@@ -7,6 +7,7 @@ import {
   readAutomation,
 } from "@luke/database/models/automation-store";
 import { workspaceIntegrationInstallations } from "@luke/database/models/integration-installation-store";
+import { disabledServersSchema } from "@luke/features/agent-wire";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -27,7 +28,6 @@ import {
   scheduleTriggerSchema,
   sentryTriggerSchema,
 } from "@luke/features/automation-wire";
-import { disabledServersSchema } from "@luke/features/coding-agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
@@ -56,18 +56,18 @@ import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
-import { acceptedAgentChoice } from "./coder-host/start.js";
 import {
+  AGENT_TOOL_REFUSAL,
+  type AgentCall,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  type CodingAgentCall,
   callerUserId,
   callerWorkspace,
   choiceRefusal,
   orStoreRefusal,
   workedRepository,
-} from "./coding-agent-tools.js";
+} from "./agent-tools.js";
+import { calledId } from "./called-id.js";
+import { acceptedAgentChoice } from "./coder-host/start.js";
 import { workspaceAgent } from "./workspace-agents.js";
 
 /**
@@ -586,7 +586,7 @@ const workspaceAutomation = (userId: string, workspaceId: string, id: string) =>
 
 /** One call of `list_automations`: the caller's workspace's automations its member may read, or one of them whole. */
 export function runListAutomations(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readListAsked(input);
@@ -597,8 +597,7 @@ export function runListAutomations(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found =
         automationId === undefined
@@ -635,7 +634,7 @@ export function runListAutomations(
 
 /** One call of `create_automation`: an automation made for the caller's member in the caller's workspace, once under the call's key. */
 export function runCreateAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readCreateAsked(input);
@@ -649,8 +648,7 @@ export function runCreateAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       // A call run again finds the automation it made first, as it was made.
@@ -733,7 +731,7 @@ export function runCreateAutomation(
 
 /** One call of `update_automation`: an automation of the caller's workspace changed as its member may change it. */
 export function runUpdateAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readUpdateAsked(input);
@@ -760,8 +758,7 @@ export function runUpdateAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -809,7 +806,7 @@ export function runUpdateAutomation(
 
 /** One call of `delete_automation`: an automation of the caller's workspace deleted with its history, as its member may delete it. */
 export function runDeleteAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readDeleteAsked(input);
@@ -820,8 +817,7 @@ export function runDeleteAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -841,7 +837,7 @@ export function runDeleteAutomation(
 
 /** One call of `run_automation`: an automation of the caller's workspace run now, once under the call's key, as its member may run it. */
 export function runRunAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readRunAsked(input);
@@ -856,8 +852,7 @@ export function runRunAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);

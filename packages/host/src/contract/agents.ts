@@ -11,55 +11,55 @@
  */
 
 import {
-  type CodingAgentTranscriptPage,
-  codingAgentAgentAnswerSchema,
-  codingAgentArchiveParamsSchema,
-  codingAgentChangesAnswerViewSchema,
-  codingAgentChooseParamsSchema,
-  codingAgentDefaultAnswerViewSchema,
-  codingAgentDefaultWriteParamsSchema,
-  codingAgentDeleteAnswerViewSchema,
-  codingAgentGitHubImageParamsSchema,
-  codingAgentGitHubImageViewSchema,
-  codingAgentListAnswerViewSchema,
-  codingAgentListParamsSchema,
-  codingAgentMessageParamsSchema,
-  codingAgentMessagesAnswerViewSchema,
-  codingAgentMessagesParamsSchema,
-  codingAgentModelsAnswerSchema,
-  codingAgentOperatorEnsureAnswerViewSchema,
-  codingAgentOperatorEnsureParamsSchema,
-  codingAgentOverviewChecksAnswerViewSchema,
-  codingAgentOverviewConversationAnswerViewSchema,
-  codingAgentOverviewPullRequestAnswerViewSchema,
-  codingAgentPageAnswerViewSchema,
-  codingAgentPageParamsSchema,
-  codingAgentPartParamsSchema,
-  codingAgentPartViewSchema,
-  codingAgentPinParamsSchema,
-  codingAgentPullRequestActionParamsSchema,
-  codingAgentPullRequestAnswerViewSchema,
-  codingAgentPullRequestParamsSchema,
-  codingAgentPullRequestReadParamsSchema,
-  codingAgentPullRequestViewedAnswerViewSchema,
-  codingAgentPullRequestWriteAnswerViewSchema,
-  codingAgentRenameParamsSchema,
-  codingAgentReviewOptionsAnswerViewSchema,
-  codingAgentRewindParamsSchema,
-  codingAgentServersParamsSchema,
-  codingAgentStartParamsSchema,
-  codingAgentStopParamsSchema,
-  codingAgentTranscriptKeySchema,
-  codingAgentTranscriptOlderAnswerSchema,
-  codingAgentTranscriptOlderParamsSchema,
-  codingAgentWorkspaceListParamsSchema,
+  type AgentTranscriptPage,
+  agentAgentAnswerSchema,
+  agentArchiveParamsSchema,
+  agentChangesAnswerViewSchema,
+  agentChooseParamsSchema,
+  agentDefaultAnswerViewSchema,
+  agentDefaultWriteParamsSchema,
+  agentDeleteAnswerViewSchema,
+  agentGitHubImageParamsSchema,
+  agentGitHubImageViewSchema,
+  agentListAnswerViewSchema,
+  agentListParamsSchema,
+  agentMessageParamsSchema,
+  agentMessagesAnswerViewSchema,
+  agentMessagesParamsSchema,
+  agentModelsAnswerSchema,
+  agentOperatorEnsureAnswerViewSchema,
+  agentOperatorEnsureParamsSchema,
+  agentOverviewChecksAnswerViewSchema,
+  agentOverviewConversationAnswerViewSchema,
+  agentOverviewPullRequestAnswerViewSchema,
+  agentPageAnswerViewSchema,
+  agentPageParamsSchema,
+  agentPartParamsSchema,
+  agentPartViewSchema,
+  agentPinParamsSchema,
+  agentPullRequestActionParamsSchema,
+  agentPullRequestAnswerViewSchema,
+  agentPullRequestParamsSchema,
+  agentPullRequestReadParamsSchema,
+  agentPullRequestViewedAnswerViewSchema,
+  agentPullRequestWriteAnswerViewSchema,
+  agentRenameParamsSchema,
+  agentReviewOptionsAnswerViewSchema,
+  agentRewindParamsSchema,
+  agentServersParamsSchema,
+  agentStartParamsSchema,
+  agentStopParamsSchema,
+  agentTranscriptKeySchema,
+  agentTranscriptOlderAnswerSchema,
+  agentTranscriptOlderParamsSchema,
+  agentWorkspaceListParamsSchema,
   devicePresenceAnswerViewSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
   hostInstallTokenAnswerViewSchema,
   hostInstallTokenParamsSchema,
   hostsAnswerViewSchema,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -81,19 +81,19 @@ const shownParamsSchema = EffectSchema.Struct({
 });
 
 export const agentActsContract = {
-  [AGENT_ACT_KIND.CODING_AGENTS_MODELS]: actProcedure("Could not read the models on this system.")
+  [AGENT_ACT_KIND.AGENTS_MODELS]: actProcedure("Could not read the models on this system.")
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(codingAgentModelsAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_READ]: actProcedure(
+    .output(EffectSchema.flip(agentModelsAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: actProcedure(
     "Could not read the default model on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(codingAgentDefaultAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: actProcedure(
+    .output(EffectSchema.flip(agentDefaultAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: actProcedure(
     "Could not change the default model on this system.",
   )
-    .input(exactInput(codingAgentDefaultWriteParamsSchema))
-    .output(EffectSchema.flip(codingAgentDefaultAnswerViewSchema)),
+    .input(exactInput(agentDefaultWriteParamsSchema))
+    .output(EffectSchema.flip(agentDefaultAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_LIST]: actProcedure("Could not read your hosts on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(hostsAnswerViewSchema)),
@@ -115,135 +115,119 @@ export const agentActsContract = {
   )
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_LIST]: actProcedure(
-    "Could not read the task's agents on this system.",
-  )
-    .input(exactInput(codingAgentListParamsSchema))
-    .output(EffectSchema.flip(codingAgentListAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: actProcedure(
+  [AGENT_ACT_KIND.AGENTS_LIST]: actProcedure("Could not read the task's agents on this system.")
+    .input(exactInput(agentListParamsSchema))
+    .output(EffectSchema.flip(agentListAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: actProcedure(
     "Could not read the workspace's agents on this system.",
   )
-    .input(exactInput(codingAgentWorkspaceListParamsSchema))
-    .output(EffectSchema.flip(codingAgentListAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_START]: actProcedure("Could not start an agent on this system.")
-    .input(exactInput(codingAgentStartParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: actProcedure(
+    .input(exactInput(agentWorkspaceListParamsSchema))
+    .output(EffectSchema.flip(agentListAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_START]: actProcedure("Could not start an agent on this system.")
+    .input(exactInput(agentStartParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_MESSAGES]: actProcedure(
     "Could not read the agent's transcript on this system.",
   )
-    .input(exactInput(codingAgentMessagesParamsSchema))
-    .output(EffectSchema.flip(codingAgentMessagesAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actProcedure(
+    .input(exactInput(agentMessagesParamsSchema))
+    .output(EffectSchema.flip(agentMessagesAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actProcedure(
     "Could not follow the agent's transcript on this system.",
   )
-    .input(exactInput(codingAgentTranscriptKeySchema))
-    .output(eventIterator(type<CodingAgentTranscriptPage>())),
-  [AGENT_ACT_KIND.CODING_AGENTS_PART]: actProcedure(
-    "Could not read the agent's output on this system.",
-  )
-    .input(exactInput(codingAgentPartParamsSchema))
-    .output(EffectSchema.flip(codingAgentPartViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: actProcedure(
+    .input(exactInput(agentTranscriptKeySchema))
+    .output(eventIterator(type<AgentTranscriptPage>())),
+  [AGENT_ACT_KIND.AGENTS_PART]: actProcedure("Could not read the agent's output on this system.")
+    .input(exactInput(agentPartParamsSchema))
+    .output(EffectSchema.flip(agentPartViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: actProcedure(
     "Could not read the agent's earlier messages on this system.",
   )
-    .input(exactInput(codingAgentTranscriptOlderParamsSchema))
-    .output(EffectSchema.flip(codingAgentTranscriptOlderAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actProcedure(
-    "Could not message the agent on this system.",
-  )
-    .input(exactInput(codingAgentMessageParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: actProcedure(
-    "Could not change the agent's model on this system.",
-  )
-    .input(exactInput(codingAgentChooseParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: actProcedure("Could not rename the agent on this system.")
-    .input(exactInput(codingAgentRenameParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_SERVERS]: actProcedure(
+    .input(exactInput(agentTranscriptOlderParamsSchema))
+    .output(EffectSchema.flip(agentTranscriptOlderAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_MESSAGE]: actProcedure("Could not message the agent on this system.")
+    .input(exactInput(agentMessageParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_CHOOSE]: actProcedure("Could not change the agent's model on this system.")
+    .input(exactInput(agentChooseParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_RENAME]: actProcedure("Could not rename the agent on this system.")
+    .input(exactInput(agentRenameParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_SERVERS]: actProcedure(
     "Could not switch the agent's MCP servers on this system.",
   )
-    .input(exactInput(codingAgentServersParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_STOP]: actProcedure("Could not stop the agent on this system.")
-    .input(exactInput(codingAgentStopParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_REWIND]: actProcedure("Could not rewind the agent on this system.")
-    .input(exactInput(codingAgentRewindParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: actProcedure(
-    "Could not archive the agent on this system.",
-  )
-    .input(exactInput(codingAgentArchiveParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
-    .input(exactInput(codingAgentPinParamsSchema))
-    .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR]: actProcedure(
-    "Could not reach Luke on this system.",
-  )
-    .input(exactInput(codingAgentOperatorEnsureParamsSchema))
-    .output(EffectSchema.flip(codingAgentOperatorEnsureAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
-    .input(exactInput(codingAgentStopParamsSchema))
-    .output(EffectSchema.flip(codingAgentDeleteAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: actProcedure(
-    "Could not note which agent is shown on this system.",
-  )
+    .input(exactInput(agentServersParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_STOP]: actProcedure("Could not stop the agent on this system.")
+    .input(exactInput(agentStopParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_REWIND]: actProcedure("Could not rewind the agent on this system.")
+    .input(exactInput(agentRewindParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_ARCHIVE]: actProcedure("Could not archive the agent on this system.")
+    .input(exactInput(agentArchiveParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
+    .input(exactInput(agentPinParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actProcedure("Could not reach Luke on this system.")
+    .input(exactInput(agentOperatorEnsureParamsSchema))
+    .output(EffectSchema.flip(agentOperatorEnsureAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
+    .input(exactInput(agentStopParamsSchema))
+    .output(EffectSchema.flip(agentDeleteAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_SHOWN]: actProcedure("Could not note which agent is shown on this system.")
     .input(exactInput(shownParamsSchema))
     .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actProcedure(
-    "Could not mark the agent as read on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_SEEN]: actProcedure("Could not mark the agent as read on this system.")
     .input(exactInput(EffectSchema.Struct({ agentId: exactId })))
     .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
-    .input(exactInput(codingAgentPageParamsSchema))
-    .output(EffectSchema.flip(codingAgentPageAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actProcedure(
+  [AGENT_ACT_KIND.AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
+    .input(exactInput(agentPageParamsSchema))
+    .output(EffectSchema.flip(agentPageAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actProcedure(
     "Could not read the agent's pull request on this system.",
   )
-    .input(exactInput(codingAgentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(codingAgentPullRequestAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actProcedure(
+    .input(exactInput(agentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(agentPullRequestAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_CHANGES]: actProcedure(
     "Could not read the agent's changes on this system.",
   )
-    .input(exactInput(codingAgentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(codingAgentChangesAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: actProcedure(
+    .input(exactInput(agentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(agentChangesAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: actProcedure(
     "Could not read the agent's pull request on this system.",
   )
-    .input(exactInput(codingAgentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(codingAgentOverviewPullRequestAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: actProcedure(
+    .input(exactInput(agentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(agentOverviewPullRequestAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actProcedure(
     "Could not read the repository's reviewers and labels on this system.",
   )
-    .input(exactInput(codingAgentPullRequestParamsSchema))
-    .output(EffectSchema.flip(codingAgentReviewOptionsAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: actProcedure(
+    .input(exactInput(agentPullRequestParamsSchema))
+    .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actProcedure(
     "Could not read the pull request's checks on this system.",
   )
-    .input(exactInput(codingAgentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(codingAgentOverviewChecksAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: actProcedure(
+    .input(exactInput(agentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(agentOverviewChecksAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: actProcedure(
     "Could not read the pull request's conversation on this system.",
   )
-    .input(exactInput(codingAgentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(codingAgentOverviewConversationAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: actProcedure(
+    .input(exactInput(agentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(agentOverviewConversationAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: actProcedure(
     "Could not read the pull request's image on this system.",
   )
-    .input(exactInput(codingAgentGitHubImageParamsSchema))
-    .output(EffectSchema.flip(codingAgentGitHubImageViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: actProcedure(
+    .input(exactInput(agentGitHubImageParamsSchema))
+    .output(EffectSchema.flip(agentGitHubImageViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: actProcedure(
     "Could not change the pull request on this system.",
   )
-    .input(exactInput(codingAgentPullRequestActionParamsSchema))
-    .output(EffectSchema.flip(codingAgentPullRequestWriteAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: actProcedure(
+    .input(exactInput(agentPullRequestActionParamsSchema))
+    .output(EffectSchema.flip(agentPullRequestWriteAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: actProcedure(
     "Could not read which files you viewed on this system.",
   )
-    .input(exactInput(codingAgentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(codingAgentPullRequestViewedAnswerViewSchema)),
+    .input(exactInput(agentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(agentPullRequestViewedAnswerViewSchema)),
 };

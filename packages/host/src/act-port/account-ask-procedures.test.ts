@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
@@ -116,7 +116,7 @@ function windowPort(
 ) {
   const asked: unknown[] = [];
   const answer =
-    options.answer ?? (() => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    options.answer ?? (() => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   const ask =
     (name: keyof HostAsk) =>
     (...params: unknown[]) =>
@@ -191,7 +191,7 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
   const { client, asked } = windowPort(PANEL);
   for (const act of ACTS) {
     assert.deepEqual(await settled(client, act.kind, act.payload), {
-      answer: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      answer: { failure: AGENT_CALL_FAILURE.UNANSWERED },
     });
   }
   assert.deepEqual(

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { type CodingAgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { type AgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -35,7 +35,7 @@ import { windowInboxFollower } from "./use-followed-inboxes.js";
  * main's document as it is.
  */
 
-type Heard = CodingAgentInboxChanged["inbox"];
+type Heard = AgentInboxChanged["inbox"];
 
 afterEach(() => {
   // The window's one registry holds the document it read, so the next test's window reads its own.
@@ -170,7 +170,7 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
     const itemId = "00000000-0000-4000-8000-000000000001";
 
     assert.deepEqual(
-      fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
+      fixture.fixtureActAnswer(run, ACT_KIND.AGENTS_INBOX_READ_STATE, {
         itemId,
         unread: false,
       }),
@@ -178,7 +178,7 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
     );
     // Two of the staged items are unread.
     assert.deepEqual(
-      fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { itemIds: [] }),
+      fixture.fixtureActAnswer(run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
       { answer: { marked: 2 } },
     );
   }),
@@ -193,7 +193,7 @@ it.effect("any other profile leaves main's document as it is, and stages no Inbo
 
     assert.equal(fixture.fixtureAppState(tasks), tasks);
     assert.equal(
-      fixture.fixtureActAnswer(tasks.run, ACT_KIND.CODING_AGENTS_INBOX_FOLLOW, {
+      fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_FOLLOW, {
         kind: INBOX_SCOPE_KIND.PLAN,
         id: FIXTURE_IDS.TASK,
       }),

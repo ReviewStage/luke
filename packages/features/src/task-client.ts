@@ -10,9 +10,9 @@ import {
   jsonOf,
 } from "./account-call.js";
 import { type BrowserTabsPlace, browserTabsPlaceId } from "./agent-browser-tab-wire.js";
-import { startRefusedAs } from "./coding-agent-client.js";
-import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
-import type { LocalAgentRefusal } from "./coding-agent-wire.js";
+import { startRefusedAs } from "./agent-client.js";
+import type { AgentAgentAnswer } from "./agent-view.js";
+import type { LocalAgentRefusal } from "./agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
@@ -117,7 +117,7 @@ import {
 /** A started task, and, where the start named an agent, the agent started on it or why it was not, as an agent's Start answers. */
 export interface TaskStarted {
   readonly task: Task;
-  readonly agent?: CodingAgentAgentAnswer;
+  readonly agent?: AgentAgentAnswer;
   /** The transaction the task was written in, which the task list followed live carries once it lands. */
   readonly txid?: string;
 }

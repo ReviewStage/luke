@@ -1,4 +1,4 @@
-import type { CodingAgentNewestAnswer } from "@luke/features/coding-agent-wire";
+import type { AgentNewestAnswer } from "@luke/features/agent-wire";
 import { Effect, Equal, Option, Ref } from "effect";
 
 /**
@@ -27,19 +27,16 @@ const HELD_BYTES_EACH = HELD_BYTES / 4;
 interface Entry<Key> {
   readonly key: Key;
   readonly userId: string;
-  readonly page: CodingAgentNewestAnswer;
+  readonly page: AgentNewestAnswer;
   readonly bytes: number;
 }
 
 /** The transcripts held, most recently told first. */
 export interface TranscriptHeld<Key> {
   /** The window held of a transcript for the account, which counts as its most recent use; none where none is held for that account. */
-  readonly recall: (
-    key: Key,
-    userId: string,
-  ) => Effect.Effect<Option.Option<CodingAgentNewestAnswer>>;
+  readonly recall: (key: Key, userId: string) => Effect.Effect<Option.Option<AgentNewestAnswer>>;
   /** Holds a transcript's window for the account, in place of what was held of it. */
-  readonly keep: (key: Key, userId: string, page: CodingAgentNewestAnswer) => Effect.Effect<void>;
+  readonly keep: (key: Key, userId: string, page: AgentNewestAnswer) => Effect.Effect<void>;
   /** Lets go of every transcript held that the predicate names. */
   readonly forget: (which: (key: Key) => boolean) => Effect.Effect<void>;
   /** Lets go of everything held, as a sign-out does. */

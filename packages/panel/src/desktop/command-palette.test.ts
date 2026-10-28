@@ -2,21 +2,21 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import {
+  AGENT_KIND,
+  AGENT_STATUS,
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
+} from "@luke/features/agent-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -728,7 +728,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
             effort: "high",
             title: "Invoice export",
             createdAt: 1,
-            status: CODING_AGENT_STATUS.RUNNING,
+            status: AGENT_STATUS.RUNNING,
             turnId: null,
           },
         ],
@@ -765,7 +765,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -807,7 +807,7 @@ test("an archived agent of the open task is still found, after the standing ones
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   });
   const base = tasksControl();
@@ -898,7 +898,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
           effort: "high",
           title: "Invoice export",
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           automationId: automation.id,
         },
@@ -960,7 +960,7 @@ test("an agent's Pull request row is named as its tab is, by its pull request's 
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   openPalette(
@@ -1014,7 +1014,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const control = tasksControl({});
@@ -1086,7 +1086,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const opened: string[] = [];
@@ -1271,7 +1271,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
           title: "Alerts",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
         },
       ],
       pullRequestTotal: 0,
@@ -1320,7 +1320,7 @@ test("an agent pressed on a task's card in ⌘K over Settings leaves the palette
                 title: "Invoice export",
                 model: "anthropic/claude-opus-5.5",
                 effort: "high",
-                status: CODING_AGENT_STATUS.RUNNING,
+                status: AGENT_STATUS.RUNNING,
               },
             ],
             pullRequestTotal: 0,
@@ -1797,7 +1797,7 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
         effort: "high",
         title: "Expire old invites",
         createdAt: 3,
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
       },
     ],
@@ -2207,7 +2207,7 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2259,7 +2259,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
     effort: "high",
     title: "Triage overnight issues",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2299,7 +2299,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
     effort: "high",
     title: "Triage overnight issues",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2308,7 +2308,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
   };
   const seen: string[] = [];
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_SEEN]: ({ agentId }) => {
+    [ACT_KIND.AGENTS_SEEN]: ({ agentId }) => {
       seen.push(agentId);
       return Promise.resolve(undefined);
     },
@@ -2460,7 +2460,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const chosen: unknown[] = [];
@@ -2726,7 +2726,7 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
     effort: "high",
     title: "Triage overnight issues",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2795,7 +2795,7 @@ function servingLuke(agentId: string): SentPortAct[] {
   fakeActPortAnswering((request) => {
     sent.push(request);
     return Promise.resolve(
-      request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
+      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
     );
   });
   return sent;
@@ -2816,9 +2816,9 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           title: "Orla",
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           automationId: null,
           workspaceId: ACME.id,
@@ -2833,9 +2833,9 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           title: "Ines",
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           createdAt: 0,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           archivedAt: 1,
           automationId: null,
@@ -2883,7 +2883,7 @@ test("⌘K offers no Ask Luke and ensures nothing while the account has the oper
 
   assert.ok(!rows().includes("Ask Luke"));
   assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR),
+    sent.filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR),
     [],
   );
 });
@@ -2944,7 +2944,7 @@ const ASKER = {
   title: "Rotate secrets",
   model: "anthropic/claude-opus-4.5",
   effort: "high",
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
 } as const;
 
 /** A task holding Inbox items, its agent summed up so each item's tile names it. */
@@ -3002,7 +3002,7 @@ const PREVIEWS: InboxItem = {
 };
 
 /** The palette over a window whose listed workspace's task holds the items main pushes as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded. */
-function paletteOverInbox(inbox: () => CodingAgentInboxChanged["inbox"], changed = 9_000) {
+function paletteOverInbox(inbox: () => AgentInboxChanged["inbox"], changed = 9_000) {
   const main = followedInboxes((scope) =>
     scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === ROTATION.id ? inbox() : undefined,
   );
@@ -3084,7 +3084,7 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
 });
 
 test("an Inbox that could not be read says so, rather than that nothing matches", async () => {
-  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  paletteOverInbox(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   chooseFilter("Inbox");
   await settle();
 
@@ -3165,7 +3165,7 @@ test("while main says a task's inbox changed later than its push, a query it doe
 });
 
 test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
-  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  paletteOverInbox(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
 
   type("billing");
   await settle();

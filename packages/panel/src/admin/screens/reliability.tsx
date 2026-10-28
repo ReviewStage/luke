@@ -11,8 +11,8 @@ import {
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
 } from "@luke/features/admin-wire";
+import { AGENT_FAILURE, type AgentFailure } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
@@ -90,18 +90,18 @@ const SKELETON_PROVIDER_WIDTH = "192px";
 
 /** A coding agent's failure class, as the breakdown names it. */
 const AGENT_FAILURE_LABEL = {
-  [CODING_AGENT_FAILURE.MODEL]: "Model call",
-  [CODING_AGENT_FAILURE.SANDBOX]: "Sandbox or checkout",
-  [CODING_AGENT_FAILURE.GITHUB]: "GitHub",
-  [CODING_AGENT_FAILURE.ABANDONED]: "Abandoned by the sweep",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]: "Account's own API key",
-  [CODING_AGENT_FAILURE.NOT_STARTED]: "Never started",
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]: "Fast on own key",
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]: "Fast not enabled",
-  [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "Context too long",
-  [CODING_AGENT_FAILURE.SESSION_ENDED]: "Session ended",
-  [CODING_AGENT_FAILURE.OTHER]: "Other",
-} as const satisfies Record<CodingAgentFailure, string>;
+  [AGENT_FAILURE.MODEL]: "Model call",
+  [AGENT_FAILURE.SANDBOX]: "Sandbox or checkout",
+  [AGENT_FAILURE.GITHUB]: "GitHub",
+  [AGENT_FAILURE.ABANDONED]: "Abandoned by the sweep",
+  [AGENT_FAILURE.PROVIDER_KEY]: "Account's own API key",
+  [AGENT_FAILURE.NOT_STARTED]: "Never started",
+  [AGENT_FAILURE.FAST_ON_OWN_KEY]: "Fast on own key",
+  [AGENT_FAILURE.FAST_NOT_ENABLED]: "Fast not enabled",
+  [AGENT_FAILURE.CONTEXT_OVERFLOW]: "Context too long",
+  [AGENT_FAILURE.SESSION_ENDED]: "Session ended",
+  [AGENT_FAILURE.OTHER]: "Other",
+} as const satisfies Record<AgentFailure, string>;
 
 /** An automation run's skip or failure reason, as the breakdown names it. */
 const AUTOMATION_REASON_LABEL = {

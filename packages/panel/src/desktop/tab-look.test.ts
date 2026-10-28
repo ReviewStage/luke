@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
@@ -66,7 +66,7 @@ const SUMMARY: TaskSummary = {
         title: "Invite flow",
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
       },
     ],
     pullRequestTotal: 0,
@@ -75,11 +75,7 @@ const SUMMARY: TaskSummary = {
 };
 
 /** An agent on the task, standing where `status` says. */
-function agent(
-  id: string,
-  title: string,
-  status: CodingAgentSummary["status"],
-): CodingAgentSummary {
+function agent(id: string, title: string, status: AgentSummary["status"]): AgentSummary {
   return {
     id,
     planId: TASK.id,
@@ -92,16 +88,8 @@ function agent(
   };
 }
 
-const WORKING = agent(
-  "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  "Invite flow",
-  CODING_AGENT_STATUS.RUNNING,
-);
-const DONE = agent(
-  "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32",
-  "Expiry job",
-  CODING_AGENT_STATUS.COMPLETED,
-);
+const WORKING = agent("8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", "Invite flow", AGENT_STATUS.RUNNING);
+const DONE = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Expiry job", AGENT_STATUS.COMPLETED);
 
 const DRAFT = "draft-1";
 

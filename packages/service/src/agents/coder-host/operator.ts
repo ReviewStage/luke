@@ -3,13 +3,13 @@
  *
  * The operator is an ordinary coding agent of kind operator, with no task
  * and no repository, started blank on the one Start path
- * (`start.ts`'s `startCodingAgent`), so it runs on the member's default
+ * (`start.ts`'s `startAgent`), so it runs on the member's default
  * model and effort, on their own keys and meter, as any agent they start
  * does. An ensure answers the operator standing in the workspace where
  * there is one, and makes one where there is none: the Start runs under
  * the workspace's row lock, and the partial unique index on
  * `(organization_id, user_id)` over standing operators holds it to one
- * whatever raced it (`createCodingAgent`). Each ensure carries a fresh key,
+ * whatever raced it (`createAgent`). Each ensure carries a fresh key,
  * since the operator, not the key, is what makes two ensures one. A Reset
  * stops the turn the standing operator runs, as an archive by hand stops one
  * first, refusing where it cannot, archives it as its member, its transcript
@@ -45,16 +45,17 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
-import { aimOperatorHeartbeat } from "@luke/database/models/automation-store";
 import {
+  type Agent,
   archiveOperatorAgent,
-  type CodingAgent,
   readArchivedOperator,
   readStandingOperator,
   restoreOperatorAgent,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
+import { aimOperatorHeartbeat } from "@luke/database/models/automation-store";
 import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { nextScheduledRun } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -63,7 +64,6 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { EXPERIMENT } from "@luke/settings";
 import { DateTime, Effect, Option } from "effect";
@@ -76,13 +76,13 @@ import {
 import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT, OPERATOR_OPENING } from "./instructions.js";
 import {
+  type AgentStarted,
   acceptedAgentChoice,
-  type CodingAgentStart,
   type StartServices,
-  startCodingAgent,
+  startAgent,
   startCredentialStands,
 } from "./start.js";
-import { steerCodingAgent } from "./steer.js";
+import { steerAgent } from "./steer.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, or which archived one comes back in its place, and how its turn is stopped before it is. */
@@ -93,12 +93,12 @@ export interface OperatorEnsure<R> {
   /** The IANA zone the member's client runs in, which the heartbeat an ensure makes is read in; UTC where it names none or one that does not read. */
   readonly timeZone: string | undefined;
   /** Stops the turn the standing operator runs, refusing where it cannot, as an archive by hand stops one first (`coder-host/stop.ts`'s `stoppedForGood`). */
-  readonly stopStanding: (agent: CodingAgent) => Effect.Effect<void, HostedRefusal, R>;
+  readonly stopStanding: (agent: Agent) => Effect.Effect<void, HostedRefusal, R>;
 }
 
 /** What an ensure came to: the operator, and the one a Reset archived, whose sandbox its caller stops. */
-export interface OperatorEnsured extends CodingAgentStart {
-  readonly retired: CodingAgent | undefined;
+export interface OperatorEnsured extends AgentStarted {
+  readonly retired: Agent | undefined;
 }
 
 const OPERATOR_HEARTBEAT_SCHEDULE = {
@@ -134,7 +134,7 @@ function heartbeatTrigger(
 const aimedItsHeartbeat = (
   userId: string,
   workspaceId: string,
-  operator: CodingAgent,
+  operator: Agent,
   timeZone: string | undefined,
 ) =>
   Effect.gen(function* () {
@@ -182,22 +182,16 @@ const openedOnItsOpening = (
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
-  operator: CodingAgent,
+  operator: Agent,
 ) =>
   Effect.gen(function* () {
     const sessions = yield* eve;
-    yield* steerCodingAgent(
-      sessions,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      operator.userId,
-      operator,
-      {
-        text: OPERATOR_OPENING,
-        clientKey: randomUUID(),
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), operator.userId, operator, {
+      text: OPERATOR_OPENING,
+      clientKey: randomUUID(),
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
   }).pipe(
     Effect.catch((refusal) =>
       Effect.logWarning(`operator ${operator.id} was not opened: ${refusal.error}`),
@@ -268,8 +262,8 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
   // A Reset retires only the member's own operator, and only in a workspace they are a member of.
   const standing = ensure.reset
     ? yield* hostedStoreOrUnavailable(readStandingOperator(userId, workspaceId))
-    : Option.none<CodingAgent>();
-  let retired: CodingAgent | undefined;
+    : Option.none<Agent>();
+  let retired: Agent | undefined;
   if (Option.isSome(standing)) {
     // An archived operator works on unseen, so a turn still running is stopped before the stamp.
     yield* ensure.stopStanding(standing.value);
@@ -278,11 +272,11 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
     );
     retired = Option.isSome(archived) ? standing.value : undefined;
   }
-  const started = yield* startCodingAgent(eve, userId, {
+  const started = yield* startAgent(eve, userId, {
     taskId: null,
     organizationId: workspaceId,
     repository: null,
-    kind: CODING_AGENT_KIND.OPERATOR,
+    kind: AGENT_KIND.OPERATOR,
     blank: true,
     prompt: undefined,
     idempotencyKey: randomUUID(),

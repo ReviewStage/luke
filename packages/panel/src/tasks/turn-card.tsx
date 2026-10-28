@@ -3,7 +3,7 @@ import {
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { formatCount } from "@luke/features/number-format";
 import { spanText } from "@luke/features/time-format";

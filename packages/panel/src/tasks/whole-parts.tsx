@@ -1,4 +1,4 @@
-import type { CodingAgentPartView } from "@luke/features/coding-agent-view";
+import type { AgentPartView } from "@luke/features/agent-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireValue } from "@luke/wire";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
@@ -20,7 +20,7 @@ import type { AgentPartCut } from "./coding-agent-model.js";
 
 /** Where a transcript's cut parts are read whole: an agent's, or a worker's under its delegation call. */
 export interface WholePartDoor {
-  readonly read: (messageId: string, index: number) => Promise<CodingAgentPartView>;
+  readonly read: (messageId: string, index: number) => Promise<AgentPartView>;
 }
 
 const WholePartsContext = createContext<WholePartDoor | undefined>(undefined);
@@ -33,7 +33,7 @@ export function useWholePartDoor(agentId: string, callId?: string): WholePartDoo
   const { act } = useAct();
   const read = useCallback(
     (messageId: string, index: number) =>
-      act(ACT_KIND.CODING_AGENTS_PART, {
+      act(ACT_KIND.AGENTS_PART, {
         agentId,
         messageId,
         index,

@@ -12,7 +12,7 @@ import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { accountPreference } from "@luke/database/schemas/preferences";
 import { hostedUsage } from "@luke/database/schemas/usage";
 import { getTestDB } from "@luke/database/testing";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { count, eq, getColumnTable, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
@@ -115,9 +115,9 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
       assert.ok(afterPreferences?.updatedAt instanceof Date);
 
       yield* TestClock.adjust(Duration.minutes(1));
-      yield* writeAccountPreferences(userId, { codingAgent: CODING_AGENT_DEFAULT_CHOICE });
+      yield* writeAccountPreferences(userId, { codingAgent: AGENT_DEFAULT_CHOICE });
       const afterChoice = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterChoice?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
+      assert.deepEqual(afterChoice?.codingAgent, AGENT_DEFAULT_CHOICE);
       // The instant is the preferences part's own, so a choice leaves it where it stood.
       assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });

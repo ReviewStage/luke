@@ -3,16 +3,16 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, createAgent } from "@luke/database/models/agent-store";
 import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
 import {
@@ -24,7 +24,7 @@ import {
   TURN_STATUS,
 } from "../core.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { AGENT_CALLER, type CodingAgentCall } from "./coding-agent-tools.js";
+import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";
 
@@ -45,7 +45,7 @@ const FACT = "The web server's store tests run on PGlite through test:store.";
 
 /** A member with Memory on, in a workspace of their own, and an agent of the kind given there. */
 const openAgent = (
-  kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_KIND.OPERATOR,
+  kind: typeof AGENT_KIND.CODER | typeof AGENT_KIND.OPERATOR,
   automationOrigin?: StoredAutomationOrigin,
 ) =>
   Effect.gen(function* () {
@@ -55,7 +55,7 @@ const openAgent = (
     yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
     const workspaceId = yield* openWorkspace(userId);
     const place =
-      kind === CODING_AGENT_KIND.OPERATOR
+      kind === AGENT_KIND.OPERATOR
         ? ({
             taskId: null,
             organizationId: workspaceId,
@@ -69,7 +69,7 @@ const openAgent = (
             planSnapshot: null,
             prompt: "Tidy the docs.",
           } as const);
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       ...place,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -92,7 +92,7 @@ type Opener =
  * opened it, and its journal holding a call of each tool named.
  */
 const writeTurn = (
-  agent: CodingAgent,
+  agent: Agent,
   opener: Opener,
   called: readonly string[],
   status: typeof TURN_STATUS.RUNNING | typeof TURN_STATUS.SETTLED = TURN_STATUS.RUNNING,
@@ -142,8 +142,8 @@ const writeTurn = (
   });
 
 /** A `remember` from the agent, as its tool door calls it. */
-const remember = (agent: CodingAgent) => {
-  const call: CodingAgentCall = {
+const remember = (agent: Agent) => {
+  const call: AgentCall = {
     caller: { kind: AGENT_CALLER.AGENT, agent },
     eve: undefined,
     writer: Effect.die(new Error("a memory call writes no line")),
@@ -155,7 +155,7 @@ const remember = (agent: CodingAgent) => {
 it.layer(getTestDB())("a remember's provenance", (it) => {
   it.effect("a turn an automation's run opened keeps nothing", () =>
     Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgent(CODING_AGENT_KIND.CODER);
+      const { agent, workspaceId } = yield* openAgent(AGENT_KIND.CODER);
       yield* writeTurn(agent, { sender: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }, []);
 
       const answer = yield* remember(agent);
@@ -175,7 +175,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
           firing: { kind: AUTOMATION_FIRING.MANUAL },
           prompt: "Triage the overnight errors.",
         };
-        const { agent, workspaceId } = yield* openAgent(CODING_AGENT_KIND.CODER, origin);
+        const { agent, workspaceId } = yield* openAgent(AGENT_KIND.CODER, origin);
         yield* writeTurn(agent, { sender: undefined }, []);
 
         assert.equal((yield* remember(agent)).reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
@@ -188,7 +188,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
     () =>
       Effect.gen(function* () {
         for (const read of [AGENT_TOOL.READ_WEB_PAGE, CLAUDE_CODE_TOOL.WEB_SEARCH]) {
-          const { agent, workspaceId } = yield* openAgent(CODING_AGENT_KIND.OPERATOR);
+          const { agent, workspaceId } = yield* openAgent(AGENT_KIND.OPERATOR);
           yield* writeTurn(agent, { sender: MESSAGE_SENDER.MEMBER }, [AGENT_TOOL.BASH, read]);
 
           const answer = yield* remember(agent);
@@ -201,7 +201,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
 
   it.effect("a turn a member's line opened, which read nothing of the web, keeps the memory", () =>
     Effect.gen(function* () {
-      const { agent, workspaceId } = yield* openAgent(CODING_AGENT_KIND.OPERATOR);
+      const { agent, workspaceId } = yield* openAgent(AGENT_KIND.OPERATOR);
       yield* writeTurn(agent, { sender: MESSAGE_SENDER.MEMBER }, [AGENT_TOOL.BASH]);
 
       const answer = yield* remember(agent);
@@ -216,7 +216,7 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
 
   it.effect("a turn that settled refuses nothing, whatever opened it", () =>
     Effect.gen(function* () {
-      const { agent } = yield* openAgent(CODING_AGENT_KIND.CODER);
+      const { agent } = yield* openAgent(AGENT_KIND.CODER);
       yield* writeTurn(
         agent,
         { sender: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },

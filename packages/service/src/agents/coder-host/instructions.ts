@@ -1,18 +1,18 @@
 import { PLAYWRIGHT_PIN, SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
 import { CLAUDE_CODE_WORKER, INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
+import { type Agent, agentBriefOf } from "@luke/database/models/agent-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
-import { type CodingAgent, codingAgentBriefOf } from "@luke/database/models/coding-agent-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
+  AGENT_BRIEF,
+  AGENT_DELEGATE_TOOL,
+  AGENT_KIND,
+  AGENT_MACHINE,
   AGENT_MESSAGE_LEAD,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  type CodingAgentBrief,
-  type CodingAgentKind,
+  type AgentBrief,
+  type AgentKind,
   OPERATOR_QUIET_REPLY,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { DEVICE_ISOLATION, type DeviceIsolation } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
@@ -28,7 +28,7 @@ import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
+const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
 /**
  * instructions.ts -- what a coding agent's session runs under.
@@ -72,7 +72,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
 /** The words the instructions say of what the agent was handed, a plan, a prompt, or nothing, for one started blank, whose asks come in the conversation, where they differ. */
 const BRIEF_WORDS = {
-  [CODING_AGENT_BRIEF.PLAN]: {
+  [AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
     brief: "plan",
     reread:
@@ -81,7 +81,7 @@ const BRIEF_WORDS = {
     none: "the plan could not be implemented",
     describe: "name the plan in its description",
   },
-  [CODING_AGENT_BRIEF.PROMPT]: {
+  [AGENT_BRIEF.PROMPT]: {
     job: "carry out the prompt the developer gave as the first message of this conversation",
     brief: "prompt",
     reread:
@@ -90,7 +90,7 @@ const BRIEF_WORDS = {
     none: "the prompt could not be carried out",
     describe: "say in its description what the prompt asked",
   },
-  [CODING_AGENT_BRIEF.BLANK]: {
+  [AGENT_BRIEF.BLANK]: {
     job: "do what the developer asks of you in this conversation",
     brief: "request",
     reread:
@@ -100,7 +100,7 @@ const BRIEF_WORDS = {
     describe: "say in its description what the developer asked",
   },
 } as const satisfies Record<
-  CodingAgentBrief,
+  AgentBrief,
   {
     job: string;
     brief: string;
@@ -253,7 +253,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     todos: `For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.`,
     checks: { readable: CHECKS_WORDS.readable, rest: CHECKS_WORDS.rest },
     worker: ({ reads, readOnly }) =>
-      `\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped job to ${reads} its answer reaches you on its own as that worker's result, so keep working while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its job explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.`,
+      `\`${AGENT_DELEGATE_TOOL}\` hands one scoped job to ${reads} its answer reaches you on its own as that worker's result, so keep working while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its job explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: "",
     // Note that eve runs in no Mac of the developer's, so its words never say this.
     ownSandbox: "",
@@ -337,9 +337,9 @@ const PULL_REQUEST_WORDS = {
  * land it: the plan, where it was handed one and so can edit it; a page
  * otherwise, on its task or, on none, on itself.
  */
-function writeUpPlace(brief: CodingAgentBrief, onTask: boolean): string {
-  if (brief === CODING_AGENT_BRIEF.PLAN && onTask) {
-    return `write it into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
+function writeUpPlace(brief: AgentBrief, onTask: boolean): string {
+  if (brief === AGENT_BRIEF.PLAN && onTask) {
+    return `write it into the plan with \`${AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
   }
   return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and post it in a thread for the developer`;
 }
@@ -400,7 +400,7 @@ interface EditPlanTold {
 const NOT_TOLD_EDIT_PLAN: EditPlanTold = { decided: "", updating: "" };
 
 /** How `edit_plan` takes notes and what for, said alike to every agent on a task. */
-const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
+const EDIT_PLAN_WORDS = `\`${AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
 
 /**
  * What an agent is told of its plan: one handed the plan always, and one
@@ -408,16 +408,16 @@ const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere
  * was handed the plan, which the developer may have written since, or may yet, so
  * each is told to read the plan before it edits it.
  */
-function editPlanTold(brief: CodingAgentBrief, onTask: boolean): EditPlanTold {
-  if (brief !== CODING_AGENT_BRIEF.PLAN && !onTask) return NOT_TOLD_EDIT_PLAN;
+function editPlanTold(brief: AgentBrief, onTask: boolean): EditPlanTold {
+  if (brief !== AGENT_BRIEF.PLAN && !onTask) return NOT_TOLD_EDIT_PLAN;
   const read =
-    brief === CODING_AGENT_BRIEF.PROMPT
+    brief === AGENT_BRIEF.PROMPT
       ? `Your task has a plan beside the prompt you were handed, which the developer may have written or changed since: it may be empty, or say what your prompt does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
-      : brief === CODING_AGENT_BRIEF.BLANK
+      : brief === AGENT_BRIEF.BLANK
         ? `Your task has a plan, which you were not handed: it may be empty, or say what the conversation does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
         : "";
   return {
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
+    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
     updating: `
 
 ## Updating the plan
@@ -616,8 +616,8 @@ function seeingWords(tools: ToolWords, machine: CoderMachine): string {
 function repositoryWords(
   tools: ToolWords,
   repository: string,
-  words: (typeof BRIEF_WORDS)[CodingAgentBrief],
-  brief: CodingAgentBrief,
+  words: (typeof BRIEF_WORDS)[AgentBrief],
+  brief: AgentBrief,
   ciReadable: boolean,
   taskLink: string | null,
   coAuthor: string | undefined,
@@ -694,8 +694,8 @@ You have a sandbox of your own, with no repository in it, which opens the first 
  */
 function sandboxWords(
   tools: ToolWords,
-  words: (typeof BRIEF_WORDS)[CodingAgentBrief],
-  brief: CodingAgentBrief,
+  words: (typeof BRIEF_WORDS)[AgentBrief],
+  brief: AgentBrief,
   taskLink: string | null,
   machine: CoderMachine,
 ): WorkWords {
@@ -903,20 +903,20 @@ Your workspace keeps one memory shared by every member and every one of its agen
  */
 export function coderInstructions(
   repository: string | null,
-  brief: CodingAgentBrief,
+  brief: AgentBrief,
   ciReadable: boolean,
   taskLink: string | null,
   coAuthor: string | undefined = undefined,
   startBranch: string | null = null,
   memberToken = false,
   harness: CoderHarness = CODER_HARNESS.EVE,
-  kind: CodingAgentKind = CODING_AGENT_KIND.CODER,
+  kind: AgentKind = AGENT_KIND.CODER,
   memoryOn = false,
   machine: CoderMachine = SANDBOX_MACHINE,
 ): string {
   const words = BRIEF_WORDS[brief];
   const tools = toolsOn(TOOL_WORDS[harness], machine);
-  const operator = kind === CODING_AGENT_KIND.OPERATOR;
+  const operator = kind === AGENT_KIND.OPERATOR;
   const task = taskLink === null ? TASK_PLACE_WORDS.taskless : TASK_PLACE_WORDS.onTask;
   const work = operator
     ? operatorWords(tools)
@@ -997,14 +997,11 @@ export interface AgentInstructionsContext {
 
 /**
  * The instructions for the agent its row names, on any harness: its brief
- * (`codingAgentBriefOf`), its task's link, its start branch, its credential,
+ * (`agentBriefOf`), its task's link, its start branch, its credential,
  * and its kind read from the row, so an eve session and a native one are
  * worded alike for the same agent.
  */
-export function agentCoderInstructions(
-  agent: CodingAgent,
-  context: AgentInstructionsContext,
-): string {
+export function agentCoderInstructions(agent: Agent, context: AgentInstructionsContext): string {
   const taskLink =
     agent.taskId === null
       ? null
@@ -1014,7 +1011,7 @@ export function agentCoderInstructions(
         );
   return coderInstructions(
     agent.repository,
-    codingAgentBriefOf(agent),
+    agentBriefOf(agent),
     context.ciReadable,
     taskLink,
     context.coAuthor,
@@ -1024,9 +1021,9 @@ export function agentCoderInstructions(
     agent.kind,
     context.memoryOn,
     {
-      local: agent.machine === CODING_AGENT_MACHINE.DEVICE,
+      local: agent.machine === AGENT_MACHINE.DEVICE,
       sandboxed:
-        agent.machine === CODING_AGENT_MACHINE.DEVICE &&
+        agent.machine === AGENT_MACHINE.DEVICE &&
         context.place?.isolation === DEVICE_ISOLATION.SANDBOX,
       checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,

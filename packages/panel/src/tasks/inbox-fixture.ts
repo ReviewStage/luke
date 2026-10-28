@@ -17,13 +17,13 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import {
-  type CodingAgentAccountItems,
-  type CodingAgentInboxChanged,
+  type AgentAccountItems,
+  type AgentInboxChanged,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -433,9 +433,9 @@ function agentOn(
   id: string,
   taskId: string,
   title: string,
-  status: CodingAgentSummary["status"],
+  status: AgentSummary["status"],
   startedAgo: number,
-): CodingAgentSummary {
+): AgentSummary {
   return {
     id,
     planId: taskId,
@@ -450,36 +450,24 @@ function agentOn(
   };
 }
 
-const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map([
+const AGENTS: ReadonlyMap<string, AgentSummary> = new Map([
   [
     TASK.INVITES,
     agentOn(
       AGENT.INVITES,
       TASK.INVITES,
       "Build teammate invitations",
-      CODING_AGENT_STATUS.RUNNING,
+      AGENT_STATUS.RUNNING,
       3 * DAY,
     ),
   ],
   [
     TASK.DIGEST,
-    agentOn(
-      AGENT.DIGEST,
-      TASK.DIGEST,
-      "Send the weekly digest",
-      CODING_AGENT_STATUS.RUNNING,
-      4 * HOUR,
-    ),
+    agentOn(AGENT.DIGEST, TASK.DIGEST, "Send the weekly digest", AGENT_STATUS.RUNNING, 4 * HOUR),
   ],
   [
     TASK.ROUNDING,
-    agentOn(
-      AGENT.ROUNDING,
-      TASK.ROUNDING,
-      "Fix ledger rounding",
-      CODING_AGENT_STATUS.COMPLETED,
-      5 * DAY,
-    ),
+    agentOn(AGENT.ROUNDING, TASK.ROUNDING, "Fix ledger rounding", AGENT_STATUS.COMPLETED, 5 * DAY),
   ],
 ]);
 
@@ -487,7 +475,7 @@ const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map([
 function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
   const agent = AGENTS.get(taskId);
   if (agent === undefined) return {};
-  const working = agent.status === CODING_AGENT_STATUS.RUNNING ? 1 : 0;
+  const working = agent.status === AGENT_STATUS.RUNNING ? 1 : 0;
   return {
     agents: {
       total: 1,
@@ -618,28 +606,28 @@ const NO_AUTOMATIONS: AutomationListView = { automations: [] };
  * (`settings-fixture.ts`), and the page names the account by its tasks meanwhile.
  */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ id }) => {
-    const pushed: CodingAgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
+  [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ id }) => {
+    const pushed: AgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
     return pushedOnce(pushed);
   },
   // The account's feed of every item, which the window's Inbox draws from, each staged task's items whole.
-  [ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+  [ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
     const scopes = [...INBOXES].map(([id, items]) => ({
       scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
       items,
     }));
-    const pushed: CodingAgentAccountItems = { whole: true, scopes };
+    const pushed: AgentAccountItems = { whole: true, scopes };
     return pushedOnce(pushed);
   },
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {
+  [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
   },
   [ACT_KIND.AUTOMATIONS_FOLLOW]: (follow) =>
     pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
   // Note that a mark is taken as the service takes one, the item's state echoed, though nothing here moves, so its dot stays as staged: the host draws a mark, and none stands behind a fixture run's act door.
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: () => ({
+  [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
+  [ACT_KIND.AGENTS_INBOX_READ_ALL]: () => ({
     marked: [...INBOXES.values()].flat().filter(({ unread }) => unread === true).length,
   }),
 };

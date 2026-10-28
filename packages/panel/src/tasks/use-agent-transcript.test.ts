@@ -2,18 +2,18 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptOlderAnswer,
-  type CodingAgentTranscriptOlderParams,
-  type CodingAgentTranscriptPage,
+  AGENT_CALL_FAILURE,
+  type AgentTranscriptKey,
+  type AgentTranscriptOlderAnswer,
+  type AgentTranscriptOlderParams,
+  type AgentTranscriptPage,
   TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -42,11 +42,11 @@ import {
  * while the messages held stand. Synthetic ids throughout.
  */
 
-const AGENT: CodingAgentTranscriptKey = {
+const AGENT: AgentTranscriptKey = {
   kind: TRANSCRIPT_KIND.AGENT,
   agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
 };
-const OTHER: CodingAgentTranscriptKey = { ...AGENT, callId: "call-7" };
+const OTHER: AgentTranscriptKey = { ...AGENT, callId: "call-7" };
 
 let root: Root | undefined;
 
@@ -60,7 +60,7 @@ afterEach(() => {
 /** A follower that writes down each follow and let-go, and pushes what the test says to the stream of that transcript. */
 function scriptedFollower() {
   const asked: string[] = [];
-  const hearing = new Map<string, (page: CodingAgentTranscriptPage) => void>();
+  const hearing = new Map<string, (page: AgentTranscriptPage) => void>();
   const follower: TranscriptFollower = (transcript, hear) => {
     const name = transcript.callId ?? "own";
     asked.push(`follow:${name}`);
@@ -70,33 +70,33 @@ function scriptedFollower() {
       hearing.delete(name);
     };
   };
-  const push = (transcript: CodingAgentTranscriptKey, page: CodingAgentTranscriptPage) =>
+  const push = (transcript: AgentTranscriptKey, page: AgentTranscriptPage) =>
     act(() => hearing.get(transcript.callId ?? "own")?.(page));
   return { follower, asked, push };
 }
 
 /** A page saying `text` under `id`. */
-function pageOf(id: string, text: string): CodingAgentTranscriptPage {
+function pageOf(id: string, text: string): AgentTranscriptPage {
   return {
     messages: [{ id, role: "assistant", parts: [{ type: "text", text }] }],
     cursor: "1:0",
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: null,
     caughtUp: false,
   };
 }
 
 /** Messages saying their own ids. */
-function said(ids: readonly string[]): CodingAgentMessage[] {
+function said(ids: readonly string[]): AgentTranscriptMessage[] {
   return ids.map((id) => ({ id, role: "assistant", parts: [{ type: "text", text: id }] }));
 }
 
 /** The newest page, as a follow opens with it: its messages by id, and where the older page is read below where one stands. */
-function newestOf(ids: readonly string[], before?: string): CodingAgentTranscriptPage {
+function newestOf(ids: readonly string[], before?: string): AgentTranscriptPage {
   return {
     messages: said(ids),
     cursor: "9:0",
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: null,
     newest: true,
     caughtUp: false,
@@ -156,7 +156,7 @@ test("a page that could not be read offers Try again, which follows the transcri
 
   draw(true);
   push(AGENT, pageOf("m-1", "Reading the invites."));
-  push(AGENT, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  push(AGENT, { failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(seen.current?.failed, true);
   assert.equal(seen.current?.messages.length, 1);
 
@@ -171,11 +171,11 @@ test("a page that could not be read offers Try again, which follows the transcri
 });
 
 /** A page saying the agent's one worker stands at `status`, its title and start alike each time. */
-function workerPage(status: CodingAgentStatus): CodingAgentTranscriptPage {
+function workerPage(status: AgentStatus): AgentTranscriptPage {
   return {
     messages: [],
     cursor: "1:1",
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: "Wire the schema",
     caughtUp: true,
     subagentTitles: [{ callId: "call-1", title: "Read the schema" }],
@@ -197,20 +197,20 @@ test("a page that says the agent's workers as they stood keeps what the tab hold
   const { seen, draw } = drawn(follower);
 
   draw(true);
-  push(AGENT, workerPage(CODING_AGENT_STATUS.RUNNING));
+  push(AGENT, workerPage(AGENT_STATUS.RUNNING));
   const first = seen.current;
-  push(AGENT, workerPage(CODING_AGENT_STATUS.RUNNING));
+  push(AGENT, workerPage(AGENT_STATUS.RUNNING));
   const again = seen.current;
   assert.equal(again?.pages, (first?.pages ?? 0) + 1);
 
-  push(AGENT, workerPage(CODING_AGENT_STATUS.COMPLETED));
-  assert.equal(seen.current?.subagents.get("call-1")?.status, CODING_AGENT_STATUS.COMPLETED);
+  push(AGENT, workerPage(AGENT_STATUS.COMPLETED));
+  assert.equal(seen.current?.subagents.get("call-1")?.status, AGENT_STATUS.COMPLETED);
 });
 
 test("a stream that opens only after its tab let it go is closed at once", async () => {
-  let open: (stream: AsyncIteratorObject<CodingAgentTranscriptPage>) => void = () => undefined;
+  let open: (stream: AsyncIteratorObject<AgentTranscriptPage>) => void = () => undefined;
   let closed = false;
-  const stream: AsyncIteratorObject<CodingAgentTranscriptPage> = {
+  const stream: AsyncIteratorObject<AgentTranscriptPage> = {
     next: () => new Promise(() => undefined),
     return: () => {
       closed = true;
@@ -221,7 +221,7 @@ test("a stream that opens only after its tab let it go is closed at once", async
   };
   // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () =>
+    [ACT_KIND.AGENTS_TRANSCRIPT]: () =>
       new Promise((resolve) => {
         open = resolve;
       }),
@@ -235,8 +235,8 @@ test("a stream that opens only after its tab let it go is closed at once", async
 });
 
 test("a page a read already out hands over after the tab let go of its stream is heard by no one", async () => {
-  let hand: (read: IteratorResult<CodingAgentTranscriptPage>) => void = () => undefined;
-  const stream: AsyncIteratorObject<CodingAgentTranscriptPage> = {
+  let hand: (read: IteratorResult<AgentTranscriptPage>) => void = () => undefined;
+  const stream: AsyncIteratorObject<AgentTranscriptPage> = {
     next: () =>
       new Promise((resolve) => {
         hand = resolve;
@@ -247,9 +247,9 @@ test("a page a read already out hands over after the tab let go of its stream is
   };
   // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
+    [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
   } as unknown as Parameters<typeof fakeActPort>[0]);
-  const heard: CodingAgentTranscriptPage[] = [];
+  const heard: AgentTranscriptPage[] = [];
 
   const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -262,9 +262,9 @@ test("a page a read already out hands over after the tab let go of its stream is
 test("an agent that ended stays followed while its tab is shown, so the lines a call into it writes still reach the tab", () => {
   const { follower, asked, push } = scriptedFollower();
   const { seen, draw } = drawn(follower);
-  const ended = (id: string, text: string): CodingAgentTranscriptPage => ({
+  const ended = (id: string, text: string): AgentTranscriptPage => ({
     ...pageOf(id, text),
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
   });
 
   draw(true);
@@ -277,7 +277,7 @@ test("an agent that ended stays followed while its tab is shown, so the lines a 
     seen.current?.messages.map((message) => message.id),
     ["m-1", "said-1", "said-2"],
   );
-  assert.equal(seen.current?.pageStatus, CODING_AGENT_STATUS.COMPLETED);
+  assert.equal(seen.current?.pageStatus, AGENT_STATUS.COMPLETED);
   assert.deepEqual(asked, ["follow:own"], "the ended agent's stream is never let go while shown");
 });
 
@@ -294,7 +294,7 @@ test("a follow is timed to its first page drawn and to the page that caught it u
   const first = newestOf(["m-1"], "1");
   push(AGENT, first);
   vi.setSystemTime(1_000_900);
-  const caughtUp: CodingAgentTranscriptPage = {
+  const caughtUp: AgentTranscriptPage = {
     ...pageOf("m-1", "x"),
     messages: [],
     caughtUp: true,
@@ -360,7 +360,7 @@ test("a transcript the account no longer reaches draws nothing the host held of 
 
   draw(true);
   push(AGENT, { ...newestOf(["m-1", "m-2"], "1"), held: true });
-  push(AGENT, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+  push(AGENT, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
 
   assert.deepEqual(seen.current?.messages, []);
   assert.equal(seen.current?.hasOlder, false);
@@ -383,15 +383,15 @@ test("a follow let go before its first page landed is timed by no span", () => {
 
 /** An older reader that writes down each read and answers it when the test hands the answer. */
 function scriptedOlder() {
-  const asked: CodingAgentTranscriptOlderParams[] = [];
-  let answer: (older: CodingAgentTranscriptOlderAnswer) => void = () => undefined;
+  const asked: AgentTranscriptOlderParams[] = [];
+  let answer: (older: AgentTranscriptOlderAnswer) => void = () => undefined;
   const older: TranscriptOlderReader = (params) => {
     asked.push(params);
     return new Promise((resolve) => {
       answer = resolve;
     });
   };
-  const hand = (older: CodingAgentTranscriptOlderAnswer) =>
+  const hand = (older: AgentTranscriptOlderAnswer) =>
     act(async () => {
       answer(older);
       for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
@@ -439,7 +439,7 @@ test("an older read that failed leaves what is held and may be asked again", asy
   draw(true);
   push(AGENT, newestOf(["m-3"], "3"));
   act(() => seen.current?.loadOlder());
-  await hand({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(seen.current?.olderFailed, true);
   assert.deepEqual(
     seen.current?.messages.map((message) => message.id),
@@ -472,7 +472,7 @@ test("a newest page that meets what is held joins it, older pages and all; one t
   draw(true);
   // An older read that failed is the failed cursor's alone.
   act(() => seen.current?.loadOlder());
-  await hand({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(seen.current?.olderFailed, true);
   draw(false);
   draw(true);

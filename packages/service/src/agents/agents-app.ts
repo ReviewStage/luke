@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository } from "@luke/database/models/coding-agent-store";
+import { hasRepository } from "@luke/database/models/agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
-import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { agentCallIdSchema } from "@luke/features/agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -32,7 +32,7 @@ import { githubReadRefusal } from "./asked-pull-request.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 
 /**
- * coding-agents-app.ts -- what a coding agent's window reads as bytes rather than JSON: an image its pull request's overview names, an inbox item's attachment, and a picture a tool answered it.
+ * agents-app.ts -- what a coding agent's window reads as bytes rather than JSON: an image its pull request's overview names, an inbox item's attachment, and a picture a tool answered it.
  *
  * Everything else about an agent answers through the hosted oRPC router
  * (`agents-procedures.ts`, `messages-procedures.ts`,
@@ -59,19 +59,19 @@ const QUERY = {
   SRC: "src",
 } as const;
 
-export interface CodingAgentsAppSeams {
+export interface AgentsAppSeams {
   resolveUserId: UserIdResolver;
 }
 
 /** What the routes may require of the function that stands them. */
-export type CodingAgentsAppServices =
+export type AgentsAppServices =
   | DatabaseServices
   | GitHubApp
   | HttpClient.HttpClient
   | ModelCatalog
   | HostedEnvironment;
 
-type AgentsServices = CodingAgentsAppServices | HttpServerRequest.HttpServerRequest;
+type AgentsServices = AgentsAppServices | HttpServerRequest.HttpServerRequest;
 
 /** The one id the path named under `id`. */
 const idOf = (request: Request) => uuidOf(request, QUERY.ID);
@@ -87,7 +87,7 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<string, HostedRefusal> {
   const call = new URL(request.url).searchParams.get(QUERY.CALL) ?? "";
-  const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
+  const read = readEither(agentCallIdSchema)(unparsedWire(call));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
@@ -102,7 +102,7 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * draws, a file of any other repository among them.
  */
 const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
+  seams: AgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) {
@@ -134,7 +134,7 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
  * workspace's, or of another item's, is not found, as an item is.
  */
 const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
+  seams: AgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) {
@@ -162,7 +162,7 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
  * another worker's, is not found, as an agent the account cannot reach is.
  */
 const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
+  seams: AgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) {
@@ -185,7 +185,7 @@ const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(fu
 });
 
 /** The group: its paths, and the hosted vocabulary's own refusal for any other. */
-export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
+export function agentsApp(seams: AgentsAppSeams): WebRoutes<AgentsAppServices> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

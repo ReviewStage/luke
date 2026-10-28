@@ -54,8 +54,8 @@ const ACME = { workspaceId: "workspace-acme" };
 const READS: readonly Read[] = [
   read(ACT_KIND.GITHUB_TOKEN_READ, undefined),
   read(ACT_KIND.PROVIDER_KEYS_READ, undefined),
-  read(ACT_KIND.CODING_AGENTS_MODELS, undefined),
-  read(ACT_KIND.CODING_AGENTS_DEFAULT_READ, undefined),
+  read(ACT_KIND.AGENTS_MODELS, undefined),
+  read(ACT_KIND.AGENTS_DEFAULT_READ, undefined),
   read(ACT_KIND.CHAPTERS_MODEL_READ, undefined),
   read(ACT_KIND.INTEGRATIONS_STATUS, undefined),
   read(ACT_KIND.INTEGRATIONS_TOOLS, { provider: INTEGRATION_PROVIDER.NOTION }),

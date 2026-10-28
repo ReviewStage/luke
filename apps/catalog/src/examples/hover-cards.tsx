@@ -1,4 +1,6 @@
 import {
+  AVATAR_SIZE,
+  Avatar,
   BUTTON_VARIANT,
   Button,
   DocumentIcon,
@@ -12,6 +14,7 @@ import {
   HoverCardRow,
   HoverCardRule,
   HoverCardScroll,
+  HoverCardSkeleton,
   Inline,
   PinIcon,
   TooltipCard,
@@ -27,7 +30,9 @@ import { CatalogSection } from "../section";
  * end; quieter rows under the name, one a press and one text; and a rule
  * before the rows it lists, every one, scrolling and fading past a few rather
  * than counting the rest, each row a button the pointer crosses onto the
- * card to press, and a long body that is no list scrolling the same way. Each card shows once the pointer rests on
+ * card to press, and a long body that is no list scrolling the same way; and
+ * each card's skeleton beside it, its glyph or its mark in the loaded card's
+ * slot, so its head stands still as what it says is read. Each card shows once the pointer rests on
  * its control or the keyboard reaches it, and stands while the pointer is on
  * the control, on the card, or between them: the catalog's own stand-in for
  * the linger an app gives its cards.
@@ -161,6 +166,47 @@ function HoverCards(): React.JSX.Element {
                   glyph={<FolderIcon />}
                   label="an-organisation-with-a-long-name/a-repository-named-at-length"
                 />
+              </HoverCard>
+            }
+          />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="hover-card-reading" title="Reading">
+        <Inline gap={GAP.CONTROL}>
+          <Carded
+            label="Skill, reading"
+            card={<HoverCardSkeleton glyph={<PinIcon />} name="/release" />}
+          />
+          <Carded
+            label="Skill"
+            card={
+              <HoverCard>
+                <HoverCardHead glyph={<PinIcon />} name="/release" />
+                <HoverCardNote>Cut a release.</HoverCardNote>
+              </HoverCard>
+            }
+          />
+          <Carded
+            label="Agent, reading"
+            card={
+              <HoverCardSkeleton
+                mark={<Avatar name="Prorate seat changes" size={AVATAR_SIZE.CARD} />}
+                name="Prorate seat changes"
+                sub
+              />
+            }
+          />
+          <Carded
+            label="Agent"
+            card={
+              <HoverCard>
+                <HoverCardHead
+                  mark={<Avatar name="Prorate seat changes" size={AVATAR_SIZE.CARD} />}
+                  name="Prorate seat changes"
+                  sub="Opus 5.5"
+                  corner="3m"
+                />
+                <HoverCardNote>Reading packages/billing/src/seats.ts</HoverCardNote>
               </HoverCard>
             }
           />

@@ -13,55 +13,55 @@
  */
 
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentArchiveParams,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentChooseParams,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentDeleteAnswerView,
-  type CodingAgentGitHubImageParams,
-  type CodingAgentGitHubImageView,
-  type CodingAgentListAnswer,
-  type CodingAgentListParams,
-  type CodingAgentMessageParams,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentMessagesParams,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOperatorEnsureAnswerView,
-  type CodingAgentOperatorEnsureParams,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPageParams,
-  type CodingAgentPartParams,
-  type CodingAgentPartView,
-  type CodingAgentPinParams,
-  type CodingAgentPullRequestActionParams,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestParams,
-  type CodingAgentPullRequestReadParams,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentRenameParams,
-  type CodingAgentReviewOptionsAnswerView,
-  type CodingAgentRewindParams,
-  type CodingAgentServersParams,
-  type CodingAgentStartParams,
-  type CodingAgentStopParams,
-  type CodingAgentTranscriptChanged,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptOlderAnswer,
-  type CodingAgentTranscriptOlderParams,
-  type CodingAgentTranscriptPage,
-  type CodingAgentWorkspaceListParams,
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentArchiveParams,
+  type AgentChangesAnswerView,
+  type AgentChooseParams,
+  type AgentDefaultAnswer,
+  type AgentDeleteAnswerView,
+  type AgentGitHubImageParams,
+  type AgentGitHubImageView,
+  type AgentListAnswer,
+  type AgentListParams,
+  type AgentMessageParams,
+  type AgentMessagesAnswerView,
+  type AgentMessagesParams,
+  type AgentModelsAnswer,
+  type AgentOperatorEnsureAnswerView,
+  type AgentOperatorEnsureParams,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPageAnswerView,
+  type AgentPageParams,
+  type AgentPartParams,
+  type AgentPartView,
+  type AgentPinParams,
+  type AgentPullRequestActionParams,
+  type AgentPullRequestAnswerView,
+  type AgentPullRequestParams,
+  type AgentPullRequestReadParams,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+  type AgentRenameParams,
+  type AgentReviewOptionsAnswerView,
+  type AgentRewindParams,
+  type AgentServersParams,
+  type AgentStartParams,
+  type AgentStopParams,
+  type AgentTranscriptChanged,
+  type AgentTranscriptKey,
+  type AgentTranscriptOlderAnswer,
+  type AgentTranscriptOlderParams,
+  type AgentTranscriptPage,
+  type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
   type HostInstallTokenAnswerView,
   type HostsAnswerView,
   TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
@@ -72,73 +72,59 @@ import { streamed } from "./followed-stream.js";
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
   host: {
-    codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
-    codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
-    codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+    agentModels(): Effect.Effect<AgentModelsAnswer>;
+    agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
+    agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
     hostsList(): Effect.Effect<HostsAnswerView>;
     hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
     hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
-    codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
-    codingAgentWorkspaceList(
-      params: CodingAgentWorkspaceListParams,
-    ): Effect.Effect<CodingAgentListAnswer>;
-    codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentMessages(
-      params: CodingAgentMessagesParams,
-    ): Effect.Effect<CodingAgentMessagesAnswerView>;
-    codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
+    agentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
+    agentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
+    agentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
+    agentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
+    agentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
+    agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
     /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
-    transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
-    transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
+    transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
     /** The page of a transcript below the oldest message the window holds, read at once. */
-    transcriptOlder(
-      params: CodingAgentTranscriptOlderParams,
-    ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
-    onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
-    codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentEnsureOperator(
-      params: CodingAgentOperatorEnsureParams,
-    ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
-    codingAgentDelete(params: CodingAgentStopParams): Effect.Effect<CodingAgentDeleteAnswerView>;
+    transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
+    onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
+    agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
+    agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
+    agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+    agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
+    agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
+    agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
+    agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
+    agentEnsureOperator(
+      params: AgentOperatorEnsureParams,
+    ): Effect.Effect<AgentOperatorEnsureAnswerView>;
+    agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
-    codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
-    codingAgentPullRequest(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentPullRequestAnswerView>;
-    codingAgentChanges(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentChangesAnswerView>;
-    codingAgentOverviewPullRequest(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
-    codingAgentReviewOptions(
-      params: CodingAgentPullRequestParams,
-    ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
-    codingAgentOverviewChecks(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
-    codingAgentOverviewConversation(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
-    codingAgentGitHubImage(
-      params: CodingAgentGitHubImageParams,
-    ): Effect.Effect<CodingAgentGitHubImageView>;
-    codingAgentPullRequestAction(
-      params: CodingAgentPullRequestActionParams,
-    ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
-    codingAgentPullRequestViewed(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
+    agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
+    agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
+    agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
+    agentOverviewPullRequest(
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
+    agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
+    agentOverviewChecks(
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentOverviewChecksAnswerView>;
+    agentOverviewConversation(
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentOverviewConversationAnswerView>;
+    agentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
+    agentPullRequestAction(
+      params: AgentPullRequestActionParams,
+    ): Effect.Effect<AgentPullRequestWriteAnswerView>;
+    agentPullRequestViewed(
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentPullRequestViewedAnswerView>;
   };
   /** Where every answer's agents and what an agent published are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -162,12 +148,12 @@ function noted<Answer>(
 
 /** A transcript as a key that equals another naming the same one. */
 class TranscriptStreamKey extends Data.Class<{
-  readonly kind: CodingAgentTranscriptKey["kind"];
+  readonly kind: AgentTranscriptKey["kind"];
   readonly owner: string;
   readonly callId: string | undefined;
 }> {}
 
-function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStreamKey {
+function transcriptKeyOf(transcript: AgentTranscriptKey): TranscriptStreamKey {
   return new TranscriptStreamKey({
     kind: transcript.kind,
     owner: transcript.agentId,
@@ -184,10 +170,10 @@ function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStream
 function transcriptPages(
   host: AgentProceduresDependencies["host"],
   open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
-  transcript: CodingAgentTranscriptKey,
-): Stream.Stream<CodingAgentTranscriptPage> {
+  transcript: AgentTranscriptKey,
+): Stream.Stream<AgentTranscriptPage> {
   const key = transcriptKeyOf(transcript);
-  return Stream.callback<CodingAgentTranscriptPage>((queue) =>
+  return Stream.callback<AgentTranscriptPage>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() =>
@@ -230,7 +216,7 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   /** How many streams stand open of each transcript, so the host lets one go only with the last. */
   const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
   // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
-  const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
+  const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
     Effect.tap(
       noted(answer, (value) => {
         if ("agent" in value) notices.observeAgents([value.agent]);
@@ -239,24 +225,25 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         "agent" in value && value.agent.planId === null ? host.tasksRefresh() : Effect.void,
     );
   return {
-    [AGENT_ACT_KIND.CODING_AGENTS_MODELS]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MODELS].effect(
+    [AGENT_ACT_KIND.AGENTS_MODELS]: actPort[AGENT_ACT_KIND.AGENTS_MODELS].effect(function* ({
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentModels();
+    }),
+    [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: actPort[AGENT_ACT_KIND.AGENTS_DEFAULT_READ].effect(
       function* ({ context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.codingAgentModels();
+        return yield* host.agentDefaultRead();
       },
     ),
-    [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_READ]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_READ
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentDefaultRead();
-    }),
-    [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_WRITE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentDefaultWrite(input);
-    }),
+    [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: actPort[AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentDefaultWrite(input);
+      },
+    ),
     [AGENT_ACT_KIND.HOSTS_LIST]: actPort[AGENT_ACT_KIND.HOSTS_LIST].effect(function* ({
       context,
       errors,
@@ -291,208 +278,242 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsRevokeInstallToken(input.id);
     }),
-    [AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: actPort[AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentWorkspaceList(input);
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_LIST]: actPort[AGENT_ACT_KIND.AGENTS_LIST].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentWorkspaceList(input);
+      return yield* noted(host.agentList(input), (answer) => {
+        if ("agents" in answer) notices.observeAgents(answer.agents);
+        else if (answer.failure === AGENT_CALL_FAILURE.NOT_FOUND) {
+          notices.observeTaskGone(input.taskId);
+        }
+      });
     }),
-    [AGENT_ACT_KIND.CODING_AGENTS_LIST]: actPort[AGENT_ACT_KIND.CODING_AGENTS_LIST].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* noted(host.codingAgentList(input), (answer) => {
-          if ("agents" in answer) notices.observeAgents(answer.agents);
-          else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-            notices.observeTaskGone(input.taskId);
-          }
-        });
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_START]: actPort[AGENT_ACT_KIND.CODING_AGENTS_START].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentStart(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MESSAGES].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // A worker's page says where the worker stands and what it is called, which is no word on the agent.
-        return yield* noted(host.codingAgentMessages(input), (answer) => {
-          if ("status" in answer && input.callId === undefined) {
-            notices.observeStatus(input.agentId, answer.status);
-          }
-        });
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_PART]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PART].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.codingAgentPart(input);
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_START]: actPort[AGENT_ACT_KIND.AGENTS_START].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const pages = transcriptPages(host, openTranscripts, input).pipe(
-        Stream.tap((page) =>
-          Effect.sync(() => {
-            // A worker's page says where the worker stands, which is no word on the agent.
-            if (!("status" in page)) return;
-            if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
-            notices.observeStatus(input.agentId, page.status);
-          }),
-        ),
-      );
-      return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      return yield* notedAgent(host.agentStart(input));
     }),
-    [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER
+    [AGENT_ACT_KIND.AGENTS_MESSAGES]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGES].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // A worker's page says where the worker stands and what it is called, which is no word on the agent.
+      return yield* noted(host.agentMessages(input), (answer) => {
+        if ("status" in answer && input.callId === undefined) {
+          notices.observeStatus(input.agentId, answer.status);
+        }
+      });
+    }),
+    [AGENT_ACT_KIND.AGENTS_PART]: actPort[AGENT_ACT_KIND.AGENTS_PART].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentPart(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actPort[AGENT_ACT_KIND.AGENTS_TRANSCRIPT].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = transcriptPages(host, openTranscripts, input).pipe(
+          Stream.tap((page) =>
+            Effect.sync(() => {
+              // A worker's page says where the worker stands, which is no word on the agent.
+              if (!("status" in page)) return;
+              if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
+              notices.observeStatus(input.agentId, page.status);
+            }),
+          ),
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: actPort[
+      AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.transcriptOlder(input);
     }),
-    [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_MESSAGE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* noted(host.codingAgentMessage(input), (answer) => {
-          if ("agent" in answer) notices.observeMessaged(answer.agent);
-        });
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CHOOSE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentChoose(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: actPort[AGENT_ACT_KIND.CODING_AGENTS_RENAME].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentRename(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_SERVERS]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SERVERS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentServers(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_STOP]: actPort[AGENT_ACT_KIND.CODING_AGENTS_STOP].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentStop(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_REWIND]: actPort[AGENT_ACT_KIND.CODING_AGENTS_REWIND].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentRewind(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentArchive(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_PIN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PIN].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.codingAgentPin(input));
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that an ensure that wrote a row made the operator, or a fresh one in a reset's place, so the plan list, which carries it, is read again.
-      return yield* Effect.tap(host.codingAgentEnsureOperator(input), (answer) =>
-        "txid" in answer ? host.tasksRefresh() : Effect.void,
-      );
+      return yield* noted(host.agentMessage(input), (answer) => {
+        if ("agent" in answer) notices.observeMessaged(answer.agent);
+      });
     }),
-    [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_DELETE].effect(
+    [AGENT_ACT_KIND.AGENTS_CHOOSE]: actPort[AGENT_ACT_KIND.AGENTS_CHOOSE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentChoose(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_RENAME]: actPort[AGENT_ACT_KIND.AGENTS_RENAME].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentRename(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_SERVERS]: actPort[AGENT_ACT_KIND.AGENTS_SERVERS].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentServers(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_STOP]: actPort[AGENT_ACT_KIND.AGENTS_STOP].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentStop(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_REWIND]: actPort[AGENT_ACT_KIND.AGENTS_REWIND].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentRewind(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_ARCHIVE]: actPort[AGENT_ACT_KIND.AGENTS_ARCHIVE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentArchive(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_PIN]: actPort[AGENT_ACT_KIND.AGENTS_PIN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentPin(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actPort[AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that the plan list is read again, which carries every agent with no plan, so the sidebar's row goes.
-        return yield* Effect.tap(host.codingAgentDelete(input), (answer) =>
-          "deleted" in answer ? host.tasksRefresh() : Effect.void,
+        // Note that an ensure that wrote a row made the operator, or a fresh one in a reset's place, so the plan list, which carries it, is read again.
+        return yield* Effect.tap(host.agentEnsureOperator(input), (answer) =>
+          "txid" in answer ? host.tasksRefresh() : Effect.void,
         );
       },
     ),
-    [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SHOWN].effect(
+    [AGENT_ACT_KIND.AGENTS_DELETE]: actPort[AGENT_ACT_KIND.AGENTS_DELETE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that the plan list is read again, which carries every agent with no plan, so the sidebar's row goes.
+      return yield* Effect.tap(host.agentDelete(input), (answer) =>
+        "deleted" in answer ? host.tasksRefresh() : Effect.void,
+      );
+    }),
+    [AGENT_ACT_KIND.AGENTS_SHOWN]: actPort[AGENT_ACT_KIND.AGENTS_SHOWN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      notices.shown(input.agentId);
+    }),
+    [AGENT_ACT_KIND.AGENTS_SEEN]: actPort[AGENT_ACT_KIND.AGENTS_SEEN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      notices.seen(input.agentId);
+    }),
+    [AGENT_ACT_KIND.AGENTS_PAGE]: actPort[AGENT_ACT_KIND.AGENTS_PAGE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentPage(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actPort[AGENT_ACT_KIND.AGENTS_PULL_REQUEST].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        notices.shown(input.agentId);
+        return yield* host.agentPullRequest(input);
       },
     ),
-    [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: actPort[AGENT_ACT_KIND.CODING_AGENTS_SEEN].effect(
+    [AGENT_ACT_KIND.AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.AGENTS_CHANGES].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentChanges(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: actPort[
+      AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentOverviewPullRequest(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actPort[AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        notices.seen(input.agentId);
+        return yield* host.agentReviewOptions(input);
       },
     ),
-    [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_PAGE].effect(
+    [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.codingAgentPage(input);
+        return yield* host.agentOverviewChecks(input);
       },
     ),
-    [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST
+    [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: actPort[
+      AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentPullRequest(input);
-    }),
-    [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CHANGES].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.codingAgentChanges(input);
-      },
-    ),
-    [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentOverviewPullRequest(input);
-    }),
-    [AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentReviewOptions(input);
-    }),
-    [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentOverviewChecks(input);
-    }),
-    [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentOverviewConversation(input);
+      return yield* host.agentOverviewConversation(input);
     }),
     // Note that the image's answer, a failure among them, is the panel's to read, as an agent's picture's is.
-    [AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
+    [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: actPort[AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentGitHubImage(input);
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: actPort[
+      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentGitHubImage(input);
+      return yield* host.agentPullRequestAction(input);
     }),
-    [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: actPort[
+      AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentPullRequestAction(input);
-    }),
-    [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: actPort[
-      AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentPullRequestViewed(input);
+      return yield* host.agentPullRequestViewed(input);
     }),
   };
 }

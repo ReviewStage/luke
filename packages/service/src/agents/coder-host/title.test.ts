@@ -2,18 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import {
-  type CodingAgent,
-  createCodingAgent,
-  readCodingAgent,
-  renameCodingAgent,
-} from "@luke/database/models/coding-agent-store";
+import { type Agent, createAgent, readAgent, renameAgent } from "@luke/database/models/agent-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { Clock, Effect, Option } from "effect";
@@ -21,7 +16,7 @@ import { TURN_TRIGGER, userMetadataOf } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleNativeAgent } from "../native-events/native-title.js";
-import { titleCodingAgent } from "./title.js";
+import { titleAgent } from "./title.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
@@ -75,7 +70,7 @@ function scriptedTitleModel(title: string) {
 }
 
 /** The agent's session opened on `prompt`, as eve records it. */
-const openedOn = (owner: string, agent: CodingAgent, prompt: string) =>
+const openedOn = (owner: string, agent: Agent, prompt: string) =>
   Effect.gen(function* () {
     const placedAt = new Date(yield* Clock.currentTimeMillis);
     yield* Database.use((db) =>
@@ -97,7 +92,7 @@ const openedOn = (owner: string, agent: CodingAgent, prompt: string) =>
 const startOnTask = (owner: string, taskId: string, prompt: string) =>
   Effect.gen(function* () {
     const started = Option.getOrThrow(
-      yield* createCodingAgent(owner, {
+      yield* createAgent(owner, {
         taskId,
         planSnapshot: null,
         prompt,
@@ -111,8 +106,8 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
   });
 
 /** The agent titled by a model answering `title`. */
-const titledAs = (owner: string, agent: CodingAgent, title: string) =>
-  titleCodingAgent(
+const titledAs = (owner: string, agent: Agent, title: string) =>
+  titleAgent(
     scriptedTitleModel(title).model,
     { userId: owner, conversationId: agent.conversationId },
     agent,
@@ -135,7 +130,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       yield* titledAs(owner, second, "Send invitation reminders");
 
       assert.equal(yield* taskName(owner, task.id), "Expire teammate invitations");
-      const secondTitled = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
+      const secondTitled = Option.getOrThrow(yield* readAgent(owner, second.id));
       assert.equal(secondTitled.title, "Send invitation reminders");
     }),
   );
@@ -151,7 +146,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       yield* titledAs(owner, first, "<Untitled>.");
       yield* titledAs(owner, second, "Send invitation reminders");
 
-      assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, first.id)).title, null);
+      assert.equal(Option.getOrThrow(yield* readAgent(owner, first.id)).title, null);
       assert.equal(yield* taskName(owner, task.id), "Send invitation reminders");
     }),
   );
@@ -175,7 +170,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       const organizationId = yield* openWorkspace(owner);
       const task = yield* createTask(owner, { organizationId });
       const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
-      yield* renameCodingAgent(owner, agent.id, "My invitations agent");
+      yield* renameAgent(owner, agent.id, "My invitations agent");
 
       // The agent as the host read it before the developer's title landed.
       yield* titledAs(owner, agent, "Expire teammate invitations");
@@ -191,12 +186,12 @@ it.layer(getTestDB())("an operator's title", (it) => {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
       const started = Option.getOrThrow(
-        yield* createCodingAgent(owner, {
+        yield* createAgent(owner, {
           taskId: null,
           organizationId,
           planSnapshot: null,
           prompt: null,
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",
@@ -211,7 +206,7 @@ it.layer(getTestDB())("an operator's title", (it) => {
 
       yield* titledAs(owner, operator, "Review open work");
 
-      const read = Option.getOrThrow(yield* readCodingAgent(owner, operator.id));
+      const read = Option.getOrThrow(yield* readAgent(owner, operator.id));
       assert.equal(read.title, null);
     }),
   );
@@ -242,15 +237,15 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
 
         for (const agent of [prompted, planned, lowered]) {
-          yield* titleCodingAgent(
+          yield* titleAgent(
             undefined,
             { userId: owner, conversationId: agent.conversationId },
             agent,
           );
         }
 
-        const titleOf = (agent: CodingAgent) =>
-          Effect.map(readCodingAgent(owner, agent.id), (read) => Option.getOrThrow(read).title);
+        const titleOf = (agent: Agent) =>
+          Effect.map(readAgent(owner, agent.id), (read) => Option.getOrThrow(read).title);
         assert.equal(yield* titleOf(prompted), "Expire teammate invitations after one week");
         assert.equal(yield* titleOf(planned), "Teammate invitations by email");
         assert.equal(yield* titleOf(lowered), "Fix the invite link in README");
@@ -276,7 +271,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           agent,
         ).pipe(Effect.provideService(HostedEnvironment, DEPLOYMENT_ENVIRONMENT));
 
-        const titled = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const titled = Option.getOrThrow(yield* readAgent(owner, agent.id));
         assert.equal(titled.title, "Retry the invite email when the");
       }),
   );
@@ -288,7 +283,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
         const owner = yield* openGithubUser();
         const organizationId = yield* openWorkspace(owner);
         const started = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: null,
             organizationId,
             planSnapshot: null,
@@ -323,12 +318,12 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
         const { model, asked } = scriptedTitleModel("Fix the flakiest CI test");
 
-        yield* titleCodingAgent(
+        yield* titleAgent(
           model,
           { userId: owner, conversationId: started.agent.conversationId },
           started.agent,
         );
-        const titled = Option.getOrThrow(yield* readCodingAgent(owner, started.agent.id));
+        const titled = Option.getOrThrow(yield* readAgent(owner, started.agent.id));
 
         assert.match(asked[0] ?? "", /Find the flakiest test in CI this week/u);
         assert.match(asked[0] ?? "", /release\/2\.4/u, "the subject survives a long prompt");
@@ -360,7 +355,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
           "Also send a reminder the day before.",
         );
         const started = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: null,
             organizationId,
             planSnapshot: null,
@@ -385,13 +380,13 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
         const { model, asked } = scriptedTitleModel("Expire invitations with a reminder");
 
-        yield* titleCodingAgent(
+        yield* titleAgent(
           model,
           { userId: owner, conversationId: started.agent.conversationId },
           started.agent,
         );
 
-        const titled = Option.getOrThrow(yield* readCodingAgent(owner, started.agent.id));
+        const titled = Option.getOrThrow(yield* readAgent(owner, started.agent.id));
         assert.equal(titled.title, "Expire invitations with a reminder");
         assert.match(asked[0] ?? "", /Expire teammate invitations after a week/u);
         assert.match(asked[0] ?? "", /Also send a reminder the day before/u);

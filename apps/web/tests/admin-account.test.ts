@@ -6,11 +6,7 @@ import {
   ADMIN_WORKSPACE_KIND,
 } from "@luke/features/admin-account-wire";
 import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_STATUS,
-  CONTEXT_WINDOW,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_FAILURE, AGENT_STATUS, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -96,7 +92,7 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         contextWindow: CONTEXT_WINDOW.LONG,
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         failure: null,
         pullRequest: ADMIN_PULL_REQUEST.MERGED,
       },
@@ -107,8 +103,8 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
         model: "openai/gpt-5.5",
         effort: "medium",
         contextWindow: CONTEXT_WINDOW.STANDARD,
-        status: CODING_AGENT_STATUS.FAILED,
-        failure: CODING_AGENT_FAILURE.PROVIDER_KEY,
+        status: AGENT_STATUS.FAILED,
+        failure: AGENT_FAILURE.PROVIDER_KEY,
         pullRequest: ADMIN_PULL_REQUEST.NONE,
       },
     ],
@@ -155,7 +151,7 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
       {
         kind: ADMIN_FAILURE_KIND.AGENT,
         at: Date.UTC(2026, 9, 13, 16, 42),
-        reason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+        reason: AGENT_FAILURE.PROVIDER_KEY,
       },
       {
         kind: ADMIN_FAILURE_KIND.KEY,

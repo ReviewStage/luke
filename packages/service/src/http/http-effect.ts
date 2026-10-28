@@ -1,4 +1,4 @@
-import type { LocalAgentRefusal, RefusedDevice } from "@luke/features/coding-agent-wire";
+import type { LocalAgentRefusal, RefusedDevice } from "@luke/features/agent-wire";
 import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";

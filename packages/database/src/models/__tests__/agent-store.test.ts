@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
+  AGENT_ARCHIVER,
+  AGENT_AUTHOR,
+  AGENT_BRIEF,
+  AGENT_KIND,
+  AGENT_PAYER,
   CHECK_SUMMARY,
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_AUTHOR,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_KIND,
-  CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
@@ -27,9 +27,9 @@ import { eq } from "drizzle-orm";
 import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import {
@@ -39,65 +39,65 @@ import {
 } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace } from "../../testing/index.js";
 import {
-  archiveCodingAgent,
-  archiveIdleCodingAgent,
+  type Agent,
+  type AgentLine,
+  agentLineOf,
+  archiveAgent,
+  archiveIdleAgent,
   archiveOperatorAgent,
-  archiveUnmovedCodingAgent,
-  type CodingAgent,
-  type CodingAgentLine,
-  codingAgentLineOf,
+  archiveUnmovedAgent,
   continuationsOf,
-  createCodingAgent,
+  createAgent,
   delegationsOf,
-  deleteCodingAgent,
+  deleteAgent,
   dispatchMentioningServers,
-  forgetCodingAgentPublishedRead,
+  forgetAgentPublishedRead,
   IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
-  listCodingAgentLines,
-  listCodingAgentsOnPullRequest,
-  listPublishedCodingAgents,
-  listPublishedCodingAgentsById,
-  listTasklessCodingAgents,
-  listWorkspaceCodingAgentLines,
-  listWorkspaceCodingAgents,
-  type NewCodingAgent,
+  listAgentLines,
+  listAgentsOnPullRequest,
+  listPublishedAgents,
+  listPublishedAgentsById,
+  listTasklessAgentRows,
+  listWorkspaceAgentLines,
+  listWorkspaceAgents,
+  type NewAgent,
   nativeRuntimesOfReached,
   operatorReplaced,
-  pinCodingAgent,
+  pinAgent,
+  readAgent,
+  readAgentHeaderOfConversation,
+  readAgentKeptPublished,
+  readAgentOfConversation,
+  readAgentPublished,
+  readAgentRouting,
   readArchivedOperator,
-  readCodingAgent,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentKeptPublished,
-  readCodingAgentOfConversation,
-  readCodingAgentPublished,
-  readCodingAgentRouting,
   readEveRunStanding,
   readNativeHanded,
   readNativeRunStanding,
   readRunnerTokenConversation,
   readStandingOperator,
-  readVisibleCodingAgent,
-  recordCodingAgentAuthor,
-  recordCodingAgentNativeSession,
-  recordCodingAgentPublished,
-  recordCodingAgentRunnerToken,
+  readVisibleAgent,
+  recordAgentAuthor,
+  recordAgentNativeSession,
+  recordAgentPublished,
+  recordAgentRunnerToken,
   recordNativeHanded,
   recordTurnFastRefused,
-  renameCodingAgent,
+  renameAgent,
   reserveTurnPlanNotes,
   restoreOperatorAgent,
-  settleCodingAgentAuthor,
+  settleAgentAuthor,
   settleTurnPlanNotes,
-  takeCodingAgentMentionedServers,
+  takeAgentMentionedServers,
   taskHasMergedPullRequest,
   taskNamesOf,
   turnUsagesOf,
-  unarchiveCodingAgentFrom,
-  updateCodingAgentChoice,
+  unarchiveAgentFrom,
+  updateAgentChoice,
   writeDelegation,
-} from "../coding-agent-store.js";
+} from "../agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
@@ -539,7 +539,7 @@ const tasklessAgent = (
     const db = yield* Database;
     const id = randomUUID();
     const conversationId = yield* openConversation(userId, CONVERSATION_KIND.CODING_AGENT);
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -589,7 +589,7 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
           agentId,
           [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.LINEAR],
           // A turn starts while the runtime has the message, and takes what stands; then the runtime refuses it.
-          Effect.map(takeCodingAgentMentionedServers(userId, conversationId), (taken) => {
+          Effect.map(takeAgentMentionedServers(userId, conversationId), (taken) => {
             tookMeanwhile = taken;
             return false;
           }),
@@ -597,7 +597,7 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
 
         assert.equal(refused, false);
         assert.deepEqual(tookMeanwhile, [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NOTION]);
-        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), []);
+        assert.deepEqual(yield* takeAgentMentionedServers(userId, conversationId), []);
       }),
   );
 
@@ -621,7 +621,7 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
         yield* Deferred.await(began);
         yield* Fiber.interrupt(handing);
 
-        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), []);
+        assert.deepEqual(yield* takeAgentMentionedServers(userId, conversationId), []);
       }),
   );
 
@@ -646,7 +646,7 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
           Effect.succeed(false),
         );
 
-        assert.deepEqual(yield* takeCodingAgentMentionedServers(userId, conversationId), [
+        assert.deepEqual(yield* takeAgentMentionedServers(userId, conversationId), [
           INTEGRATION_PROVIDER.LINEAR,
         ]);
       }),
@@ -674,12 +674,12 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan", (it) => {
         yield* openWorkspace(outsider);
         const { agentId, conversationId } = yield* tasklessAgent(starter, workspace);
 
-        const read = Option.getOrThrow(yield* readCodingAgent(teammate, agentId));
+        const read = Option.getOrThrow(yield* readAgent(teammate, agentId));
         assert.deepEqual(
           [read.taskId, read.organizationId, read.userId],
           [null, workspace, starter],
         );
-        assert.ok(Option.isNone(yield* readCodingAgent(outsider, agentId)));
+        assert.ok(Option.isNone(yield* readAgent(outsider, agentId)));
         assert.deepEqual(
           [
             yield* conversationReachableBy(starter, conversationId),
@@ -706,9 +706,9 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
         yield* openWorkspace(outsider);
         const first = yield* tasklessAgent(starter, workspace);
         const second = yield* tasklessAgent(starter, workspace);
-        yield* archiveCodingAgent(starter, second.agentId, true);
+        yield* archiveAgent(starter, second.agentId, true);
 
-        const read = yield* listPublishedCodingAgentsById(teammate, [
+        const read = yield* listPublishedAgentsById(teammate, [
           first.agentId,
           second.agentId,
           randomUUID(),
@@ -721,7 +721,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
           ],
         );
         assert.deepEqual(
-          yield* listPublishedCodingAgentsById(outsider, [first.agentId, second.agentId]),
+          yield* listPublishedAgentsById(outsider, [first.agentId, second.agentId]),
           [],
           "another workspace's agents are none of an outsider's",
         );
@@ -742,7 +742,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
           repository: "acme/relay",
           githubAccess: GITHUB_ACCESS.TOKEN,
         });
-        const started = yield* createCodingAgent(starter, {
+        const started = yield* createAgent(starter, {
           taskId: task.id,
           planSnapshot: "# Billing",
           prompt: null,
@@ -756,10 +756,10 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
 
         assert.deepEqual(
           [
-            Option.isSome(yield* readVisibleCodingAgent(starter, agentId)),
-            Option.isNone(yield* readVisibleCodingAgent(teammate, agentId)),
-            yield* listPublishedCodingAgentsById(teammate, [agentId]),
-            Option.isSome(yield* readCodingAgent(teammate, agentId)),
+            Option.isSome(yield* readVisibleAgent(starter, agentId)),
+            Option.isNone(yield* readVisibleAgent(teammate, agentId)),
+            yield* listPublishedAgentsById(teammate, [agentId]),
+            Option.isSome(yield* readAgent(teammate, agentId)),
           ],
           [true, true, [], true],
         );
@@ -787,10 +787,10 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
           .set({ nextMessageSeq: read.seq + 1 })
           .where(eq(conversations.id, conversationId));
 
-        const stale = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq);
+        const stale = yield* archiveUnmovedAgent(starter, agentId, read.seq);
         // Its pull request reopened after the read, which moves no line of its conversation.
         const pullRequest = (state: PullRequestState) =>
-          recordCodingAgentPublished(starter, agentId, {
+          recordAgentPublished(starter, agentId, {
             number: 7,
             title: "Expire teammate invitations",
             url: "https://github.com/acme/relay/pull/7",
@@ -801,13 +801,13 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
             changedFiles: 2,
           });
         yield* pullRequest(PULL_REQUEST_STATE.OPEN);
-        const reopened = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
+        const reopened = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
         yield* pullRequest(PULL_REQUEST_STATE.MERGED);
-        const current = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
-        const again = yield* archiveUnmovedCodingAgent(starter, agentId, read.seq + 1);
+        const current = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
+        const again = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
 
         assert.deepEqual([stale, reopened, current, again], [false, false, true, false]);
-        assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
+        assert.ok(Option.getOrThrow(yield* readAgent(starter, agentId)).archivedAt !== null);
       }),
   );
 });
@@ -825,7 +825,7 @@ it.layer(getTestDB())("the coding-agent store's record of who archived an agent"
         yield* openWorkspace(outsider);
         const { agentId } = yield* tasklessAgent(starter, workspace);
         const byAgent = {
-          by: CODING_AGENT_ARCHIVER.AGENT,
+          by: AGENT_ARCHIVER.AGENT,
           userId: teammate,
           agentId: randomUUID(),
           agentName: "Billing helper",
@@ -833,38 +833,38 @@ it.layer(getTestDB())("the coding-agent store's record of who archived an agent"
         };
         const idle = () => Effect.succeed(true);
 
-        const byMember = yield* archiveCodingAgent(teammate, agentId, true);
+        const byMember = yield* archiveAgent(teammate, agentId, true);
         assert.deepEqual(Option.getOrThrow(byMember).archivedBy, {
-          by: CODING_AGENT_ARCHIVER.MEMBER,
+          by: AGENT_ARCHIVER.MEMBER,
           userId: teammate,
         });
         const seen = Option.getOrThrow(byMember).archivedAt;
         assert.ok(seen !== null);
-        assert.equal(yield* unarchiveCodingAgentFrom(teammate, agentId, seen), true);
+        assert.equal(yield* unarchiveAgentFrom(teammate, agentId, seen), true);
         // The archive made again is made later, as any archive after a read of the last one is.
         yield* TestClock.adjust("1 second");
         assert.equal(
-          yield* archiveIdleCodingAgent(teammate, agentId, byAgent, () => Effect.succeed(false)),
+          yield* archiveIdleAgent(teammate, agentId, byAgent, () => Effect.succeed(false)),
           IDLE_ARCHIVE.WORKING,
         );
         assert.equal(
-          yield* archiveIdleCodingAgent(teammate, agentId, byAgent, idle),
+          yield* archiveIdleAgent(teammate, agentId, byAgent, idle),
           IDLE_ARCHIVE.ARCHIVED,
         );
         assert.equal(
-          yield* archiveIdleCodingAgent(starter, agentId, { ...byAgent, reason: "Again." }, idle),
+          yield* archiveIdleAgent(starter, agentId, { ...byAgent, reason: "Again." }, idle),
           IDLE_ARCHIVE.ALREADY,
         );
-        const archived = Option.getOrThrow(yield* readCodingAgent(starter, agentId));
+        const archived = Option.getOrThrow(yield* readAgent(starter, agentId));
         assert.deepEqual(archived.archivedBy, byAgent);
         assert.equal(
-          yield* archiveIdleCodingAgent(outsider, agentId, byAgent, idle),
+          yield* archiveIdleAgent(outsider, agentId, byAgent, idle),
           IDLE_ARCHIVE.NOT_FOUND,
         );
         // An unarchive from the archive a reader saw before it was made again takes nothing.
-        assert.equal(yield* unarchiveCodingAgentFrom(starter, agentId, seen), false);
-        assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
-        const back = Option.getOrThrow(yield* archiveCodingAgent(starter, agentId, false));
+        assert.equal(yield* unarchiveAgentFrom(starter, agentId, seen), false);
+        assert.ok(Option.getOrThrow(yield* readAgent(starter, agentId)).archivedAt !== null);
+        const back = Option.getOrThrow(yield* archiveAgent(starter, agentId, false));
         assert.deepEqual([back.archivedAt, back.archivedBy], [null, null]);
       }),
   );
@@ -900,19 +900,20 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
         yield* tasklessAgent(outsider, elsewhere, { createdAt: at(12) });
         yield* Effect.flatMap(Database, (db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ archivedAt: at(13) })
-            .where(eq(codingAgent.id, archived.agentId)),
+            .where(eq(agentTable.id, archived.agentId)),
         );
         const ids = (agents: readonly { readonly id: string }[]) => agents.map((agent) => agent.id);
 
-        assert.deepEqual(
-          ids(yield* listWorkspaceCodingAgents(teammate, workspace, { limit: 10 })),
-          [newest.agentId, web.agentId, oldest.agentId],
-        );
+        assert.deepEqual(ids(yield* listWorkspaceAgents(teammate, workspace, { limit: 10 })), [
+          newest.agentId,
+          web.agentId,
+          oldest.agentId,
+        ]);
         assert.deepEqual(
           ids(
-            yield* listWorkspaceCodingAgents(starter, workspace, {
+            yield* listWorkspaceAgents(starter, workspace, {
               repository: "acme/web",
               limit: 10,
             }),
@@ -921,25 +922,25 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
         );
         assert.deepEqual(
           ids(
-            yield* listWorkspaceCodingAgents(teammate, workspace, {
+            yield* listWorkspaceAgents(teammate, workspace, {
               includeArchived: true,
               limit: 10,
             }),
           ),
           [newest.agentId, archived.agentId, web.agentId, oldest.agentId],
         );
-        assert.deepEqual(ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 2 })), [
+        assert.deepEqual(ids(yield* listWorkspaceAgents(starter, workspace, { limit: 2 })), [
           newest.agentId,
           web.agentId,
         ]);
-        assert.deepEqual(yield* listWorkspaceCodingAgents(outsider, workspace, { limit: 10 }), []);
+        assert.deepEqual(yield* listWorkspaceAgents(outsider, workspace, { limit: 10 }), []);
         // Only the account's own, where asked, held to the limit after the narrowing.
         assert.deepEqual(
-          ids(yield* listWorkspaceCodingAgents(starter, workspace, { ownOnly: true, limit: 2 })),
+          ids(yield* listWorkspaceAgents(starter, workspace, { ownOnly: true, limit: 2 })),
           [newest.agentId, oldest.agentId],
         );
         assert.deepEqual(
-          ids(yield* listWorkspaceCodingAgents(teammate, workspace, { ownOnly: true, limit: 10 })),
+          ids(yield* listWorkspaceAgents(teammate, workspace, { ownOnly: true, limit: 10 })),
           [web.agentId],
         );
 
@@ -955,7 +956,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
         });
         assert.deepEqual(
           ids(
-            yield* listWorkspaceCodingAgents(starter, workspace, {
+            yield* listWorkspaceAgents(starter, workspace, {
               taskId: invitations.id,
               includeArchived: true,
               limit: 10,
@@ -964,7 +965,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           [onTask.agentId],
         );
         assert.equal(
-          ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 10 }))[0],
+          ids(yield* listWorkspaceAgents(starter, workspace, { limit: 10 }))[0],
           onTask.agentId,
         );
         const elsewhereTask = yield* createTask(outsider, {
@@ -982,7 +983,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
         assert.deepEqual(names.get(oldTask.id), { name: "Old" });
         assert.equal((yield* taskNamesOf(outsider, [invitations.id])).size, 0);
         assert.deepEqual(
-          yield* listWorkspaceCodingAgents(outsider, workspace, {
+          yield* listWorkspaceAgents(outsider, workspace, {
             includeArchived: true,
             limit: 10,
           }),
@@ -1002,41 +1003,29 @@ it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
         const workspace = yield* openWorkspace(starter);
         yield* openWorkspace(outsider);
         const { agentId } = yield* tasklessAgent(starter, workspace);
-        const before = Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author;
+        const before = Option.getOrThrow(yield* readAgent(starter, agentId)).author;
 
-        const refused = yield* settleCodingAgentAuthor(
-          outsider,
-          agentId,
-          CODING_AGENT_AUTHOR.APP_UNLINKED,
-        );
-        const first = yield* settleCodingAgentAuthor(
-          starter,
-          agentId,
-          CODING_AGENT_AUTHOR.DEVELOPER,
-        );
-        const second = yield* settleCodingAgentAuthor(
-          starter,
-          agentId,
-          CODING_AGENT_AUTHOR.APP_UNREAD,
-        );
+        const refused = yield* settleAgentAuthor(outsider, agentId, AGENT_AUTHOR.APP_UNLINKED);
+        const first = yield* settleAgentAuthor(starter, agentId, AGENT_AUTHOR.DEVELOPER);
+        const second = yield* settleAgentAuthor(starter, agentId, AGENT_AUTHOR.APP_UNREAD);
 
         assert.equal(before, null);
         assert.ok(Option.isNone(refused));
         assert.deepEqual(
           [first, second],
-          [Option.some(CODING_AGENT_AUTHOR.DEVELOPER), Option.some(CODING_AGENT_AUTHOR.DEVELOPER)],
+          [Option.some(AGENT_AUTHOR.DEVELOPER), Option.some(AGENT_AUTHOR.DEVELOPER)],
         );
         assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author,
-          CODING_AGENT_AUTHOR.DEVELOPER,
+          Option.getOrThrow(yield* readAgent(starter, agentId)).author,
+          AGENT_AUTHOR.DEVELOPER,
         );
 
         // Recorded over, as an opening the App made in the developer's place records why; never by an outsider.
-        yield* recordCodingAgentAuthor(outsider, agentId, CODING_AGENT_AUTHOR.APP_NO_PUSH);
-        yield* recordCodingAgentAuthor(starter, agentId, CODING_AGENT_AUTHOR.APP_UNLINKED);
+        yield* recordAgentAuthor(outsider, agentId, AGENT_AUTHOR.APP_NO_PUSH);
+        yield* recordAgentAuthor(starter, agentId, AGENT_AUTHOR.APP_UNLINKED);
         assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author,
-          CODING_AGENT_AUTHOR.APP_UNLINKED,
+          Option.getOrThrow(yield* readAgent(starter, agentId)).author,
+          AGENT_AUTHOR.APP_UNLINKED,
         );
       }),
   );
@@ -1070,21 +1059,22 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
         const outside = yield* tasklessAgent(outsider, elsewhere, { createdAt: at(12) });
         yield* Effect.flatMap(Database, (db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ archivedAt: at(13) })
-            .where(eq(codingAgent.id, archived.agentId)),
+            .where(eq(agentTable.id, archived.agentId)),
         );
         const ids = (agents: readonly { readonly id: string }[]) => agents.map((agent) => agent.id);
 
-        assert.deepEqual(ids(yield* listTasklessCodingAgents(starter)), [
+        assert.deepEqual(ids(yield* listTasklessAgentRows(starter)), [
           newest.agentId,
           oldest.agentId,
         ]);
-        assert.deepEqual(
-          ids(yield* listTasklessCodingAgents(teammate, { includeArchived: true })),
-          [newest.agentId, archived.agentId, oldest.agentId],
-        );
-        assert.deepEqual(ids(yield* listTasklessCodingAgents(outsider)), [outside.agentId]);
+        assert.deepEqual(ids(yield* listTasklessAgentRows(teammate, { includeArchived: true })), [
+          newest.agentId,
+          archived.agentId,
+          oldest.agentId,
+        ]);
+        assert.deepEqual(ids(yield* listTasklessAgentRows(outsider)), [outside.agentId]);
       }),
   );
 });
@@ -1121,20 +1111,20 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
 
         const read = { at: Date.parse("2026-10-17T09:01:00Z"), branch: "relay", pushed: true };
 
-        yield* recordCodingAgentPublished(starter, agentId, kept, read);
+        yield* recordAgentPublished(starter, agentId, kept, read);
 
-        assert.deepEqual(yield* readCodingAgentPublished(teammate, agentId), kept);
-        assert.deepEqual(yield* readCodingAgentKeptPublished(teammate, agentId), {
+        assert.deepEqual(yield* readAgentPublished(teammate, agentId), kept);
+        assert.deepEqual(yield* readAgentKeptPublished(teammate, agentId), {
           published: kept,
           read,
         });
-        const listed = yield* listPublishedCodingAgentsById(teammate, [agentId]);
+        const listed = yield* listPublishedAgentsById(teammate, [agentId]);
         assert.deepEqual(
           listed.map(({ published }) => published),
           [onTheWire],
         );
-        assert.equal(yield* readCodingAgentPublished(outsider, agentId), null);
-        assert.equal(yield* readCodingAgentKeptPublished(outsider, agentId), null);
+        assert.equal(yield* readAgentPublished(outsider, agentId), null);
+        assert.equal(yield* readAgentKeptPublished(outsider, agentId), null);
       }),
   );
 
@@ -1147,14 +1137,14 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
         const { agentId } = yield* tasklessAgent(starter, workspace);
         const read = { at: Date.parse("2026-10-17T09:01:00Z"), branch: "relay", pushed: true };
 
-        yield* recordCodingAgentPublished(starter, agentId, onTheWire, read);
-        yield* forgetCodingAgentPublishedRead(starter, agentId);
-        assert.equal(yield* readCodingAgentKeptPublished(starter, agentId), null);
-        assert.deepEqual(yield* readCodingAgentPublished(starter, agentId), onTheWire);
+        yield* recordAgentPublished(starter, agentId, onTheWire, read);
+        yield* forgetAgentPublishedRead(starter, agentId);
+        assert.equal(yield* readAgentKeptPublished(starter, agentId), null);
+        assert.deepEqual(yield* readAgentPublished(starter, agentId), onTheWire);
 
-        yield* recordCodingAgentPublished(starter, agentId, onTheWire, read);
-        yield* recordCodingAgentPublished(starter, agentId, onTheWire);
-        assert.equal(yield* readCodingAgentKeptPublished(starter, agentId), null);
+        yield* recordAgentPublished(starter, agentId, onTheWire, read);
+        yield* recordAgentPublished(starter, agentId, onTheWire);
+        assert.equal(yield* readAgentKeptPublished(starter, agentId), null);
       }),
   );
 
@@ -1168,17 +1158,15 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
         const quiet = yield* tasklessAgent(starter, workspace);
         // Written past the store, as a row from before the keys were kept stands.
         yield* Effect.flatMap(Database, (db) =>
-          db.update(codingAgent).set({ published: onTheWire }).where(eq(codingAgent.id, agentId)),
+          db.update(agentTable).set({ published: onTheWire }).where(eq(agentTable.id, agentId)),
         );
 
-        assert.deepEqual(yield* readCodingAgentPublished(starter, agentId), onTheWire);
+        assert.deepEqual(yield* readAgentPublished(starter, agentId), onTheWire);
         assert.deepEqual(
-          (yield* listPublishedCodingAgentsById(starter, [agentId])).map(
-            ({ published }) => published,
-          ),
+          (yield* listPublishedAgentsById(starter, [agentId])).map(({ published }) => published),
           [onTheWire],
         );
-        assert.equal(yield* readCodingAgentPublished(starter, quiet.agentId), null);
+        assert.equal(yield* readAgentPublished(starter, quiet.agentId), null);
       }),
   );
 
@@ -1198,10 +1186,10 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
         };
         // Written past the store, as a row from while Factory stood keeps them.
         yield* Effect.flatMap(Database, (db) =>
-          db.update(codingAgent).set({ published: factoryRow }).where(eq(codingAgent.id, agentId)),
+          db.update(agentTable).set({ published: factoryRow }).where(eq(agentTable.id, agentId)),
         );
 
-        assert.deepEqual(yield* readCodingAgentPublished(starter, agentId), {
+        assert.deepEqual(yield* readAgentPublished(starter, agentId), {
           ...onTheWire,
           headSha: "c0ffee1",
           mergedAt,
@@ -1236,7 +1224,7 @@ it.layer(getTestDB())("the coding-agent store's merged pull request on a task", 
         const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
         const agentOn = (githubAccess?: typeof GITHUB_ACCESS.TOKEN) =>
           Effect.map(
-            createCodingAgent(starter, {
+            createAgent(starter, {
               taskId: task.id,
               planSnapshot: "# Billing",
               prompt: null,
@@ -1250,23 +1238,23 @@ it.layer(getTestDB())("the coding-agent store's merged pull request on a task", 
           );
         const open = yield* agentOn();
         const merged = yield* agentOn();
-        yield* recordCodingAgentPublished(starter, open, pullRequest(false));
+        yield* recordAgentPublished(starter, open, pullRequest(false));
 
         assert.equal(yield* taskHasMergedPullRequest(starter, task.id), false);
 
-        yield* recordCodingAgentPublished(starter, merged, pullRequest(true));
-        yield* archiveCodingAgent(starter, merged, true);
+        yield* recordAgentPublished(starter, merged, pullRequest(true));
+        yield* archiveAgent(starter, merged, true);
 
         assert.equal(yield* taskHasMergedPullRequest(starter, task.id), true);
         assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), true);
         assert.equal(yield* taskHasMergedPullRequest(outsider, task.id), false);
 
         // The one merged pull request on the starter's own token, which the teammate's token does not read, still counts for the teammate.
-        yield* archiveCodingAgent(starter, merged, false);
-        yield* recordCodingAgentPublished(starter, merged, null);
+        yield* archiveAgent(starter, merged, false);
+        yield* recordAgentPublished(starter, merged, null);
         const onToken = yield* agentOn(GITHUB_ACCESS.TOKEN);
         assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), false);
-        yield* recordCodingAgentPublished(starter, onToken, pullRequest(true));
+        yield* recordAgentPublished(starter, onToken, pullRequest(true));
         assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), true);
       }),
   );
@@ -1297,12 +1285,12 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
         const elsewhere = yield* tasklessAgent(dean, deans, { repository: "acme/web" });
         // An agent that published nothing yet is found by no pull request.
         yield* tasklessAgent(dean, deans);
-        yield* recordCodingAgentPublished(dean, author.agentId, pullRequest(12));
-        yield* recordCodingAgentPublished(charles, reviewer.agentId, pullRequest(12));
-        yield* recordCodingAgentPublished(dean, other.agentId, pullRequest(13));
-        yield* recordCodingAgentPublished(dean, elsewhere.agentId, pullRequest(12));
+        yield* recordAgentPublished(dean, author.agentId, pullRequest(12));
+        yield* recordAgentPublished(charles, reviewer.agentId, pullRequest(12));
+        yield* recordAgentPublished(dean, other.agentId, pullRequest(13));
+        yield* recordAgentPublished(dean, elsewhere.agentId, pullRequest(12));
 
-        const found = yield* listCodingAgentsOnPullRequest("acme/api", 12, 10);
+        const found = yield* listAgentsOnPullRequest("acme/api", 12, 10);
         assert.deepEqual(
           found.map(({ userId, agent }) => [userId, agent.id]),
           [
@@ -1310,10 +1298,10 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
             [dean, author.agentId],
           ],
         );
-        assert.equal((yield* listCodingAgentsOnPullRequest("acme/api", 12, 1)).length, 1);
+        assert.equal((yield* listAgentsOnPullRequest("acme/api", 12, 1)).length, 1);
         // GitHub may spell the repository in another case than the agent's row does.
-        assert.equal((yield* listCodingAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
-        assert.deepEqual(yield* listCodingAgentsOnPullRequest("acme/api", 99, 10), []);
+        assert.equal((yield* listAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
+        assert.deepEqual(yield* listAgentsOnPullRequest("acme/api", 99, 10), []);
       }),
   );
 });
@@ -1330,7 +1318,7 @@ const openSharedAgent = Effect.gen(function* () {
 
 /** The agent's pin as the account's list reads it, archived agents among the rest; none where the list holds no pin of it. */
 const pinReadBy = (userId: string, agentId: string) =>
-  Effect.map(listTasklessCodingAgents(userId, { includeArchived: true }), (agents) =>
+  Effect.map(listTasklessAgentRows(userId, { includeArchived: true }), (agents) =>
     agents.find(({ id }) => id === agentId)?.pinnedAt?.getTime(),
   );
 
@@ -1348,7 +1336,7 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       const { dean, charles, agentId } = yield* openSharedAgent;
       const pinnedAt = yield* Clock.currentTimeMillis;
 
-      const answered = yield* pinCodingAgent(charles, agentId, true);
+      const answered = yield* pinAgent(charles, agentId, true);
 
       assert.equal(Option.getOrUndefined(answered)?.id, agentId);
       assert.equal(yield* pinReadBy(charles, agentId), pinnedAt);
@@ -1359,12 +1347,12 @@ it.layer(getTestDB())("an agent's pin", (it) => {
   it.effect("unpinning takes away only the account's own pin", () =>
     Effect.gen(function* () {
       const { dean, charles, agentId } = yield* openSharedAgent;
-      yield* pinCodingAgent(dean, agentId, true);
+      yield* pinAgent(dean, agentId, true);
       yield* TestClock.adjust("1 minute");
       const charlesPinnedAt = yield* Clock.currentTimeMillis;
-      yield* pinCodingAgent(charles, agentId, true);
+      yield* pinAgent(charles, agentId, true);
 
-      yield* pinCodingAgent(dean, agentId, false);
+      yield* pinAgent(dean, agentId, false);
 
       assert.equal(yield* pinReadBy(dean, agentId), undefined);
       assert.equal(yield* pinReadBy(charles, agentId), charlesPinnedAt);
@@ -1377,14 +1365,14 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       Effect.gen(function* () {
         const { dean, agentId } = yield* openSharedAgent;
         const pinnedAt = yield* Clock.currentTimeMillis;
-        yield* pinCodingAgent(dean, agentId, true);
+        yield* pinAgent(dean, agentId, true);
         yield* TestClock.adjust("1 minute");
 
-        yield* pinCodingAgent(dean, agentId, true);
+        yield* pinAgent(dean, agentId, true);
         assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
-        yield* archiveCodingAgent(dean, agentId, true);
+        yield* archiveAgent(dean, agentId, true);
         assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
-        yield* archiveCodingAgent(dean, agentId, false);
+        yield* archiveAgent(dean, agentId, false);
         assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
       }),
   );
@@ -1395,23 +1383,23 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       Effect.gen(function* () {
         const { dean, charles, agentId } = yield* openSharedAgent;
         const pinnedAt = yield* Clock.currentTimeMillis;
-        yield* pinCodingAgent(dean, agentId, true);
-        yield* pinCodingAgent(charles, agentId, true);
+        yield* pinAgent(dean, agentId, true);
+        yield* pinAgent(charles, agentId, true);
         yield* TestClock.adjust("1 minute");
 
-        yield* pinCodingAgent(dean, agentId, true, "a1");
-        yield* pinCodingAgent(dean, agentId, true, "Zz");
-        yield* pinCodingAgent(dean, agentId, true);
+        yield* pinAgent(dean, agentId, true, "a1");
+        yield* pinAgent(dean, agentId, true, "Zz");
+        yield* pinAgent(dean, agentId, true);
 
         const listed = (agents: readonly { id: string; pinPosition: string | null }[]) =>
           agents.find(({ id }) => id === agentId)?.pinPosition;
-        assert.equal(listed(yield* listTasklessCodingAgents(dean)), "Zz");
+        assert.equal(listed(yield* listTasklessAgentRows(dean)), "Zz");
         assert.equal(yield* pinReadBy(dean, agentId), pinnedAt);
-        assert.equal(listed(yield* listTasklessCodingAgents(charles)), null);
+        assert.equal(listed(yield* listTasklessAgentRows(charles)), null);
 
-        yield* pinCodingAgent(dean, agentId, false);
-        yield* pinCodingAgent(dean, agentId, true);
-        assert.equal(listed(yield* listTasklessCodingAgents(dean)), null);
+        yield* pinAgent(dean, agentId, false);
+        yield* pinAgent(dean, agentId, true);
+        assert.equal(listed(yield* listTasklessAgentRows(dean)), null);
       }),
   );
 
@@ -1419,11 +1407,11 @@ it.layer(getTestDB())("an agent's pin", (it) => {
     Effect.gen(function* () {
       const { dean, agentId } = yield* openSharedAgent;
       const outsider = yield* openAccount;
-      yield* pinCodingAgent(dean, agentId, true);
+      yield* pinAgent(dean, agentId, true);
 
-      assert.ok(Option.isNone(yield* pinCodingAgent(outsider, agentId, true)));
-      assert.ok(Option.isNone(yield* pinCodingAgent(outsider, agentId, false)));
-      assert.deepEqual(yield* listTasklessCodingAgents(outsider, { includeArchived: true }), []);
+      assert.ok(Option.isNone(yield* pinAgent(outsider, agentId, true)));
+      assert.ok(Option.isNone(yield* pinAgent(outsider, agentId, false)));
+      assert.deepEqual(yield* listTasklessAgentRows(outsider, { includeArchived: true }), []);
       assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: dean }]);
     }),
   );
@@ -1437,10 +1425,7 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
       const { agentId } = yield* tasklessAgent(dean, workspace, { taskId: task.id });
 
-      assert.equal(
-        Option.getOrUndefined(yield* pinCodingAgent(charles, agentId, true))?.id,
-        agentId,
-      );
+      assert.equal(Option.getOrUndefined(yield* pinAgent(charles, agentId, true))?.id, agentId);
       assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: charles }]);
     }),
   );
@@ -1448,12 +1433,12 @@ it.layer(getTestDB())("an agent's pin", (it) => {
   it.effect("an agent's pins go with the agent, and an account's with the account", () =>
     Effect.gen(function* () {
       const { dean, charles, agentId } = yield* openSharedAgent;
-      yield* pinCodingAgent(dean, agentId, true);
-      yield* pinCodingAgent(charles, agentId, true);
+      yield* pinAgent(dean, agentId, true);
+      yield* pinAgent(charles, agentId, true);
 
       yield* Database.use((db) => db.delete(user).where(eq(user.id, charles)));
       assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: dean }]);
-      yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, agentId)));
+      yield* Database.use((db) => db.delete(agentTable).where(eq(agentTable.id, agentId)));
       assert.deepEqual(yield* pinnedOnes(agentId), []);
     }),
   );
@@ -1471,7 +1456,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
         const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
         const source = Option.getOrThrow(
-          yield* createCodingAgent(starter, {
+          yield* createAgent(starter, {
             taskId: task.id,
             planSnapshot: "# Billing",
             prompt: null,
@@ -1487,7 +1472,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           totalSteps: 40,
         };
         const forked = Option.getOrThrow(
-          yield* createCodingAgent(teammate, {
+          yield* createAgent(teammate, {
             taskId: task.id,
             planSnapshot: "# Billing",
             prompt: null,
@@ -1501,7 +1486,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         assert.deepEqual(source.startedFrom, null);
         assert.deepEqual(forked.startedFrom, startedFrom);
         assert.deepEqual(
-          Option.getOrThrow(yield* readCodingAgent(starter, forked.id)).startedFrom,
+          Option.getOrThrow(yield* readAgent(starter, forked.id)).startedFrom,
           startedFrom,
         );
       }),
@@ -1517,7 +1502,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const workspace = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, teammate);
         const task = yield* createTask(owner, { organizationId: workspace, name: "Rollout" });
-        const start = (startedByAgentId?: string): NewCodingAgent => ({
+        const start = (startedByAgentId?: string): NewAgent => ({
           taskId: task.id,
           planSnapshot: "# Rollout",
           prompt: null,
@@ -1527,21 +1512,19 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           repository: "acme/api",
           ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
         });
-        const orchestrator = Option.getOrThrow(yield* createCodingAgent(owner, start())).agent;
-        const worker = Option.getOrThrow(
-          yield* createCodingAgent(owner, start(orchestrator.id)),
-        ).agent;
+        const orchestrator = Option.getOrThrow(yield* createAgent(owner, start())).agent;
+        const worker = Option.getOrThrow(yield* createAgent(owner, start(orchestrator.id))).agent;
         const teammates = Option.getOrThrow(
-          yield* createCodingAgent(teammate, start(orchestrator.id)),
+          yield* createAgent(teammate, start(orchestrator.id)),
         ).agent;
 
         assert.equal(orchestrator.startedByAgentId, null);
         assert.equal(worker.startedByAgentId, orchestrator.id);
         assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(teammate, worker.id)).startedByAgentId,
+          Option.getOrThrow(yield* readAgent(teammate, worker.id)).startedByAgentId,
           orchestrator.id,
         );
-        assert.ok(Option.isNone(yield* readCodingAgent(outsider, worker.id)));
+        assert.ok(Option.isNone(yield* readAgent(outsider, worker.id)));
         assert.equal(teammates.startedByAgentId, null);
       }),
   );
@@ -1563,7 +1546,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         ) =>
           Effect.gen(function* () {
             const { agent } = Option.getOrThrow(
-              yield* createCodingAgent(by, {
+              yield* createAgent(by, {
                 taskId: task.id,
                 planSnapshot: "# Billing",
                 prompt: null,
@@ -1578,9 +1561,9 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
             );
             yield* Database.use((db) =>
               db
-                .update(codingAgent)
+                .update(agentTable)
                 .set({ createdAt: new Date(createdAt) })
-                .where(eq(codingAgent.id, agent.id)),
+                .where(eq(agentTable.id, agent.id)),
             );
             return agent.id;
           });
@@ -1592,9 +1575,9 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         });
         const continued = yield* startOn(starter, "2026-10-17T10:01:00Z", { agentId: source });
         const again = yield* startOn(starter, "2026-10-17T10:03:00Z", { agentId: continued });
-        yield* archiveCodingAgent(starter, continued, true);
+        yield* archiveAgent(starter, continued, true);
 
-        yield* renameCodingAgent(teammate, fork, "Bill by seat");
+        yield* renameAgent(teammate, fork, "Bill by seat");
         const expected = new Map([
           [
             source,
@@ -1622,7 +1605,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const startOn = (createdAt: Date, agentId?: string) =>
           Effect.gen(function* () {
             const { agent } = Option.getOrThrow(
-              yield* createCodingAgent(starter, {
+              yield* createAgent(starter, {
                 taskId: task.id,
                 planSnapshot: "# Billing",
                 prompt: null,
@@ -1636,7 +1619,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
               }),
             );
             yield* Database.use((db) =>
-              db.update(codingAgent).set({ createdAt }).where(eq(codingAgent.id, agent.id)),
+              db.update(agentTable).set({ createdAt }).where(eq(agentTable.id, agent.id)),
             );
             return agent.id;
           });
@@ -1678,7 +1661,7 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
           repository: "acme/api",
         });
         const start = (taskId: string, githubAccess?: typeof GITHUB_ACCESS.TOKEN) =>
-          createCodingAgent(starter, {
+          createAgent(starter, {
             taskId,
             planSnapshot: "# Billing",
             prompt: null,
@@ -1699,7 +1682,7 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
         assert.equal(yield* accessOf(onToken.id), GITHUB_ACCESS.TOKEN);
         assert.equal(yield* accessOf(onApp.id), GITHUB_ACCESS.APP);
         assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(starter, tokenAgent.id)).githubAccess,
+          Option.getOrThrow(yield* readAgent(starter, tokenAgent.id)).githubAccess,
           GITHUB_ACCESS.TOKEN,
         );
         assert.equal(appAgent.githubAccess, GITHUB_ACCESS.APP);
@@ -1712,7 +1695,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
   const largeText = "Any member may invite a teammate by email.\n".repeat(6_000);
 
   /** What a line says of an agent, and which of the text columns it carries, which should be none. */
-  const said = (line: CodingAgentLine) => ({
+  const said = (line: AgentLine) => ({
     id: line.id,
     title: line.title,
     brief: line.brief,
@@ -1722,7 +1705,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
   });
 
   /** The agent a Start made, failing the test where it made none. */
-  const made = (answer: Option.Option<{ readonly agent: CodingAgent }>) =>
+  const made = (answer: Option.Option<{ readonly agent: Agent }>) =>
     Option.getOrElse(answer, () => assert.fail("the start made no agent")).agent;
 
   it.effect(
@@ -1739,7 +1722,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           repository: "acme/api",
         };
         const snapshotted = made(
-          yield* createCodingAgent(starter, {
+          yield* createAgent(starter, {
             ...asked,
             taskId: onTask.id,
             planSnapshot: largeText,
@@ -1751,7 +1734,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
         yield* TestClock.adjust("1 minute");
         const source = { agentId: snapshotted.id, steps: 2, totalSteps: 4 };
         const continued = made(
-          yield* createCodingAgent(starter, {
+          yield* createAgent(starter, {
             ...asked,
             taskId: onTask.id,
             planSnapshot: null,
@@ -1762,7 +1745,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
         );
         yield* TestClock.adjust("1 minute");
         const run = made(
-          yield* createCodingAgent(starter, {
+          yield* createAgent(starter, {
             ...asked,
             taskId: null,
             organizationId: workspace,
@@ -1781,7 +1764,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           snapshotted: {
             id: snapshotted.id,
             title: "Invite emails",
-            brief: CODING_AGENT_BRIEF.PLAN,
+            brief: AGENT_BRIEF.PLAN,
             automationName: null,
             startedFrom: null,
             text: [],
@@ -1789,7 +1772,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           continued: {
             id: continued.id,
             title: null,
-            brief: CODING_AGENT_BRIEF.PROMPT,
+            brief: AGENT_BRIEF.PROMPT,
             automationName: null,
             startedFrom: source,
             text: [],
@@ -1797,29 +1780,29 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           run: {
             id: run.id,
             title: null,
-            brief: CODING_AGENT_BRIEF.PROMPT,
+            brief: AGENT_BRIEF.PROMPT,
             automationName: "Nightly triage",
             startedFrom: null,
             text: [],
           },
         };
 
-        assert.deepEqual((yield* listCodingAgentLines(starter, onTask.id)).map(said), [
+        assert.deepEqual((yield* listAgentLines(starter, onTask.id)).map(said), [
           lines.snapshotted,
           lines.continued,
         ]);
         assert.deepEqual(
-          (yield* listPublishedCodingAgents(starter, [onTask.id])).map(({ agent }) => said(agent)),
+          (yield* listPublishedAgents(starter, [onTask.id])).map(({ agent }) => said(agent)),
           [lines.snapshotted, lines.continued],
         );
         assert.deepEqual(
-          (yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 10 })).map(said),
+          (yield* listWorkspaceAgentLines(starter, workspace, { limit: 10 })).map(said),
           [lines.run, lines.continued, lines.snapshotted],
         );
-        assert.deepEqual((yield* listTasklessCodingAgents(starter)).map(said), [lines.run]);
+        assert.deepEqual((yield* listTasklessAgentRows(starter)).map(said), [lines.run]);
 
         // Every other column reads as a whole read reads it, and the line a whole read draws is the listed one.
-        const whole = Option.getOrThrow(yield* readCodingAgent(starter, run.id));
+        const whole = Option.getOrThrow(yield* readAgent(starter, run.id));
         const {
           automationOrigin: _origin,
           planSnapshot: _snapshot,
@@ -1829,17 +1812,14 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
         const expected = {
           ...rest,
           automationName: "Nightly triage",
-          brief: CODING_AGENT_BRIEF.PROMPT,
+          brief: AGENT_BRIEF.PROMPT,
         };
-        const [listed] = yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 1 });
+        const [listed] = yield* listWorkspaceAgentLines(starter, workspace, { limit: 1 });
         assert.deepEqual(listed, expected);
-        assert.deepEqual(codingAgentLineOf(whole), expected);
+        assert.deepEqual(agentLineOf(whole), expected);
 
-        assert.deepEqual(yield* listCodingAgentLines(outsider, onTask.id), []);
-        assert.deepEqual(
-          yield* listWorkspaceCodingAgentLines(outsider, workspace, { limit: 10 }),
-          [],
-        );
+        assert.deepEqual(yield* listAgentLines(outsider, onTask.id), []);
+        assert.deepEqual(yield* listWorkspaceAgentLines(outsider, workspace, { limit: 10 }), []);
       }),
   );
 });
@@ -1859,7 +1839,7 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
         });
 
         const { agent } = Option.getOrThrow(
-          yield* createCodingAgent(starter, {
+          yield* createAgent(starter, {
             taskId: task.id,
             planSnapshot: null,
             prompt: null,
@@ -1870,17 +1850,17 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
           }),
         );
 
-        const read = Option.getOrThrow(yield* readCodingAgent(teammate, agent.id));
+        const read = Option.getOrThrow(yield* readAgent(teammate, agent.id));
         assert.deepEqual(
           { repository: read.repository, planSnapshot: read.planSnapshot, prompt: read.prompt },
           { repository: null, planSnapshot: null, prompt: null },
         );
-        const lines = yield* listCodingAgentLines(teammate, task.id);
+        const lines = yield* listAgentLines(teammate, task.id);
         assert.deepEqual(
           lines.map((line) => [line.id, line.repository, line.brief]),
-          [[agent.id, null, CODING_AGENT_BRIEF.BLANK]],
+          [[agent.id, null, AGENT_BRIEF.BLANK]],
         );
-        assert.equal(codingAgentLineOf(read).brief, CODING_AGENT_BRIEF.BLANK);
+        assert.equal(agentLineOf(read).brief, AGENT_BRIEF.BLANK);
       }),
   );
 });
@@ -1889,10 +1869,10 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   const startIn = (
     starter: string,
     organizationId: string,
-    routing: Pick<NewCodingAgent, "runtime" | "payer"> = {},
+    routing: Pick<NewAgent, "runtime" | "payer"> = {},
   ) =>
     Effect.map(
-      createCodingAgent(starter, {
+      createAgent(starter, {
         taskId: null,
         organizationId,
         planSnapshot: null,
@@ -1914,32 +1894,28 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const workspace = yield* openWorkspace(starter);
         const agent = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
 
-        const fresh = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
-        const recordedSession = yield* recordCodingAgentNativeSession(
-          starter,
-          agent.id,
-          "session-1",
-        );
-        const recordedToken = yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
-        const recorded = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
-        yield* recordCodingAgentRunnerToken(starter, agent.id, null);
-        const retired = Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id));
+        const fresh = Option.getOrThrow(yield* readAgentRouting(starter, agent.id));
+        const recordedSession = yield* recordAgentNativeSession(starter, agent.id, "session-1");
+        const recordedToken = yield* recordAgentRunnerToken(starter, agent.id, "digest-1");
+        const recorded = Option.getOrThrow(yield* readAgentRouting(starter, agent.id));
+        yield* recordAgentRunnerToken(starter, agent.id, null);
+        const retired = Option.getOrThrow(yield* readAgentRouting(starter, agent.id));
 
         assert.deepEqual(fresh, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           nativeSession: null,
           runnerTokenHash: null,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         assert.deepEqual([recordedSession, recordedToken], [true, true]);
         assert.deepEqual(recorded, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           nativeSession: "session-1",
           runnerTokenHash: "digest-1",
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         assert.equal(retired.runnerTokenHash, null);
         assert.equal(retired.nativeSession, "session-1");
@@ -1954,13 +1930,13 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const workspace = yield* openWorkspace(starter);
         const agent = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
-        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-held");
+        yield* recordAgentRunnerToken(starter, agent.id, "digest-held");
 
         const held = yield* readRunnerTokenConversation("digest-held");
         const other = yield* readRunnerTokenConversation("digest-other");
-        yield* recordCodingAgentRunnerToken(starter, agent.id, null);
+        yield* recordAgentRunnerToken(starter, agent.id, null);
         const retired = yield* readRunnerTokenConversation("digest-held");
 
         assert.deepEqual(Option.getOrThrow(held), {
@@ -1981,9 +1957,9 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const workspace = yield* openWorkspace(starter);
         const agent = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+          payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
-        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-departed");
+        yield* recordAgentRunnerToken(starter, agent.id, "digest-departed");
 
         yield* leaveWorkspace(workspace, starter);
 
@@ -2006,14 +1982,8 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runnerTokenHash: null,
           payer: null,
         };
-        assert.deepEqual(
-          Option.getOrThrow(yield* readCodingAgentRouting(starter, unnamed.id)),
-          expected,
-        );
-        assert.deepEqual(
-          Option.getOrThrow(yield* readCodingAgentRouting(starter, older)),
-          expected,
-        );
+        assert.deepEqual(Option.getOrThrow(yield* readAgentRouting(starter, unnamed.id)), expected);
+        assert.deepEqual(Option.getOrThrow(yield* readAgentRouting(starter, older)), expected);
       }),
   );
 
@@ -2026,16 +1996,16 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const workspace = yield* openWorkspace(starter);
         const claude = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         const codex = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+          payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
         const eve = yield* startIn(starter, workspace, {});
         const deleted = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         const settledAt = new Date(Date.UTC(2026, 9, 14, 12));
         const turnOf = (conversationId: string, status: TurnStatus, at: Date) =>
@@ -2104,7 +2074,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const eve = yield* startIn(starter, workspace, {});
         const native = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
         const twinA = yield* startIn(starter, workspace, {});
         const twinB = yield* startIn(starter, workspace, {});
@@ -2154,11 +2124,11 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
       const eve = yield* startIn(starter, workspace);
       const claude = yield* startIn(starter, workspace, {
         runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-        payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
       });
       const codex = yield* startIn(starter, workspace, {
         runtime: CONVERSATION_RUNTIME.CODEX,
-        payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
       });
 
       const read = yield* nativeRuntimesOfReached([
@@ -2188,16 +2158,16 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         yield* openWorkspace(outsider);
         const agent = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+          payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
-        yield* recordCodingAgentNativeSession(starter, agent.id, "thread-1");
-        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-1");
+        yield* recordAgentNativeSession(starter, agent.id, "thread-1");
+        yield* recordAgentRunnerToken(starter, agent.id, "digest-1");
         const own = { userId: starter, conversationId: agent.conversationId };
         yield* recordNativeHanded(own, { spoken: true });
 
-        const read = yield* readCodingAgentRouting(outsider, agent.id);
-        const wroteSession = yield* recordCodingAgentNativeSession(outsider, agent.id, "thread-2");
-        const wroteToken = yield* recordCodingAgentRunnerToken(outsider, agent.id, "digest-2");
+        const read = yield* readAgentRouting(outsider, agent.id);
+        const wroteSession = yield* recordAgentNativeSession(outsider, agent.id, "thread-2");
+        const wroteToken = yield* recordAgentRunnerToken(outsider, agent.id, "digest-2");
         const theirs = { userId: outsider, conversationId: agent.conversationId };
         yield* recordNativeHanded(theirs, { task: "task-key" });
 
@@ -2205,11 +2175,11 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         assert.deepEqual([wroteSession, wroteToken], [false, false]);
         assert.equal(yield* readNativeHanded(theirs), null);
         assert.deepEqual(yield* readNativeHanded(own), { spoken: true });
-        assert.deepEqual(Option.getOrThrow(yield* readCodingAgentRouting(starter, agent.id)), {
+        assert.deepEqual(Option.getOrThrow(yield* readAgentRouting(starter, agent.id)), {
           runtime: CONVERSATION_RUNTIME.CODEX,
           nativeSession: "thread-1",
           runnerTokenHash: "digest-1",
-          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+          payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
       }),
   );
@@ -2218,7 +2188,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
 it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) => {
   const startIn = (starter: string, organizationId: string) =>
     Effect.map(
-      createCodingAgent(starter, {
+      createAgent(starter, {
         taskId: null,
         organizationId,
         planSnapshot: null,
@@ -2253,25 +2223,25 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
         };
 
         assert.deepEqual(
-          yield* readCodingAgentHeaderOfConversation(starter, agent.conversationId),
+          yield* readAgentHeaderOfConversation(starter, agent.conversationId),
           Option.some(header),
         );
         assert.deepEqual(
-          yield* readCodingAgentHeaderOfConversation(teammate, agent.conversationId),
+          yield* readAgentHeaderOfConversation(teammate, agent.conversationId),
           Option.some(header),
         );
         assert.deepEqual(
-          yield* readCodingAgentHeaderOfConversation(stranger, agent.conversationId),
+          yield* readAgentHeaderOfConversation(stranger, agent.conversationId),
           Option.none(),
         );
         assert.deepEqual(
-          yield* readCodingAgentOfConversation(stranger, agent.conversationId),
+          yield* readAgentOfConversation(stranger, agent.conversationId),
           Option.none(),
         );
 
         yield* leaveWorkspace(workspace, teammate);
         assert.deepEqual(
-          yield* readCodingAgentHeaderOfConversation(teammate, agent.conversationId),
+          yield* readAgentHeaderOfConversation(teammate, agent.conversationId),
           Option.none(),
         );
       }),
@@ -2285,7 +2255,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
       const db = yield* Database;
 
       const second = yield* Effect.exit(
-        db.insert(codingAgent).values({
+        db.insert(agentTable).values({
           organizationId: workspace,
           userId: starter,
           conversationId: agent.conversationId,
@@ -2298,7 +2268,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
       assert.ok(second._tag === "Failure");
       assert.deepEqual(
         Option.map(
-          yield* readCodingAgentOfConversation(starter, agent.conversationId),
+          yield* readAgentOfConversation(starter, agent.conversationId),
           (read) => read.id,
         ),
         Option.some(agent.id),
@@ -2346,23 +2316,23 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
         yield* joinWorkspace(workspace, teammate);
         yield* openWorkspace(outsider);
         const { agentId, conversationId } = yield* tasklessAgent(starter, workspace);
-        yield* pinCodingAgent(starter, agentId, true);
+        yield* pinAgent(starter, agentId, true);
         const retired: string[][] = [];
         const guard = (stopped: boolean) => ({
           standsStopped: () => Effect.succeed(stopped),
           beforeDelete: (ids: readonly string[]) => Effect.sync(() => void retired.push([...ids])),
         });
 
-        assert.ok(Option.isNone(yield* deleteCodingAgent(outsider, agentId, guard(true))));
-        const refused = yield* Effect.result(deleteCodingAgent(teammate, agentId, guard(false)));
+        assert.ok(Option.isNone(yield* deleteAgent(outsider, agentId, guard(true))));
+        const refused = yield* Effect.result(deleteAgent(teammate, agentId, guard(false)));
         assert.equal(Result.isFailure(refused) && refused.failure._tag, "TaskAgentUnstopped");
-        assert.ok(Option.isSome(yield* readCodingAgent(starter, agentId)));
+        assert.ok(Option.isSome(yield* readAgent(starter, agentId)));
         assert.deepEqual(retired, [], "a refused delete retires nothing");
 
-        const deleted = yield* deleteCodingAgent(teammate, agentId, guard(true));
+        const deleted = yield* deleteAgent(teammate, agentId, guard(true));
         assert.match(Option.getOrThrow(deleted).txid, /^\d+$/u);
         assert.deepEqual(retired, [[conversationId]]);
-        assert.ok(Option.isNone(yield* readCodingAgent(starter, agentId)));
+        assert.ok(Option.isNone(yield* readAgent(starter, agentId)));
         const db = yield* Database;
         const pins = yield* db
           .select({ userId: agentPin.userId })
@@ -2373,18 +2343,18 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
           .from(conversations)
           .where(eq(conversations.id, conversationId));
         assert.deepEqual([pins, stamped?.deletedAt !== null], [[], true]);
-        assert.ok(Option.isNone(yield* deleteCodingAgent(starter, agentId, guard(true))));
+        assert.ok(Option.isNone(yield* deleteAgent(starter, agentId, guard(true))));
       }),
   );
 });
 
 /** A Start of the member's operator in the workspace, under a fresh key unless one is given. */
-const operatorStart = (organizationId: string, idempotencyKey = randomUUID()): NewCodingAgent => ({
+const operatorStart = (organizationId: string, idempotencyKey = randomUUID()): NewAgent => ({
   taskId: null,
   organizationId,
   planSnapshot: null,
   prompt: null,
-  kind: CODING_AGENT_KIND.OPERATOR,
+  kind: AGENT_KIND.OPERATOR,
   idempotencyKey,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
@@ -2401,22 +2371,22 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         const workspace = yield* openWorkspace(member);
         const coder = yield* tasklessAgent(member, workspace);
 
-        const made = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
-        const found = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const made = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
+        const found = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
         const second = yield* db
-          .insert(codingAgent)
+          .insert(agentTable)
           .values({
             organizationId: workspace,
             userId: member,
             conversationId: yield* openConversation(member, CONVERSATION_KIND.CODING_AGENT),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             idempotencyKey: randomUUID(),
           })
           .pipe(Effect.result);
         const archived = yield* archiveOperatorAgent(member, workspace, made.agent.id);
-        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const fresh = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
         const stale = yield* archiveOperatorAgent(member, workspace, made.agent.id);
 
         assert.deepEqual(
@@ -2425,18 +2395,18 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         );
         assert.deepEqual(
           [made.agent.kind, made.agent.taskId, made.agent.repository, made.agent.prompt],
-          [CODING_AGENT_KIND.OPERATOR, null, null, null],
+          [AGENT_KIND.OPERATOR, null, null, null],
         );
         assert.ok(Result.isFailure(second), "a second standing operator breaks the index");
         assert.deepEqual(archived, Option.some(made.agent.id));
         assert.ok(Option.isNone(stale), "an archive of the one read leaves the fresh one standing");
         assert.equal(fresh.created, true);
         assert.notEqual(fresh.agent.id, made.agent.id);
-        const old = Option.getOrThrow(yield* readCodingAgent(member, made.agent.id));
-        assert.deepEqual(old.archivedBy, { by: CODING_AGENT_ARCHIVER.MEMBER, userId: member });
+        const old = Option.getOrThrow(yield* readAgent(member, made.agent.id));
+        assert.deepEqual(old.archivedBy, { by: AGENT_ARCHIVER.MEMBER, userId: member });
         assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(member, coder.agentId)).kind,
-          CODING_AGENT_KIND.CODER,
+          Option.getOrThrow(yield* readAgent(member, coder.agentId)).kind,
+          AGENT_KIND.CODER,
           "a row written without a kind reads as a coder",
         );
       }),
@@ -2449,30 +2419,25 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         const member = yield* openAccount;
         const workspace = yield* openWorkspace(member);
         const coder = yield* tasklessAgent(member, workspace);
-        const old = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const old = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
         yield* archiveOperatorAgent(member, workspace, old.agent.id);
-        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
-        const archivedAt = Option.getOrThrow(
-          yield* readCodingAgent(member, old.agent.id),
-        ).archivedAt;
+        const fresh = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
+        const archivedAt = Option.getOrThrow(yield* readAgent(member, old.agent.id)).archivedAt;
         assert.ok(archivedAt !== null);
-        yield* archiveCodingAgent(member, coder.agentId, true);
+        yield* archiveAgent(member, coder.agentId, true);
 
         const replaced = yield* operatorReplaced(member, old.agent.id);
-        const byHand = yield* archiveCodingAgent(member, old.agent.id, false);
-        const byTool = yield* unarchiveCodingAgentFrom(member, old.agent.id, archivedAt);
-        const coderBack = yield* archiveCodingAgent(member, coder.agentId, false);
+        const byHand = yield* archiveAgent(member, old.agent.id, false);
+        const byTool = yield* unarchiveAgentFrom(member, old.agent.id, archivedAt);
+        const coderBack = yield* archiveAgent(member, coder.agentId, false);
 
         assert.deepEqual([replaced, Option.isNone(byHand), byTool], [true, true, false]);
-        assert.notEqual(
-          Option.getOrThrow(yield* readCodingAgent(member, old.agent.id)).archivedAt,
-          null,
-        );
+        assert.notEqual(Option.getOrThrow(yield* readAgent(member, old.agent.id)).archivedAt, null);
         assert.equal(Option.getOrThrow(coderBack).archivedAt, null, "a coder comes back as before");
         assert.equal(yield* operatorReplaced(member, fresh.agent.id), false);
 
         yield* archiveOperatorAgent(member, workspace, fresh.agent.id);
-        const back = yield* archiveCodingAgent(member, old.agent.id, false);
+        const back = yield* archiveAgent(member, old.agent.id, false);
         assert.equal(Option.getOrThrow(back).archivedAt, null);
       }),
   );
@@ -2485,14 +2450,11 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         const teammate = yield* openAccount;
         const workspace = yield* openWorkspace(member);
         yield* joinWorkspace(workspace, teammate);
-        const old = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const old = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
         yield* archiveOperatorAgent(member, workspace, old.agent.id);
-        const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const fresh = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
         const archivedAt = (agentId: string) =>
-          Effect.map(
-            readCodingAgent(member, agentId),
-            (read) => Option.getOrThrow(read).archivedAt,
-          );
+          Effect.map(readAgent(member, agentId), (read) => Option.getOrThrow(read).archivedAt);
 
         const byTeammate = yield* restoreOperatorAgent(
           teammate,
@@ -2539,14 +2501,11 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
       const outsider = yield* openAccount;
       const workspace = yield* openWorkspace(member);
       yield* openWorkspace(outsider);
-      const made = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+      const made = Option.getOrThrow(yield* createAgent(member, operatorStart(workspace)));
 
-      assert.ok(Option.isNone(yield* createCodingAgent(outsider, operatorStart(workspace))));
+      assert.ok(Option.isNone(yield* createAgent(outsider, operatorStart(workspace))));
       assert.ok(Option.isNone(yield* archiveOperatorAgent(outsider, workspace, made.agent.id)));
-      assert.equal(
-        Option.getOrThrow(yield* readCodingAgent(member, made.agent.id)).archivedAt,
-        null,
-      );
+      assert.equal(Option.getOrThrow(yield* readAgent(member, made.agent.id)).archivedAt, null);
     }),
   );
 });
@@ -2561,7 +2520,7 @@ it.layer(getTestDB())("the coding-agent store's operator, private to its member"
         const workspace = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, teammate);
         const operator = Option.getOrThrow(
-          yield* createCodingAgent(owner, operatorStart(workspace)),
+          yield* createAgent(owner, operatorStart(workspace)),
         ).agent;
         const ownerCoder = yield* tasklessAgent(owner, workspace);
         const teammateCoder = yield* tasklessAgent(teammate, workspace);
@@ -2574,35 +2533,35 @@ it.layer(getTestDB())("the coding-agent store's operator, private to its member"
         };
 
         assert.deepEqual(
-          ids(yield* listWorkspaceCodingAgents(teammate, workspace, { limit: 10 })),
+          ids(yield* listWorkspaceAgents(teammate, workspace, { limit: 10 })),
           [ownerCoder.agentId, teammateCoder.agentId].toSorted(),
         );
         assert.deepEqual(
-          ids(yield* listTasklessCodingAgents(teammate)),
+          ids(yield* listTasklessAgentRows(teammate)),
           [ownerCoder.agentId, teammateCoder.agentId].toSorted(),
         );
         assert.deepEqual(
           [
-            Option.isNone(yield* readCodingAgent(teammate, operator.id)),
-            Option.isNone(yield* readCodingAgentOfConversation(teammate, operator.conversationId)),
+            Option.isNone(yield* readAgent(teammate, operator.id)),
+            Option.isNone(yield* readAgentOfConversation(teammate, operator.conversationId)),
             yield* conversationReachableBy(teammate, operator.conversationId),
-            Option.isNone(yield* renameCodingAgent(teammate, operator.id, "Mine now")),
-            Option.isNone(yield* updateCodingAgentChoice(teammate, operator.id, choice)),
-            Option.isNone(yield* pinCodingAgent(teammate, operator.id, true)),
-            Option.isNone(yield* archiveCodingAgent(teammate, operator.id, true)),
-            Option.isNone(yield* deleteCodingAgent(teammate, operator.id, stopped)),
+            Option.isNone(yield* renameAgent(teammate, operator.id, "Mine now")),
+            Option.isNone(yield* updateAgentChoice(teammate, operator.id, choice)),
+            Option.isNone(yield* pinAgent(teammate, operator.id, true)),
+            Option.isNone(yield* archiveAgent(teammate, operator.id, true)),
+            Option.isNone(yield* deleteAgent(teammate, operator.id, stopped)),
           ],
           [true, true, false, true, true, true, true, true],
           "a teammate reaches nothing of the operator",
         );
-        assert.ok(Option.isSome(yield* readCodingAgent(teammate, ownerCoder.agentId)));
-        assert.ok(Option.isSome(yield* readCodingAgent(owner, teammateCoder.agentId)));
+        assert.ok(Option.isSome(yield* readAgent(teammate, ownerCoder.agentId)));
+        assert.ok(Option.isSome(yield* readAgent(owner, teammateCoder.agentId)));
 
         assert.deepEqual(
-          ids(yield* listWorkspaceCodingAgents(owner, workspace, { limit: 10 })),
+          ids(yield* listWorkspaceAgents(owner, workspace, { limit: 10 })),
           [operator.id, ownerCoder.agentId, teammateCoder.agentId].toSorted(),
         );
-        const read = Option.getOrThrow(yield* readCodingAgent(owner, operator.id));
+        const read = Option.getOrThrow(yield* readAgent(owner, operator.id));
         assert.deepEqual(
           [read.title, read.archivedAt],
           [null, null],
@@ -2610,14 +2569,14 @@ it.layer(getTestDB())("the coding-agent store's operator, private to its member"
         );
         assert.ok(yield* conversationReachableBy(owner, operator.conversationId));
         assert.equal(
-          Option.getOrThrow(yield* renameCodingAgent(owner, operator.id, "Luke")).title,
+          Option.getOrThrow(yield* renameAgent(owner, operator.id, "Luke")).title,
           "Luke",
         );
         assert.equal(
-          Option.getOrThrow(yield* updateCodingAgentChoice(owner, operator.id, choice)).effort,
+          Option.getOrThrow(yield* updateAgentChoice(owner, operator.id, choice)).effort,
           "low",
         );
-        assert.ok(Option.isSome(yield* pinCodingAgent(owner, operator.id, true)));
+        assert.ok(Option.isSome(yield* pinAgent(owner, operator.id, true)));
       }),
   );
 });
@@ -2634,10 +2593,10 @@ it.layer(getTestDB())("the coding-agent store's search of a workspace's agents",
         const elsewhere = yield* openWorkspace(outsider);
         yield* joinWorkspace(workspace, teammate);
         const ownOperator = Option.getOrThrow(
-          yield* createCodingAgent(owner, operatorStart(workspace)),
+          yield* createAgent(owner, operatorStart(workspace)),
         ).agent;
         const teammatesOperator = Option.getOrThrow(
-          yield* createCodingAgent(teammate, operatorStart(workspace)),
+          yield* createAgent(teammate, operatorStart(workspace)),
         ).agent;
         const titled = yield* tasklessAgent(teammate, workspace, {
           title: "Fix the invite flow",
@@ -2662,7 +2621,7 @@ it.layer(getTestDB())("the coding-agent store's search of a workspace's agents",
           automationName: "Nightly triage",
         });
         const found = (userId: string, words: string) =>
-          Effect.map(listWorkspaceCodingAgents(userId, workspace, { words, limit: 10 }), (agents) =>
+          Effect.map(listWorkspaceAgents(userId, workspace, { words, limit: 10 }), (agents) =>
             agents.map((agent) => agent.id).toSorted(),
           );
 

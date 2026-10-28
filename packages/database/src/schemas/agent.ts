@@ -1,16 +1,16 @@
-import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentArchiver,
+  type AgentAuthor,
+  type AgentKind,
+  type AgentMachineKind,
+  type AgentPayer,
+  type AgentPullRequest,
   CONTEXT_WINDOW,
-  type CodingAgentArchiver,
-  type CodingAgentAuthor,
-  type CodingAgentKind,
-  type CodingAgentMachine,
-  type CodingAgentPayer,
-  type CodingAgentPullRequest,
   type ContextWindow,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import type { AutomationFiring } from "@luke/features/automation-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { sql } from "drizzle-orm";
 import {
@@ -99,11 +99,11 @@ import { task } from "./task.js";
  * automation started, and once the starter's row is gone. A Continue or a
  * Fork by hand names none, whoever started its source.
  * `author` is who the agent's commits are by and its pull request is opened
- * as, the developer or the Luke GitHub App with why (`CODING_AGENT_AUTHOR`),
+ * as, the developer or the Luke GitHub App with why (`AGENT_AUTHOR`),
  * settled once as its first session starts and never moved after, so its
  * instructions and its checkout agree; null before then, and for an agent
  * from before the column, which writes as the App.
- * `payer` is who pays for the agent's model calls (`CODING_AGENT_PAYER`),
+ * `payer` is who pays for the agent's model calls (`AGENT_PAYER`),
  * the starter's Claude or ChatGPT plan, their own API key, or Luke's,
  * recorded as it starts and never moved after; null for an agent from
  * before the column. What answers its conversation is the conversation's
@@ -112,14 +112,14 @@ import { task } from "./task.js";
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
- * `kind` is what the agent is (`CODING_AGENT_KIND`): a coder, as every agent
+ * `kind` is what the agent is (`AGENT_KIND`): a coder, as every agent
  * started on work is and every row from before the column reads, or its
  * member's operator, started blank with no task and no repository, of which
  * a member holds at most one standing per workspace; a Reset archives it,
  * transcript kept, and ensures a fresh one.
  *
  * `machine` is where the agent's runner and checkout live
- * (`CODING_AGENT_MACHINE`): a Vercel Sandbox, as every row from before the
+ * (`AGENT_MACHINE`): a Vercel Sandbox, as every row from before the
  * column reads, or the starter's own Mac, named by `device_id`, which a
  * local agent is pinned to and every line and request for it goes to
  * (`./device-agent.ts`); null for an agent in a sandbox, and once its Mac's row
@@ -197,7 +197,7 @@ export interface StoredStartedFrom {
  * archived the task, which the task's unarchive brings back with it.
  */
 export interface StoredArchive {
-  readonly by: CodingAgentArchiver;
+  readonly by: AgentArchiver;
   readonly userId: string;
   readonly agentId?: string;
   readonly agentName?: string;
@@ -214,7 +214,7 @@ export interface StoredArchive {
  * while Factory stood may hold `areas` beside them, which nothing reads now
  * and the next write drops.
  */
-export interface StoredPullRequest extends CodingAgentPullRequest {
+export interface StoredPullRequest extends AgentPullRequest {
   readonly headSha?: string;
   readonly mergedAt?: number;
 }
@@ -232,7 +232,7 @@ export interface StoredPublishedRead {
   readonly pushed: boolean;
 }
 
-export const codingAgent = pgTable(
+export const agentTable = pgTable(
   "coding_agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -251,7 +251,7 @@ export const codingAgent = pgTable(
     /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
     startedFrom: jsonb("started_from").$type<StoredStartedFrom>(),
     /** The coding agent whose `start_agent` started this one; null for any other starter, and once the agent's row is gone. */
-    startedByAgentId: uuid("started_by_agent_id").references((): AnyPgColumn => codingAgent.id, {
+    startedByAgentId: uuid("started_by_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",
     }),
     userId: text("user_id")
@@ -299,11 +299,11 @@ export const codingAgent = pgTable(
     /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
     mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
     /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
-    author: text("author").$type<CodingAgentAuthor>(),
+    author: text("author").$type<AgentAuthor>(),
     /** How the agent's repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
-    payer: text("payer").$type<CodingAgentPayer>(),
+    payer: text("payer").$type<AgentPayer>(),
     /**
      * The digest of the bearer the agent's runner presents at Luke's MCP server and its events
      * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
@@ -312,12 +312,9 @@ export const codingAgent = pgTable(
      */
     runnerTokenHash: text("runner_token_hash"),
     /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
-    kind: text("kind").$type<CodingAgentKind>().notNull().default(CODING_AGENT_KIND.CODER),
+    kind: text("kind").$type<AgentKind>().notNull().default(AGENT_KIND.CODER),
     /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */
-    machine: text("machine")
-      .$type<CodingAgentMachine>()
-      .notNull()
-      .default(CODING_AGENT_MACHINE.VERCEL),
+    machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
     /** The Mac a local agent is pinned to; null for one in a sandbox. */
     deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -348,9 +345,7 @@ export const codingAgent = pgTable(
     // A member holds one standing operator per workspace, so two ensures that race make one row.
     uniqueIndex("coding_agent_member_operator")
       .on(table.organizationId, table.userId)
-      .where(
-        sql`${table.kind} = ${literal(CODING_AGENT_KIND.OPERATOR)} and ${table.archivedAt} is null`,
-      ),
+      .where(sql`${table.kind} = ${literal(AGENT_KIND.OPERATOR)} and ${table.archivedAt} is null`),
   ],
 );
 
@@ -366,7 +361,7 @@ export const codingAgent = pgTable(
  * by that call. The row goes with its conversation, which goes with the
  * agent's.
  */
-export const codingAgentDelegation = pgTable(
+export const agentDelegationTable = pgTable(
   "coding_agent_delegation",
   {
     childConversationId: uuid("child_conversation_id").primaryKey(),

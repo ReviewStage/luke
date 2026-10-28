@@ -1,7 +1,4 @@
-import type {
-  CodingAgentChangesPeople,
-  CodingAgentPullRequest,
-} from "@luke/features/coding-agent-wire";
+import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
@@ -15,7 +12,7 @@ import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import { browserOf } from "../tasks/cloud-browser-pane.js";
 import { FileCard } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-model.js";
-import { PageCard, PageNameCard } from "../tasks/page-card.js";
+import { PageCard, PageNameCard, PageNameSkeleton } from "../tasks/page-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TerminalCardFoot } from "../tasks/terminal-shells.js";
 import {
@@ -80,8 +77,8 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
       /** The pull request, none before it is read. */
-      readonly pullRequest: CodingAgentPullRequest | undefined;
-      readonly people: CodingAgentChangesPeople | undefined;
+      readonly pullRequest: AgentPullRequest | undefined;
+      readonly people: AgentChangesPeople | undefined;
       readonly onOpenAgent: () => void;
     }
   | {
@@ -144,6 +141,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="">
       <HoverCardHead
+        glyph={tabLook({ kind: TAB_KIND.INBOX }).icon}
         name={TAB_WORDS.INBOX}
         corner={waiting === 0 ? NEEDS_YOU.NONE : needsYouWords(waiting)}
       />
@@ -231,6 +229,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         <PageChipCard
           place={subject.place}
           pageId={subject.pageId}
+          reading={<PageNameSkeleton name={subject.name} />}
           fallback={<PageNameCard name={subject.name} />}
         />
       );

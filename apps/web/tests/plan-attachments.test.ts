@@ -7,7 +7,7 @@ import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
 import { PICTURE_BOUNDS, PICTURE_MEDIA_TYPE, PICTURE_TYPE } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_BOUNDS,
@@ -189,7 +189,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
             attachments: [
               {
                 name: "flow.pdf",
-                mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF,
+                mediaType: AGENT_ATTACHMENT_TYPE.PDF,
                 data: Buffer.from(pdf).toString("base64"),
               },
             ],
@@ -201,7 +201,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
 
         const served = yield* ask(read(taskId, fileId, owner));
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
-        assert.equal(served.contentType, CODING_AGENT_ATTACHMENT_TYPE.PDF);
+        assert.equal(served.contentType, AGENT_ATTACHMENT_TYPE.PDF);
         assert.equal(served.cache, "private, no-store");
         assert.deepEqual(served.policy, SANDBOXED_PAGE);
         assert.deepEqual([...served.bytes], [...pdf]);

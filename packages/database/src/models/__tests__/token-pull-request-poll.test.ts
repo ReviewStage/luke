@@ -5,17 +5,13 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, plansOf, startTask } from "../../testing/index.js";
-import {
-  archiveCodingAgent,
-  createCodingAgent,
-  recordCodingAgentPublished,
-} from "../coding-agent-store.js";
+import { archiveAgent, createAgent, recordAgentPublished } from "../agent-store.js";
 import {
   claimTokenPullRequestPolls,
   recordTokenPullRequestPoll,
@@ -59,7 +55,7 @@ const openAgent = (
 ) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -71,7 +67,7 @@ const openAgent = (
     });
     const { agent } = Option.getOrThrow(started);
     if (pullRequest !== undefined) {
-      yield* recordCodingAgentPublished(userId, agent.id, {
+      yield* recordAgentPublished(userId, agent.id, {
         number: pullRequest.number,
         title: "Expire invitations",
         url: `https://github.com/acme/relay/pull/${pullRequest.number}`,
@@ -117,7 +113,7 @@ it.layer(getTestDB())("the token agents' pull requests due a poll", (it) => {
           number: 5,
           state: PULL_REQUEST_STATE.OPEN,
         });
-        yield* archiveCodingAgent(owner, archived, true);
+        yield* archiveAgent(owner, archived, true);
         const unpublished = yield* openAgent(owner, GITHUB_ACCESS.TOKEN);
         const ours = [open, draft, onApp, merged, archived, unpublished];
 
@@ -156,7 +152,7 @@ it.layer(getTestDB())("the token agents' pull requests due a poll", (it) => {
         )).filter((each) => each.agentId === agentId);
         assert.deepEqual(again?.state, read);
 
-        yield* recordCodingAgentPublished(owner, agentId, {
+        yield* recordAgentPublished(owner, agentId, {
           number: 8,
           title: "Expire invitations again",
           url: "https://github.com/acme/relay/pull/8",

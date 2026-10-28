@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, createAgent } from "@luke/database/models/agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
@@ -44,7 +44,7 @@ const openStarted = Effect.gen(function* () {
   const start = { taskId: null, organizationId, planSnapshot: null, repository: null };
   const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
   const starter = Option.getOrThrow(
-    yield* createCodingAgent(member, {
+    yield* createAgent(member, {
       ...start,
       prompt: "Orchestrate the rollout.",
       idempotencyKey: randomUUID(),
@@ -52,7 +52,7 @@ const openStarted = Effect.gen(function* () {
     }),
   ).agent;
   const agent = Option.getOrThrow(
-    yield* createCodingAgent(member, {
+    yield* createAgent(member, {
       ...start,
       prompt: "Record the starter.",
       title: "Record the starter",
@@ -71,7 +71,7 @@ const openStarted = Effect.gen(function* () {
 });
 
 /** One turn of the agent's, begun just before `at` and ended in the run status given at `at`. */
-const endedAt = (agent: CodingAgent, status: RunStatus, at: number) =>
+const endedAt = (agent: Agent, status: RunStatus, at: number) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const target = { userId: agent.userId, conversationId: agent.conversationId };

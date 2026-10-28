@@ -11,17 +11,17 @@ import {
 } from "@luke/agent-runner/protocol";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
-  claimCodingAgentRunnerLease,
-  releaseCodingAgentRunnerLease,
-} from "@luke/database/models/coding-agent-runner-lease";
+  claimAgentRunnerLease,
+  releaseAgentRunnerLease,
+} from "@luke/database/models/agent-runner-lease";
 import {
-  type CodingAgent,
-  createCodingAgent,
+  type Agent,
+  createAgent,
   latestTurnsOfReached,
-  readCodingAgentRouting,
-  recordCodingAgentNativeSession,
-  updateCodingAgentChoice,
-} from "@luke/database/models/coding-agent-store";
+  readAgentRouting,
+  recordAgentNativeSession,
+  updateAgentChoice,
+} from "@luke/database/models/agent-store";
 import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { installSkill } from "@luke/database/models/installed-skill-store";
@@ -40,12 +40,7 @@ import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_PAYER,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_FAILURE, AGENT_KIND, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -120,7 +115,7 @@ import {
   runnerIdled,
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
-import { codingAgentFailureOf } from "./status.js";
+import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -202,7 +197,7 @@ const openAgentWithoutPlan = Effect.gen(function* () {
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
   );
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: "start-1",
     model: "anthropic/claude-opus-5.5",
@@ -260,7 +255,7 @@ const runnerExited = (api: ReturnType<typeof runnerSandboxApi>) => {
   if (first !== undefined) first.exitCode = 0;
 };
 
-const message = (agent: CodingAgent, text: string, lineId?: string) => ({
+const message = (agent: Agent, text: string, lineId?: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
   message: text,
@@ -282,9 +277,9 @@ const textsOf = (command: Parameters<typeof launchLines>[0]) =>
   );
 
 /** The account's operator in the agent's workspace, on the same plan. */
-const openOperator = (userId: string, agent: CodingAgent) =>
+const openOperator = (userId: string, agent: Agent) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       taskId: null,
       organizationId: agent.organizationId,
       idempotencyKey: `operator-${randomUUID()}`,
@@ -293,13 +288,13 @@ const openOperator = (userId: string, agent: CodingAgent) =>
       planSnapshot: null,
       prompt: null,
       repository: null,
-      kind: CODING_AGENT_KIND.OPERATOR,
+      kind: AGENT_KIND.OPERATOR,
     }),
     (started) => Option.getOrThrow(started).agent,
   );
 
 /** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
-const turnUnderWay = (userId: string, agent: CodingAgent) =>
+const turnUnderWay = (userId: string, agent: Agent) =>
   Effect.gen(function* () {
     const turnId = randomUUID();
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -371,10 +366,10 @@ const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times:
   });
 
 /** The agent's newest turn, as its status reads it, and the word its failure is read as. */
-const newestTurn = (agent: CodingAgent) =>
+const newestTurn = (agent: Agent) =>
   Effect.map(latestTurnsOfReached([agent.conversationId]), (turns) => {
     const turn = turns.get(agent.conversationId);
-    return { status: turn?.status, failure: codingAgentFailureOf(turn) };
+    return { status: turn?.status, failure: agentFailureOf(turn) };
   });
 
 afterEach(() => {
@@ -401,7 +396,7 @@ const repositoryAgent = (
     yield* savePlan(userId);
     const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
@@ -470,10 +465,10 @@ function sighting(wanted: (sent: SentToGitHub) => boolean) {
 }
 
 /** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
-const anotherAgent = (userId: string, agent: CodingAgent, startBranch?: string) =>
+const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
   Effect.gen(function* () {
     assert.ok(agent.taskId !== null);
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: agent.taskId,
       idempotencyKey: `start-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
@@ -510,7 +505,7 @@ const repositorySnapshots = (api: ReturnType<typeof runnerSandboxApi>) =>
   );
 
 /** The agent's own sandbox still standing, by the agent's tag. */
-const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: CodingAgent) =>
+const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: Agent) =>
   api.sandboxes.find((each) => !each.deleted && each.tags[RUNNER_TAG.AGENT] === agent.id);
 
 it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
@@ -559,7 +554,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         const [config, first] = (yield* launchLines(command)) as [ClaudeCodeConfig, InputLine];
@@ -772,7 +767,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           signedIn: { claudeCode: true },
         });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -781,8 +776,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
-          machine: CODING_AGENT_MACHINE.DEVICE,
+          payer: AGENT_PAYER.MAC_SIGN_IN,
+          machine: AGENT_MACHINE.DEVICE,
           deviceId,
         });
         assert.ok(Option.isSome(started));
@@ -851,7 +846,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -860,7 +855,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.API_KEY,
+          payer: AGENT_PAYER.API_KEY,
         });
         assert.ok(Option.isSome(started));
         const agent = started.value.agent;
@@ -937,7 +932,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -946,7 +941,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.API_KEY,
+          payer: AGENT_PAYER.API_KEY,
         });
         assert.ok(Option.isSome(started));
         // The key was sealed under another deployment's ring, as a Preview's database holds production's.
@@ -1059,7 +1054,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
       assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
       const lineId = randomUUID();
-      yield* updateCodingAgentChoice(userId, agent.id, {
+      yield* updateAgentChoice(userId, agent.id, {
         model: "anthropic/claude-sonnet-5.5",
         effort: "low",
       });
@@ -1106,7 +1101,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        yield* updateCodingAgentChoice(userId, agent.id, {
+        yield* updateAgentChoice(userId, agent.id, {
           model: "anthropic/claude-opus-5.5-fast",
           effort: "low",
         });
@@ -1202,7 +1197,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
         // The events route records the CLI's session from the runner's init, and the run ends.
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
         sequence.next = 42;
 
@@ -1235,7 +1230,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // A fresh bearer for the new launch, recorded in place of the last.
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         // The first launch's END, arriving late, stops nothing of the second's.
@@ -1301,7 +1296,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         // The runner took its first message, and a message queued as it ended was never read.
         yield* runnerTook(agent.id);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
@@ -1378,7 +1373,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The runner took its message, and its events were applied.
         yield* runnerTook(agent.id);
         sequence.next = 1;
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         const target = { userId, conversationId: agent.conversationId };
         const lineId = randomUUID();
         yield* (yield* Database).insert(messages).values({
@@ -1464,7 +1459,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         sequence.next = 42;
         yield* runnerTook(agent.id);
         yield* runnerEnded({
@@ -1896,7 +1891,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes.length, 0);
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
-          failure: CODING_AGENT_FAILURE.SANDBOX,
+          failure: AGENT_FAILURE.SANDBOX,
         });
       }),
   );
@@ -2151,7 +2146,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
 
         const waiting = yield* Effect.forkChild(
           sessions.send(opened.sessionId, message(agent, "Again.")),
@@ -2166,9 +2161,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(api.commands.length, 1);
         // The lease is still the other call's alone, and free once it lets go.
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), false);
-        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), false);
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), true);
       }),
   );
 
@@ -2188,9 +2183,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
         const kept = keptAfterResponse();
-        yield* updateCodingAgentChoice(userId, agent.id, {
+        yield* updateAgentChoice(userId, agent.id, {
           model: "anthropic/claude-sonnet-5.5",
           effort: "low",
         });
@@ -2251,13 +2246,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
         const kept = keptAfterResponse();
 
         const answer = yield* sessions
           .send(opened.sessionId, message(agent, "Now the emails."))
           .pipe(Effect.provide(kept.layer));
-        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
         yield* kept.run;
 
         assert.equal(answer.outcome, EVE_SEND_OUTCOME.ACCEPTED);
@@ -2338,7 +2333,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
 
         yield* runnerTook(agent.id);
         const ending = yield* Effect.forkChild(
@@ -2357,7 +2352,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(sandbox.status, "running");
         // The send's relaunch writes its launch's tag, past the END's sequence, and lets go.
         sandbox.tags[RUNNER_TAG.LAUNCH] = "42";
-        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
         yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
 
         assert.equal(yield* Fiber.join(ending), RUNNER_ENDED.STALE);
@@ -2413,7 +2408,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .insert(user)
           .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -2565,7 +2560,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
           (yield* sessions.reset(opened.sessionId)).outcome,
@@ -2596,10 +2591,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       // A send queued behind another call's lease is told the same, and queues nothing.
       const now = new Date(yield* Clock.currentTimeMillis);
       const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-      assert.equal(
-        yield* claimCodingAgentRunnerLease(mine.agent.id, randomUUID(), now, until),
-        true,
-      );
+      assert.equal(yield* claimAgentRunnerLease(mine.agent.id, randomUUID(), now, until), true);
       const queuedBehind = yield* mySessions
         .send(opened.sessionId, message(mine.agent, "Still not yours."))
         .pipe(Effect.provide(keptAfterResponse().layer));
@@ -2786,7 +2778,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(api.sandboxes.every((sandbox) => sandbox.deleted));
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
-          failure: CODING_AGENT_FAILURE.SANDBOX,
+          failure: AGENT_FAILURE.SANDBOX,
         });
       }),
   );
@@ -2840,7 +2832,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(api.sandboxes, []);
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
-          failure: CODING_AGENT_FAILURE.SANDBOX,
+          failure: AGENT_FAILURE.SANDBOX,
         });
       }),
   );

@@ -15,10 +15,7 @@ import { keepConversationPicture } from "@luke/database/models/conversation-pict
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   PICTURE_OMISSION,
@@ -67,15 +64,15 @@ const INLINED_FILE = /^Attached file: ([^\n]+)\n(`{3,})\n([\s\S]*)\n\2$/u;
 
 /** The types an attached file is a picture under, which a conversation keeps. */
 const IMAGE_TYPES: ReadonlySet<string> = new Set([
-  CODING_AGENT_ATTACHMENT_TYPE.PNG,
-  CODING_AGENT_ATTACHMENT_TYPE.JPEG,
-  CODING_AGENT_ATTACHMENT_TYPE.WEBP,
+  AGENT_ATTACHMENT_TYPE.PNG,
+  AGENT_ATTACHMENT_TYPE.JPEG,
+  AGENT_ATTACHMENT_TYPE.WEBP,
 ]);
 
 /** One image kept beside the conversation, as its bytes are sniffed and measured, or why it was not kept. */
 function keptImage(
   target: ConversationTarget,
-  file: CodingAgentAttachment,
+  file: AgentAttachment,
 ): Effect.Effect<KeptImage, TaskStoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const bytes = new Uint8Array(Buffer.from(file.data, "base64"));
@@ -102,7 +99,7 @@ function keptImage(
  */
 export function keptHandedImages(
   target: ConversationTarget,
-  files: readonly CodingAgentAttachment[],
+  files: readonly AgentAttachment[],
 ): Effect.Effect<readonly HandedFile[], TaskStoreFailure, DatabaseServices> {
   return Effect.forEach(files, (file) =>
     IMAGE_TYPES.has(file.mediaType)
@@ -155,12 +152,12 @@ export function eveContent(
 ): string | UserContent {
   if (attachments.length === 0 && mentioned === undefined && sender === undefined) return text;
   const texts = attachments.flatMap((file) =>
-    file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
+    file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT
       ? [{ type: "text" as const, text: inlinedFile(file.name, textOf(file.data)) }]
       : [],
   );
   const files = attachments.flatMap((file) =>
-    file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
+    file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT
       ? []
       : [
           {
@@ -197,9 +194,9 @@ function inlinedFileOf(text: string): FileUIPart | undefined {
   const [, name = "", , file = ""] = inlined;
   return {
     type: "file",
-    mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+    mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
     filename: name,
-    url: dataUrl(CODING_AGENT_ATTACHMENT_TYPE.TEXT, Buffer.from(file, "utf8").toString("base64")),
+    url: dataUrl(AGENT_ATTACHMENT_TYPE.TEXT, Buffer.from(file, "utf8").toString("base64")),
   };
 }
 

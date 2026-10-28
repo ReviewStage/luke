@@ -30,16 +30,13 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
-} from "@luke/database/models/coding-agent-store";
+import { readAgentHeaderOfConversation, readAgentRouting } from "@luke/database/models/agent-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
+import { LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
@@ -181,9 +178,9 @@ function routed<Turn extends EveHostTurn>(
   /** The route of the conversation's calls, read now. */
   const routeOf = (conversationId: string) =>
     Effect.gen(function* () {
-      const agent = yield* readCodingAgentHeaderOfConversation(account, conversationId);
+      const agent = yield* readAgentHeaderOfConversation(account, conversationId);
       if (Option.isNone(agent)) return TO_EVE;
-      const routing = yield* readCodingAgentRouting(account, agent.value.id);
+      const routing = yield* readAgentRouting(account, agent.value.id);
       const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
       return isNativeRuntime(runtime) ? { runtime, starter: agent.value.userId } : TO_EVE;
     }).pipe(Effect.provideContext(store));
@@ -287,7 +284,7 @@ export const runnerChoiceApplied = (agent: {
   readonly conversationId: string;
 }): Effect.Effect<RunnerChoice, never, DatabaseServices> =>
   Effect.gen(function* () {
-    const routing = yield* readCodingAgentRouting(agent.userId, agent.id);
+    const routing = yield* readAgentRouting(agent.userId, agent.id);
     const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
     if (!isNativeRuntime(runtime)) return RUNNER_CHOICE.NOT_LIVE;
     const native = yield* Effect.serviceOption(NativeAgentSessions);

@@ -5,7 +5,7 @@ import { inArray } from "drizzle-orm";
 import { Effect, Exit, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent } from "../../models/coding-agent-store.js";
+import { createAgent } from "../../models/agent-store.js";
 import {
   conversationReachableBy,
   runtimeSessionReachableBy,
@@ -148,7 +148,7 @@ it.layer(getTestDB())("the per-task Luke's conversations", (it) => {
           deletedAt: "2026-09-01T00:00:00.000Z",
         });
         const agent = Option.getOrThrow(
-          yield* createCodingAgent(userId, {
+          yield* createAgent(userId, {
             taskId,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",

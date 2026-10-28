@@ -1,5 +1,5 @@
 import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
-import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_TODO_STATUS } from "@luke/features/agent-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
 /**
@@ -85,7 +85,7 @@ function patchOf(path: string, hunk: string, removed: readonly string[], added: 
 
 /** A to-do's status as the wire spells it: Claude Code's `completed` is done, and the rest are spelled alike. */
 function todoStatus(status: WireValue | undefined): WireValue | undefined {
-  return status === "completed" ? CODING_AGENT_TODO_STATUS.DONE : status;
+  return status === "completed" ? AGENT_TODO_STATUS.DONE : status;
 }
 
 /** A `TodoWrite` list as `write_todos` takes one: each item's words and status; an item that does not read is kept, so the list reads as JSON rather than as a shorter list. */
@@ -258,8 +258,8 @@ function codexPatch(input: WireValue | undefined): WireValue | undefined {
 
 /** A plan step's status as the wire spells a to-do's: Codex's `inProgress` and `completed` are in progress and done. */
 function codexStepStatus(status: WireValue | undefined): WireValue | undefined {
-  if (status === "inProgress") return CODING_AGENT_TODO_STATUS.IN_PROGRESS;
-  if (status === "completed") return CODING_AGENT_TODO_STATUS.DONE;
+  if (status === "inProgress") return AGENT_TODO_STATUS.IN_PROGRESS;
+  if (status === "completed") return AGENT_TODO_STATUS.DONE;
   return status;
 }
 

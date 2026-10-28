@@ -1,14 +1,10 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentDefaultAnswer,
-} from "@luke/features/coding-agent-view";
-import type {
-  CodingAgentAttachment,
-  CodingAgentSummary,
-  TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentDefaultAnswer,
+} from "@luke/features/agent-view";
+import type { AgentAttachment, AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -442,7 +438,7 @@ interface AutomationsViewControl {
 export interface NewTaskAgent {
   readonly idempotencyKey: string;
   readonly prompt: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
 }
 
@@ -754,7 +750,7 @@ export interface TasksControl {
     /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
-    readDefault: () => Promise<CodingAgentDefaultAnswer>;
+    readDefault: () => Promise<AgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers. */
@@ -797,7 +793,7 @@ export interface TasksControl {
   /** The account's pins of agents on a plan, the archived ones left out, which the sidebar's Pinned section draws beside the pinned plans; none while the list is not followed live. */
   taskAgentPins: readonly TaskAgentPin[];
   /** Every agent on a plan, the archived ones left out, as the list followed live names it; none while it is not. */
-  taskAgents: readonly CodingAgentSummary[];
+  taskAgents: readonly AgentSummary[];
   /**
    * Gives the pins a drag in the sidebar's Pinned section moved their new
    * places, on the account: a plan's and an agent's, drawn
@@ -982,7 +978,7 @@ const NO_IDS: readonly string[] = [];
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
 /** No agent on a plan, the same array every render, while the list is not followed live. */
-const NO_TASK_AGENTS: readonly CodingAgentSummary[] = [];
+const NO_TASK_AGENTS: readonly AgentSummary[] = [];
 
 /** No pin of an agent on a plan, the same array every render. */
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
@@ -1537,7 +1533,7 @@ export function useTasksTab(input: {
         continue;
       }
       const placed = pin.position === undefined ? {} : { position: pin.position };
-      act(ACT_KIND.CODING_AGENTS_PIN, { agentId: pin.agent, pinned: true, ...placed }).then(
+      act(ACT_KIND.AGENTS_PIN, { agentId: pin.agent, pinned: true, ...placed }).then(
         (answer) => {
           if ("agent" in answer) onCarried(pin.agent);
         },
@@ -1595,7 +1591,7 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (reportedAgent.current === shownAgent) return;
     reportedAgent.current = shownAgent;
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
+    tell(ACT_KIND.AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
 
   // The tab showing is what asks the host to read the tasks again; the open
@@ -1865,7 +1861,7 @@ export function useTasksTab(input: {
     const pressedBy = input.account;
     const asked = (flights.get(agentId) ?? Promise.resolve(true)).then(() =>
       accountNow.current === pressedBy
-        ? act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned }).then(
+        ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned }).then(
             (answer) => "agent" in answer,
             () => false,
           )
@@ -1898,7 +1894,7 @@ export function useTasksTab(input: {
       const flight: Promise<boolean | undefined> = agent
         ? (flights.get(id) ?? Promise.resolve(true)).then(() =>
             accountNow.current === pressedBy
-              ? act(ACT_KIND.CODING_AGENTS_PIN, { agentId: id, pinned: true, position }).then(
+              ? act(ACT_KIND.AGENTS_PIN, { agentId: id, pinned: true, position }).then(
                   (answer) => "agent" in answer,
                   () => false,
                 )
@@ -2433,7 +2429,7 @@ export function useTasksTab(input: {
   const openAgent = (
     planId: string,
     handed: NewTaskAgent,
-    started: CodingAgentAgentAnswer | undefined,
+    started: AgentAgentAnswer | undefined,
     device: MacOffer | undefined,
   ) => {
     sidePanel.onCloseOn(planId, SIDE_PANEL_TAB.PLAN);
@@ -2447,7 +2443,7 @@ export function useTasksTab(input: {
       return;
     }
     const refused = agentStartFailureNote(
-      started ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      started ?? { failure: AGENT_CALL_FAILURE.UNANSWERED },
       planId,
       device,
     );

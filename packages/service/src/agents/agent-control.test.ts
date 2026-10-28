@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent, readAgent } from "@luke/database/models/agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { createTask } from "@luke/database/models/task-store";
@@ -21,7 +21,7 @@ import {
 } from "../testing/github-app-fake.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 import { startFromOf } from "./coder-host/replay.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
+import { steerAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_MOUNT, type EveTypedTurn, eveSessions } from "./eve-host/eve-sessions.js";
 
@@ -52,7 +52,7 @@ const openTokenAgent = Effect.gen(function* () {
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
   });
-  const started = yield* createCodingAgent(owner, {
+  const started = yield* createAgent(owner, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -77,7 +77,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           mount: EVE_MOUNT.CODER,
         });
         const steer = (userId: string) =>
-          steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
+          steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
             text: "Carry on.",
             clientKey: randomUUID(),
             sender: { kind: MESSAGE_SENDER.MEMBER, userId },
@@ -91,8 +91,8 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
             randomUUID(),
           );
 
-        assert.ok(Option.isSome(yield* readCodingAgent(reader, agent.id)));
-        assert.ok(Option.isNone(yield* readCodingAgent(tokenless, agent.id)));
+        assert.ok(Option.isSome(yield* readAgent(reader, agent.id)));
+        assert.ok(Option.isNone(yield* readAgent(tokenless, agent.id)));
         assert.deepEqual(yield* Effect.flip(steer(reader)), HOSTED_REFUSAL.NOT_PERMITTED);
         assert.deepEqual(yield* Effect.flip(startFrom(reader)), HOSTED_REFUSAL.NOT_PERMITTED);
         assert.deepEqual(
@@ -110,7 +110,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
         const { owner, tokenless, workspace, task } = yield* openTokenAgent;
         // Note that a native runtime with no payer asks for no API key, so the send reaches the task's gate.
         const repository = "octo-member/app-side";
-        const started = yield* createCodingAgent(owner, {
+        const started = yield* createAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -128,9 +128,9 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           mount: EVE_MOUNT.CODER,
         });
 
-        assert.ok(Option.isSome(yield* readCodingAgent(tokenless, agent.id)));
+        assert.ok(Option.isSome(yield* readAgent(tokenless, agent.id)));
         const refused = yield* Effect.flip(
-          steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
+          steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
             text: "Carry on.",
             clientKey: randomUUID(),
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: tokenless },

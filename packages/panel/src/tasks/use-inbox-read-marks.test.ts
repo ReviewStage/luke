@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -85,21 +85,21 @@ function marks() {
   const sent: Sent[] = [];
   /** One write held until the test answers it, with the value it answers when it does not fail. */
   const sending = <Value>(words: string, value: Value) =>
-    new Promise<Value | { failure: typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND }>((resolve) => {
+    new Promise<Value | { failure: typeof AGENT_CALL_FAILURE.NOT_FOUND }>((resolve) => {
       sent.push({
         words,
         answer: async (failed = false) => {
           await act(async () => {
-            resolve(failed ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } : value);
+            resolve(failed ? { failure: AGENT_CALL_FAILURE.NOT_FOUND } : value);
             for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
           });
         },
       });
     });
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: ({ workspaceId, itemIds }) =>
+    [ACT_KIND.AGENTS_INBOX_READ_ALL]: ({ workspaceId, itemIds }) =>
       sending(`all:${workspaceId}:${itemIds.join(",")}`, { marked: 1 }),
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
       sending(`${unread ? "unread" : "read"}:${itemId}`, { id: itemId, unread }),
   });
   let control: InboxReadMarks | undefined;

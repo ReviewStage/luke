@@ -69,7 +69,7 @@ export function RecentRow({
   const card = useMemo(() => taskCardOf(tasks, task, now), [tasks, task, now]);
   return (
     <>
-      <RowHintOptions card={card} cardBeside>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={task.id}

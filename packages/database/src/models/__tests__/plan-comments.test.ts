@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -17,7 +17,7 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createAgent } from "../agent-store.js";
 import { readPlanAttachment } from "../plan-attachments.js";
 import {
   actOnPlanCommentThread,
@@ -430,7 +430,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
         const agentId = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -493,12 +493,12 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
             attachments: [
               {
                 name: "expiry.txt",
-                mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+                mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
                 data: Buffer.from(notes).toString("base64"),
               },
               {
                 name: "flow.pdf",
-                mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF,
+                mediaType: AGENT_ATTACHMENT_TYPE.PDF,
                 data: Buffer.from("%PDF-1.4\n").toString("base64"),
               },
             ],
@@ -517,8 +517,8 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         assert.deepEqual(
           first?.files?.map((file) => [file.name, file.mediaType]),
           [
-            ["expiry.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
-            ["flow.pdf", CODING_AGENT_ATTACHMENT_TYPE.PDF],
+            ["expiry.txt", AGENT_ATTACHMENT_TYPE.TEXT],
+            ["flow.pdf", AGENT_ATTACHMENT_TYPE.PDF],
           ],
         );
         assert.equal(second?.files, undefined);
@@ -526,7 +526,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         assert.ok(fileId !== undefined);
 
         const kept = Option.getOrThrow(yield* readPlanCommentFile(owner, taskId, fileId));
-        assert.equal(kept.contentType, CODING_AGENT_ATTACHMENT_TYPE.TEXT);
+        assert.equal(kept.contentType, AGENT_ATTACHMENT_TYPE.TEXT);
         assert.deepEqual([...kept.bytes], [...notes]);
         assert.ok(Option.isNone(yield* readPlanCommentFile(outsider, taskId, fileId)));
         // A comment's file is no picture of the plan's.

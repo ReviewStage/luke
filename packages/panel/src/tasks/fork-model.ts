@@ -3,7 +3,7 @@
  *
  * A fork is a new agent on the same plan handed the source's transcript up
  * to and including one of the source's own messages
- * (`codingAgentStartRequestFields`' `from`): a settled one whole, and the
+ * (`agentStartRequestFields`' `from`): a settled one whole, and the
  * reply a running turn is still writing as far as it stood when Fork was
  * pressed, by its steps and the words and calls of the last of them (`forkCutOf`). The draft that sends it holds
  * the fork beside its choices (`use-coding-agents.ts`), with the opening
@@ -21,10 +21,10 @@
  */
 
 import type {
-  CodingAgentAttachment,
-  CodingAgentMessage,
-  CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AgentAttachment,
+  AgentSummary,
+  AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
@@ -99,7 +99,7 @@ const START_STAGE_WORDS = {
 const COPY_STAGE_MS = 3_000;
 
 /** A Start as the draft's send asks it, the plan left for the caller to name. */
-export type ForkStart = Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">;
+export type ForkStart = Omit<PortActPayload<typeof ACT_KIND.AGENTS_START>, "taskId">;
 
 /**
  * A message's opening words as the fork's chip quotes them: its first line
@@ -117,7 +117,7 @@ export function messageOpening(words: string): string {
 }
 
 /** The choice a fork of `source` starts on until the developer picks another: the source's own model and effort, and its window. */
-export function forkChoice(source: CodingAgentSummary): ModelChoice {
+export function forkChoice(source: AgentSummary): ModelChoice {
   return choiceRequest({
     model: source.model,
     effort: source.effort,
@@ -147,7 +147,7 @@ export function forkStart(input: {
   readonly draftId: string;
   readonly fork: AgentFork;
   readonly words: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
 }): ForkStart {
@@ -192,7 +192,7 @@ export function openReply(
 }
 
 /** Whether a part is a step's words or a call, which a fork's cut within a step counts as the service does. */
-function isCutPart(part: CodingAgentMessage["parts"][number]): boolean {
+function isCutPart(part: AgentTranscriptMessage["parts"][number]): boolean {
   if (!isRecord(part) || !isWireString(part.type)) return false;
   return part.type === AGENT_PART.TEXT || part.type.startsWith(TOOL_PART_TYPE_PREFIX);
 }
@@ -206,7 +206,7 @@ function isCutPart(part: CodingAgentMessage["parts"][number]): boolean {
  * no fork, since there is nothing of it yet to keep.
  */
 export function forkCutOf(
-  message: Pick<CodingAgentMessage, "id" | "parts">,
+  message: Pick<AgentTranscriptMessage, "id" | "parts">,
   open: string | undefined,
 ): ForkCut | undefined {
   if (message.id !== open) return undefined;
@@ -226,7 +226,7 @@ export function forkCutOf(
  * no fork of any.
  */
 export function forksOf(
-  agents: readonly CodingAgentSummary[],
+  agents: readonly AgentSummary[],
   sourceId: string,
 ): ReadonlyMap<string, readonly string[]> {
   const forks = new Map<string, string[]>();

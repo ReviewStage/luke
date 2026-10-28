@@ -59,7 +59,7 @@ const headShaSchema = EffectSchema.String.check(
   EffectSchema.isPattern(/^[0-9a-f]+$/u),
 );
 
-/** The reactions GitHub offers on a comment, in the order it draws them; a reaction is read with the conversation (`coding-agent-wire.ts`) and changed here. */
+/** The reactions GitHub offers on a comment, in the order it draws them; a reaction is read with the conversation (`agent-wire.ts`) and changed here. */
 export const REACTION = {
   THUMBS_UP: "thumbs_up",
   THUMBS_DOWN: "thumbs_down",

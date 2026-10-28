@@ -444,7 +444,7 @@ function PlacedRow({
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <RowHintOptions card={row.card} cardBeside>
+    <RowHintOptions card={row.card}>
       <ListRow
         leading={row.icon}
         title={title}

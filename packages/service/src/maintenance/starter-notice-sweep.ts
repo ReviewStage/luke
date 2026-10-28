@@ -7,7 +7,7 @@
  * on it until a person noticed. So each such ending
  * (`@luke/database/models/starter-notices`) is handed to the starter within
  * the sweep's minute as one line from Luke naming the agent and what
- * happened, the one way a message reaches an agent (`steerCodingAgent`).
+ * happened, the one way a message reaches an agent (`steerAgent`).
  *
  * The line goes under the ending's own key, the turn's id or the archived
  * agent's, so one that landed is never sent again, and one refused or cut
@@ -16,7 +16,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
   type DueStarterNotice,
   dueStarterNotices,
@@ -29,7 +29,7 @@ import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import { Duration, Effect, Option, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { workspaceStepOf, writtenMention } from "../agents/written-mentions.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
@@ -87,22 +87,16 @@ function noticeLine(notice: DueStarterNotice, step: string): string {
  */
 const tell = (eveFor: EveForAccount, due: DueStarterNotice) =>
   Effect.gen(function* () {
-    const starter = yield* readCodingAgent(due.userId, due.starterId);
+    const starter = yield* readAgent(due.userId, due.starterId);
     if (Option.isNone(starter) || starter.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);
-    yield* steerCodingAgent(
-      eve,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      due.userId,
-      starter.value,
-      {
-        text: noticeLine(due, step),
-        clientKey: due.key,
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), due.userId, starter.value, {
+      text: noticeLine(due, step),
+      clientKey: due.key,
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
     return true;
   }).pipe(
     // The failure's kind alone: nothing of the agent or its member rides the line.

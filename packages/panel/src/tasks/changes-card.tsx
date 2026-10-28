@@ -1,7 +1,4 @@
-import type {
-  CodingAgentChangesPeople,
-  CodingAgentPullRequest,
-} from "@luke/features/coding-agent-wire";
+import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { useEffect } from "react";
@@ -26,8 +23,8 @@ import { openerOf } from "./use-link-standing.js";
 /** Who a pull request names, as its tab last read them for that very pull request; none where the tab read them for another, or has not yet. */
 export function peopleOf(
   held: HeldPeople | undefined,
-  pullRequest: Pick<CodingAgentPullRequest, "url">,
-): CodingAgentChangesPeople | undefined {
+  pullRequest: Pick<AgentPullRequest, "url">,
+): AgentChangesPeople | undefined {
   return held?.url === pullRequest.url ? held.people : undefined;
 }
 
@@ -54,9 +51,9 @@ export function ChangesCard({
   subject: AgentSubject;
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
-  pullRequest: CodingAgentPullRequest;
+  pullRequest: AgentPullRequest;
   /** Who the pull request names, as its Changes tab last read them; none before it has. */
-  people: CodingAgentChangesPeople | undefined;
+  people: AgentChangesPeople | undefined;
   /** Opens the agent's tab in the plan's column. */
   onOpenAgent: () => void;
 }): React.JSX.Element {

@@ -1,6 +1,6 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
+import type { GitHubPerson } from "@luke/features/agent-wire";
 import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {

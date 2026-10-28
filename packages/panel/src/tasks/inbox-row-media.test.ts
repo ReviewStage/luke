@@ -51,7 +51,7 @@ function reads(first: readonly string[]) {
   const out = new Map<string, () => Promise<void>>();
   const askedUnder = new Map<string, string>();
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: ({ attachmentId, itemId }) =>
+    [ACT_KIND.AGENTS_INBOX_ATTACHMENT]: ({ attachmentId, itemId }) =>
       new Promise((resolve) => {
         askedUnder.set(attachmentId, itemId);
         out.set(attachmentId, async () => {

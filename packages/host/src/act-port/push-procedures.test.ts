@@ -32,7 +32,7 @@ function documentAt(version: number): AppStateSnapshot {
   return {
     ...initialAppState(RUN, true, []),
     version,
-    codingAgents: { unseen: [`agent-${version}`] },
+    agents: { unseen: [`agent-${version}`] },
     window: { fullScreen: false },
   };
 }
@@ -175,10 +175,10 @@ it("a document replaced unsent takes nothing it moved with it: the one sent name
 
   const offline = { ...first, version: 2, network: { online: false } };
   pushes.pushState(WINDOW, offline);
-  pushes.pushState(WINDOW, { ...offline, version: 3, codingAgents: { unseen: [] } });
+  pushes.pushState(WINDOW, { ...offline, version: 3, agents: { unseen: [] } });
   assert.deepEqual(await delivered(stream), {
     version: 3,
-    entries: { network: { online: false }, codingAgents: { unseen: [] } },
+    entries: { network: { online: false }, agents: { unseen: [] } },
   });
 });
 

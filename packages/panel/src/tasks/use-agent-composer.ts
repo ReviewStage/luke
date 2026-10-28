@@ -1,13 +1,10 @@
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import {
-  type CodingAgentAttachment,
-  type CodingAgentMessage,
-  type CodingAgentPayer,
+  type AgentAttachment,
+  type AgentPayer,
+  type AgentTranscriptMessage,
   hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { sentLineId } from "@luke/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
@@ -82,14 +79,11 @@ export type MessageSender = (
   agentId: string,
   text: string,
   clientKey: string,
-  attachments: readonly CodingAgentAttachment[],
-) => Promise<CodingAgentAgentAnswer>;
+  attachments: readonly AgentAttachment[],
+) => Promise<AgentAgentAnswer>;
 
 /** How the agent is taken back to just before one of the developer's lines, by its message id, answered as the view hears it. */
-export type MessageRewinder = (
-  agentId: string,
-  messageId: string,
-) => Promise<CodingAgentAgentAnswer>;
+export type MessageRewinder = (agentId: string, messageId: string) => Promise<AgentAgentAnswer>;
 
 /** Everything the composer draws and presses. */
 export interface AgentComposerControl {
@@ -97,11 +91,9 @@ export interface AgentComposerControl {
   draft: string;
   setDraft: (text: string) => void;
   /** The files that go with the words, in the order attached. */
-  attachments: readonly CodingAgentAttachment[];
+  attachments: readonly AgentAttachment[];
   /** Changes the files from those the box holds as the change lands, which a read that lands late needs. */
-  setAttachments: (
-    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
-  ) => void;
+  setAttachments: (next: (held: readonly AgentAttachment[]) => readonly AgentAttachment[]) => void;
   /** Whether a send holds the box until it answers, during which the box takes nothing: New task's, whose send opens the task; an agent's box never holds. */
   sending: boolean;
   /** Why the last message did not go, said under the box beside what mends it; nothing while none failed. */
@@ -162,7 +154,7 @@ function fresh(agentId: string): Held {
 
 /** The ids of the message named and every message after it, which a rewind to just before it drops. */
 function cutFrom(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   messageId: string,
 ): ReadonlySet<string> | undefined {
   const at = messages.findIndex((message) => message.id === messageId);
@@ -185,7 +177,7 @@ function carried(sent: readonly SentLine[], behind: Draft): Draft {
   };
 }
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Whether a draft holds neither words nor files. */
 function holdsNothing(draft: Draft): boolean {
@@ -210,7 +202,7 @@ function rewoundBefore(sent: readonly SentLine[], id: string): readonly SentLine
 export interface HeldComposer extends AgentComposerControl {
   readonly unsent: {
     readonly words: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
   };
   /** Sends a line marked as not sent again under its key, from the line itself. */
   readonly retryLine: (id: string) => void;
@@ -224,7 +216,7 @@ export interface HeldComposer extends AgentComposerControl {
   readonly sendEdit: (
     messageId: string,
     words: string,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
   ) => void;
   /** Whether a rewind is out, an edit's or a revert's, until the service answers it. */
   readonly rewindOut: boolean;
@@ -245,14 +237,14 @@ export function useAgentComposer(input: {
   /** The agent's task, whose repository a refusal's remedy mends; null for an agent with no task, whose refusal says its words alone. */
   taskId: string | null;
   /** The transcript as the tab holds it, which a sent line is read back from. */
-  messages: readonly CodingAgentMessage[];
+  messages: readonly AgentTranscriptMessage[];
   /** Whether a turn runs now, which a line sent now steers rather than opening one; none where none does. */
   running?: boolean | undefined;
   send: MessageSender;
   /** Takes the agent back to just before one of the developer's lines; none where the box offers no edit and no revert. */
   rewind?: MessageRewinder | undefined;
   /** Who pays for the agent, which a plan's refusal names; none for an agent from before payers. */
-  payer?: CodingAgentPayer | undefined;
+  payer?: AgentPayer | undefined;
   /** The teammate who started the agent (`teammateStarter`), whose own credentials a refusal names; none for the reader's own. */
   starter?: string | undefined;
   /** The service said where the agent stands now, which is newer than the list. */
@@ -294,9 +286,9 @@ export function useAgentComposer(input: {
 
   const { update } = kept;
   /** The agent taken back to just before the line named, answered as unanswered where the box was handed no rewind. */
-  const rewindTo = (agentId: string, messageId: string): Promise<CodingAgentAgentAnswer> =>
+  const rewindTo = (agentId: string, messageId: string): Promise<AgentAgentAnswer> =>
     (latest.current.rewind?.(agentId, messageId) ?? Promise.resolve(UNANSWERED)).catch(
-      (): CodingAgentAgentAnswer => UNANSWERED,
+      (): AgentAgentAnswer => UNANSWERED,
     );
   /** Sends one line once every line before it has answered, and takes its answer. */
   const deliver = (line: SentLine) => {
@@ -320,7 +312,7 @@ export function useAgentComposer(input: {
           ? rewound
           : await latest.current
               .send(agentId, line.text, line.clientKey, line.attachments)
-              .catch((): CodingAgentAgentAnswer => UNANSWERED);
+              .catch((): AgentAgentAnswer => UNANSWERED);
       // An answer to another agent's tab, or to a tab since remounted, is nobody's.
       if (latest.current.agentId !== agentId) return;
       // A rewind that did not go drops nothing, so the messages it would have dropped are drawn again.
@@ -409,11 +401,7 @@ export function useAgentComposer(input: {
   };
 
   /** Sends the words and files in place of the line named, the messages from it on hidden at once; the box is left as it is. */
-  const sendEdit = (
-    messageId: string,
-    words: string,
-    attachments: readonly CodingAgentAttachment[],
-  ) => {
+  const sendEdit = (messageId: string, words: string, attachments: readonly AgentAttachment[]) => {
     const text = words.trim();
     if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
     const clientKey = crypto.randomUUID();

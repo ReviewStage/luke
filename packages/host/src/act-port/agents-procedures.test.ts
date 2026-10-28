@@ -13,14 +13,14 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentTranscriptChanged,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptPage,
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentTranscriptChanged,
+  type AgentTranscriptKey,
+  type AgentTranscriptPage,
   TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -51,56 +51,50 @@ const STARTED = {
     effort: "high",
     title: null,
     createdAt: 1_800_000_000_000,
-    status: CODING_AGENT_STATUS.STARTING,
+    status: AGENT_STATUS.STARTING,
     turnId: null,
   },
-} satisfies CodingAgentAgentAnswer;
+} satisfies AgentAgentAnswer;
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [AGENT_ACT_KIND.CODING_AGENTS_MODELS]: "Could not read the models on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_READ]: "Could not read the default model on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]:
-    "Could not change the default model on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_LIST]: "Could not read the task's agents on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]:
-    "Could not read the workspace's agents on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_START]: "Could not start an agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_PART]: "Could not read the agent's output on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]:
+  [AGENT_ACT_KIND.AGENTS_MODELS]: "Could not read the models on this system.",
+  [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: "Could not read the default model on this system.",
+  [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: "Could not change the default model on this system.",
+  [AGENT_ACT_KIND.AGENTS_LIST]: "Could not read the task's agents on this system.",
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: "Could not read the workspace's agents on this system.",
+  [AGENT_ACT_KIND.AGENTS_START]: "Could not start an agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
+  [AGENT_ACT_KIND.AGENTS_PART]: "Could not read the agent's output on this system.",
+  [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]:
     "Could not read the agent's earlier messages on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_MESSAGE]: "Could not message the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_RENAME]: "Could not rename the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_SERVERS]:
-    "Could not switch the agent's MCP servers on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_STOP]: "Could not stop the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_PIN]: "Could not pin the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR]: "Could not reach Luke on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: "Could not delete the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_SEEN]: "Could not mark the agent as read on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: "Could not read the agent on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]:
+  [AGENT_ACT_KIND.AGENTS_MESSAGE]: "Could not message the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
+  [AGENT_ACT_KIND.AGENTS_RENAME]: "Could not rename the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_SERVERS]: "Could not switch the agent's MCP servers on this system.",
+  [AGENT_ACT_KIND.AGENTS_STOP]: "Could not stop the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_PIN]: "Could not pin the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: "Could not reach Luke on this system.",
+  [AGENT_ACT_KIND.AGENTS_DELETE]: "Could not delete the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
+  [AGENT_ACT_KIND.AGENTS_SEEN]: "Could not mark the agent as read on this system.",
+  [AGENT_ACT_KIND.AGENTS_PAGE]: "Could not read the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: "Could not read the agent's pull request on this system.",
+  [AGENT_ACT_KIND.AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
+  [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]:
     "Could not read the agent's pull request on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]:
-    "Could not read the agent's pull request on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]:
+  [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]:
     "Could not read the repository's reviewers and labels on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]:
+  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]:
     "Could not read the pull request's checks on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]:
+  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]:
     "Could not read the pull request's conversation on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]:
-    "Could not read the pull request's image on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]:
-    "Could not change the pull request on this system.",
-  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]:
+  [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: "Could not read the pull request's image on this system.",
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: "Could not change the pull request on this system.",
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]:
     "Could not read which files you viewed on this system.",
 } as const;
 
@@ -112,145 +106,145 @@ const ACTS: readonly {
   payload: WireBoundaryInput;
   ask?: keyof HostAsk;
 }[] = [
-  { kind: AGENT_ACT_KIND.CODING_AGENTS_MODELS, payload: undefined, ask: "codingAgentModels" },
+  { kind: AGENT_ACT_KIND.AGENTS_MODELS, payload: undefined, ask: "agentModels" },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_READ,
+    kind: AGENT_ACT_KIND.AGENTS_DEFAULT_READ,
     payload: undefined,
-    ask: "codingAgentDefaultRead",
+    ask: "agentDefaultRead",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_DEFAULT_WRITE,
+    kind: AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE,
     payload: { model: "anthropic/claude-opus-5.5", effort: "high" },
-    ask: "codingAgentDefaultWrite",
+    ask: "agentDefaultWrite",
   },
-  { kind: AGENT_ACT_KIND.CODING_AGENTS_LIST, payload: { taskId: TASK_ID }, ask: "codingAgentList" },
+  { kind: AGENT_ACT_KIND.AGENTS_LIST, payload: { taskId: TASK_ID }, ask: "agentList" },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+    kind: AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST,
     payload: { workspaceId: WORKSPACE_ID },
-    ask: "codingAgentWorkspaceList",
+    ask: "agentWorkspaceList",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_START,
+    kind: AGENT_ACT_KIND.AGENTS_START,
     payload: { taskId: TASK_ID, idempotencyKey: "press-1" },
-    ask: "codingAgentStart",
+    ask: "agentStart",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGES,
+    kind: AGENT_ACT_KIND.AGENTS_MESSAGES,
     payload: { agentId: AGENT_ID, after: "0" },
-    ask: "codingAgentMessages",
+    ask: "agentMessages",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_PART,
+    kind: AGENT_ACT_KIND.AGENTS_PART,
     payload: { agentId: AGENT_ID, messageId: "message-1", index: 1 },
-    ask: "codingAgentPart",
+    ask: "agentPart",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER,
+    kind: AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER,
     payload: { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID, before: "40" },
     ask: "transcriptOlder",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_MESSAGE,
+    kind: AGENT_ACT_KIND.AGENTS_MESSAGE,
     payload: { agentId: AGENT_ID, text: "Carry on.", clientKey: "send-1" },
-    ask: "codingAgentMessage",
+    ask: "agentMessage",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_CHOOSE,
+    kind: AGENT_ACT_KIND.AGENTS_CHOOSE,
     payload: { agentId: AGENT_ID, model: "anthropic/claude-opus-5.5", effort: "low" },
-    ask: "codingAgentChoose",
+    ask: "agentChoose",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_RENAME,
+    kind: AGENT_ACT_KIND.AGENTS_RENAME,
     payload: { agentId: AGENT_ID, title: "Triage" },
-    ask: "codingAgentRename",
+    ask: "agentRename",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_SERVERS,
+    kind: AGENT_ACT_KIND.AGENTS_SERVERS,
     payload: { agentId: AGENT_ID, disabledServers: ["linear"] },
-    ask: "codingAgentServers",
+    ask: "agentServers",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_STOP,
+    kind: AGENT_ACT_KIND.AGENTS_STOP,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentStop",
+    ask: "agentStop",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE,
+    kind: AGENT_ACT_KIND.AGENTS_ARCHIVE,
     payload: { agentId: AGENT_ID, archived: true },
-    ask: "codingAgentArchive",
+    ask: "agentArchive",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_PIN,
+    kind: AGENT_ACT_KIND.AGENTS_PIN,
     payload: { agentId: AGENT_ID, pinned: true },
-    ask: "codingAgentPin",
+    ask: "agentPin",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR,
+    kind: AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR,
     payload: { workspaceId: WORKSPACE_ID },
-    ask: "codingAgentEnsureOperator",
+    ask: "agentEnsureOperator",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_DELETE,
+    kind: AGENT_ACT_KIND.AGENTS_DELETE,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentDelete",
+    ask: "agentDelete",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_SHOWN,
-    payload: { agentId: AGENT_ID },
-  },
-  {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_SEEN,
+    kind: AGENT_ACT_KIND.AGENTS_SHOWN,
     payload: { agentId: AGENT_ID },
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_PAGE,
+    kind: AGENT_ACT_KIND.AGENTS_SEEN,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentPage",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST,
+    kind: AGENT_ACT_KIND.AGENTS_PAGE,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentPullRequest",
+    ask: "agentPage",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_CHANGES,
+    kind: AGENT_ACT_KIND.AGENTS_PULL_REQUEST,
+    payload: { agentId: AGENT_ID },
+    ask: "agentPullRequest",
+  },
+  {
+    kind: AGENT_ACT_KIND.AGENTS_CHANGES,
     payload: { agentId: AGENT_ID, number: 41 },
-    ask: "codingAgentChanges",
+    ask: "agentChanges",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST,
+    kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentOverviewPullRequest",
+    ask: "agentOverviewPullRequest",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS,
+    kind: AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentReviewOptions",
+    ask: "agentReviewOptions",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS,
+    kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentOverviewChecks",
+    ask: "agentOverviewChecks",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION,
+    kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentOverviewConversation",
+    ask: "agentOverviewConversation",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE,
+    kind: AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE,
     payload: { agentId: AGENT_ID, src: "https://github.com/user-attachments/assets/seats.png" },
-    ask: "codingAgentGitHubImage",
+    ask: "agentGitHubImage",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION,
+    kind: AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION,
     payload: { agentId: AGENT_ID, request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT } },
-    ask: "codingAgentPullRequestAction",
+    ask: "agentPullRequestAction",
   },
   {
-    kind: AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED,
+    kind: AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED,
     payload: { agentId: AGENT_ID },
-    ask: "codingAgentPullRequestViewed",
+    ask: "agentPullRequestViewed",
   },
 ];
 
@@ -357,33 +351,33 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
 
 it("a panel's Start from an agent on its own page reaches the host with no task, only the agent it starts from, and the press's own key", async () => {
   const { call, asked } = windowPort(PANEL, {
-    answers: { codingAgentStart: () => Effect.succeed(STARTED) },
+    answers: { agentStart: () => Effect.succeed(STARTED) },
   });
 
-  const started = await call(AGENT_ACT_KIND.CODING_AGENTS_START, {
+  const started = await call(AGENT_ACT_KIND.AGENTS_START, {
     idempotencyKey: "press-1",
     from: { agentId: AGENT_ID },
   });
 
   assert.deepEqual(started, { answer: STARTED });
   assert.deepEqual(asked, [
-    ["codingAgentStart", { idempotencyKey: "press-1", from: { agentId: AGENT_ID } }],
+    ["agentStart", { idempotencyKey: "press-1", from: { agentId: AGENT_ID } }],
   ]);
 });
 
 it("a panel's Start reaches the host with the plan and the press's own key, hears the agent, and the agent is noted", async () => {
   const { call, asked, noted } = windowPort(PANEL, {
-    answers: { codingAgentStart: () => Effect.succeed(STARTED) },
+    answers: { agentStart: () => Effect.succeed(STARTED) },
   });
 
-  const started = await call(AGENT_ACT_KIND.CODING_AGENTS_START, {
+  const started = await call(AGENT_ACT_KIND.AGENTS_START, {
     taskId: TASK_ID,
     idempotencyKey: "press-1",
   });
 
   assert.deepEqual(started, { answer: STARTED });
-  assert.deepEqual(asked, [["codingAgentStart", { taskId: TASK_ID, idempotencyKey: "press-1" }]]);
-  assert.deepEqual(noted, [`agents:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`]);
+  assert.deepEqual(asked, [["agentStart", { taskId: TASK_ID, idempotencyKey: "press-1" }]]);
+  assert.deepEqual(noted, [`agents:${AGENT_ID}=${AGENT_STATUS.STARTING}`]);
 });
 
 it("a rename, an archive, or a pin answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not", async () => {
@@ -391,103 +385,102 @@ it("a rename, an archive, or a pin answering an agent with no plan reads the pla
   const answered = () => Effect.succeed(unplaced);
   const taskless = windowPort(PANEL, {
     answers: {
-      codingAgentRename: answered,
-      codingAgentArchive: answered,
-      codingAgentPin: answered,
+      agentRename: answered,
+      agentArchive: answered,
+      agentPin: answered,
     },
   });
   const onTask = windowPort(PANEL, {
-    answers: { codingAgentRename: () => Effect.succeed(STARTED) },
+    answers: { agentRename: () => Effect.succeed(STARTED) },
   });
   const rename = { agentId: AGENT_ID, title: "Triage" };
 
-  await taskless.call(AGENT_ACT_KIND.CODING_AGENTS_RENAME, rename);
-  await taskless.call(AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE, {
+  await taskless.call(AGENT_ACT_KIND.AGENTS_RENAME, rename);
+  await taskless.call(AGENT_ACT_KIND.AGENTS_ARCHIVE, {
     agentId: AGENT_ID,
     archived: true,
   });
-  await taskless.call(AGENT_ACT_KIND.CODING_AGENTS_PIN, {
+  await taskless.call(AGENT_ACT_KIND.AGENTS_PIN, {
     agentId: AGENT_ID,
     pinned: true,
   });
-  await onTask.call(AGENT_ACT_KIND.CODING_AGENTS_RENAME, rename);
+  await onTask.call(AGENT_ACT_KIND.AGENTS_RENAME, rename);
 
   assert.deepEqual(taskless.asked, [
-    ["codingAgentRename", rename],
+    ["agentRename", rename],
     ["tasksRefresh"],
-    ["codingAgentArchive", { agentId: AGENT_ID, archived: true }],
+    ["agentArchive", { agentId: AGENT_ID, archived: true }],
     ["tasksRefresh"],
-    ["codingAgentPin", { agentId: AGENT_ID, pinned: true }],
+    ["agentPin", { agentId: AGENT_ID, pinned: true }],
     ["tasksRefresh"],
   ]);
-  assert.deepEqual(onTask.asked, [["codingAgentRename", rename]]);
+  assert.deepEqual(onTask.asked, [["agentRename", rename]]);
 });
 
 it("a delete that took the agent reads the plan list again, so its sidebar row goes, and one refused does not", async () => {
   const deleted = windowPort(PANEL, {
-    answers: { codingAgentDelete: () => Effect.succeed({ deleted: true as const }) },
+    answers: { agentDelete: () => Effect.succeed({ deleted: true as const }) },
   });
   const refused = windowPort(PANEL, {
     answers: {
-      codingAgentDelete: () =>
-        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY }),
+      agentDelete: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.AGENT_NOT_READY }),
     },
   });
 
-  assert.deepEqual(await deleted.call(AGENT_ACT_KIND.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+  assert.deepEqual(await deleted.call(AGENT_ACT_KIND.AGENTS_DELETE, { agentId: AGENT_ID }), {
     answer: { deleted: true },
   });
-  assert.deepEqual(await refused.call(AGENT_ACT_KIND.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
-    answer: { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY },
+  assert.deepEqual(await refused.call(AGENT_ACT_KIND.AGENTS_DELETE, { agentId: AGENT_ID }), {
+    answer: { failure: AGENT_CALL_FAILURE.AGENT_NOT_READY },
   });
 
-  assert.deepEqual(deleted.asked, [["codingAgentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
-  assert.deepEqual(refused.asked, [["codingAgentDelete", { agentId: AGENT_ID }]]);
+  assert.deepEqual(deleted.asked, [["agentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
+  assert.deepEqual(refused.asked, [["agentDelete", { agentId: AGENT_ID }]]);
 });
 
 it("an ensure of the operator that made one reads the plan list again, so its sidebar row stands, and one that found it standing does not", async () => {
   const made = windowPort(PANEL, {
     answers: {
-      codingAgentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID, txid: "9103" }),
+      agentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID, txid: "9103" }),
     },
   });
   const standing = windowPort(PANEL, {
-    answers: { codingAgentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID }) },
+    answers: { agentEnsureOperator: () => Effect.succeed({ agentId: AGENT_ID }) },
   });
   const ensure = { workspaceId: WORKSPACE_ID, reset: true };
 
-  assert.deepEqual(await made.call(AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR, ensure), {
+  assert.deepEqual(await made.call(AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR, ensure), {
     answer: { agentId: AGENT_ID, txid: "9103" },
   });
-  await standing.call(AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR, { workspaceId: WORKSPACE_ID });
+  await standing.call(AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR, { workspaceId: WORKSPACE_ID });
 
-  assert.deepEqual(made.asked, [["codingAgentEnsureOperator", ensure], ["tasksRefresh"]]);
-  assert.deepEqual(standing.asked, [["codingAgentEnsureOperator", { workspaceId: WORKSPACE_ID }]]);
+  assert.deepEqual(made.asked, [["agentEnsureOperator", ensure], ["tasksRefresh"]]);
+  assert.deepEqual(standing.asked, [["agentEnsureOperator", { workspaceId: WORKSPACE_ID }]]);
 });
 
 it("a panel's reads are noted on their way: a task's agents or the task gone, and an agent's status, but a worker's page is no word on the agent", async () => {
   const { call, noted } = windowPort(PANEL, {
     answers: {
-      codingAgentList: () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
-      codingAgentMessages: () =>
+      agentList: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
+      agentMessages: () =>
         Effect.succeed({
           messages: [],
           cursor: "0",
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
           title: "Triage",
         }),
-      codingAgentMessage: () => Effect.succeed(STARTED),
+      agentMessage: () => Effect.succeed(STARTED),
     },
   });
 
-  await call(AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: TASK_ID });
-  await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID, after: "0" });
-  await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, {
+  await call(AGENT_ACT_KIND.AGENTS_LIST, { taskId: TASK_ID });
+  await call(AGENT_ACT_KIND.AGENTS_MESSAGES, { agentId: AGENT_ID, after: "0" });
+  await call(AGENT_ACT_KIND.AGENTS_MESSAGES, {
     agentId: AGENT_ID,
     after: "0",
     callId: "call-worker",
   });
-  await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGE, {
+  await call(AGENT_ACT_KIND.AGENTS_MESSAGE, {
     agentId: AGENT_ID,
     text: "Carry on.",
     clientKey: "send-1",
@@ -495,16 +488,16 @@ it("a panel's reads are noted on their way: a task's agents or the task gone, an
 
   assert.deepEqual(noted, [
     `gone:${TASK_ID}`,
-    `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
-    `messaged:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`,
+    `status:${AGENT_ID}=${AGENT_STATUS.RUNNING}`,
+    `messaged:${AGENT_ID}=${AGENT_STATUS.STARTING}`,
   ]);
 });
 
 it("a panel's word on which agent it shows is noted, none as none, and answers nothing", async () => {
   const { call, asked, noted } = windowPort(PANEL);
 
-  const named = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: AGENT_ID });
-  const none = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: null });
+  const named = await call(AGENT_ACT_KIND.AGENTS_SHOWN, { agentId: AGENT_ID });
+  const none = await call(AGENT_ACT_KIND.AGENTS_SHOWN, { agentId: null });
 
   assert.deepEqual(named, { answer: undefined });
   assert.deepEqual(none, { answer: undefined });
@@ -515,7 +508,7 @@ it("a panel's word on which agent it shows is noted, none as none, and answers n
 it("a panel's Mark as read on an agent clears its unseen dot without naming a page shown, and answers nothing", async () => {
   const { call, asked, noted } = windowPort(PANEL);
 
-  const answer = await call(AGENT_ACT_KIND.CODING_AGENTS_SEEN, { agentId: AGENT_ID });
+  const answer = await call(AGENT_ACT_KIND.AGENTS_SEEN, { agentId: AGENT_ID });
 
   assert.deepEqual(answer, { answer: undefined });
   assert.deepEqual(noted, [`seen:${AGENT_ID}`]);
@@ -529,9 +522,8 @@ it("a panel's change to an agent's pull request reaches the host as asked and he
   };
   const { call, asked, noted } = windowPort(PANEL, {
     answers: {
-      codingAgentPullRequestAction: () =>
-        Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
-      codingAgentPullRequestViewed: () => Effect.succeed(viewed),
+      agentPullRequestAction: () => Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
+      agentPullRequestViewed: () => Effect.succeed(viewed),
     },
   });
   const change = {
@@ -540,16 +532,15 @@ it("a panel's change to an agent's pull request reaches the host as asked and he
     request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT },
   };
 
-  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, change), {
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION, change), {
     answer: { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
   });
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
-    { answer: viewed },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }), {
+    answer: viewed,
+  });
   assert.deepEqual(asked, [
-    ["codingAgentPullRequestAction", change],
-    ["codingAgentPullRequestViewed", { agentId: AGENT_ID }],
+    ["agentPullRequestAction", change],
+    ["agentPullRequestViewed", { agentId: AGENT_ID }],
   ]);
   assert.deepEqual(noted, []);
 });
@@ -569,27 +560,26 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked nor anything noted", async () => {
   const { call, asked, noted } = windowPort(PANEL);
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_STOP, { agentId: AGENT_ID, stray: true }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_STOP],
+  });
   assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_STOP, { agentId: AGENT_ID, stray: true }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_STOP] },
-  );
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
+    await call(AGENT_ACT_KIND.AGENTS_SHOWN, {
       agentId: AGENT_ID,
       stray: true,
     }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN] },
+    { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_SHOWN] },
   );
   assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID, stray: true }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST] },
+    await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST, { agentId: AGENT_ID, stray: true }),
+    { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_PULL_REQUEST] },
   );
   assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, {
+    await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION, {
       agentId: AGENT_ID,
       request: { action: PULL_REQUEST_ACTION.CONVERT_TO_DRAFT, stray: true },
     }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION] },
+    { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION] },
   );
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
@@ -597,28 +587,25 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
 
 it("a payload its kind's schema refuses, or one sent to a kind that carries none, is refused in the kind's own words, and the host is not asked nor anything noted", async () => {
   const { call, asked, noted } = windowPort(PANEL);
-  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: " " }), {
-    refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN],
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_SHOWN, { agentId: " " }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_SHOWN],
   });
-  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: "" }), {
-    refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_LIST],
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_LIST, { taskId: "" }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_LIST],
   });
-  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_MODELS, { workspaceId: WORKSPACE_ID }), {
-    refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_MODELS],
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_MODELS, { workspaceId: WORKSPACE_ID }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_MODELS],
   });
   assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, {
+    await call(AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE, {
       agentId: AGENT_ID,
       src: "",
     }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE] },
+    { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE] },
   );
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.CODING_AGENTS_CHANGES, { agentId: AGENT_ID, number: 0 }),
-    {
-      refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_CHANGES],
-    },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_CHANGES, { agentId: AGENT_ID, number: 0 }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_CHANGES],
+  });
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
 });
@@ -630,7 +617,7 @@ async function until(ready: () => boolean): Promise<void> {
 
 it("a panel's transcript stream follows the transcript at the host, hears each page told of it alone, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const listeners = new Set<(changed: CodingAgentTranscriptChanged) => void>();
+  const listeners = new Set<(changed: AgentTranscriptChanged) => void>();
   const transcripts: Pick<
     HostAsk,
     "transcriptFollow" | "transcriptUnfollow" | "onTranscriptChanged"
@@ -652,17 +639,17 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   const port = testActPort(agentProcedures({ host, notices }));
   ports.push(port);
   const client = port.as(PANEL);
-  const transcript: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
-  const page: CodingAgentTranscriptPage = {
+  const transcript: AgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
+  const page: AgentTranscriptPage = {
     messages: [],
     cursor: "1:0",
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: "Invites",
     caughtUp: false,
   };
 
-  const one = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);
-  const two = await client[AGENT_ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript);
+  const one = await client[AGENT_ACT_KIND.AGENTS_TRANSCRIPT](transcript);
+  const two = await client[AGENT_ACT_KIND.AGENTS_TRANSCRIPT](transcript);
   const first = one.next();
   const second = two.next();
   await until(() => asked.length === 2);

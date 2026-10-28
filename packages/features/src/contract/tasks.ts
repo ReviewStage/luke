@@ -12,7 +12,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { MAXIMUM_START_BODY_BYTES } from "../coding-agent-wire.js";
+import { MAXIMUM_START_BODY_BYTES } from "../agent-wire.js";
 import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {

@@ -13,7 +13,7 @@ import {
   agentBrowserTabLineSchema,
   agentBrowserTabOf,
 } from "./agent-browser-tab-wire.js";
-import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import { agentMessagesAnswerSchema } from "./agent-wire.js";
 import {
   INBOX_BOUNDS,
   INBOX_STATUS,
@@ -436,7 +436,7 @@ export const TRANSCRIPT_NOW_QUERY = { WAIT: "wait", NONE: "none" } as const;
  * edge the rows cannot say, before it reads again.
  */
 export const transcriptNowAnswerSchema = EffectSchema.Struct({
-  ...codingAgentMessagesAnswerSchema.fields,
+  ...agentMessagesAnswerSchema.fields,
   holds: EffectSchema.Boolean,
   /**
    * Where it would hold, how many milliseconds from now the clock alone may

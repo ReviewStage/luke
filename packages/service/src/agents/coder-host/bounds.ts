@@ -1,4 +1,4 @@
-import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";

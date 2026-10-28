@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { CodingAgentSummary, TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   inPinOrder,
@@ -569,7 +569,7 @@ function accountPinOf(
 }
 
 /** An agent on a plan the account pinned as its row under Pinned draws it: as its tab in the plan's column, named as the agent is. */
-function agentPinOf(pin: TaskAgentPin, agent: CodingAgentSummary, tasks: TasksControl): AgentPin {
+function agentPinOf(pin: TaskAgentPin, agent: AgentSummary, tasks: TasksControl): AgentPin {
   const drawn = {
     task: pin.taskId,
     tab: { agent: agent.id },

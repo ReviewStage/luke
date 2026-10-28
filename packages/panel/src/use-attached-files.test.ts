@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -36,7 +36,7 @@ function AgentBox(): ReactNode {
     agentId: "agent-1",
     taskId: "plan-1",
     messages: [],
-    send: () => new Promise<CodingAgentAgentAnswer>(ignore),
+    send: () => new Promise<AgentAgentAnswer>(ignore),
     onStatus: ignore,
   });
   return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: undefined });
@@ -143,8 +143,8 @@ test("a picture pasted into the agent's box is held as its chip, the paste writi
 
 test("pictures past the bytes a message carries together leave the last out of the agent's box, and the note says why", async () => {
   // Note that each picture fits a message alone, kept as it is, and two of them fit together while three do not.
-  const size = Math.floor(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES / 2.5);
-  assert.ok(size <= CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES);
+  const size = Math.floor(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES / 2.5);
+  assert.ok(size <= AGENT_BOUNDS.MAX_IMAGE_BYTES);
   for (const box of Object.keys(BOXES) as (keyof typeof BOXES)[]) {
     const container = await mounted(box);
     await drop(container, [png("one.png", size), png("two.png", size), png("three.png", size)]);

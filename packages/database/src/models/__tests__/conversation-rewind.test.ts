@@ -10,7 +10,7 @@ import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
-import { createCodingAgent, readNativeHanded, recordNativeHanded } from "../coding-agent-store.js";
+import { createAgent, readNativeHanded, recordNativeHanded } from "../agent-store.js";
 import {
   clearNativeRewindHanded,
   REWIND_REFUSAL,
@@ -32,7 +32,7 @@ const openConversation = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",

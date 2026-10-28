@@ -1,5 +1,5 @@
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { useRef, useState } from "react";
 import type { AgentServersControl } from "./agent-servers.js";
 
@@ -19,7 +19,7 @@ import type { AgentServersControl } from "./agent-servers.js";
 export type ServersWriter = (
   agentId: string,
   disabledServers: readonly string[],
-) => Promise<CodingAgentAgentAnswer>;
+) => Promise<AgentAgentAnswer>;
 
 /** Nothing switched off, which is what an agent from a service before the switch holds. */
 const NONE_OFF: readonly string[] = [];
@@ -30,7 +30,7 @@ interface Held {
 }
 
 export function useAgentServers(input: {
-  agent: Pick<CodingAgentSummary, "id" | "disabledServers">;
+  agent: Pick<AgentSummary, "id" | "disabledServers">;
   write: ServersWriter;
   onOpenSettings: () => void;
 }): AgentServersControl {

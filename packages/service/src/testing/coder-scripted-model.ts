@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_TODO_STATUS,
-  type CodingAgentTodos,
-  codingAgentDelegationOutputSchema,
-} from "@luke/features/coding-agent-wire";
+  AGENT_TODO_STATUS,
+  type AgentTodos,
+  agentDelegationOutputSchema,
+} from "@luke/features/agent-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {
@@ -59,7 +59,7 @@ export const SCRIPTED_SKILLS = [
 const NAMED_SKILL = /(?:^|\s)\/([a-z0-9-]+)/u;
 
 const readDelegationOutput = Schema.decodeUnknownOption(
-  Schema.fromJsonString(codingAgentDelegationOutputSchema),
+  Schema.fromJsonString(agentDelegationOutputSchema),
 );
 /** What `load_skill` answers: the skill's body. */
 const readSkillBody = Schema.decodeUnknownOption(Schema.String);
@@ -101,11 +101,11 @@ function delegatedReply(body: string): MockModelResponse {
 }
 
 /** The list the scripted agent writes for the words after `SCRIPTED_TODOS`: one item for each, the first in progress. */
-function scriptedTodos(words: string): CodingAgentTodos {
+function scriptedTodos(words: string): AgentTodos {
   return {
     todos: words.split(";").map((content, index) => ({
       content: content.trim(),
-      status: index === 0 ? CODING_AGENT_TODO_STATUS.IN_PROGRESS : CODING_AGENT_TODO_STATUS.PENDING,
+      status: index === 0 ? AGENT_TODO_STATUS.IN_PROGRESS : AGENT_TODO_STATUS.PENDING,
     })),
   };
 }

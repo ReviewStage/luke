@@ -1,7 +1,4 @@
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@luke/features/agent-wire";
 import type { TurnPolicy } from "eve/channels";
 import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
@@ -33,7 +30,7 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../eve-host/door.
  * the route on its session cookie alone, as the deployment acting for the
  * account the cookie named (`stop.ts`'s `eveFor`), on the same rows below.
  * What else the deployment does here is carry the three things a coding
- * agent does for the member who started it (`agents/coding-agent-tools.ts`),
+ * agent does for the member who started it (`agents/agent-tools.ts`),
  * since its session holds no bearer of the account's: a message it sends an
  * agent, admitted only on a session the named account's agent recorded, the
  * opening that starts an agent, admitted only on a conversation the named
@@ -68,12 +65,12 @@ const TURN_POLICY: TurnPolicy = EVE_HOST_TURN_POLICY.STEER;
  * inlines it as text (`attached-files.ts`).
  */
 const UPLOAD_POLICY = {
-  maxBytes: CODING_AGENT_BOUNDS.MAX_PDF_BYTES,
+  maxBytes: AGENT_BOUNDS.MAX_PDF_BYTES,
   allowedMediaTypes: [
-    CODING_AGENT_ATTACHMENT_TYPE.PNG,
-    CODING_AGENT_ATTACHMENT_TYPE.JPEG,
-    CODING_AGENT_ATTACHMENT_TYPE.WEBP,
-    CODING_AGENT_ATTACHMENT_TYPE.PDF,
+    AGENT_ATTACHMENT_TYPE.PNG,
+    AGENT_ATTACHMENT_TYPE.JPEG,
+    AGENT_ATTACHMENT_TYPE.WEBP,
+    AGENT_ATTACHMENT_TYPE.PDF,
   ],
 } as const;
 

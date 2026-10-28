@@ -1,4 +1,4 @@
-import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment, AgentSummary } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import {
   ANNOUNCE,
@@ -74,7 +74,7 @@ const CONTINUED_COPY = {
 /** What a closed box hands the press: its words and the files attached to them, and the agent's task, under which they are kept. */
 export interface ContinueCarry {
   readonly words: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly taskId: string | null;
 }
 
@@ -278,7 +278,7 @@ export function ContinuedComposerNote({
   control,
   shown,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   doors: ContinuedDoors;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
   stop?: (() => Promise<void>) | undefined;

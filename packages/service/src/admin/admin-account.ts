@@ -19,7 +19,7 @@
 
 import type { GitHubInstallationStatus } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import type { CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
+import type { AgentLatestTurn } from "@luke/database/models/agent-store";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
@@ -33,16 +33,16 @@ import type {
   AdminAccountProviderKey,
   AdminAccountSupport,
 } from "@luke/features/admin-answer-wire";
-import type { AutomationRunReason } from "@luke/features/automation-wire";
 import {
-  CODING_AGENT_STATUS,
+  AGENT_STATUS,
   type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import type { AutomationRunReason } from "@luke/features/automation-wire";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { EXPERIMENTS, type ExperimentChoices } from "@luke/settings";
-import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
 import { lastSeenInstant } from "./admin-users.js";
 
 /** How many of the account's newest coding agents the page lists. */
@@ -70,7 +70,7 @@ export interface AdminAccountAgentSource {
   contextWindow: ContextWindow;
   /** The state of its pull request as GitHub last answered, alone; null where none was found. */
   pullRequestState: PullRequestState | null;
-  turn: CodingAgentLatestTurn | undefined;
+  turn: AgentLatestTurn | undefined;
   awaitingLineAt: Date | undefined;
 }
 
@@ -125,13 +125,12 @@ function pullRequestOf(state: PullRequestState | null): AdminPullRequest {
 
 /** One agent with its status read at `now`, and its failure class where it failed. */
 function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgent {
-  const status = codingAgentStatusOf(source.turn, {
+  const status = agentStatusOf(source.turn, {
     createdAt: source.createdAt,
     now,
     awaitingLineAt: source.awaitingLineAt,
   });
-  const failure =
-    status === CODING_AGENT_STATUS.FAILED ? (codingAgentFailureOf(source.turn) ?? null) : null;
+  const failure = status === AGENT_STATUS.FAILED ? (agentFailureOf(source.turn) ?? null) : null;
   return {
     id: source.id,
     createdAt: source.createdAt.getTime(),
@@ -155,7 +154,7 @@ function agentFailures(
   for (const agent of source.windowAgents) {
     const read = agentOf(agent, now);
     const at = (agent.turn?.settledAt ?? agent.createdAt).getTime();
-    if (read.status !== CODING_AGENT_STATUS.FAILED || at < windowStart) continue;
+    if (read.status !== AGENT_STATUS.FAILED || at < windowStart) continue;
     failures.push({ kind: ADMIN_FAILURE_KIND.AGENT, at, reason: read.failure });
   }
   return failures;
@@ -232,8 +231,7 @@ export function buildAdminAccountSupport(
     totals: {
       tasksCreated: source.totals.tasksCreated,
       agentsStarted: source.totals.agentsStarted,
-      agentsFailed: windowRead.filter((agent) => agent.status === CODING_AGENT_STATUS.FAILED)
-        .length,
+      agentsFailed: windowRead.filter((agent) => agent.status === AGENT_STATUS.FAILED).length,
       agentsRead: windowRead.length,
       pullRequestsOpened: source.totals.pullRequestsOpened,
       pullRequestsMerged: source.totals.pullRequestsMerged,

@@ -5,9 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
@@ -23,6 +23,7 @@ import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_WINDOW,
 } from "@luke/features/admin-wire";
+import { AGENT_FAILURE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -33,7 +34,6 @@ import {
   type AutomationRunReason,
   type AutomationRunStatus,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { TURN_ORIGIN } from "@luke/wire";
@@ -108,7 +108,7 @@ const openAgent = (userId: string, organizationId: string, createdAt: Date) =>
   Effect.gen(function* () {
     const conversationId = yield* openConversation(userId, CONVERSATION_KIND.CODING_AGENT);
     yield* Database.use((db) =>
-      db.insert(codingAgent).values({
+      db.insert(agentTable).values({
         organizationId,
         userId,
         conversationId,
@@ -260,9 +260,9 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
             left.failure.localeCompare(right.failure),
           ),
           [
-            { failure: CODING_AGENT_FAILURE.MODEL, count: 1 },
-            { failure: CODING_AGENT_FAILURE.NOT_STARTED, count: 2 },
-            { failure: CODING_AGENT_FAILURE.SANDBOX, count: 1 },
+            { failure: AGENT_FAILURE.MODEL, count: 1 },
+            { failure: AGENT_FAILURE.NOT_STARTED, count: 2 },
+            { failure: AGENT_FAILURE.SANDBOX, count: 1 },
           ],
         );
         assert.deepEqual(
