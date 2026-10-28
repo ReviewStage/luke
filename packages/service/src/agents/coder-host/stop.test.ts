@@ -26,7 +26,6 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
-  eveSessions,
 } from "../brain-host/eve-sessions.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
@@ -290,7 +289,7 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
   );
 
   it.effect(
-    "a cookie's typed message is admitted at the door as the account's own principal, the identity its bearer's is admitted as, with the deployment named only as its carrier, and so are the voice's spoken asks and the cookie's Stop and retire, since the coding agents' door presents the account, so a call's ask joins the agent's own turn",
+    "a cookie's typed message is admitted at the door as the account's own principal, the identity its bearer's is admitted as, with the deployment named only as its carrier, and so are the cookie's Stop and retire, since the coding agents' door presents the account",
     () =>
       Effect.gen(function* () {
         const eve = eveOverHttp();
@@ -305,23 +304,15 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
             routeRequest({ cookie: COOKIE }),
             ACCOUNT,
           );
-          // The voice function's client, composed as its exchange composes it (`voice/deployment-exchange.ts`).
-          const voice = yield* eveSessions({
-            origin: ORIGIN,
-            caller: { secret: Redacted.make(SECRET), account: ACCOUNT },
-            mount: EVE_MOUNT.CODER,
-          });
           yield* overBearer.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
           yield* overCookie.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
           yield* overCookie.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
-          yield* voice.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.SPOKEN));
-          yield* voice.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.SPOKEN));
           yield* overCookie.cancel(OWN_SESSION, "turn_0");
           yield* overCookie.reset(OWN_SESSION);
         }).pipe(Effect.provide(Layer.merge(eve.layer, WITH_SECRET)));
 
         const [bearer, ...carried] = eve.received.map(({ admitted }) => admitted);
-        assert.equal(eve.received.length, 7);
+        assert.equal(eve.received.length, 5);
         assert.deepEqual(identityOf(bearer), [
           BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
           null,

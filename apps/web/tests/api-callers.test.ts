@@ -33,7 +33,7 @@ test("a client path resolves to an exception's rewrite first, then a hosted proc
       "export const paths = [",
       `  \`/api/agents/${HOLE}/pictures/${HOLE}\`,`,
       `  \`/api/plans/${HOLE}/board\`,`,
-      '  "/api/voice/sessions",',
+      '  "/api/terminal/sessions",',
       '  "/api/nope",',
       `  \`/api/plans/${HOLE}/board/more\`,`,
       "];",
@@ -53,9 +53,9 @@ test("a client path resolves to an exception's rewrite first, then a hosted proc
     "/api/plans/{id}/board",
   ]);
   assert.deepEqual(resolution.get("/api/models"), [RESOLUTION.PROCEDURE, "/api/models"]);
-  assert.deepEqual(resolution.get("/api/voice/sessions"), [
+  assert.deepEqual(resolution.get("/api/terminal/sessions"), [
     RESOLUTION.ALIAS,
-    "/api/voice/sessions",
+    "/api/terminal/sessions",
   ]);
   assert.deepEqual(
     report.refused.map((refusal) => [refusal.display, refusal.reason]),

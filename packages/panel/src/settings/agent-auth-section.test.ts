@@ -546,7 +546,10 @@ test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and ho
   const page = await mount();
   assert.deepEqual(rowState(page, "Codex"), needsHand("Sign-in expired"));
   const dialog = await open(page, "Codex");
-  assert.match(card(dialog, "Subscription").textContent ?? "", /Sign-in expired\.(?! Sign in)/u);
+  assert.match(
+    card(dialog, "Subscription").textContent ?? "",
+    /Sign-in expired\.(?! Sign in)/u,
+  );
 });
 
 test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {

@@ -6,16 +6,9 @@ import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { listPages, writePage } from "@luke/database/models/plan-pages";
 import { readTaskPlan, savePlanText, updateTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
-import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  VOICE_SEGMENT_ROLE,
-} from "@luke/database/voice-vocabulary";
 import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@luke/features/live-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { eq } from "drizzle-orm";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -37,8 +30,6 @@ type Part = (typeof PARTS)[number];
 
 /** The parts a held read answers: the plan and the pages; no desktop reads the calls or the code again. */
 const HELD_PARTS = ["plan", "pages"] as const;
-
-const CLOSED_AT = new Date(1_800_000_000_000);
 
 /** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
@@ -91,40 +82,9 @@ function heldOf(expected: readonly Part[]): readonly Part[] {
   return expected.filter((part) => part !== "calls" && part !== "code");
 }
 
-/** A call about the task, its session row written as the voice service opens one. */
-const openCall = (userId: string, taskId: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const [row] = yield* db
-      .insert(voiceSessions)
-      .values({
-        userId,
-        taskId,
-        liveSessionId: `live-${randomUUID()}`,
-        delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-        model: "gpt-realtime",
-      })
-      .returning({ id: voiceSessions.id });
-    assert.ok(row);
-    return row.id;
-  });
-
-/** One fragment of the developer's words on a call, appended as the voice writer appends one. */
-const said = (voiceSessionId: string, seq: number) =>
-  Effect.flatMap(Database, (db) =>
-    db.insert(voiceTranscriptSegments).values({
-      voiceSessionId,
-      seq,
-      role: VOICE_SEGMENT_ROLE.USER,
-      text: seq === 0 ? "Invite by" : " email.",
-      startMs: seq * 400,
-      endMs: seq * 400 + 300,
-    }),
-  );
-
 it.layer(getTestDB())("a task's record followed live", (it) => {
   it.effect(
-    "each part moves exactly when its held read would answer something new, as a page is shown, and a call's words, end, and metering land; and a stranger reads no rows",
+    "each part moves exactly when its held read would answer something new, as a page is shown; and a stranger reads no rows",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -176,30 +136,6 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           ),
         );
 
-        // A call with no words yet reads as no call.
-        const call = yield* openCall(owner, task.id);
-        yield* step([], Effect.void);
-        assert.deepEqual(live.calls, []);
-        yield* step(["calls"], said(call, 0));
-        yield* step(["calls"], said(call, 1));
-        yield* step(
-          ["calls"],
-          Database.use((db) =>
-            db
-              .update(voiceSessions)
-              .set({ closedAt: CLOSED_AT, closeReason: VOICE_CLOSE_REASON.REMOTE_HANGUP })
-              .where(eq(voiceSessions.id, call)),
-          ),
-        );
-        yield* step(
-          ["calls"],
-          Database.use((db) =>
-            db
-              .update(voiceSessions)
-              .set({ usage: { seconds: 42, confirmed: true } })
-              .where(eq(voiceSessions.id, call)),
-          ),
-        );
         // Another task's record moving moves nothing of this one's.
         yield* step(
           [],

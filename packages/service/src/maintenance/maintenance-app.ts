@@ -2,14 +2,9 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { purgeWithdrawnLines, sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
-import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
-import { recordVoiceSeconds } from "@luke/database/models/quota";
-import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { Clock, Effect, Layer, Redacted } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import { ownApiKeyOf } from "../accounts/own-api-key.js";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -26,12 +21,6 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { createLiveUpstream } from "../voice/openai.js";
-import {
-  sweepVoiceOrphans,
-  VOICE_ORPHAN_SWEEP,
-  VOICE_SESSION_LIMIT_MS,
-} from "../voice/orphan-sweep.js";
 import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
@@ -59,10 +48,7 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
  * cron on the cadence `vercel.json` fixes. The logic lives in
  * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
  * seams and the database queries behind them, each answering an Effect over
- * the group's own `SqlClient.SqlClient`. A deployment without the voice key
- * sweeps no detached voice session, since it opened none; one with it ends
- * them on the same upstream the voice functions attach through. An
- * automation's run reaches eve as the deployment acting for the
+ * the group's own `SqlClient.SqlClient`. An automation's run reaches eve as the deployment acting for the
  * automation's owner, under the deployment's own eve secret, never the
  * bearer the cron called with; a deployment without it, or without an
  * origin for eve, fails each run it acts on as unavailable.
@@ -85,27 +71,13 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sessionSandboxesLayer,
     Layer.succeed(HttpClient.HttpClient, httpClient),
   );
-  // Each orphan is ended on its owner's own OpenAI key, the one its call was created on.
-  const voiceUpstreamOf = (userId: string) =>
-    Effect.map(
-      ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.OPENAI, environment.providerKeyEncryptionKeys),
-      (key) =>
-        // A key the ring cannot open reaches nothing, so the orphan waits for the next sweep.
-        key === undefined || key === PROVIDER_KEY_UNREADABLE
-          ? undefined
-          : createLiveUpstream({
-              apiKey: Redacted.value(key),
-              attachTimeoutMs: VOICE_ORPHAN_SWEEP.ATTACH_TIMEOUT_MS,
-            }),
-    );
   return yield* handleMaintenanceSweep({
     request,
     cronSecret: environment.cronSecret,
     monitor: sentryCronCheckIns(SWEEP_MONITOR),
     purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
-    // A call started longer ago than OpenAI's own limit has ended, whether or not its row was closed.
-    purgeDeletedTaskCalls: (now) =>
-      hostedStore().retention.purgeDeletedTaskCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
+    // No call runs any more, so every call a deleted task kept has ended.
+    purgeDeletedTaskCalls: (now) => hostedStore().retention.purgeDeletedTaskCalls(new Date(now)),
     sweepAbandonedTurns: (now) =>
       Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
@@ -147,18 +119,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     // A repository no agent starts on any more keeps no snapshot past its age.
     sweepRepositorySnapshots: () =>
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
-    sweepVoice: (now) =>
-      sweepVoiceOrphans(
-        {
-          upstreamOf: voiceUpstreamOf,
-          record: voiceSessionRecord(),
-          recordSeconds: (input) =>
-            Effect.flatMap(Clock.currentTimeMillis, (at) =>
-              recordVoiceSeconds({ ...input, now: at }),
-            ),
-        },
-        { now },
-      ),
   });
 });
 

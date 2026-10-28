@@ -2,7 +2,7 @@
 
 Last updated: 27 October 2026
 
-Luke is a macOS app for planning a feature by voice. This policy explains
+Luke is a macOS app for planning a feature. This policy explains
 what we collect, who we send it to, and how to turn it off.
 
 ## In short
@@ -12,7 +12,7 @@ what we collect, who we send it to, and how to turn it off.
   plans, your agents' transcripts, and your conversation. Coding agents work
   in sandboxes on our service, not on your Mac. See [What we
   collect](#what-we-collect) and [Storage](#storage).
-- **Models run on your keys.** Voice and dictation go to OpenAI, and coding
+- **Models run on your keys.** Dictation goes to OpenAI, and coding
   agents go to Anthropic or OpenAI, on the API key or subscription you
   saved, never ours.
 - **Who else gets data.** GitHub for your repositories. Vercel runs our
@@ -127,13 +127,7 @@ to Luke for Mac, is kept with them too, set in Settings › Account; Luke in a
 browser on a Mac reads it each time it loads a link that names something in
 Luke.
 
-A voice session on this Mac is a call into one coding agent of a task. It
-opens with the task's plan, the lines said on earlier calls into that agent,
-and what the agent has done lately, your newest typed messages to it among
-them, so the voice can pick up where the agent stands. The agent answers each
-spoken ask as a turn of its own conversation, with the tools it has on any
-turn, and what was said on the call is kept in that agent's transcript. A
-fixture or evidence run keeps no conversation at all.
+A fixture or evidence run keeps no conversation at all.
 
 **Your operator.** With the "Luke, your operator" experiment on, our
 service keeps one coding agent of yours in each workspace, your operator,
@@ -203,10 +197,9 @@ lost him, is already marked deleted, whether or not the task is, and is
 removed seven days after it was marked. Before it deletes anything, it
 stops every coding agent of the task still at work, as Stop does; if one
 cannot be stopped just then, or is still starting, the task is not deleted
-and you can try again in a moment. It also deletes the record of each of the
-task's calls, with every line said on it (see "Your account"): at once for a
-call that has ended, and within a minute or so of its end for a call still
-open. Deleting your account removes every task. Pinning or archiving a task
+and you can try again in a moment. It also deletes the record of each call an
+earlier version made on the task, with every line said on it (see "Your
+account"), within a minute or so. Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
 
 **A plan's pictures.** When you paste, drop, or choose a picture into a
@@ -411,10 +404,10 @@ when, the provider last accepted it, refused it, or said it was out of credit,
 or our service could no longer read it, updated when a coding agent call on it
 finds that changed. Every model call Luke makes for you runs on your own keys
 and never on ours: a coding agent's and its workers' calls, Fast, and web
-search on the key of the provider the model is on; voice calls and dictation
-on your OpenAI key; and titles, pull request chapters, and the summary a
+search on the key of the provider the model is on; dictation on your OpenAI
+key; and titles, pull request chapters, and the summary a
 Continue or Fork writes on whichever of your keys there is. Without an OpenAI
-key, calls and dictation are off; without any API key, an agent is titled from
+key, dictation is off; without any API key, an agent is titled from
 the first words of its first message, and no chapters or summaries are
 written. After you save it, neither your Mac nor any answer from our
 service holds the key again, and we never log it or send it to our analytics,
@@ -759,8 +752,8 @@ when you choose one, and nobody's own GitHub account decides what a
 workspace reaches. We also keep the records
 that keep you signed in, each with the network address and the browser or app
 it was signed in from, and a daily count of your use of our service, one
-number a day: one for each voice session you opened and each clip you
-dictated;
+number a day: one for each clip you dictated, and on days an earlier version
+opened voice sessions, one for each of those;
 beside it, how many seconds you dictated.
 
 Luke's own maintainers can see your name, email address, profile picture,
@@ -836,28 +829,24 @@ and the workspace, the installation GitHub named, and the random code that
 proves the authorization is the one it asked for.
 
 The service also keeps your conversations with your coding agents. Each
-turn an agent runs for you writes to our database your message or spoken ask
-as given; its reply, the summaries of its reasoning, and each tool call with
+turn an agent runs for you writes to our database your message as given; its reply, the summaries of its reasoning, and each tool call with
 its input and result; and the turn's model and effort, token counts, and
 when it was queued, started, and ended, and how (rows from earlier versions
 may also hold the ids of OpenAI's responses, and the turns a task's own Luke
-ran before tasks lost him). On a call, what you said is kept as your line
-and what the voice said as its own, in the transcript of the agent you
-called — an answer it gave without a turn, what it said around one, a reply
-it read aloud — each written once it has settled, so the record holds the
-words you heard beside the turns the agent ran. Each call also keeps a
-record of its own: its task and its agent, OpenAI's id for the session, when
-it started and ended and why, its voice model, its billed seconds (or our
-own count where OpenAI gave none), and each line said on it, by whom and
-when; the agent's tab shows it. A call made before calls were made into an
-agent, when a task had its own Luke, keeps its record without the lines said
-on it, which are deleted. These rows are not sealed: they are stored
+ran before tasks lost him). A transcript from an earlier version, which took
+voice calls, may also hold the lines said on a call into the agent, yours and
+the voice's, each kept as it was written; and each such call keeps a record
+of its own: its task and its agent, OpenAI's id for the session, when it
+started and ended and why, its voice model, its billed seconds (or our own
+count where OpenAI gave none), and each line said on it, by whom and when. A
+call made before calls were made into an agent, when a task had its own Luke,
+keeps its record without the lines said on it, which are deleted. These rows are not sealed: they are stored
 as written, and our own operators can read them. They stand until you delete
 your account, which removes them at once. A deleted task's agents'
 transcripts are marked deleted and removed seven days later, as is every
 conversation a task held with its own Luke before tasks lost him (see
-"Tasks"); its call records, with the lines said on them, are deleted with
-the task, or within a minute or so of the call ending for a call still open.
+"Tasks"); its call records, with the lines said on them, are deleted within a
+minute or so of the task.
 
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
 signs you in to Linear in your browser through Vercel Connect, which stores
@@ -1052,8 +1041,7 @@ already changed on GitHub, and the record of it, stays.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
-a fixed list. A voice session's start is counted with the source that opened
-it, our voice service on your account, and never with a session id. A count
+a fixed list. A count
 made before you sign in waits in Luke's memory and is sent under your account
 if you sign in before Luke quits, and is dropped otherwise. The mark that you
 used Luke on a day is counted once a day for each account signed in, so Luke
@@ -1186,9 +1174,10 @@ the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
 authorization header or a token parameter, before it is sent. Luke drops any
-error report or breadcrumb that names a call's avatar access token, and any
-traced step whose name or request address names that token as it starts; in
-the rest of a trace, a name or a value that names the token is replaced. In
+error report or breadcrumb that names an access token in an address's
+`access_token` parameter, and any traced step whose name or request address
+names one as it starts; in the rest of a trace, a name or a value that names
+one is replaced. In
 the address of a request or of the page that a trace carries, the value of
 each query parameter and the fragment are replaced, and so is any part of its
 path shaped like a credential, such as a long token; the scheme, the host, the
@@ -1200,8 +1189,8 @@ Fixture and evidence runs send nothing to Sentry.
 **Error, performance, and agent reports from our service.** Our service and
 Luke's agents send Sentry reports so that we can find and fix failures. Our
 service's web functions send every error they did not handle or that ended
-work they run apart from a request (such as following a turn for a call, or
-standing the voice or terminal service), with its message, stack trace, and
+work they run apart from a request (such as standing the terminal service),
+with its message, stack trace, and
 the lines of code around it; performance traces of a share of the requests
 they answer, each database query, and each request they make, with the
 method, the address and the names of its query parameters, the status, the
@@ -1261,36 +1250,6 @@ only when you press Send.
 
 ## Who we send it to
 
-- OpenAI, for voice. A voice session is one continuous
-  conversation. While your microphone is on — from a press of an agent's Call
-  button, the call card's microphone, or the microphone shortcut, or from
-  starting a new voice chat, until you press one of those again — everything
-  it hears streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
-  listening and closes the microphone when OpenAI confirms, within five
-  seconds; Luke can still speak while it is closed. A call opens only when you
-  press an agent's Call button or start a new voice chat; starting a task
-  never opens one, and Luke takes no key from the machine to open one. Every session goes through our own voice service on your
-  account, and runs on the OpenAI API key you saved in Settings › Agents, never
-  on a key of ours: without one, calls are off. Nothing on your Mac holds or
-  is handed the key. The service creates the session on your key; relays the control and transcript events between your Mac and
-  OpenAI; reads them to keep the record and to hand each spoken ask to the
-  agent the call speaks into; drops the audio OpenAI reflects back, so neither your voice nor
-  Luke's transits our service; keeps only the lines and the call record
-  described under "Your account"; logs status and close codes, event names,
-  the kind of any failure, and counts, never what was said or an error's own
-  words, apart from the reports to Sentry described under "Error, performance,
-  and agent reports from our service"; and counts each session's billed seconds once. A line
-  you type into an agent's composer while a call is up on that agent goes to the
-  call rather than straight to the agent: your Mac hands it to our voice
-  service, which keeps it as a typed line in the agent's transcript, hands it to
-  the agent, and tells OpenAI's voice session the line, with each mention as its
-  name, so the voice speaks the agent's reply; files you attach to it are not
-  sent. The agent answers each spoken ask as a turn of its own
-  conversation, on the model it runs on, as described under "Anthropic and
-  OpenAI, for a coding agent" below; your Mac makes no such call. Every model
-  call is counted in your daily usage. A
-  development build run from a checkout can write a local trace of the voice
-  traffic when its developer asks; a packaged build cannot.
 - Anthropic or OpenAI, for web search. A coding agent and its workers search
   the web with the search tool of the provider its model is on (Anthropic's
   for a Claude model, OpenAI's for a GPT one), inside that model call and on
@@ -1312,30 +1271,6 @@ only when you press Send.
   and agent reports from our service", and counts
   only the clip and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
-- Keyframe Labs, for video calls, only while the Video calls experiment is on
-  in Settings › Experimental, which it is not until you turn it on. The
-  choice is your account's, so it follows you to every Mac you sign in on.
-  Each call that shows Luke on video opens one avatar session at Keyframe: our
-  service asks Keyframe for it
-  on our key, naming the stock persona Luke appears as (the default, or the
-  avatar you chose under Video calls, which is kept on that Mac) and nothing
-  about you,
-  and hands the session's one-time pass to your Mac, where only Luke's main
-  window holds it. That window then sends Keyframe Luke's synthesized voice as
-  he speaks, which carries what he says about your plan, and plays back the
-  video, in the called agent's tab and on the call card, and the
-  audio Keyframe renders from it. While another app is in front, that window
-  also hands the video, and nothing else, to Luke's floating call window over
-  a connection between the two windows on your Mac. Your microphone never reaches
-  Keyframe, nor does anything else on your Mac or in your account: the voice it
-  receives is Luke's alone. Our service logs only whether a session started, the
-  Keyframe server it opened on, and, when one could not, why, and keeps, with
-  the call's record, when each session started and ended, its length, and why it
-  ended. Keyframe keeps what it receives under its own retention policy. The
-  Avatar menu under Video calls shows each stock avatar's photo, which your
-  Mac loads straight from Keyframe's public storage as the menu is drawn, so
-  Keyframe sees your Mac's IP address then, as any site serving an image does;
-  no referrer and nothing of yours is sent with it.
 - PostHog, for usage data and screen recordings from the Mac app, screen
   recordings from Luke in a browser, and the counts our service makes of the
   work done through it. The counts go through our own service; the
@@ -1584,7 +1519,6 @@ and error, performance, and agent reports by Sentry.
 
 ## Your choices
 
-- Sign out of your Luke account to turn voice off.
 - Turn off Settings › Account › "Share usage data" to stop Luke sending the
   usage counts it makes (see "Usage data"); what is waiting to be sent is
   dropped, and nothing more is sent until you turn it on again. It is set on
@@ -1600,18 +1534,9 @@ and error, performance, and agent reports by Sentry.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.
-- What you say on a call goes to the conversation of the agent you called,
-  fixed when the call opens and never moved afterwards.
-- Luke listens through your microphone only while a call's microphone is on,
-  or while a dictation into a message box is recording, which the box shows as
-  a moving waveform with its time. An agent's Call button, the call card's
-  microphone, or the microphone shortcut opens it until you press one again,
-  and so does starting a new voice chat, which opens a call into its agent.
-  macOS's microphone
-  indicator is lit whenever the device is open: from the press, including
-  while a new call connects, until OpenAI confirms it has stopped listening,
-  within five seconds of the microphone going off. Escape closes it too, and
-  also tells Luke to stop talking.
+- Luke listens through your microphone only while a dictation into a message
+  box is recording, which the box shows as a moving waveform with its time.
+  macOS's microphone indicator is lit whenever the device is open.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage

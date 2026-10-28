@@ -26,12 +26,6 @@ import { sessionsRouter } from "./coder-host/runtime-sessions.js";
  * (`brain-host/auth.ts`). So none of them reaches for another secret, and a
  * deployment holding none, or no environment at all, or no origin for eve,
  * reaches eve for nobody.
- *
- * The voice function is the one caller that composes its own: its exchange
- * stands for a function instance's life outside any request, over an
- * `HttpClient` of its own, so it reads the same secret by the same rule
- * from its environment (`eveDeploymentSecretIn`) and composes eve's client
- * in `voice/deployment-exchange.ts`.
  */
 
 /**

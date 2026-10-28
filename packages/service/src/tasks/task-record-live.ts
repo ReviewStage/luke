@@ -8,21 +8,19 @@ import { taskSeenBy } from "@luke/database/models/workspace-store";
 import { member } from "@luke/database/schemas/auth";
 import { planPageVersion } from "@luke/database/schemas/plan-page";
 import { task } from "@luke/database/schemas/task";
-import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 
 /**
- * task-record-live.ts -- where an open task's plan, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move rather than when a call's activity or end suggests they might have.
+ * task-record-live.ts -- where an open task's plan, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move.
  *
  * Four parts, each a mark and none of the words it marks: the plan's text
  * (`plan`), one row marked by its last save, which only a save of the text
  * moves, whoever wrote it; the pages agents
  * showed (`pages`), one row a page at its newest version; the task's
- * calls (`calls`), one row a call that has words, which moves as its words
- * land, as it closes, and as its metering and the rows the voice wrote for
- * it land after; and the code the task's agents showed (`code`), which
- * answers no rows now that no agent shows code. The board is followed on
+ * calls (`calls`), which answers no rows now that Luke takes no calls; and
+ * the code the task's agents showed (`code`), which answers no rows now that
+ * no agent shows code. The board is followed on
  * its own (`boardLiveStatement`). Each statement reads what its held read
  * reads (`listPages`), the account joined through its membership of the
  * task's workspace and held to the task's GitHub access, as the board's
@@ -71,37 +69,14 @@ function pagesStatement(userId: string, taskId: string) {
 }
 
 /**
- * Each call about the task, marked: one with words, since a call with none
- * reads as no call; how it ended, what it metered, and its model, as its
- * session row holds them; and its last fragment, since fragments are only
- * ever appended. Note that `spoken`, the rows the voice wrote for it in the
- * task's own conversation, is always none now that every call speaks into
- * an agent's; it stands so a desktop that still reads it decodes the part.
+ * The task's calls: none, since Luke takes no calls. A released desktop
+ * still follows the part and decodes it, so it stands, answering no rows.
  */
-function callsStatement(userId: string, taskId: string) {
+function callsStatement() {
   return queryBuilder
-    .select({
-      ...liveSelection(
-        {
-          id: voiceSessions.id,
-          closeReason: voiceSessions.closeReason,
-          usage: voiceSessions.usage,
-          model: voiceSessions.model,
-        },
-        { closedAt: voiceSessions.closedAt },
-      ),
-      lastSegment: max(voiceTranscriptSegments.seq).as("lastSegment"),
-      spoken: sql<number>`0`.as("spoken"),
-    })
-    .from(voiceSessions)
-    .innerJoin(task, eq(task.id, voiceSessions.taskId))
-    .innerJoin(member, memberOfTask(userId))
-    .innerJoin(
-      voiceTranscriptSegments,
-      eq(voiceTranscriptSegments.voiceSessionId, voiceSessions.id),
-    )
-    .where(and(eq(voiceSessions.taskId, taskId), taskSeenBy(userId)))
-    .groupBy(voiceSessions.id, task.id);
+    .select(liveSelection({ id: task.id }))
+    .from(task)
+    .where(sql`false`);
 }
 
 /**
@@ -124,7 +99,7 @@ export function taskRecordLiveStatements(
   return Option.all({
     plan: liveStatementOf(planStatement(userId, taskId)),
     pages: liveStatementOf(pagesStatement(userId, taskId)),
-    calls: liveStatementOf(callsStatement(userId, taskId)),
+    calls: liveStatementOf(callsStatement()),
     code: liveStatementOf(codeStatement()),
   });
 }

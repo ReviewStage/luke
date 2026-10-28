@@ -138,7 +138,6 @@ export {
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
   installedSkillPath,
-  VOICE_SERVICE_PATH,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,

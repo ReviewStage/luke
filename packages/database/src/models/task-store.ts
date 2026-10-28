@@ -911,8 +911,8 @@ const removeTask = SqlSchema.findOneOption({
 /**
  * The task's calls that have ended, and with them the words said on each,
  * which cascade with the session. A call still open is left to the sweep
- * (`purgeDeletedTaskCalls`), since the voice service still writes it and
- * the orphan sweep may still have to end it on Luke's key.
+ * (`purgeDeletedTaskCalls`), which removes it once no call can still be
+ * writing it.
  */
 const removeEndedCalls = SqlSchema.void({
   Request: TaskKeySchema,
