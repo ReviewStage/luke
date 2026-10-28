@@ -14,10 +14,10 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
+  type Agent,
   readNativeHanded,
   recordNativeHanded,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { turnsBefore } from "@luke/database/models/message-reads";
 import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
 import { listRevisions } from "@luke/database/models/plan-revisions";
@@ -71,9 +71,7 @@ const writeHanded = Schema.encodeUnknownResult(TurnHandedSchema);
  * member's open work as it stands; nothing for any other agent, or where
  * a read failed, which is logged, so the turn still opens.
  */
-const deskOf = (
-  agent: CodingAgent,
-): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
+const deskOf = (agent: Agent): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
   isOperator(agent)
     ? readOperatorDesk(agent).pipe(
         Effect.tapError(logStoreFailure),
@@ -111,7 +109,7 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  */
 const taskOf = (
   admitted: AdmittedConversation,
-  agent: CodingAgent,
+  agent: Agent,
   turn: CoderTurn,
   handed: TurnHanded,
   now: number,
@@ -165,7 +163,7 @@ const taskOf = (
  */
 export function coderTurnMessage<R>(
   admitted: AdmittedConversation,
-  agent: CodingAgent,
+  agent: Agent,
   turn: CoderTurn,
   handed: TurnHanded,
   now: number,
@@ -204,7 +202,7 @@ export function coderTurnMessage<R>(
  * fails is logged, and the notices are handed again on the next turn.
  */
 export function deskHandedRead(
-  agent: CodingAgent,
+  agent: Agent,
   message: ComposedTurnMessage,
 ): Effect.Effect<void, never, DatabaseServices> {
   const { desk } = message;

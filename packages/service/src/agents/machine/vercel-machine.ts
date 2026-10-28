@@ -48,13 +48,9 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
-import {
-  type CodingAgent,
-  hasRepository,
-  type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Brand, Duration, Effect, Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
@@ -270,7 +266,7 @@ const nameOfSandbox = Brand.nominal<MachineName>();
 /** The place a sandbox's running session stands for, under Luke's session given. */
 function vercelPlace(session: string, sandboxSessionId: string): MachinePlace {
   return {
-    machine: CODING_AGENT_MACHINE.VERCEL,
+    machine: AGENT_MACHINE.VERCEL,
     session,
     running: runningOfSession(sandboxSessionId),
   };
@@ -356,7 +352,7 @@ function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
       ? vercelPlace(session, sandbox.currentSessionId)
       : undefined;
   return {
-    machine: CODING_AGENT_MACHINE.VERCEL,
+    machine: AGENT_MACHINE.VERCEL,
     session,
     agentId: tags[RUNNER_TAG.AGENT],
     name: nameOfSandbox(sandbox.name),
@@ -526,7 +522,7 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 /** The machine over the API given, its checkout run through the edge's runner. */
 export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
   /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
-  const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
+  const createdFrom = (agent: Agent, sessionId: string, snapshotId: string) =>
     api.create({
       name: `${SANDBOX_NAME}${randomUUID()}`,
       snapshotId,
@@ -557,7 +553,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * starter's own token, whose access is not the workspace's.
    */
   const repositorySnapshotOf = (
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     imageSnapshotId: string,
   ): Option.Option<RepositorySnapshotOf> =>
@@ -596,7 +592,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * forgets nothing, so the launch goes on as without a snapshot.
    */
   const openedFromRepositorySnapshot = (
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     sessionId: string,
     harness: string,
     of: RepositorySnapshotOf,
@@ -635,7 +631,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    */
   const openedFromImage = (
     image: AgentSandboxImageService,
-    agent: CodingAgent,
+    agent: Agent,
     sessionId: string,
     snapshotId: string,
   ) =>
@@ -660,7 +656,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    */
   const checkedOutSandbox = (
     image: AgentSandboxImageService,
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     sessionId: string,
     harness: string,
@@ -702,7 +698,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    */
   const openedCheckout = (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: Agent,
     sessionId: string,
     harness: string,
   ) =>

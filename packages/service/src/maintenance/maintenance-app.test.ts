@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { deleteTask } from "@luke/database/models/task-store";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { agentTable } from "@luke/database/schemas/agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
@@ -189,7 +189,7 @@ const deleteTaskWithAgent = Effect.gen(function* () {
   yield* db
     .insert(conversations)
     .values({ id: conversationId, userId: owner, kind: CONVERSATION_KIND.CODING_AGENT });
-  yield* db.insert(codingAgent).values({
+  yield* db.insert(agentTable).values({
     id: randomUUID(),
     organizationId: task.workspaceId,
     userId: owner,

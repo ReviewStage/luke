@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { test } from "vitest";
 import { forkStart, forksOf, messageOpening, startingWords } from "./fork-model.js";
 
@@ -14,15 +14,15 @@ const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const AT = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
 const LATER = "5a2f3e4d-6c7b-4a89-9b2c-3d4e5f6a7b8c";
 
-function agent(id: string, createdAt: number, extra: Partial<CodingAgentSummary> = {}) {
-  const summary: CodingAgentSummary = {
+function agent(id: string, createdAt: number, extra: Partial<AgentSummary> = {}) {
+  const summary: AgentSummary = {
     id,
     planId: TASK,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: null,
     createdAt,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...extra,
   };

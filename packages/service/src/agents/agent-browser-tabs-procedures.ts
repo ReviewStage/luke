@@ -44,7 +44,7 @@ import {
   recordMemberOpenedBrowserTab,
   takeOverBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
-import { readVisibleAgentWorkspace } from "@luke/database/models/coding-agent-store";
+import { readVisibleAgentWorkspace } from "@luke/database/models/agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import {

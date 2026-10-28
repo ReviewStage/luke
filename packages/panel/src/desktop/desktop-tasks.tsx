@@ -1,4 +1,4 @@
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { AgentStatus } from "@luke/features/agent-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
@@ -450,7 +450,7 @@ function TaskInboxTab({
   const shown = tasks.shown && tasks.sidePanel.open;
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its
   // place, both held still while the tab is shown (`use-held-inbox-list.ts`).
-  const { list, steps } = useHeldInboxList(groups, filter, asked, shown);
+  const { list, steps, onPointing } = useHeldInboxList(groups, filter, asked, shown);
   const listed = listedItems(list);
   // Note that nothing is chosen until a row's press or a call's row chooses it, so the pane beside the list stands empty till then.
   const chosen = listedItems(steps).find(({ item }) => item.id === asked);
@@ -537,6 +537,7 @@ function TaskInboxTab({
         models={tasks.agents.models}
         readerId={tasks.me}
         reading={inbox.reading}
+        onPointing={onPointing}
         note={
           inbox.reading ? (
             <InboxListSkeleton />
@@ -840,12 +841,7 @@ function PlanDocument({
   };
   // A delegation's row in an agent's transcript opens its worker in the side
   // panel, where every subagent stands; where the worker stands seeds its glyph.
-  const openDelegation = (
-    agent: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => {
+  const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
     sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
   };

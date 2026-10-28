@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { listPages, writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
@@ -39,7 +39,7 @@ const runLive = (statement: LiveStatement) =>
 /** A coding agent of the account's, on the task named or, in the workspace, on none. */
 const openAgent = (userId: string, place: { taskId: string } | { organizationId: string }) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       ...("taskId" in place
         ? { taskId: place.taskId, planSnapshot: null, prompt: null }
         : { taskId: null, organizationId: place.organizationId, planSnapshot: null, prompt: "Go" }),

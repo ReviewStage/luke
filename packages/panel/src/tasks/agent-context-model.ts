@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_BRIEF,
-  type CodingAgentBrief,
-  type CodingAgentContext,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BRIEF, type AgentBrief, type AgentContext } from "@luke/features/agent-wire";
 import { formatCompact } from "@luke/features/number-format";
 import { agoText } from "@luke/features/time-format";
 
@@ -12,7 +8,7 @@ import { agoText } from "@luke/features/time-format";
  * The service tells what the agent's newest step read, as its provider
  * counted it, against the window of the model the agent runs on now and
  * the count past which eve compacts the conversation
- * (`codingAgentContextSchema`). The ring fills with the share of the
+ * (`agentContextSchema`). The ring fills with the share of the
  * window that step read, turns amber within a tenth of the window of the
  * compaction, and red at or past it, since the next step compacts. The
  * popover divides the read into the parts the service could name: the
@@ -51,10 +47,10 @@ const ESTIMATE_MARK = "~";
 
 /** What the brief's row is called, by what the agent was handed. */
 const BRIEF_LABEL = {
-  [CODING_AGENT_BRIEF.PLAN]: "Plan",
-  [CODING_AGENT_BRIEF.PROMPT]: "Prompt",
-  [CODING_AGENT_BRIEF.BLANK]: "First message",
-} as const satisfies Record<CodingAgentBrief, string>;
+  [AGENT_BRIEF.PLAN]: "Plan",
+  [AGENT_BRIEF.PROMPT]: "Prompt",
+  [AGENT_BRIEF.BLANK]: "First message",
+} as const satisfies Record<AgentBrief, string>;
 
 /** One part of the context as the popover's bar and legend draw it. */
 export interface ContextRow {
@@ -72,17 +68,17 @@ export interface ContextStat {
 }
 
 /** The share of the window the last step read, past one where it read more than the window holds. */
-export function contextShare(context: CodingAgentContext): number {
+export function contextShare(context: AgentContext): number {
   return context.inputTokens / context.windowTokens;
 }
 
 /** The share as a whole percentage: 62. */
-function contextPercent(context: CodingAgentContext): number {
+function contextPercent(context: AgentContext): number {
   return Math.round(contextShare(context) * 100);
 }
 
 /** How the ring reads: at or past eve's threshold, within a tenth of the window of it, or short of that. */
-export function contextLevel(context: CodingAgentContext): ContextLevel {
+export function contextLevel(context: AgentContext): ContextLevel {
   const { inputTokens, compactionThresholdTokens, windowTokens } = context;
   if (inputTokens >= compactionThresholdTokens) return CONTEXT_LEVEL.OVER;
   if (inputTokens >= compactionThresholdTokens - NEAR_SHARE * windowTokens) {
@@ -92,18 +88,18 @@ export function contextLevel(context: CodingAgentContext): ContextLevel {
 }
 
 /** The ring's hover: "62% of context used", and ", near the limit" once the ring has turned amber or red, so the warning is not colour alone. */
-export function contextHint(context: CodingAgentContext): string {
+export function contextHint(context: AgentContext): string {
   const used = `${contextPercent(context)}% of context used`;
   return contextLevel(context) === CONTEXT_LEVEL.ROOM ? used : `${used}, near the limit`;
 }
 
 /** The popover's headline: "62% full". */
-export function contextFullLine(context: CodingAgentContext): string {
+export function contextFullLine(context: AgentContext): string {
   return `${contextPercent(context)}% full`;
 }
 
 /** The popover's total: "~620K / 1M tokens". */
-export function contextTotalLine(context: CodingAgentContext): string {
+export function contextTotalLine(context: AgentContext): string {
   return `${ESTIMATE_MARK}${formatCompact(context.inputTokens)} / ${formatCompact(context.windowTokens)} tokens`;
 }
 
@@ -112,10 +108,7 @@ export function contextTotalLine(context: CodingAgentContext): string {
  * service estimated, the brief only while it stands apart, and the
  * conversation as what the estimates leave of the provider's count.
  */
-export function contextRows(
-  context: CodingAgentContext,
-  brief: CodingAgentBrief | undefined,
-): ContextRow[] {
+export function contextRows(context: AgentContext, brief: AgentBrief | undefined): ContextRow[] {
   const { systemPromptTokens, toolDefinitionTokens, briefTokens } = context.estimated;
   const rows: ContextRow[] = [
     {
@@ -134,7 +127,7 @@ export function contextRows(
   if (briefTokens !== undefined) {
     rows.push({
       part: CONTEXT_PART.BRIEF,
-      label: BRIEF_LABEL[brief ?? CODING_AGENT_BRIEF.PLAN],
+      label: BRIEF_LABEL[brief ?? AGENT_BRIEF.PLAN],
       tokens: briefTokens,
       estimated: true,
     });
@@ -160,12 +153,12 @@ export function rowCount(row: ContextRow): string {
 }
 
 /** How wide a part's stretch of the bar is, as a percentage of the bar: of the window, or of the read where it overran the window. */
-export function rowWidth(row: ContextRow, context: CodingAgentContext): number {
+export function rowWidth(row: ContextRow, context: AgentContext): number {
   return (row.tokens / Math.max(context.windowTokens, context.inputTokens)) * 100;
 }
 
 /** What the popover says under the legend, at the time given: the cache, the step's answer, where eve compacts, and when it last did. */
-export function contextStats(context: CodingAgentContext, now: number): ContextStat[] {
+export function contextStats(context: AgentContext, now: number): ContextStat[] {
   const stats: ContextStat[] = [];
   if (context.cachedInputTokens !== undefined) {
     stats.push({ label: "Read from cache", value: formatCompact(context.cachedInputTokens) });

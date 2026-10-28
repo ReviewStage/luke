@@ -3,20 +3,20 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { fillChildTitle } from "@luke/database/models/child-titles";
 import {
-  type CodingAgentBriefText,
-  createCodingAgent,
+  type AgentBriefText,
+  createAgent,
   delegationsOf,
-  fillCodingAgentTitle,
+  fillAgentTitle,
   hasRepository,
   latestTurnsOf,
-  readCodingAgent,
-  recordCodingAgentCompaction,
-  recordCodingAgentPublished,
-  recordCodingAgentStep,
+  readAgent,
+  recordAgentCompaction,
+  recordAgentPublished,
+  recordAgentStep,
   writeDelegation,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
+import { fillChildTitle } from "@luke/database/models/child-titles";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
@@ -37,14 +37,14 @@ import {
 } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_CURSOR_START,
+  AGENT_KIND,
+  AGENT_STATUS,
+  type AgentTranscriptMessage,
   CHECK_SUMMARY,
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_CURSOR_START,
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_STATUS, INBOX_TOOL } from "@luke/features/inbox-wire";
 import { agentTranscriptLiveRowsSchema, LIVE_POLL } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -218,7 +218,7 @@ function mintSession(): string {
 const unclaimedAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
-  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
+  brief: AgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -226,7 +226,7 @@ const unclaimedAgent = (
       name: "Teammate invitations",
       repository: "acme/relay",
     });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${minted}`,
       model,
@@ -246,7 +246,7 @@ const openAgent = (
   host: CoderHost,
   model = "anthropic/claude-opus-5.5",
   effort = "high",
-  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
+  brief: AgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
 ) =>
   Effect.gen(function* () {
     const { userId, agent, target, auth } = yield* unclaimedAgent(model, effort, brief);
@@ -270,7 +270,7 @@ const openAgent = (
 /** The member's operator in the workspace, blank with no task and no repository, its session claimed as the hook claims it. */
 const openOperator = (host: CoderHost, userId: string, workspaceId: string) =>
   Effect.gen(function* () {
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: null,
       organizationId: workspaceId,
       idempotencyKey: `operator-${randomUUID()}`,
@@ -279,7 +279,7 @@ const openOperator = (host: CoderHost, userId: string, workspaceId: string) =>
       planSnapshot: null,
       prompt: null,
       repository: null,
-      kind: CODING_AGENT_KIND.OPERATOR,
+      kind: AGENT_KIND.OPERATOR,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -584,7 +584,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const first = yield* read(CURSOR_START);
           const past = yield* read(first.page.cursor);
 
-          assert.equal(past.page.status, CODING_AGENT_STATUS.RUNNING);
+          assert.equal(past.page.status, AGENT_STATUS.RUNNING);
           assert.equal(past.holds, true);
           assert.equal(
             past.wakeIn,
@@ -671,7 +671,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             [1, 2],
           );
           // SAFETY: a page's message is the wire's once serialized, which its JSON parts already are here.
-          const said = page.page.messages as unknown as readonly CodingAgentMessage[];
+          const said = page.page.messages as unknown as readonly AgentTranscriptMessage[];
           assert.deepEqual(drawn, said.map(cutMessage));
 
           const stranger = yield* openGithubUser();
@@ -750,7 +750,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           yield* line("Start on the invites.");
           const opened = yield* standing;
-          const whole = yield* answered(CODING_AGENT_CURSOR_START);
+          const whole = yield* answered(AGENT_CURSOR_START);
           assert.deepEqual(whole.ids, [...opened.keys()].toSorted());
 
           // The turn opens its journal.
@@ -811,7 +811,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           let read = yield* now(cursor);
           let rows = yield* liveRowsOf(target, parent);
           // Before its first turn the agent is starting, which only the clock ends: the read says when.
-          assert.equal(read.page.status, CODING_AGENT_STATUS.STARTING);
+          assert.equal(read.page.status, AGENT_STATUS.STARTING);
           assert.equal(read.holds, true);
           assert.equal(
             read.wakeIn,
@@ -840,14 +840,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             }
             // Note that a page with nothing past the cursor holds while the turn runs, and not once it ended.
             if (next.page.messages.length === 0) {
-              assert.equal(next.holds, next.page.status === CODING_AGENT_STATUS.RUNNING);
+              assert.equal(next.holds, next.page.status === AGENT_STATUS.RUNNING);
             }
             cursor = next.page.cursor;
             read = next;
             rows = moved;
           }
           assert.ok(said > 2, "the turn said something more than once");
-          assert.equal(read.page.status, CODING_AGENT_STATUS.COMPLETED);
+          assert.equal(read.page.status, AGENT_STATUS.COMPLETED);
 
           // Ended and untitled, the read holds on the title, until its window closes with the clock.
           const ended = (yield* latestTurnsOf(userId, [parent])).get(parent)?.settledAt;
@@ -868,7 +868,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
 
           // A title landing is heard on the agent's own transcript.
-          assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Teammate invitations"), true);
+          assert.equal(yield* fillAgentTitle(userId, agent.id, "Teammate invitations"), true);
           const titled = yield* liveRowsOf(target, parent);
           assert.notEqual(titled, rows);
 
@@ -970,7 +970,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const userId = yield* openGithubUser();
           const task = yield* startTask(userId, { name: "Talk it over" });
           const { agent } = Option.getOrThrow(
-            yield* createCodingAgent(userId, {
+            yield* createAgent(userId, {
               taskId: task.id,
               idempotencyKey: "start-blank",
               model: "anthropic/claude-opus-5.5",
@@ -1127,19 +1127,19 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const { userId, target, auth, sessionId, admitted } = yield* openAgent(host);
           const shot = {
             name: "flow.png",
-            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            mediaType: AGENT_ATTACHMENT_TYPE.PNG,
             data: Buffer.from(SIZED_PNG).toString("base64"),
           };
           // An image no picture was kept of, as every row written before keeps its bytes.
           const old = {
             name: "old.png",
-            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            mediaType: AGENT_ATTACHMENT_TYPE.PNG,
             data: shot.data,
           };
           // An image whose header states no size, which no picture is kept of.
           const broken = {
             name: "broken.png",
-            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            mediaType: AGENT_ATTACHMENT_TYPE.PNG,
             data: Buffer.from(SIZED_PNG.slice(0, 12)).toString("base64"),
           };
           const [kept, refused] = yield* keptHandedImages(target, [shot, broken]);
@@ -1239,7 +1239,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.ok(agent.taskId !== null);
           const taskId = agent.taskId;
           yield* updateTask(userId, taskId, { status: TASK_STATUS.DONE });
-          yield* recordCodingAgentPublished(userId, agent.id, {
+          yield* recordAgentPublished(userId, agent.id, {
             number: 42,
             title: "Fix the refresh",
             url: "https://github.com/acme/relay/pull/42",
@@ -1285,7 +1285,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             yield* host.relay(event, admitted, session as never, state, {});
           }
 
-          const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+          const titled = Option.getOrThrow(yield* readAgent(userId, agent.id));
           assert.equal(titled.title, "Teammate invitations by email");
           assert.match(asked[0] ?? "", /Invite a teammate by email/u);
         }),
@@ -1311,7 +1311,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             yield* host.relay(event, admitted, session as never, state, {});
           }
 
-          const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+          const titled = Option.getOrThrow(yield* readAgent(userId, agent.id));
           assert.equal(titled.title, "Read the agent guide");
           assert.match(asked[1] ?? "", /The guide is read; the plan fits the code\./u);
         }),
@@ -1372,7 +1372,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               createdAt: agent.createdAt,
               now: yield* Clock.currentTimeMillis,
             }),
-            CODING_AGENT_STATUS.COMPLETED,
+            AGENT_STATUS.COMPLETED,
           );
         }),
     );
@@ -1835,7 +1835,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // The agent's answer to the other agent's message speaks to that agent, so the title reads its answer to the developer.
           assert.ok(asked.includes("The guide is read; the plan fits the code."));
           assert.ok(!asked.includes("Understood."));
-          const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+          const titled = Option.getOrThrow(yield* readAgent(userId, agent.id));
           assert.equal(titled.title, "Teammate invitations by email");
         }),
     );
@@ -2054,7 +2054,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.ok(!desked(unchanged.text), unchanged.text ?? "");
 
           // One of the member's agents opens a pull request: the desk changed, so it is handed again, once.
-          yield* recordCodingAgentPublished(userId, agent.id, {
+          yield* recordAgentPublished(userId, agent.id, {
             number: 42,
             title: "Fix the refresh",
             url: "https://github.com/acme/relay/pull/42",
@@ -2152,7 +2152,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             Effect.gen(function* () {
               // Each a second after the last, so newest first is one order, and none yet reads as never started.
               yield* TestClock.adjust("1 second");
-              const made = yield* createCodingAgent(starter, {
+              const made = yield* createAgent(starter, {
                 taskId: task.id,
                 title,
                 idempotencyKey: randomUUID(),
@@ -2222,7 +2222,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           );
           // The newest step the row holds, ended at the share of the window given.
           const stepAt = (share: number, at: number) =>
-            recordCodingAgentStep(userId, operator.agent.id, {
+            recordAgentStep(userId, operator.agent.id, {
               inputTokens: Math.ceil(windowTokens * share),
               outputTokens: 0,
               systemPromptTokens: 0,
@@ -2267,7 +2267,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.ok(!told(coderTurn), coderTurn.text ?? "");
 
           // eve compacts: the step before it measured the folded history, and the next past the mark is told again.
-          yield* recordCodingAgentCompaction(userId, operator.agent.id, new Date(4_000));
+          yield* recordAgentCompaction(userId, operator.agent.id, new Date(4_000));
           const compacted = handedAfterCompaction(flushed.handed);
           const after = yield* typed(compacted);
           assert.ok(!told(after));

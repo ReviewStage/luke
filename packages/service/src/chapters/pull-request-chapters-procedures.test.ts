@@ -3,10 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import {
-  createCodingAgent,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+import { createAgent, updateAgentBranch } from "@luke/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   claimChapterGeneration,
@@ -15,7 +12,7 @@ import { accountPreference } from "@luke/database/schemas/preferences";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { CHAPTER_KIND, CHAPTER_RISK } from "@luke/features/pull-request-chapters";
 import {
@@ -85,7 +82,7 @@ let installationsConnected = 0;
 
 const CATALOG: readonly OfferedModel[] = [
   {
-    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    id: AGENT_DEFAULT_CHOICE.model,
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: ["low", "medium", "high", "max"],
@@ -228,17 +225,17 @@ const standing = (
     assert.ok(installation !== undefined, "the suite ran out of installations");
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
     const agent = Option.getOrThrow(
-      yield* createCodingAgent(owner, {
+      yield* createAgent(owner, {
         taskId: task.id,
         planSnapshot: "# Invitations",
         prompt: null,
         idempotencyKey: randomUUID(),
-        model: CODING_AGENT_DEFAULT_CHOICE.model,
+        model: AGENT_DEFAULT_CHOICE.model,
         effort: "low",
         repository: RELAY_FULL_NAME,
       }),
     ).agent;
-    yield* updateCodingAgentBranch(owner, agent.id, BRANCH);
+    yield* updateAgentBranch(owner, agent.id, BRANCH);
     let head = HEAD;
     const github = githubReaching(
       [installation],

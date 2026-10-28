@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 /** An agent on the task, named by its title. */
-function agent(id: string, title: string, status: CodingAgentSummary["status"]) {
+function agent(id: string, title: string, status: AgentSummary["status"]) {
   return {
     id,
     planId: "plan-1",
@@ -42,11 +42,11 @@ function agent(id: string, title: string, status: CodingAgentSummary["status"]) 
     createdAt: 1,
     status,
     turnId: null,
-  } satisfies CodingAgentSummary;
+  } satisfies AgentSummary;
 }
 
-const BROKEN = agent("agent-1", "Billing export", CODING_AGENT_STATUS.FAILED);
-const HEALTHY = agent("agent-2", "Invoice sweep", CODING_AGENT_STATUS.COMPLETED);
+const BROKEN = agent("agent-1", "Billing export", AGENT_STATUS.FAILED);
+const HEALTHY = agent("agent-2", "Invoice sweep", AGENT_STATUS.COMPLETED);
 
 /** A "+" drawn offering `entries`, pressed open; the options it lists, by their names. */
 async function opened(entries: readonly AddEntry[]): Promise<Map<string, HTMLElement>> {

@@ -1,9 +1,9 @@
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
   FIRING_HANDS_OUTSIDE_WORDS,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
@@ -33,8 +33,8 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { automationRun } from "../schemas/automation.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import { conversations, messages } from "../schemas/storage.js";
 import { MESSAGE_SENDER } from "../storage-vocabulary.js";
@@ -229,13 +229,13 @@ const findResult = SqlSchema.findOneOption({
 const parent = alias(conversations, "parent");
 
 /** The agent that sent a line, read for whose it is. */
-const sendingAgent = alias(codingAgent, "sending_agent");
+const sendingAgent = alias(agentTable, "sending_agent");
 
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
 /** The agent the root conversation is of, read for whether it is an operator, whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
-const startedAgent = alias(codingAgent, "started_agent");
+const startedAgent = alias(agentTable, "started_agent");
 
 /** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
 const OUTSIDE_FIRINGS = Object.values(AUTOMATION_FIRING).filter(
@@ -369,7 +369,7 @@ const findForeignLine = SqlSchema.findOneOption({
               and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
-                or(isNull(startedAgent.kind), ne(startedAgent.kind, CODING_AGENT_KIND.OPERATOR)),
+                or(isNull(startedAgent.kind), ne(startedAgent.kind, AGENT_KIND.OPERATOR)),
                 or(
                   and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
                   STARTED_ON_OUTSIDE_WORDS,

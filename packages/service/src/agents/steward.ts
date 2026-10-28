@@ -17,8 +17,8 @@
  * (`coder-host/tool-set.ts`'s `kindToolsOf`).
  */
 
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import type { Agent } from "@luke/database/models/agent-store";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 
 /** What an operator was refused doing to a teammate's agent or task, as the refusal opens. */
 export const STEWARD_ACT = {
@@ -40,8 +40,8 @@ export const STEWARD_CONTINUED_REFUSAL =
   "and let them decide.";
 
 /** Whether the calling agent is a member's operator. */
-export function isOperator(agent: Pick<CodingAgent, "kind">): boolean {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR;
+export function isOperator(agent: Pick<Agent, "kind">): boolean {
+  return agent.kind === AGENT_KIND.OPERATOR;
 }
 
 /**
@@ -51,8 +51,8 @@ export function isOperator(agent: Pick<CodingAgent, "kind">): boolean {
  * operator, or Luke on a call (`undefined`), is refused nothing here.
  */
 export function stewardRefusal(
-  caller: Pick<CodingAgent, "kind" | "userId"> | undefined,
-  target: Pick<CodingAgent, "userId">,
+  caller: Pick<Agent, "kind" | "userId"> | undefined,
+  target: Pick<Agent, "userId">,
   act: StewardAct,
 ): string | undefined {
   if (caller === undefined || !isOperator(caller) || target.userId === caller.userId) {
@@ -71,7 +71,7 @@ export function stewardRefusal(
  * operator, or Luke on a call (`undefined`), is refused nothing here.
  */
 export function stewardTaskRefusal(
-  caller: Pick<CodingAgent, "kind" | "userId"> | undefined,
+  caller: Pick<Agent, "kind" | "userId"> | undefined,
   task: { readonly ownerId: string },
 ): string | undefined {
   if (caller === undefined || !isOperator(caller) || task.ownerId === caller.userId) {
@@ -90,7 +90,7 @@ export function stewardTaskRefusal(
  * is no operator, or Luke on a call (`undefined`), is refused nothing here.
  */
 export function stewardContinuedRefusal(
-  caller: Pick<CodingAgent, "kind"> | undefined,
+  caller: Pick<Agent, "kind"> | undefined,
   continuedBefore: boolean,
 ): string | undefined {
   return caller !== undefined && isOperator(caller) && continuedBefore

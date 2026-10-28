@@ -1,9 +1,9 @@
 import { index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
+import { agentTable } from "./agent.js";
 
 /**
- * coding-agent-wakeup.ts -- the wakeups a native agent's released wait left for Luke to deliver.
+ * agent-wakeup.ts -- the wakeups a native agent's released wait left for Luke to deliver.
  *
  * A Claude Code agent waiting on nothing but one-shot wakeups is released:
  * its runner ends the launch so the sandbox stops, and names each wakeup,
@@ -14,15 +14,15 @@ import { codingAgent } from "./coding-agent.js";
  * release replaces the agent's rows; a Stop deletes them, as a stopped
  * CLI's own wakeups end with it; and so does any launch of the CLI, which
  * restores on resume the tasks it can and leaves the agent to own them
- * again (`coding-agent-wakeups.ts`). The rows go with their agent.
+ * again (`agent-wakeups.ts`). The rows go with their agent.
  */
-export const codingAgentWakeup = pgTable(
+export const agentWakeupTable = pgTable(
   "coding_agent_wakeup",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** The prompt the CLI would have run as the wakeup fired, which is delivered as the message. */
     prompt: text("prompt").notNull(),
     /** When the wakeup is next delivered: as it comes due, then again past a delivery that failed. */

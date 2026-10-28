@@ -1,14 +1,14 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentCallFailure,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+} from "@luke/features/agent-view";
 import {
-  type CodingAgentPullRequest,
+  type AgentPullRequest,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { saidWords } from "@luke/features/integration-health";
 import {
   PULL_REQUEST_ACTION,
@@ -155,11 +155,11 @@ const WRITE_WORDS = {
 } as const;
 
 /** Luke's own words where a change never reached GitHub, by why. */
-function failureWords(failure: CodingAgentCallFailure): string {
+function failureWords(failure: AgentCallFailure): string {
   switch (failure) {
-    case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
+    case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This pull request can no longer be found.";
-    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
       return WRITE_WORDS.UNREACHED;
     default:
       return "GitHub could not be reached. Try again in a moment.";
@@ -245,10 +245,10 @@ export interface PullRequestWrites {
 
 /** What an answer leaves to say: nothing where GitHub made the change. */
 export function noteOf(
-  answer: CodingAgentPullRequestWriteAnswerView | CodingAgentPullRequestViewedAnswerView,
+  answer: AgentPullRequestWriteAnswerView | AgentPullRequestViewedAnswerView,
 ): WriteNote | undefined {
   if ("failure" in answer) {
-    return answer.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
+    return answer.failure === AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
       ? {
           kind: WRITE_NOTE.WORDS,
           words: failureWords(answer.failure),
@@ -296,8 +296,8 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
         request,
       })
         .catch(
-          (): CodingAgentPullRequestWriteAnswerView => ({
-            failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+          (): AgentPullRequestWriteAnswerView => ({
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
           }),
         )
         .then((answer) => {
@@ -392,7 +392,7 @@ export function PullRequestStateMenu({
   shown = true,
   writes,
 }: {
-  pullRequest: Pick<CodingAgentPullRequest, "number" | "state" | "checks">;
+  pullRequest: Pick<AgentPullRequest, "number" | "state" | "checks">;
   /** Where GitHub's merge queue holds it, as the merge control read it; none where it holds it nowhere. */
   queued?: { readonly position?: number | undefined } | null | undefined;
   /** Whether the panel the pill stands in is on screen; a question asked goes with it. */

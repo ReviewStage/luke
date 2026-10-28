@@ -1,4 +1,4 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { useMemo } from "react";
 import { type InboxListed, openItems } from "./inbox-model.js";
 import {

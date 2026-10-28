@@ -7,7 +7,7 @@ import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, STORE_TEST_DATABASE_ENVIRONMENT, startTask } from "../../testing/index.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createAgent } from "../agent-store.js";
 import { queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
 
 /**
@@ -42,7 +42,7 @@ const openAccount = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",

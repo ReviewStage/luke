@@ -1,4 +1,4 @@
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -93,7 +93,7 @@ export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   to: PlanCommentAsked,
 ) {
   if (to.actor !== PLAN_COMMENT_ACTOR.AGENT || to.agentId === undefined) return undefined;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, to.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, to.agentId));
   if (Option.isNone(agent) || agent.value.taskId !== taskId || agent.value.archivedAt !== null) {
     return undefined;
   }

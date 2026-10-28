@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,8 +12,6 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -162,15 +162,9 @@ function task(
   };
 }
 
-const BACKOFF = agent(1, "Jittered backoff", CHARLES, CODING_AGENT_STATUS.RUNNING, 12 * MINUTE);
-const CACHE_KEYS = agent(
-  2,
-  "Tenant cache keys",
-  CHARLES,
-  CODING_AGENT_STATUS.COMPLETED,
-  3 * 60 * MINUTE,
-);
-const LIMITER = agent(3, "Limiter flag", DEAN, CODING_AGENT_STATUS.RUNNING, 30 * MINUTE);
+const BACKOFF = agent(1, "Jittered backoff", CHARLES, AGENT_STATUS.RUNNING, 12 * MINUTE);
+const CACHE_KEYS = agent(2, "Tenant cache keys", CHARLES, AGENT_STATUS.COMPLETED, 3 * 60 * MINUTE);
+const LIMITER = agent(3, "Limiter flag", DEAN, AGENT_STATUS.RUNNING, 30 * MINUTE);
 
 const RETRIES = task(1, "Relay retries on 502", CHARLES, 12 * MINUTE, [BACKOFF, LIMITER]);
 const CACHE = task(2, "Edge cache keys", DEAN, 3 * 60 * MINUTE, [CACHE_KEYS]);
@@ -256,7 +250,7 @@ beforeEach(() => {
     if (inboxHeld) return undefined;
     if (kind === INBOX_SCOPE_KIND.AGENT) return { items: [SWEEP_ITEM] };
     return inboxRefused
-      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+      ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
       : { items: INBOXES.get(id) ?? [] };
   });
   fakeActPort({
@@ -284,7 +278,7 @@ beforeEach(() => {
           effort: CACHE_KEYS.effort,
           title: CACHE_KEYS.title,
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           automationId: null,
           workspaceId: ACME.id,
@@ -529,7 +523,7 @@ test("a waiting item is the Inbox's own row: its task named on a line of its own
 });
 
 test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
-  const broken = agent(9, "Flaky retry", CHARLES, CODING_AGENT_STATUS.FAILED, 5 * MINUTE);
+  const broken = agent(9, "Flaky retry", CHARLES, AGENT_STATUS.FAILED, 5 * MINUTE);
   const failing = task(9, "Retry flake hunt", CHARLES, 5 * MINUTE, [broken]);
   const { page } = mountWith(
     { tasks: [...TASKS, failing], listed: { tasks: [...TASKS, failing], ...HOLDING } },

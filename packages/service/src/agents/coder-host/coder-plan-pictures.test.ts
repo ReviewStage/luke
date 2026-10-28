@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import {
   keepPlanAttachment,
   PLAN_ATTACHMENT_KEEP,
@@ -94,7 +94,7 @@ const openAgentTask = Effect.gen(function* () {
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
   const task = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
-  const started = yield* createCodingAgent(owner, {
+  const started = yield* createAgent(owner, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",

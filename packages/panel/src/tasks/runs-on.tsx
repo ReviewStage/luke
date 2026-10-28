@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_MACHINE,
-  DEVICE_STANDING,
-  type DeviceStanding,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, DEVICE_STANDING, type DeviceStanding } from "@luke/features/agent-wire";
 import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
@@ -88,7 +84,7 @@ const CLOUD_ROW = "cloud";
 const KEPT = { PICK: keptKey("luke.newTaskRunsOn", Schema.String) } as const;
 
 /** The cloud, as a request names it. */
-const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: CODING_AGENT_MACHINE.VERCEL };
+const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };
 
 /** A device's glyph by its platform (`devicePlatformOf`): a server's for Linux, a Mac's otherwise. */
 function DeviceGlyph({
@@ -211,7 +207,7 @@ function offerStateWords(device: MacOffer, book: PresenceBook): string {
 export function newTaskRunsOn(device: MacOffer | undefined): TaskRunsOnRequest {
   return device === undefined
     ? RUNS_ON_CLOUD
-    : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: device.deviceId };
+    : { machine: AGENT_MACHINE.DEVICE, deviceId: device.deviceId };
 }
 
 /** New task's Runs on chip, wearing the experiment's flask at its corner: Cloud or the device picked, dropping the menu. */

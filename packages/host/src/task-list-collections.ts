@@ -18,7 +18,7 @@
  * service in the order asked, since each was drawn over the ones before.
  */
 
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   type TaskListLiveRows,
   taskAgentsOfLiveRows,
@@ -46,7 +46,7 @@ export type AgentRow = TaskListLiveRows["agents"][number];
 /** The list as the rows make it at one instant, every agent on a plan beside it, and the plans a write stands over. */
 export interface LiveTaskList {
   readonly list: TaskListAnswer;
-  readonly taskAgents: readonly CodingAgentSummary[];
+  readonly taskAgents: readonly AgentSummary[];
   readonly taskPullRequests: readonly TaskPullRequests[];
   readonly pendingTasks: readonly string[];
 }

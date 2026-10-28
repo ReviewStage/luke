@@ -14,9 +14,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   hasRepository,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentOfConversation,
-} from "@luke/database/models/coding-agent-store";
+  readAgentHeaderOfConversation,
+  readAgentOfConversation,
+} from "@luke/database/models/agent-store";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
@@ -159,7 +159,7 @@ function foundOrRefused<A>(found: Option.Option<A>) {
 /** The coding agent the admitted conversation is, whole, or the refusal that it is none. */
 function agentOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
-    readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
+    readAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
     foundOrRefused,
   );
 }
@@ -167,7 +167,7 @@ function agentOfConversation(admitted: AdmittedConversation) {
 /** The header of the coding agent the admitted conversation is, for a tool that needs no more of it, or the refusal that it is none. */
 function agentHeaderOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
-    readCodingAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
+    readAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
     foundOrRefused,
   );
 }

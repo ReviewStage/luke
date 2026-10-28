@@ -126,7 +126,7 @@ export const HOSTED_SERVICE_PATH = {
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's
    * Same agent and an `@` list's agents are chosen from; the plan list's
-   * answer (`coding-agent-wire.ts`).
+   * answer (`agent-wire.ts`).
    */
   AGENTS: "/api/agents",
   /**

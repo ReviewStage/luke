@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxMessageParams,
+  AGENT_CALL_FAILURE,
+  type AgentInboxAnswerParams,
+  type AgentInboxMessagedView,
+  type AgentInboxMessageParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -665,7 +665,7 @@ test("the thread names its agent as one button wherever it does, its message's c
 });
 
 test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
-  world.listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
   let { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   let [named] = threadRefs(page);
@@ -1021,8 +1021,8 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
 });
 
 /** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
-function heldAnswers(): CodingAgentInboxAnswerParams[] {
-  const sent: CodingAgentInboxAnswerParams[] = [];
+function heldAnswers(): AgentInboxAnswerParams[] {
+  const sent: AgentInboxAnswerParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
@@ -1192,7 +1192,7 @@ test("a message's file whose read failed says so under the files, and Retry read
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: failing
-          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
           : { contentType: "application/pdf", base64: "JVBERg==" },
       });
     },
@@ -1378,7 +1378,7 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
   const { page } = mount();
   await settle();
   const listReads: AnyAct[] = [];
-  const nods: CodingAgentInboxAnswerParams[] = [];
+  const nods: AgentInboxAnswerParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
@@ -1576,7 +1576,7 @@ test("words selected in an open item's question quote into its box, its reply ca
   await settle();
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  const sent: CodingAgentInboxMessageParams[] = [];
+  const sent: AgentInboxMessageParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
@@ -1660,7 +1660,7 @@ test("a message refused says why under the box, which keeps its words, and leave
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  heldMessages(() => ({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
   const pane = itemPane(page);
 
   typeInComposer(pane, "Page on-call at night too.");
@@ -1681,12 +1681,12 @@ test("a message refused says why under the box, which keeps its words, and leave
 });
 
 test("a message refused as naming no agent says the agent is archived where it is, with Unarchive after it, which brings the agent back and lets the note go, the box keeping its words; one whose agent is gone says it no longer exists", async () => {
-  world.listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  heldMessages(() => ({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   const unarchived: { agentId: string; archived: boolean }[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
@@ -1696,7 +1696,7 @@ test("a message refused as naming no agent says the agent is archived where it i
       if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
       unarchived.push(request.payload);
       // Brought back, the agent is listed so from then on.
-      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
       world.listedAgents = [back];
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
     },
@@ -1742,14 +1742,13 @@ test("a message refused as naming no agent says the agent is archived where it i
 });
 
 test("an Unarchive that lands after another send was refused lets only the archived note go, so the newer refusal still says why", async () => {
-  world.listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  let refusal:
-    | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
-    | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED = CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+  let refusal: typeof AGENT_CALL_FAILURE.NOT_FOUND | typeof AGENT_CALL_FAILURE.UNANSWERED =
+    AGENT_CALL_FAILURE.NOT_FOUND;
   heldMessages(() => ({ failure: refusal }));
   let land: () => void = () => undefined;
   const bridge = appBridge();
@@ -1758,7 +1757,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
-      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
       // Held until the test lands it, after the second send was refused.
       return new Promise((resolve) => {
         land = () => {
@@ -1780,7 +1779,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
     ...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button"),
   ].find((button) => button.textContent === "Unarchive");
   act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
-  refusal = CODING_AGENT_CALL_FAILURE.UNANSWERED;
+  refusal = AGENT_CALL_FAILURE.UNANSWERED;
   send();
   await settle();
   const newer = note();
@@ -2318,11 +2317,11 @@ function noticeItem(extra: Partial<InboxItem> = {}): InboxItem {
  * open again, and held unanswered otherwise; each message held unanswered.
  */
 function noticeWrites(refusing: () => boolean = () => false): {
-  answered: CodingAgentInboxAnswerParams[];
-  messaged: CodingAgentInboxMessageParams[];
+  answered: AgentInboxAnswerParams[];
+  messaged: AgentInboxMessageParams[];
 } {
-  const answered: CodingAgentInboxAnswerParams[] = [];
-  const messaged: CodingAgentInboxMessageParams[] = [];
+  const answered: AgentInboxAnswerParams[] = [];
+  const messaged: AgentInboxMessageParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
@@ -2331,7 +2330,7 @@ function noticeWrites(refusing: () => boolean = () => false): {
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
         answered.push(request.payload);
         if (!refusing()) return new Promise(() => undefined);
-        const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        const value = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
@@ -2343,7 +2342,7 @@ function noticeWrites(refusing: () => boolean = () => false): {
 }
 
 /** What each answer sent says: its item, the revision it names, and the reply. */
-function answersOf(answered: readonly CodingAgentInboxAnswerParams[]) {
+function answersOf(answered: readonly AgentInboxAnswerParams[]) {
   return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
 }
 
@@ -2379,7 +2378,7 @@ test("a notice shown while its plan's follow has failed reads Got it, since open
     [INVITES.id, [EXPIRY]],
   ]);
   // The list's follow of the plan reads its items, and the item's own follow of it could not be read.
-  const unanswered = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+  const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
   let follows = 0;
   world.startRead = (taskId) => {
     if (taskId !== BILLING.id) return undefined;
@@ -2459,8 +2458,8 @@ test("a teammate's notice is left open as it is opened, since acknowledging it s
 test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
-  const sent: CodingAgentInboxMessageParams[] = [];
-  const answers: ((answer: CodingAgentInboxMessagedView) => void)[] = [];
+  const sent: AgentInboxMessageParams[] = [];
+  const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
@@ -2503,7 +2502,7 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
     "a second Enter sends nothing again",
   );
 
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
   await settle();
 
   assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
@@ -2545,7 +2544,7 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
         lands.push((refused) =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED } : answer,
+            value: refused ? { failure: AGENT_CALL_FAILURE.NOT_PERMITTED } : answer,
           }),
         ),
       );
@@ -2616,7 +2615,7 @@ test("words written in a reply's box while the reply is out stay there, whether 
         lands.push((refused) =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED } : landed,
+            value: refused ? { failure: AGENT_CALL_FAILURE.NOT_PERMITTED } : landed,
           }),
         ),
       );
@@ -2664,7 +2663,7 @@ test("words written on a reply's settled box while the reply carrying the ask's 
         refuse.push(() =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED },
+            value: { failure: AGENT_CALL_FAILURE.NOT_PERMITTED },
           }),
         ),
       );

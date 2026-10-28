@@ -15,10 +15,10 @@
  */
 
 import type {
-  CodingAgentAccountItems,
-  CodingAgentInboxChanged,
-  CodingAgentInboxScope,
-} from "@luke/features/coding-agent-view";
+  AgentAccountItems,
+  AgentInboxChanged,
+  AgentInboxScope,
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -33,13 +33,13 @@ import {
 import { askAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 
-type ScopeKind = CodingAgentInboxScope["kind"];
+type ScopeKind = AgentInboxScope["kind"];
 
 /** A followed inbox as the window hears it: its items whole, or why there are none. */
-type Heard = CodingAgentInboxChanged["inbox"];
+type Heard = AgentInboxChanged["inbox"];
 
 /** How an inbox is followed: hearing each change until the stop it answers is called. */
-type Follow = (scope: CodingAgentInboxScope, hear: (inbox: Heard) => void) => () => void;
+type Follow = (scope: AgentInboxScope, hear: (inbox: Heard) => void) => () => void;
 
 /** The inboxes of one kind as last pushed, and which could not be read. */
 interface HeldKind {
@@ -71,7 +71,7 @@ interface AccountFeed {
   /** Whether the feed said it is not answering before it ever answered. */
   readonly failed: () => boolean;
   /** Folds what the feed pushed into what is held. */
-  readonly feed: (pushed: CodingAgentAccountItems) => void;
+  readonly feed: (pushed: AgentAccountItems) => void;
 }
 
 /** One inbox's follow: how many readers hold it, and its stop while it stands. */

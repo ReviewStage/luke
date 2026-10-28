@@ -1,12 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  recordCodingAgentAuthor,
-  updateCodingAgentBranch,
+  type Agent,
+  recordAgentAuthor,
+  updateAgentBranch,
   type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
+import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -49,7 +49,7 @@ import { agentPublished } from "./published.js";
  *
  * Where GitHub refuses the developer's token, or their sign-in no longer
  * yields one, the pull request is opened as the App instead and the agent's
- * row records why (`recordCodingAgentAuthor`), so the Changes tab says it and
+ * row records why (`recordAgentAuthor`), so the Changes tab says it and
  * the agent's later pull requests go out as the App without asking again;
  * the agent is told, so it can tell the developer. A refusal of the pull
  * request itself, such as one already open from the branch, is the agent's
@@ -162,12 +162,12 @@ export function pullRequestRejected(reason: string): PullRequestToolResult {
 
 /** What the agent is told where the App opened its pull request in the developer's place, by why. */
 const FALLBACK_NOTE = {
-  [CODING_AGENT_AUTHOR.APP_UNLINKED]:
+  [AGENT_AUTHOR.APP_UNLINKED]:
     "Opened as Luke's GitHub App: the developer's GitHub sign-in was refused. Tell them; signing in with GitHub again " +
     "lets a later agent open its pull requests as them.",
-  [CODING_AGENT_AUTHOR.APP_NO_PUSH]:
+  [AGENT_AUTHOR.APP_NO_PUSH]:
     "Opened as Luke's GitHub App: the developer's own GitHub account may not open a pull request on this repository. Tell them.",
-} as const satisfies Partial<Record<CodingAgentAuthor, string>>;
+} as const satisfies Partial<Record<AgentAuthor, string>>;
 
 type FallbackReason = keyof typeof FALLBACK_NOTE;
 
@@ -254,13 +254,13 @@ const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function
       const response = yield* send(githubPost(path, token, pullRequest));
       switch (response.status) {
         case GITHUB_HTTP_STATUS.UNAUTHORIZED:
-          return { kind: ATTEMPT.TOKEN_REFUSED, reason: CODING_AGENT_AUTHOR.APP_UNLINKED };
+          return { kind: ATTEMPT.TOKEN_REFUSED, reason: AGENT_AUTHOR.APP_UNLINKED };
         case GITHUB_HTTP_STATUS.FORBIDDEN:
           return rateLimited(response.headers)
             ? { kind: ATTEMPT.REFUSED, reason: PULL_REQUEST_REFUSAL.RATE_LIMITED }
-            : { kind: ATTEMPT.TOKEN_REFUSED, reason: CODING_AGENT_AUTHOR.APP_NO_PUSH };
+            : { kind: ATTEMPT.TOKEN_REFUSED, reason: AGENT_AUTHOR.APP_NO_PUSH };
         case GITHUB_HTTP_STATUS.NOT_FOUND:
-          return { kind: ATTEMPT.TOKEN_REFUSED, reason: CODING_AGENT_AUTHOR.APP_NO_PUSH };
+          return { kind: ATTEMPT.TOKEN_REFUSED, reason: AGENT_AUTHOR.APP_NO_PUSH };
         case GITHUB_HTTP_STATUS.UNPROCESSABLE: {
           const refusal = yield* HttpClientResponse.schemaBodyJson(RefusalSchema)(response);
           return { kind: ATTEMPT.REFUSED, reason: refusalWords(refusal) };
@@ -291,18 +291,18 @@ const attempt = /* @__PURE__ */ Effect.fn("web/openPullRequestAttempt")(function
  */
 const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDeveloper")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: Agent,
   fullName: string,
   pullRequest: PullRequestAsked,
 ): Effect.fn.Return<Attempt | undefined, never, CheckoutServices> {
-  if (agent.author !== CODING_AGENT_AUTHOR.DEVELOPER) return undefined;
+  if (agent.author !== AGENT_AUTHOR.DEVELOPER) return undefined;
   const app = yield* GitHubApp;
   return yield* app.userToken(target.userId).pipe(
     Effect.flatMap((token) => attempt(token, fullName, pullRequest)),
     Effect.catchTag("GitHubSignInRequired", () =>
       Effect.succeed<Attempt>({
         kind: ATTEMPT.TOKEN_REFUSED,
-        reason: CODING_AGENT_AUTHOR.APP_UNLINKED,
+        reason: AGENT_AUTHOR.APP_UNLINKED,
       }),
     ),
     Effect.catch((failure) =>
@@ -349,7 +349,7 @@ function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullReques
  */
 const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   input: UnparsedWireValue,
 ): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
   const read = readInput(input);
@@ -376,7 +376,7 @@ const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening"
   if (asDeveloper === undefined || asApp.kind === ATTEMPT.REFUSED) {
     return answerOf(asApp, OPENED_AS.APP);
   }
-  yield* recordCodingAgentAuthor(target.userId, agent.id, asDeveloper.reason).pipe(
+  yield* recordAgentAuthor(target.userId, agent.id, asDeveloper.reason).pipe(
     Effect.catch((failure) =>
       Effect.logWarning(
         `Why conversation ${target.conversationId}'s pull request was opened as the App was not recorded: ${failure._tag}`,
@@ -393,9 +393,9 @@ const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening"
  * finds the agent at once. Either failing is logged by its kind and the
  * call still answers as opened.
  */
-const recordOpened = (target: ConversationTarget, agent: CodingAgent, head: string) =>
+const recordOpened = (target: ConversationTarget, agent: Agent, head: string) =>
   Effect.gen(function* () {
-    yield* updateCodingAgentBranch(target.userId, agent.id, head);
+    yield* updateAgentBranch(target.userId, agent.id, head);
     yield* agentPublished(target.userId, { ...agent, branch: head });
   }).pipe(
     Effect.catch((failure) =>
@@ -412,7 +412,7 @@ const recordOpened = (target: ConversationTarget, agent: CodingAgent, head: stri
  */
 export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   input: UnparsedWireValue,
 ): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
   const result = yield* attemptOpening(target, agent, input);

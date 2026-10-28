@@ -1,16 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Duration, Effect } from "effect";
@@ -55,7 +52,7 @@ const AGENT_THOUGHT = "Weighing the release calendar.";
 const DEVELOPER_WORDS = "Which one is safer?";
 
 /** The agent's turn: a thought, then its words. */
-const TURN: CodingAgentMessage = {
+const TURN: AgentTranscriptMessage = {
   id: "turn",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
@@ -140,7 +137,7 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
 }
 
 /** The tab mounted, every message its box sends written down and answered by `answer`. */
-async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new Promise(ignore)) {
+async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promise(ignore)) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
@@ -285,9 +282,7 @@ test("a selection outside the agent's words, in its thought or the developer's w
 });
 
 test("a message that did not go comes back with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {
-  const tab = await mounted(() =>
-    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-  );
+  const tab = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   tab.select(AGENT_WORDS, "Option A", "today.");
   await tab.pressReply();
   tab.select(AGENT_WORDS, "Option B", "review.");
@@ -372,16 +367,16 @@ test("with a mouse, a selection resting is offered nothing until the pointer let
 });
 
 /** An agent of the developer's, handed a prompt and answered with one turn. */
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Release plan",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
 };
 
 test("on the agent's tab, Reply quotes its words into the tab's own box, and stands while a message is out, since the box takes words", async () => {

@@ -1,4 +1,4 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "../act.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";

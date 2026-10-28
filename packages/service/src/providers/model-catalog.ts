@@ -1,4 +1,4 @@
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import {
   type CatalogModel,
   type ContextWindows,

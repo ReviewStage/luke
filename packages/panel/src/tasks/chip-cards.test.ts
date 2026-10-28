@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,8 +12,6 @@ import {
 } from "@luke/features/automation-wire";
 import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -66,7 +66,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 const AT = 1_792_000_000_000;
 
 /** What a page's card says where its page cannot be read, as the reader sees it. */
-const PAGE_UNREAD = "Luke cannot read this page.";
+const PAGE_UNREAD = "Luke can't read this page.";
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
@@ -237,7 +237,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Sweep the flaky tests",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: AT,
           automationId: null,
           workspaceId: ACME.id,
@@ -341,7 +341,7 @@ let openChannelsRefused = false;
 
 /** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
 const inboxes = followedInboxes((scope) => {
-  if (inboxRefused) return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  if (inboxRefused) return { failure: AGENT_CALL_FAILURE.UNANSWERED };
   if (scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === TASK_ID) {
     return { items: [WAITING, ANSWERED] };
   }
@@ -382,9 +382,7 @@ const taskCards = {
       : createElement(TaskCard, {
           task: TASK,
           models: [],
-          pictures: false,
           now,
-          onOpenGitHub: () => undefined,
           onShowAgent: () => undefined,
           focus,
         }),
@@ -543,7 +541,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
 
   assert.equal(taskCard.card, "data-task-card");
   assert.equal(taskCard.name, TASK.name);
-  assert.deepEqual(taskCard.details, ["acme/relay"]);
+  assert.match(taskCard.sub ?? "", /^acme\/relay · /u);
   assert.equal(taskCard.focus, undefined);
   assert.equal(sectionCard.card, "data-task-card");
   assert.equal(sectionCard.name, TASK.name);
@@ -761,7 +759,7 @@ test("an Inbox item's chip whose inbox could not be read keeps the card main's b
 
   assert.equal(brief.card, "data-inbox-item-card");
   assert.equal(brief.name, "Keep expired links?");
-  assert.deepEqual(brief.notes, ["Waiting for an answer"]);
+  assert.deepEqual(brief.notes, ["Needs you"]);
   assert.equal(own.card, "data-mention-card");
 });
 
@@ -772,7 +770,7 @@ test("a member's chip hangs their card", async () => {
 
   assert.equal(member.card, "data-actor-card");
   assert.equal(member.name, "Sam Okafor");
-  assert.equal(member.sub, "sam@example.com");
+  assert.equal(member.sub, "sam@example.com · Owner");
 });
 
 test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
@@ -786,6 +784,8 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
   assert.equal(before, 0, "nothing is read as the chip is drawn");
   assert.equal(card.card, "data-actor-card");
   assert.equal(card.name, "Nightly sweep");
+  assert.match(card.sub ?? "", / · Acme$/u, "whose it is joins what fires it");
+  assert.equal(card.corner, undefined);
   assert.deepEqual(card.detailWords, ["Created by Sam Okafor · Oct 25"]);
   assert.equal(reads(), 1);
 });
@@ -800,7 +800,7 @@ test("a member's and an automation's chips under another workspace's link are re
   const member = await cardOf(person);
   const audit = await cardOf(automation);
 
-  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
   assert.equal(audit.name, "Weekly audit");
   assert.deepEqual(audit.detailWords, ["Created by Priya Nair · Oct 25"], "its maker is Beta's");
 });
@@ -810,7 +810,7 @@ test("a member's chip under a link naming its workspace by id, as one with no sl
 
   const member = await cardOf(chipsOf(container)[0]);
 
-  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
 });
 
 /** The card a channel's chip hangs, its workspace's channels read as it is first hung, counted back from `CHANNELS_NOW`. */

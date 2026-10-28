@@ -5,7 +5,7 @@ import { eq, getTableColumns } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent } from "../../models/coding-agent-store.js";
+import { createAgent } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import {
   getTestDB,
@@ -45,7 +45,7 @@ const openAgent = Effect.gen(function* () {
   const organizationId = yield* openWorkspace(userId);
   const task = yield* createTask(userId, { organizationId, name: "Teammate invitations" });
   const started = Option.getOrThrow(
-    yield* createCodingAgent(userId, {
+    yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",

@@ -1,12 +1,12 @@
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
-  type CodingAgentChangedFile,
   DIFF_SIDE,
   type DiffSide,
   PATCH_OMITTED,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   DIFF_ROW,
   type DiffHunk,
@@ -316,10 +316,10 @@ interface DrawnLines {
  * it, because the view asks again on every draw and a patch is parsed to
  * answer.
  */
-const DRAWN_LINES = new WeakMap<CodingAgentChangedFile, DrawnLines>();
+const DRAWN_LINES = new WeakMap<AgentChangedFile, DrawnLines>();
 
 /** The lines a file's diff draws a row for, on each of GitHub's sides; none where it draws no hunks. */
-function drawnLines(file: CodingAgentChangedFile): DrawnLines {
+function drawnLines(file: AgentChangedFile): DrawnLines {
   const kept = DRAWN_LINES.get(file);
   if (kept !== undefined) return kept;
   const lines = linesDrawnBy(file);
@@ -344,7 +344,7 @@ function wholeLines(whole: DiffFileTexts): DrawnLines {
 }
 
 /** The lines a file's diff draws a row for, read off its patch. */
-function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
+function linesDrawnBy(file: AgentChangedFile): DrawnLines {
   const patch = fileNotice(file) === undefined ? file.patch : null;
   const rows = patch === null ? [] : (patchHunks(patch) ?? []).flatMap((hunk) => hunk.rows);
   return {
@@ -378,7 +378,7 @@ function hunkEnds(patch: string): readonly { readonly old: number; readonly now:
  * since every line between hunks is the same on both sides. None where the
  * file draws no patch.
  */
-function gapLineOf(file: CodingAgentChangedFile, side: DiffSide, line: number): number | undefined {
+function gapLineOf(file: AgentChangedFile, side: DiffSide, line: number): number | undefined {
   if (side === DIFF_SIDE.RIGHT) return line;
   if (file.patch === null) return undefined;
   const before = hunkEnds(file.patch).findLast((end) => end.old <= line);
@@ -400,7 +400,7 @@ function openable(thread: ReviewThread): thread is ReviewThread & { readonly lin
  */
 export function gapLines(
   threads: readonly ReviewThread[],
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
 ): readonly number[] {
   const own = threads.filter(
     (thread): thread is ReviewThread & { readonly line: number } =>
@@ -433,7 +433,7 @@ export function gapLines(
  */
 export function threadsOn(
   threads: readonly ReviewThread[],
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   /** The file's texts where it is drawn whole; none where it draws its patch. */
   whole?: DiffFileTexts | undefined,
   /** The lines of the new side between its hunks the file draws now, its gaps opened over them. */
@@ -467,7 +467,7 @@ export function threadsOn(
  * its hunks: why it carries no patch, that a file only moved kept its
  * contents, or that a patch holds no hunk.
  */
-export function fileNotice(file: CodingAgentChangedFile): string | undefined {
+export function fileNotice(file: AgentChangedFile): string | undefined {
   if (file.omitted !== null) return CHANGES_WORDS.OMITTED[file.omitted];
   if (file.patch === null) return CHANGES_WORDS.OMITTED[PATCH_OMITTED.TOO_LARGE];
   if (file.patch.trim() !== "") return undefined;
@@ -483,7 +483,7 @@ export function fileNotice(file: CodingAgentChangedFile): string | undefined {
  * tree counts them, and whether the member marked it viewed.
  */
 export function changeMarks(
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   beside: {
     readonly threads?: readonly ReviewThread[] | undefined;
     readonly viewed?: ((path: string) => boolean) | undefined;
@@ -533,7 +533,7 @@ export function changedFolders(paths: readonly string[]): ReadFolder {
  * paths on each side, `/dev/null` for a side it does not stand on; none
  * where the file carries no hunks to copy.
  */
-function filePatch(file: CodingAgentChangedFile): string | undefined {
+function filePatch(file: AgentChangedFile): string | undefined {
   if (file.patch === null || fileNotice(file) !== undefined) return undefined;
   const from = file.previousPath ?? file.path;
   const before = file.status === CHANGED_FILE_STATUS.ADDED ? NO_SIDE : `a/${from}`;
@@ -548,7 +548,7 @@ function filePatch(file: CodingAgentChangedFile): string | undefined {
  * given; a file with none (a binary, one GitHub omitted, or one that only
  * moved) is left out. None where no file has one.
  */
-export function pullRequestPatch(files: readonly CodingAgentChangedFile[]): string | undefined {
+export function pullRequestPatch(files: readonly AgentChangedFile[]): string | undefined {
   const patches = files.flatMap((file) => filePatch(file) ?? []);
   return patches.length === 0 ? undefined : patches.join("");
 }
@@ -562,7 +562,7 @@ export function pullRequestPatchName(url: string): string {
 }
 
 /** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */
-export function headerPatch(file: CodingAgentChangedFile): string {
+export function headerPatch(file: AgentChangedFile): string {
   const from = file.previousPath ?? file.path;
   return [`diff --git a/${from} b/${file.path}`, `--- a/${from}`, `+++ b/${file.path}`, ""].join(
     "\n",
@@ -574,7 +574,7 @@ export function headerPatch(file: CodingAgentChangedFile): string {
  * answered it, so a draw of the list hands the bundle the very string it
  * was handed before, which it compares at once.
  */
-const LIST_PATCHES = new WeakMap<CodingAgentChangedFile, string>();
+const LIST_PATCHES = new WeakMap<AgentChangedFile, string>();
 
 /**
  * What a file's place in the list draws: its patch as a whole unified diff,
@@ -582,7 +582,7 @@ const LIST_PATCHES = new WeakMap<CodingAgentChangedFile, string>();
  * the file still stands in the list under its header, with why it has none
  * said there (`fileNotice`).
  */
-export function listPatch(file: CodingAgentChangedFile): string {
+export function listPatch(file: AgentChangedFile): string {
   const kept = LIST_PATCHES.get(file);
   if (kept !== undefined) return kept;
   const patch = filePatch(file) ?? headerPatch(file);
@@ -593,9 +593,9 @@ export function listPatch(file: CodingAgentChangedFile): string {
 /** The files whose path holds `query`, whatever its case, as the tree's search narrows its rows; every file for a query of nothing but spaces. */
 
 export function filterFiles(
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   query: string,
-): readonly CodingAgentChangedFile[] {
+): readonly AgentChangedFile[] {
   const asked = query.trim().toLowerCase();
   if (asked === "") return files;
   return files.filter((file) => file.path.toLowerCase().includes(asked));
@@ -623,14 +623,12 @@ function compareTreePaths(a: string, b: string): number {
 }
 
 /** The files in the order the tree lists them, as Pierre's tree sorts its rows. */
-export function treeOrder(
-  files: readonly CodingAgentChangedFile[],
-): readonly CodingAgentChangedFile[] {
+export function treeOrder(files: readonly AgentChangedFile[]): readonly AgentChangedFile[] {
   return files.toSorted((a, b) => compareTreePaths(a.path, b.path));
 }
 
 /** Whether a file starts collapsed: deleted, changing more than `LARGE_FILE_LINES` lines, or a lockfile. Note that a file with no hunks never does, because what stands under its header is why. */
-export function startsCollapsed(file: CodingAgentChangedFile): boolean {
+export function startsCollapsed(file: AgentChangedFile): boolean {
   if (fileNotice(file) !== undefined) return false;
   return (
     file.status === CHANGED_FILE_STATUS.DELETED ||
@@ -679,7 +677,7 @@ function rowAt(
  * range whose ends stand in two hunks, which GitHub refuses.
  */
 export function commentLines(
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   picked: DiffSelection,
 ): CommentLines | undefined {
   if (fileNotice(file) !== undefined || file.patch === null) return undefined;
@@ -770,7 +768,7 @@ function rawHunks(patch: string): readonly RawHunk[] | undefined {
 /**
  * The name git gives a file's contents, its blob: the SHA-1 of its header
  * and its bytes, which GitHub names each changed file's contents after by
- * (`CodingAgentChangedFile.blobSha`).
+ * (`AgentChangedFile.blobSha`).
  */
 export async function blobShaOf(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
@@ -783,7 +781,7 @@ export async function blobShaOf(text: string): Promise<string> {
 }
 
 /** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn, and that is no secret file. */
-export function expandable(file: CodingAgentChangedFile): boolean {
+export function expandable(file: AgentChangedFile): boolean {
   const changedInPlace =
     file.status === CHANGED_FILE_STATUS.MODIFIED || file.status === CHANGED_FILE_STATUS.RENAMED;
   // Note that a secret file is never read whole, so its gaps are never offered.
@@ -791,12 +789,12 @@ export function expandable(file: CodingAgentChangedFile): boolean {
 }
 
 /** Whether a file only moved, its contents as they were: a rename whose patch holds no hunk. */
-function movedOnly(file: CodingAgentChangedFile): boolean {
+function movedOnly(file: AgentChangedFile): boolean {
   return file.status === CHANGED_FILE_STATUS.RENAMED && file.patch?.trim() === "";
 }
 
 /** Whether a file can be drawn whole: one whose gaps open (`expandable`), or one that only moved, all of whose lines stand unchanged; never a secret one. */
-export function wholeable(file: CodingAgentChangedFile): boolean {
+export function wholeable(file: AgentChangedFile): boolean {
   return expandable(file) || (movedOnly(file) && !isSecretFile(file.path));
 }
 
@@ -810,7 +808,7 @@ export function wholeable(file: CodingAgentChangedFile): boolean {
  * hunks would then be drawn from another commit; and none for a file
  * whose lines between hunks are not drawn (`expandable`).
  */
-export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
+export function textsOf(file: AgentChangedFile, after: string): DiffFileTexts | undefined {
   // A file that only moved stood before as it stands now.
   if (movedOnly(file) && wholeable(file)) return { before: after, after };
   const patch = file.patch;
@@ -861,10 +859,7 @@ export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTe
  * the old side, whose lines a suggestion cannot change, or where the patch
  * holds no row for one of the lines.
  */
-export function suggestedLines(
-  file: CodingAgentChangedFile,
-  lines: CommentLines,
-): string | undefined {
+export function suggestedLines(file: AgentChangedFile, lines: CommentLines): string | undefined {
   const first = lines.startLine ?? lines.line;
   const sides = [lines.side, lines.startSide ?? lines.side];
   if (file.patch === null || sides.some((side) => side !== DIFF_SIDE.RIGHT)) return undefined;
@@ -885,7 +880,7 @@ export function suggestedLines(
  * no row stands for.
  */
 export function rowPlace(
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   side: DiffSelection["side"],
   line: number,
 ): number | undefined {

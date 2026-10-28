@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { type ActSender, accountAskProcedures } from "@luke/host/act-port";
@@ -34,7 +34,7 @@ afterEach(() => {
 function openActPort(actor: ActSender): void {
   const noKeys = () => Effect.succeed({ keys: [] });
   const noToken = () => Effect.succeed({ token: null });
-  const unanswered = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  const unanswered = () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   const port = testActPort(
     accountAskProcedures({
       host: {

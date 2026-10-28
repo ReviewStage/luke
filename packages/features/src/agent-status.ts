@@ -1,8 +1,8 @@
 import { TURN_STATUS } from "@luke/wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
 
 /**
- * coding-agent-status.ts -- where a coding agent stands, read from its newest turn at an instant: the one rule the service and the desktop both read an agent's status by.
+ * agent-status.ts -- where a coding agent stands, read from its newest turn at an instant: the one rule the service and the desktop both read an agent's status by.
  *
  * An agent's status is its conversation's newest turn row and the one
  * thing beside it, a message of the developer's still awaiting its turn:
@@ -53,12 +53,12 @@ export const LINE_GRACE_MILLIS = 5 * 60 * 1000;
 
 /** The status a turn row's own status word reads as. */
 const STATUS_OF_TURN = {
-  [TURN_STATUS.QUEUED]: CODING_AGENT_STATUS.RUNNING,
-  [TURN_STATUS.RUNNING]: CODING_AGENT_STATUS.RUNNING,
-  [TURN_STATUS.SETTLED]: CODING_AGENT_STATUS.COMPLETED,
-  [TURN_STATUS.CANCELLED]: CODING_AGENT_STATUS.CANCELLED,
-  [TURN_STATUS.FAILED]: CODING_AGENT_STATUS.FAILED,
-} as const satisfies Record<string, CodingAgentStatus>;
+  [TURN_STATUS.QUEUED]: AGENT_STATUS.RUNNING,
+  [TURN_STATUS.RUNNING]: AGENT_STATUS.RUNNING,
+  [TURN_STATUS.SETTLED]: AGENT_STATUS.COMPLETED,
+  [TURN_STATUS.CANCELLED]: AGENT_STATUS.CANCELLED,
+  [TURN_STATUS.FAILED]: AGENT_STATUS.FAILED,
+} as const satisfies Record<string, AgentStatus>;
 
 const STATUS_WORDS: ReadonlySet<string> = new Set(Object.keys(STATUS_OF_TURN));
 
@@ -108,9 +108,7 @@ interface LineReading {
 
 /** Whether a turn row still runs, or is queued to: what takes a line at its next step, however long the step it is on runs. */
 function turnRuns(turn: StatusTurn): boolean {
-  return (
-    isTurnStatusWord(turn.status) && STATUS_OF_TURN[turn.status] === CODING_AGENT_STATUS.RUNNING
-  );
+  return isTurnStatusWord(turn.status) && STATUS_OF_TURN[turn.status] === AGENT_STATUS.RUNNING;
 }
 
 /**
@@ -169,25 +167,20 @@ export function turnStoppable(turn: StatusTurn | undefined): boolean {
  * with no turn yet has done all it was asked, which is nothing, so it reads
  * as completed, however long ago it started: no first turn is on its way.
  */
-export function codingAgentStatusAt(
-  turn: StatusTurn | undefined,
-  standing: StatusStanding,
-): CodingAgentStatus {
+export function agentStatusAt(turn: StatusTurn | undefined, standing: StatusStanding): AgentStatus {
   const line = lineOf(turn, standing).standing;
-  if (line === LINE_STANDING.AWAITS) return CODING_AGENT_STATUS.RUNNING;
-  if (line === LINE_STANDING.UNANSWERED) return CODING_AGENT_STATUS.FAILED;
-  if (turn === undefined && standing.blank === true) return CODING_AGENT_STATUS.COMPLETED;
+  if (line === LINE_STANDING.AWAITS) return AGENT_STATUS.RUNNING;
+  if (line === LINE_STANDING.UNANSWERED) return AGENT_STATUS.FAILED;
+  if (turn === undefined && standing.blank === true) return AGENT_STATUS.COMPLETED;
   if (turn === undefined) {
     return standing.now - standing.createdAt <= STARTING_GRACE_MILLIS
-      ? CODING_AGENT_STATUS.STARTING
-      : CODING_AGENT_STATUS.FAILED;
+      ? AGENT_STATUS.STARTING
+      : AGENT_STATUS.FAILED;
   }
   // A row outside the vocabulary is a write this build does not know, read as the one status that claims nothing.
-  if (!isTurnStatusWord(turn.status)) return CODING_AGENT_STATUS.FAILED;
+  if (!isTurnStatusWord(turn.status)) return AGENT_STATUS.FAILED;
   const status = STATUS_OF_TURN[turn.status];
-  return status === CODING_AGENT_STATUS.RUNNING && turn.cancelRequested
-    ? CODING_AGENT_STATUS.CANCELLED
-    : status;
+  return status === AGENT_STATUS.RUNNING && turn.cancelRequested ? AGENT_STATUS.CANCELLED : status;
 }
 
 /**

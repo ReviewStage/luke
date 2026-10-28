@@ -6,8 +6,8 @@ import {
 import { queryBuilder } from "@luke/database/core/query";
 import { agentGivenNameSql } from "@luke/database/models/agent-name";
 import { taskSeenBy } from "@luke/database/models/workspace-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { member, user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
 import { PLAN_HISTORY_BOUNDS } from "@luke/features/task-wire";
@@ -57,11 +57,11 @@ function revisionsStatement(userId: string, taskId: string) {
             // No revision is written on a call any more; a released desktop still decodes the key.
             liveSessionId: sql<string | null>`null::text`,
             agentId: planRevision.agentId,
-            agentModel: codingAgent.model,
+            agentModel: agentTable.model,
             // The name the agent goes by: Luke for an operator, else its title.
             agentTitle: sql<
               string | null
-            >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+            >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
             // No call stands to name, since Luke takes no calls; a released desktop still decodes the key.
             callId: sql<string | null>`null::text`,
             changes: planRevision.changes,
@@ -77,7 +77,7 @@ function revisionsStatement(userId: string, taskId: string) {
         member,
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
       )
-      .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+      .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
       .leftJoin(user, eq(user.id, planRevision.userId))
       .leftJoin(
         restored,

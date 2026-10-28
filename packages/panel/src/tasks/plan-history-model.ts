@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { type WordChange, wordChanges } from "@luke/features/plan-diff";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
@@ -112,7 +112,7 @@ function personOf(by: PlanEditor | undefined, reader: HistoryReader): Actor {
 export function revisionAuthorOf(
   line: Pick<PlanRevisionLine, "lastEdit" | "agentId">,
   reader: HistoryReader,
-  agents: readonly Pick<CodingAgentSummary, "id" | "model">[],
+  agents: readonly Pick<AgentSummary, "id" | "model">[],
 ): Actor {
   const { lastEdit } = line;
   switch (lastEdit.actor) {

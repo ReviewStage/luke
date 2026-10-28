@@ -1,15 +1,15 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleEndedSessionTurn } from "@luke/database/models/abandoned-turns";
 import {
-  type CodingAgent,
-  type CodingAgentLatestTurn,
+  type Agent,
+  type AgentLatestTurn,
   dispatchMentioningServers,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
-  readCodingAgent,
-  readCodingAgentRouting,
+  readAgent,
+  readAgentRouting,
   taskNamesOf,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import {
   claimRuntimeSession,
@@ -25,7 +25,7 @@ import {
   type StoreWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentAttachment } from "@luke/features/agent-wire";
 import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import { causeKind } from "@luke/runtime/effect";
@@ -135,7 +135,7 @@ import { codingAgentStatusOf } from "./status.js";
 export interface SteerLine {
   readonly text: string;
   readonly clientKey: string;
-  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly attachments?: readonly AgentAttachment[] | undefined;
   readonly sender: LineSender;
   readonly metadata?: AwaitingLineMetadata | undefined;
   /** The words the servers handed to the next turn are read from where they are not all of `text`: an automation's own prompt, never a webhook body or a GitHub event's words beside it; `text` otherwise. */
@@ -143,7 +143,7 @@ export interface SteerLine {
 }
 
 /** Another coding agent as the row of a line it sends keeps it: by its name, id, and model. */
-export function agentLineSender(agent: CodingAgent): LineSender {
+export function agentLineSender(agent: Agent): LineSender {
   return {
     kind: MESSAGE_SENDER.AGENT,
     agentId: agent.id,
@@ -186,13 +186,12 @@ const REFUSAL_OF_UNWRITTEN_LINE = {
  * second opened beside it would only lose the record to it, so the developer
  * tries again.
  */
-const opensUnclaimed = (agent: CodingAgent) =>
+const opensUnclaimed = (agent: Agent) =>
   Effect.map(
     Clock.currentTimeMillis,
     (now) =>
       (agent.planSnapshot === null && agent.prompt === null) ||
-      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) ===
-        CODING_AGENT_STATUS.FAILED,
+      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
   );
 
 /** An eve the client never reached reads as an outage, said in the log by its kind alone. */
@@ -212,7 +211,7 @@ const FORMER_MEMBER = "A former member";
  * under the agent's workspace; nothing for the starter's own words or any
  * other sender's, whose line already says who sent it.
  */
-const teammateLabel = (agent: CodingAgent, sender: LineSender) => {
+const teammateLabel = (agent: Agent, sender: LineSender) => {
   if (sender.kind !== MESSAGE_SENDER.MEMBER || sender.userId === agent.userId) {
     return Effect.succeed(undefined);
   }
@@ -246,10 +245,10 @@ const claimedFor = (target: ConversationTarget, sessionId: string) =>
   );
 
 /** The turn an ended session settles: the newest, where it still stood queued or running before eve was asked; none otherwise. */
-const runningTurnOf = (agent: CodingAgent) =>
+const runningTurnOf = (agent: Agent) =>
   Effect.map(
     hostedStoreOrUnavailable(latestTurnsOfReached([agent.conversationId])),
-    (turns): CodingAgentLatestTurn | undefined => {
+    (turns): AgentLatestTurn | undefined => {
       const turn = turns.get(agent.conversationId);
       return turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status) ? turn : undefined;
     },
@@ -261,11 +260,7 @@ const runningTurnOf = (agent: CodingAgent) =>
  * and the refusal stands all the same, since the sweep's bound still ends
  * the turn in time.
  */
-const settledEnded = (
-  writer: Effect.Effect<StoreWriter>,
-  agent: CodingAgent,
-  turn: CodingAgentLatestTurn,
-) =>
+const settledEnded = (writer: Effect.Effect<StoreWriter>, agent: Agent, turn: AgentLatestTurn) =>
   Effect.gen(function* () {
     const write = yield* writer;
     const now = yield* Clock.currentTimeMillis;
@@ -287,13 +282,10 @@ const settledEnded = (
  * its task out of the sender's reach, or the agent archived or gone;
  * nothing while it still takes one.
  */
-const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  agent: CodingAgent,
-) {
+const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, agent: Agent) {
   const tasks = agent.taskId === null ? undefined : yield* taskNamesOf(userId, [agent.taskId]);
   if (agent.taskId !== null && tasks?.has(agent.taskId) !== true) return HOSTED_REFUSAL.NOT_FOUND;
-  const now = yield* readCodingAgent(userId, agent.id);
+  const now = yield* readAgent(userId, agent.id);
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
 
@@ -308,7 +300,7 @@ export const steerCodingAgent = (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   line: SteerLine,
 ) =>
   Effect.map(
@@ -321,7 +313,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   line: SteerLine,
 ): Effect.fn.Return<
   SteerWritten,
@@ -337,7 +329,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   // refused for the same one it always was; a repeat reads them all for nothing, which is rare.
   const read = yield* Effect.all(
     {
-      routing: Effect.result(hostedStoreOrUnavailable(readCodingAgentRouting(userId, agent.id))),
+      routing: Effect.result(hostedStoreOrUnavailable(readAgentRouting(userId, agent.id))),
       repeated: Effect.result(
         hostedStoreOrUnavailable(
           sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),

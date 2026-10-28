@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,7 +11,6 @@ import {
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -61,7 +61,7 @@ const TRIAGE: AutomationSummary = {
     agent: {
       id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
       title: "Triage",
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
     },
     firedAt: 2,
     settledAt: 3,
@@ -70,14 +70,14 @@ const TRIAGE: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Triage",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   startedBy: CHARLES,
   automationId: TRIAGE.id,
@@ -184,9 +184,9 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   );
   assert.equal(
     automation.querySelector(".luke-hover-card-sub")?.textContent,
-    "Weekdays at 9:00 AM · UTC",
+    "Weekdays at 9:00 AM · UTC · Acme",
   );
-  assert.equal(automation.querySelector(".luke-hover-card-corner")?.textContent, "Acme");
+  assert.equal(automation.querySelector(".luke-hover-card-corner"), null);
   const notes = [...automation.querySelectorAll(".luke-hover-card-note")].map(
     (note) => note.textContent,
   );
@@ -229,6 +229,6 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
     automation?.querySelector(".luke-hover-card-sub")?.textContent,
-    "When a pull request by people is opened in acme/relay or acme/ledger",
+    "When a pull request by people is opened in acme/relay or acme/ledger · Acme",
   );
 });

@@ -10,8 +10,8 @@ import {
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
-import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { AGENT_CALL_FAILURE } from "./agent-view.js";
+import { AGENT_STATUS } from "./agent-wire.js";
 import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
@@ -134,7 +134,7 @@ it.effect(
         effort: "high",
         title: null,
         createdAt: 1_800_000_300_000,
-        status: CODING_AGENT_STATUS.STARTING,
+        status: AGENT_STATUS.STARTING,
         turnId: null,
       };
       const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
@@ -169,14 +169,14 @@ it.effect(
       assert.deepEqual(started, { ok: true, answer: { task, agent: { agent } } });
       assert.deepEqual(refused, {
         ok: true,
-        answer: { task, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+        answer: { task, agent: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE } },
       });
       // A plan's reached limit keeps the reset the service named, as a Start on its own does.
       assert.deepEqual(limited, {
         ok: true,
         answer: {
           task,
-          agent: { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+          agent: { failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
         },
       });
       assert.deepEqual(planned, { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED });

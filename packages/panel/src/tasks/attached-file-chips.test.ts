@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment } from "@luke/features/agent-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -43,12 +43,12 @@ interface Played {
 /** How wide a chip is drawn, side by side in its row. */
 const CHIP = 120;
 
-const SPEC: CodingAgentAttachment = {
+const SPEC: AgentAttachment = {
   name: "spec.pdf",
   mediaType: "application/pdf",
   data: "JVBERi0=",
 };
-const NOTES: CodingAgentAttachment = { name: "notes.txt", mediaType: "text/plain", data: "aGk=" };
+const NOTES: AgentAttachment = { name: "notes.txt", mediaType: "text/plain", data: "aGk=" };
 
 let root: Root | undefined;
 let played: Played[] = [];
@@ -97,8 +97,8 @@ function Box({
   start,
   held,
 }: {
-  start: readonly CodingAgentAttachment[];
-  held: { now: readonly CodingAgentAttachment[] };
+  start: readonly AgentAttachment[];
+  held: { now: readonly AgentAttachment[] };
 }): React.JSX.Element {
   const [files, setFiles] = useState(start);
   held.now = files;
@@ -113,7 +113,7 @@ function Box({
   );
 }
 
-function draw(start: readonly CodingAgentAttachment[]) {
+function draw(start: readonly AgentAttachment[]) {
   const held = { now: start };
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

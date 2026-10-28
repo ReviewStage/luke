@@ -4,7 +4,7 @@ import {
   type PagePlace,
   type PageShower,
 } from "@luke/features/page-wire";
-import { HoverCard, HoverCardHead, PageThumb, Time, useMinute } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardSkeleton, PageThumb, Time, useMinute } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { PAGE_SANDBOX } from "./page-pane.js";
@@ -96,14 +96,28 @@ export function PageCard({ place, page }: CardPage): React.JSX.Element {
 /** What a page's card names it by before its page is read, or where it is gone: a page. */
 const UNNAMED_PAGE = "Page";
 
+/** The name a page's card calls it by before its page is read: the name it was shown by, or a page. */
+function shownName(name: string | undefined): string {
+  return name === undefined || name === "" ? UNNAMED_PAGE : name;
+}
+
 /** A page's card where its page is not read: its tab's glyph and the name it was shown by. */
 export function PageNameCard({ name }: { name: string | undefined }): React.JSX.Element {
   return (
     <HoverCard data-page-card="">
-      <HoverCardHead
-        glyph={<AppWindowIcon aria-hidden="true" />}
-        name={name === undefined || name === "" ? UNNAMED_PAGE : name}
-      />
+      <HoverCardHead glyph={<AppWindowIcon aria-hidden="true" />} name={shownName(name)} />
     </HoverCard>
+  );
+}
+
+/** A page's card while its page is read: its tab's glyph and the name it was shown by, holding the line its version and who showed it stand on. */
+export function PageNameSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
+  return (
+    <HoverCardSkeleton
+      glyph={<AppWindowIcon aria-hidden="true" />}
+      name={shownName(name)}
+      sub
+      data-page-card=""
+    />
   );
 }

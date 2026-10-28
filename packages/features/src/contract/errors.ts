@@ -15,7 +15,7 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
-import { localAgentRefusalSchema, refusedDeviceSchema } from "../coding-agent-wire.js";
+import { localAgentRefusalSchema, refusedDeviceSchema } from "../agent-wire.js";
 import { hostUpgradeNeededDataSchema } from "../host-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";

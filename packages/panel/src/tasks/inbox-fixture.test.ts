@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { type CodingAgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { type AgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -35,7 +35,7 @@ import { windowInboxFollower } from "./use-followed-inboxes.js";
  * main's document as it is.
  */
 
-type Heard = CodingAgentInboxChanged["inbox"];
+type Heard = AgentInboxChanged["inbox"];
 
 afterEach(() => {
   // The window's one registry holds the document it read, so the next test's window reads its own.

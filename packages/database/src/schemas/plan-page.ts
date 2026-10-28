@@ -2,7 +2,7 @@ import type { PageShower } from "@luke/features/page-wire";
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
+import { agentTable } from "./agent.js";
 import { task } from "./task.js";
 
 /**
@@ -43,7 +43,7 @@ export const planPageVersion = pgTable(
     /** The task the page stands on; null for a page of a coding agent on no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** The coding agent that showed the version, on a task or not; null for one Luke showed, or one shown before it was kept. */
-    agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
+    agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "set null" }),
     /** The page the version is of, the same on each of its versions. */
     pageId: uuid("page_id").notNull(),
     /** The version's number within its page, from one. */

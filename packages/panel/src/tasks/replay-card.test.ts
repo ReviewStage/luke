@@ -10,11 +10,11 @@ import {
   toolStep,
 } from "@luke/features/agent-replay";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -48,14 +48,14 @@ const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const SENT_AT = Date.UTC(2026, 9, 14, 15, 42);
 const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
-function summary(overrides: Partial<CodingAgentSummary> & { id: string }): CodingAgentSummary {
+function summary(overrides: Partial<AgentSummary> & { id: string }): AgentSummary {
   return {
     planId: TASK_ID,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: null,
     createdAt: 1_000,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     startedBy: DEAN,
     ...overrides,
@@ -65,7 +65,7 @@ function summary(overrides: Partial<CodingAgentSummary> & { id: string }): Codin
 const SOURCE = summary({
   id: "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b",
   title: "Wire the start from field",
-  status: CODING_AGENT_STATUS.FAILED,
+  status: AGENT_STATUS.FAILED,
 });
 
 const STEPS: Replay["steps"] = [
@@ -110,7 +110,7 @@ afterEach(() => {
 
 /** The new agent's tab drawn with its first message as given, sent when given, every tab and place it opens recorded. */
 async function drawn(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   first: string,
   source = SOURCE,
   listed = true,
@@ -118,7 +118,7 @@ async function drawn(
 ) {
   const opened: ToolTarget[] = [];
   const places: LinkPlace[] = [];
-  const messages: readonly CodingAgentMessage[] = [
+  const messages: readonly AgentTranscriptMessage[] = [
     {
       id: "first",
       role: MESSAGE_ROLE.USER,
@@ -137,7 +137,7 @@ async function drawn(
       {
         messages: [...messages],
         cursor: "2:0",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         title: null,
       },
     ]),
@@ -236,7 +236,7 @@ function drawnSteps(container: Element): string[] {
 test("an agent continued from another opens on the plan's card, the folded Continued card under who started it, and the note as the developer's line, with no marker drawn", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
     from: { agentId: SOURCE.id, steps: 3, totalSteps: 3 },
   });
   const { container, opened } = await drawn(
@@ -282,7 +282,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
 test("opened, the card draws each step as a transcript does, a line as a sent message under its sender, the agent's words as words, and a call as a call's row opening onto its input and result, under a foot naming no way to the full transcript, which the source's chip already opens", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const { container } = await drawn(agent, firstMessageText("# Invite flow", replay(), undefined));
   press(container.querySelector("[data-replay-card] > summary"));
@@ -320,7 +320,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
 test("a fork trimmed of its earliest steps says Forked and its steps of how many, and says how many were left out", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   });
   const { container } = await drawn(
     agent,
@@ -345,14 +345,14 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
 });
 
 test("an agent continued from an automation's run opens on the run's Prompt card under the automation, though it is no run itself", async () => {
-  const run: CodingAgentSummary = {
+  const run: AgentSummary = {
     ...SOURCE,
     automationId: "22222222-2222-4222-8222-222222222222",
     automationName: "Nightly triage",
   };
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
     from: { agentId: run.id, steps: 3, totalSteps: 3 },
   });
   const { container } = await drawn(
@@ -372,7 +372,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
 test("a first message whose markers do not add up is drawn whole as the plan's card, with no replay card", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const text = firstMessageText("# Invite flow", replay(), undefined).replace(
     "steps=3 total-steps=3",
@@ -388,7 +388,7 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
 test("on an agent's own page, which lists no source, the card names the source as a read of it does, wearing its harness's mark, and opens it as a link to it would", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const { container, opened, places } = await drawn(
     agent,
@@ -410,7 +410,7 @@ test("on an agent's own page, which lists no source, the card names the source a
 test("a replay holding Luke's summary of the oldest steps opens on one folded row naming it as his, which opens onto the summary", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const { container } = await drawn(
     agent,
@@ -444,7 +444,7 @@ test("a replay holding Luke's summary of the oldest steps opens on one folded ro
 test("a replayed line is named under its sender as a transcript names one: Luke, an automation, GitHub, and a teammate by their own marks, the reader's own by nobody, and a line from before senders were marked by its name", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const line = (summary: string, sender?: NonNullable<Replay["steps"][number]["sender"]>) => ({
     kind: REPLAY_STEP_KIND.LINE,
@@ -493,7 +493,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
 test("the line under the card says when the reader's own agent was started, naming nobody, as the reader's own lines are", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const { container } = await drawn(
     agent,
@@ -515,7 +515,7 @@ test("the line under the card says when the reader's own agent was started, nami
 test("the line under the card names a teammate who started the agent by their face and name, then when, as a teammate's line is", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
     startedBy: CHARLES,
   });
   const { container } = await drawn(
@@ -540,7 +540,7 @@ test("the line under the card names a teammate who started the agent by their fa
 test("opened, a long replay draws its newest twenty steps under a row that draws twenty more a press, until every step is drawn and the keys land on them", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const { container } = await drawn(
     agent,
@@ -577,7 +577,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
 test("Luke's summary and the steps left out stand over the earlier-steps row, which pages only the steps the replay kept", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const { container } = await drawn(
     agent,
@@ -625,7 +625,7 @@ test("Luke's summary and the steps left out stand over the earlier-steps row, wh
 test("a replayed call whose marker names its tool is drawn as the live transcript draws it: a command by its description, a patch as a patch, and an agent it is about by its tab's chip", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const steps: Replay["steps"] = [
     toolStep({
@@ -676,7 +676,7 @@ test("a replayed line stands over who sent it, when, and Copy, and the card's Co
   fakeAppPlatform(copyingInto(copied));
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   const steps: Replay["steps"] = [
     {
