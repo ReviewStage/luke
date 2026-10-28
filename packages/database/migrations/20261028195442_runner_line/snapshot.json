@@ -1,10 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "806c731e-ddb2-4f0e-98f4-f1876d7ddc50",
+  "id": "4832db09-0cfc-426e-856b-eeb590e36fba",
   "prevIds": [
-    "5c993da5-677a-4fae-8f14-dbd950c71df2",
-    "69c93fa6-7404-4bf1-8dc3-d283947583ee"
+    "1ac1a87e-443a-47c2-b51c-18ef9885f06a"
   ],
   "ddl": [
     {
@@ -4031,6 +4030,19 @@
       "generated": null,
       "identity": null,
       "name": "started_from",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_by_agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
@@ -15020,6 +15032,23 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "coding_agent_automation_id_automation_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "started_by_agent_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "coding_agent_started_by_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "coding_agent"
