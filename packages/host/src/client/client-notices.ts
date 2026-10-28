@@ -126,7 +126,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
       (agents) =>
         Effect.catchDefect(
           Effect.withErrorReporting(
-            Effect.sync(() => notices.observeTaskless(agents ?? [])),
+            Effect.sync(() => notices.observeAgents(agents ?? [])),
             { defectsOnly: true },
           ),
           (defect) =>
