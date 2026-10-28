@@ -1,6 +1,6 @@
 /**
  * admin-overview-queries.ts -- the Overview's reads of tasks, plan revisions,
- * coding agents, pull requests, calls, the inbox, and automations.
+ * coding agents, pull requests, the inbox, and automations.
  *
  * Every read counts rows or reads a timestamp, a status, or an id; none names
  * a column that holds what an account typed, said, or ran. Every read joins
@@ -21,7 +21,6 @@ import { inboxItem } from "@luke/database/schemas/inbox";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   DAILY_COUNT,
@@ -54,7 +53,6 @@ import {
   or,
   type SQL,
   sql,
-  sum,
 } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
@@ -133,8 +131,8 @@ const STARTED_BY_AUTOMATION = or(
  * took it and when. This is the one definition of "active" on the Overview:
  * the active-developer tiles, feature reach's base, the most active accounts,
  * and the meaningful retention grid all count through it. A plan revision
- * counts only as the developer's own, under their user id; Luke's notes on a
- * call are the call, and an agent's revisions are the agent.
+ * counts only as the developer's own, under their user id; Luke's notes are
+ * Luke's, and an agent's revisions are the agent.
  */
 function meaningfulActions(since: Date) {
   return unionAll(
@@ -156,10 +154,6 @@ function meaningfulActions(since: Date) {
       .select({ userId: userIdOf(codingAgent.userId), at: atOf(codingAgent.createdAt) })
       .from(codingAgent)
       .where(gte(codingAgent.createdAt, since)),
-    queryBuilder
-      .select({ userId: userIdOf(voiceSessions.userId), at: atOf(voiceSessions.startedAt) })
-      .from(voiceSessions)
-      .where(gte(voiceSessions.startedAt, since)),
   ).as("meaningful_action");
 }
 
@@ -217,14 +211,6 @@ function dailyCountRows(since: Date) {
           gte(planRevision.at, since),
         ),
       ),
-    queryBuilder
-      .select({
-        tag: tag(DAILY_COUNT.CALLS_HELD),
-        userId: userIdOf(voiceSessions.userId),
-        at: atOf(voiceSessions.startedAt),
-      })
-      .from(voiceSessions)
-      .where(gte(voiceSessions.startedAt, since)),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.INBOX_ANSWERED),
@@ -291,10 +277,6 @@ function reachRows(since: Date) {
           gte(inboxItem.settledAt, since),
         ),
       ),
-    queryBuilder
-      .select({ tag: tag(REACH_FEATURE.VOICE_CALLS), userId: userIdOf(voiceSessions.userId) })
-      .from(voiceSessions)
-      .where(gte(voiceSessions.startedAt, since)),
     queryBuilder
       .select({
         tag: tag(REACH_FEATURE.INTEGRATIONS),
@@ -406,7 +388,6 @@ const findFunnel = SqlSchema.findOneOption({
     [FUNNEL_STEP.SIGNED_UP]: AggregateColumnSchema,
     [FUNNEL_STEP.GITHUB_CONNECTED]: AggregateColumnSchema,
     [FUNNEL_STEP.CREATED_TASK]: AggregateColumnSchema,
-    [FUNNEL_STEP.HELD_CALL]: AggregateColumnSchema,
     [FUNNEL_STEP.STARTED_AGENT]: AggregateColumnSchema,
     [FUNNEL_STEP.OPENED_PR]: AggregateColumnSchema,
     [FUNNEL_STEP.MERGED_PR]: AggregateColumnSchema,
@@ -434,12 +415,6 @@ const findFunnel = SqlSchema.findOneOption({
           ),
           [FUNNEL_STEP.CREATED_TASK]: everDid(
             queryBuilder.select({ one }).from(task).where(eq(task.userId, user.id)),
-          ),
-          [FUNNEL_STEP.HELD_CALL]: everDid(
-            queryBuilder
-              .select({ one })
-              .from(voiceSessions)
-              .where(eq(voiceSessions.userId, user.id)),
           ),
           [FUNNEL_STEP.STARTED_AGENT]: everDid(
             queryBuilder.select({ one }).from(codingAgent).where(agentOf),
@@ -576,34 +551,6 @@ const findPrsMergedBy = SqlSchema.findAll({
     ),
 });
 
-/**
- * The seconds of the account's calls started since the bound: the metered
- * seconds where the call recorded them, its open span where it closed without,
- * and nothing for a call still open with neither.
- */
-const findCallSecondsBy = SqlSchema.findAll({
-  Request: AccountsSinceSchema,
-  Result: UserCountRowSchema,
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({
-          userId: voiceSessions.userId,
-          value: sum(
-            sql`coalesce((${voiceSessions.usage} ->> 'seconds')::numeric, extract(epoch from (${voiceSessions.closedAt} - ${voiceSessions.startedAt})), 0)`,
-          ),
-        })
-        .from(voiceSessions)
-        .where(
-          and(
-            inArray(voiceSessions.userId, request.userIds),
-            gte(voiceSessions.startedAt, request.since),
-          ),
-        )
-        .groupBy(voiceSessions.userId),
-    ),
-});
-
 const findLastSeenBy = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
   Result: Schema.Struct({ userId: Schema.String, seenAt: Schema.NullOr(InstantColumnSchema) }),
@@ -630,15 +577,14 @@ const readAccountCounts = /* @__PURE__ */ Effect.fn("web/readOverviewAccountCoun
 ): Effect.fn.Return<AdminOverviewSource["accountCounts"], AdminQueryFailure, DatabaseServices> {
   if (userIds.length === 0) {
     const none = new Map<string, number>();
-    return { tasks: none, agents: none, prsMerged: none, callSeconds: none, lastSeenAt: none };
+    return { tasks: none, agents: none, prsMerged: none, lastSeenAt: none };
   }
   const request = { userIds, since };
-  const [tasks, agents, prsMerged, callSeconds, seen] = yield* Effect.all(
+  const [tasks, agents, prsMerged, seen] = yield* Effect.all(
     [
       findTasksBy(request),
       findAgentsBy(request),
       findPrsMergedBy(request),
-      findCallSecondsBy(request),
       findLastSeenBy(userIds),
     ],
     { concurrency: "unbounded" },
@@ -649,7 +595,6 @@ const readAccountCounts = /* @__PURE__ */ Effect.fn("web/readOverviewAccountCoun
     tasks: countsByUser(tasks),
     agents: countsByUser(agents),
     prsMerged: countsByUser(prsMerged),
-    callSeconds: countsByUser(callSeconds),
     lastSeenAt,
   };
 });

@@ -134,7 +134,7 @@ test("a refused fast share is priced at its base model, and an unlisted model's 
 test("a catalog that could not be read leaves every model token unpriced, and seconds still priced", () => {
   const usage: AdminCostUsage = {
     tokens: [tokens({ day: TODAY, userId: "a", model: MODEL.BASE, inputTokens: MILLION })],
-    seconds: [{ day: TODAY, source: COST_SOURCE.VOICE, userId: "a", model: null, seconds: 120 }],
+    seconds: [{ day: TODAY, source: COST_SOURCE.DICTATION, userId: "a", seconds: 600 }],
     merged: [],
   };
   const cost = buildAdminCost({
@@ -148,21 +148,8 @@ test("a catalog that could not be read leaves every model token unpriced, and se
 
   assert.equal(cost.catalogAvailable, false);
   assert.equal(cost.totals.unpricedTokens, MILLION);
-  // Two minutes of gpt-live-1 at five cents a minute.
-  assert.equal(cost.totals.spendUsd, 0.1);
-  assert.deepEqual(cost.voice, { minutes: 2, spendUsd: 0.1, unpricedMinutes: 0 });
-});
-
-test("a voice session on a Live model the list prices do not name stays unpriced", () => {
-  const cost = built({
-    seconds: [
-      { day: TODAY, source: COST_SOURCE.VOICE, userId: "a", model: "gpt-live-1", seconds: 60 },
-      { day: TODAY, source: COST_SOURCE.VOICE, userId: "a", model: "gpt-live-next", seconds: 120 },
-    ],
-  });
-
-  assert.deepEqual(cost.voice, { minutes: 3, spendUsd: 0.05, unpricedMinutes: 2 });
-  assert.equal(cost.totals.spendUsd, 0.05);
+  // Ten minutes of gpt-transcribe at $0.0045 a minute.
+  assert.equal(cost.totals.spendUsd.toFixed(3), "0.045");
 });
 
 test("many groups too small to round to a millionth of a dollar still add up", () => {
@@ -190,10 +177,7 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
       tokens({ day: LAST_WEEK, userId: "a", model: MODEL.BASE, inputTokens: 4 * MILLION }),
       tokens({ day: LONG_AGO, userId: "a", model: MODEL.BASE, inputTokens: 100 * MILLION }),
     ],
-    seconds: [
-      { day: TODAY, source: COST_SOURCE.DICTATION, userId: "a", model: null, seconds: 600 },
-      { day: TODAY, source: COST_SOURCE.AVATAR, userId: "a", model: null, seconds: 300 },
-    ],
+    seconds: [{ day: TODAY, source: COST_SOURCE.DICTATION, userId: "a", seconds: 600 }],
   });
 
   assert.equal(cost.daily.length, WEEK);
@@ -202,13 +186,11 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
     day: TODAY,
     [COST_SOURCE.CODING_AGENTS]: 1,
     [COST_SOURCE.LUKE]: 0,
-    [COST_SOURCE.VOICE]: 0,
     [COST_SOURCE.DICTATION]: 0.045,
-    [COST_SOURCE.AVATAR]: 0.3,
   });
   assert.equal(cost.daily.at(-2)?.[COST_SOURCE.LUKE], 2);
   assert.ok(cost.daily.slice(0, -2).every((day) => day[COST_SOURCE.LUKE] === 0));
-  assert.equal(cost.totals.spendUsd.toFixed(3), "3.345");
+  assert.equal(cost.totals.spendUsd.toFixed(3), "3.045");
   // The prior window holds last week's day and not the one before it.
   assert.deepEqual(cost.totals.trend, { days: WEEK, recent: cost.totals.spendUsd, prior: 4 });
 });

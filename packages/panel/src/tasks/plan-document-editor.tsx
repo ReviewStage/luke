@@ -979,8 +979,6 @@ export function PlanDocumentEditor({
                 agents: page?.agents,
                 readAgents: page?.readAgents,
                 pullRequests: page?.pullRequests,
-                shownCode: page?.shownCode,
-                openFiles: page?.openFiles,
               },
               retarget: (target, change) =>
                 retargetedMention(task.id, mentions.place, target, change),

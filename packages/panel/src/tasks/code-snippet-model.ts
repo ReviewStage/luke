@@ -2,7 +2,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { DIFF_SELECTION_SIDE, type DiffSelection } from "../diff-view/contract.js";
 
 /**
- * code-snippet-model.ts -- a snippet of a file as the diff bundle draws it, apart from drawing it: its lines as a hunk of nothing but context, numbered from where they sit in the file, the lines it points at lit, and the line a note on it stands under.
+ * code-snippet-model.ts -- a snippet of a file as the diff bundle draws it, apart from drawing it: its lines as a hunk of nothing but context, numbered from where they sit in the file, and the lines it points at lit.
  *
  * Pierre numbers a plain file from its first line and has no way to start
  * at another, so a snippet, lines N to N+M-1 of a file, is handed to it as
@@ -75,13 +75,4 @@ export function litSelection(range: SnippetRange | undefined): DiffSelection | u
     end: range.endLine,
     endSide: DIFF_SELECTION_SIDE.ADDITIONS,
   };
-}
-
-/**
- * The lines a note on the snippet is on: those it points at, or, for a
- * file shown from its top, every line it draws; none where it draws none.
- * The note stands under the last of them.
- */
-export function noteRange(code: SnippetLines): SnippetRange | undefined {
-  return pointedRange(code) ?? snippetRange(code);
 }

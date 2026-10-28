@@ -17,8 +17,6 @@
         "src/renderer/call/index.tsx",
         "src/renderer/styles/index.css",
         "src/renderer/session-recorder/index.ts",
-        "src/renderer/avatar-feed/pcm-tee-worklet.ts",
-        "src/renderer/avatar-session/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],

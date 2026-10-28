@@ -1,11 +1,4 @@
 import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
-import {
-  DEFAULT_VIDEO_AVATAR,
-  isVideoAvatar,
-  VIDEO_AVATAR_LIST,
-  VIDEO_AVATAR_NAME,
-  videoAvatarCover,
-} from "@luke/features/video-avatar";
 import { isLiveVoice, LIVE_DEFAULTS } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
@@ -121,10 +114,6 @@ const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceContr
 const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
   view.voiceControlsDrawn && view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
-/** Signed in with Video calls on: an avatar is a choice only while calls can show one. */
-const videoCallsDrawn = (view: SettingsVisibility): boolean =>
-  view.accountDrawn && experimentOn(view.settings.experiments, EXPERIMENT.VIDEO_CALLS);
-
 /** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
 const desktopAppDrawn = (view: SettingsVisibility): boolean =>
   view.capabilities.includes(HOST_CAPABILITY.DESKTOP_APP);
@@ -191,10 +180,6 @@ export const APP_SETTING_SCHEMA = {
     field: "macCommands",
     id: APP_SETTING_ID.MAC_COMMANDS,
     label: "Let agents run commands on this Mac",
-    detail:
-      "Luke and coding agents run shell commands here from your home folder, and what each " +
-      "prints goes to the model and is kept with the conversation. Ask every time shows you " +
-      "each command before it runs.",
     values: MAC_COMMAND_MODE_LIST,
     token: (mode) => mode,
     optionLabel: (mode) => MAC_COMMAND_MODE_LABEL[mode],
@@ -248,31 +233,6 @@ export const APP_SETTING_SCHEMA = {
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.VOICE,
     visible: voiceControlDrawn,
-  }),
-  /*
-   * Who Luke appears as on video: one of Keyframe's stock avatars. A stored
-   * `default`, the deployment's own persona an earlier build offered, is no
-   * longer listed and reads as the default. Kept on this Mac, beside the Video calls switch
-   * it belongs to, and read as each avatar starts, so a change shows the next
-   * time video does rather than ending the call in progress.
-   */
-  videoAvatar: choiceSetting({
-    field: "videoAvatar",
-    id: APP_SETTING_ID.VIDEO_AVATAR,
-    label: "Avatar",
-    detail: "Who Luke appears as on video. A new choice shows the next time video starts.",
-    values: VIDEO_AVATAR_LIST,
-    token: (avatar) => avatar,
-    optionLabel: (avatar) => VIDEO_AVATAR_NAME[avatar],
-    // Each stock avatar's face, loaded from Keyframe as the row draws it, and chosen from.
-    optionPicture: videoAvatarCover,
-    guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
-    default: DEFAULT_VIDEO_AVATAR,
-    page: SETTINGS_PAGE.EXPERIMENTAL,
-    section: SETTING_SECTION.VIDEO_CALLS,
-    order: 40,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: videoCallsDrawn,
   }),
   /*
    * Where a Luke link opened in a browser goes: it stays on the web, or the

@@ -10,7 +10,11 @@ import {
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
 import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
-import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
+import {
+  MICROPHONE_STATUS,
+  type MicrophoneRoute,
+  type MicrophoneStatus,
+} from "@luke/settings/microphone";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";

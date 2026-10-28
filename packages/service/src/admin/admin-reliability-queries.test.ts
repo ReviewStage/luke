@@ -11,7 +11,6 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   getTestDB,
@@ -19,11 +18,6 @@ import {
   openInstallationWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  type VoiceCloseReason,
-} from "@luke/database/voice-vocabulary";
 import {
   ADMIN_ATTENTION_KIND,
   ADMIN_METRICS_SCOPE,
@@ -128,18 +122,6 @@ const openAgent = (userId: string, organizationId: string, createdAt: Date) =>
     return conversationId;
   });
 
-const closeCall = (userId: string, closedAt: Date | null, closeReason: VoiceCloseReason | null) =>
-  Database.use((db) =>
-    db.insert(voiceSessions).values({
-      userId,
-      liveSessionId: randomUUID(),
-      delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-      startedAt: at(10),
-      closedAt,
-      closeReason,
-    }),
-  );
-
 const settleRun = (
   automationId: string,
   userId: string,
@@ -222,12 +204,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
           failure: BRAIN_REQUEST_FAILURE.MODEL,
         });
 
-        // Calls: one of three closed calls lost its connection; an open one has not ended.
-        yield* closeCall(developer, at(13), VOICE_CLOSE_REASON.CLOSE_REQUESTED);
-        yield* closeCall(developer, at(13), VOICE_CLOSE_REASON.REMOTE_HANGUP);
-        yield* closeCall(developer, at(14), VOICE_CLOSE_REASON.CONNECTION_LOST);
-        yield* closeCall(developer, null, null);
-
         // Automation runs: one of four settled failed and one was skipped; a queued one has not settled.
         const automationId = yield* Effect.map(
           Database.use((db) =>
@@ -277,7 +253,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
           lukeTurns: { failed: 2, total: 6 },
           agentRuns: { failed: 4, total: 5 },
           abandonedTurns: 1,
-          calls: { failed: 1, total: 3 },
           automationRuns: { failed: 1, skipped: 1, total: 4 },
         });
         assert.deepEqual(
@@ -299,7 +274,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
             { reason: AUTOMATION_RUN_REASON.UNAVAILABLE, skipped: 0, failed: 1 },
           ],
         );
-        assert.equal(answer.daily.find((day) => day.day === "2026-10-14")?.calls, 1);
         assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.lukeTurns, null);
         assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.agentRuns, 1);
         assert.equal(answer.systemHealth.database.reachable, true);

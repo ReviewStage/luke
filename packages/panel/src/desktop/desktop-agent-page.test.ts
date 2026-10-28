@@ -46,8 +46,8 @@ import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
+import { CALL_LABEL } from "@luke/ui/call-card-model";
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -624,15 +624,7 @@ let drawnPanel: SidePanelControl | undefined;
 
 function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
-  const sidePanel = useSidePanel(
-    undefined,
-    { id: AGENT_ID, holds: {} },
-    agents,
-    [],
-    [],
-    [],
-    agents,
-  );
+  const sidePanel = useSidePanel(undefined, { id: AGENT_ID, holds: {} }, agents, [], [], agents);
   drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
     tasks: { ...tasksControl({}), sidePanel },
@@ -647,7 +639,6 @@ function PhonePanelPage(): React.JSX.Element {
     undefined,
     { id: AGENT_ID, holds: {} },
     agents,
-    [],
     [],
     [],
     agents,
@@ -665,7 +656,7 @@ function PhonePanelPage(): React.JSX.Element {
   );
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Comments, Code, or Call", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -712,7 +703,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Board|Code|Call)$/u.test(label ?? "")),
+    offered.filter((label) => /^(Comments|Code|Call)$/u.test(label ?? "")),
     [],
     "no task's kind is offered",
   );
@@ -734,7 +725,6 @@ function PagesPage(): React.JSX.Element {
     undefined,
     { id: AGENT_ID, holds: {} },
     agents,
-    [],
     [],
     [FUNNEL.id],
     agents,
@@ -2343,62 +2333,6 @@ test("a window with no voice hands the page no Call", async () => {
   const page = mount(tasksControl({ calls: undefined }));
   await settle();
   assert.equal(page.querySelector(`button[aria-label="${CALL_LABEL}"]`), null);
-});
-
-/** The page of an agent a call into, with no task, showed code on, over the window's own side panel. */
-function CodePanelPage(): React.JSX.Element {
-  const agents = [AGENT_ID];
-  const sidePanel = useSidePanel(
-    undefined,
-    { id: AGENT_ID, holds: { [SIDE_PANEL_TAB.CODE]: true } },
-    agents,
-    [],
-    [],
-    [],
-    agents,
-  );
-  drawnPanel = sidePanel;
-  const showing = {
-    callId: "call-1",
-    turnId: "turn-1",
-    shownAt: 10,
-    agentId: AGENT_ID,
-    code: {
-      ref: { path: "src/relay.ts", startLine: 1, endLine: 1 },
-      repository: "acme/relay",
-      firstLine: 1,
-      lineCount: 1,
-      lines: ["const retries = 3;"],
-    },
-  };
-  return createElement(DesktopAgentPage, {
-    tasks: {
-      ...tasksControl({
-        agentCallCode: { agentId: AGENT_ID, shownCode: [showing] },
-      }),
-      sidePanel,
-    },
-    agentId: AGENT_ID,
-  });
-}
-
-test("code Luke showed on a call into the agent with no task stands in its page's side panel, in its Code tab", async () => {
-  localStorage.clear();
-  installScrollIntoView();
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(CodePanelPage))));
-  await settle();
-  act(() => drawnPanel?.onChoose(SIDE_PANEL_TAB.CODE));
-  await settle();
-
-  const panel = container.querySelector("aside.side-panel");
-  assert.ok(panel, "the panel stands beside the page");
-  assert.match(panel.textContent ?? "", /src\/relay\.ts/u);
-  // No File tab reads a repository no task names, so the card offers no way into one.
-  assert.ok(panel.querySelector(".luke-code-card"), "the code's card stands");
-  assert.equal(panel.querySelector(".luke-code-card [aria-label^='Open ']"), null);
 });
 
 test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {

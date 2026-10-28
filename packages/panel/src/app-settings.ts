@@ -8,13 +8,13 @@
  */
 
 import { ACT_KIND } from "@luke/host/acts";
-import type { SettingsView } from "@luke/settings/settings-views";
-import { fixtureUpdate } from "@luke/settings/update-row";
 import type {
   MicrophoneControl,
   NotificationsControl,
   UpdateControl,
-} from "@luke/voice/settings-controls";
+} from "@luke/settings/settings-controls";
+import type { SettingsView } from "@luke/settings/settings-views";
+import { fixtureUpdate } from "@luke/settings/update-row";
 import type { ActionResult } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";

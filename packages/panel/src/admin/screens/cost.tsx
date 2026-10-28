@@ -51,11 +51,6 @@ const MODEL_SKELETON_ROWS = 5;
 /** The figure a dollar amount that has nothing to divide by stands as. */
 const NO_FIGURE = "—";
 
-/** Whole minutes, and a positive part of one as under one rather than a zero that hides it. */
-function wholeMinutes(minutes: number): string {
-  return minutes > 0 && minutes < 1 ? "<1" : formatCount(Math.round(minutes));
-}
-
 function usdOrNone(value: number | null): string {
   return value === null ? NO_FIGURE : formatUsd(value);
 }
@@ -109,15 +104,6 @@ const COST_STATS: readonly StatSpec<AdminCost>[] = [
     value: (cost) => usdOrNone(cost.perMergedPullRequest.spendUsd),
     hint: (cost) =>
       `the window's whole figure over ${formatCount(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`,
-  },
-  {
-    key: "voice",
-    label: () => "Voice minutes",
-    value: (cost) => wholeMinutes(cost.voice.minutes),
-    hint: (cost) =>
-      cost.voice.unpricedMinutes === 0
-        ? `${formatUsd(cost.voice.spendUsd)} at ${cost.prices.voice.model}'s list price`
-        : `${formatUsd(cost.voice.spendUsd)} at list price · ${wholeMinutes(cost.voice.unpricedMinutes)} min on an unpriced model`,
   },
 ];
 
@@ -217,11 +203,9 @@ function CostBasisNote({ cost }: { cost: AdminCost }): React.JSX.Element {
     <Text tone={TEXT_TONE.MUTED}>
       Tokens are priced at AI Gateway's catalog as it stands now, every model token counted
       whichever key ran it. A model the catalog does not price is counted as unpriced tokens and
-      left out of every dollar figure. Voice is priced at {prices.voice.model}'s{" "}
-      {perMinute(prices.voice.usdPerMinute)} a minute, dictation at {prices.dictation.model}'s{" "}
-      {perMinute(prices.dictation.usdPerMinute)}, and the video avatar at{" "}
-      {perMinute(prices.avatar.usdPerMinute)}. A merged PR counts on the day GitHub merged it, for
-      the account that started its agent.
+      left out of every dollar figure. Dictation is priced at {prices.dictation.model}'s{" "}
+      {perMinute(prices.dictation.usdPerMinute)} a minute. A merged PR counts on the day GitHub
+      merged it, for the account that started its agent.
       {cost.catalogAvailable
         ? ""
         : " The catalog could not be read for this answer, so no model token is priced."}

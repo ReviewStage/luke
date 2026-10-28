@@ -10,7 +10,12 @@ import {
   readRunnerTokenConversation,
 } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
-import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
+import {
+  getTestDB,
+  migrationStatements,
+  openWorkspace,
+  syncCaptureTakenOff,
+} from "../../testing/index.js";
 import { user } from "../auth.js";
 
 /**
@@ -66,7 +71,7 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
         const digest = randomUUID();
         const holding = yield* agentHolding();
         const bare = yield* agentHolding();
-        for (const statement of UNDO) yield* sql.unsafe(statement);
+        for (const statement of [...syncCaptureTakenOff(), ...UNDO]) yield* sql.unsafe(statement);
         yield* sql`UPDATE conversations SET runner_token_hash = ${digest} WHERE id = ${holding.conversationId}`;
 
         const migration = yield* migrationStatements(MIGRATION);

@@ -175,8 +175,8 @@ agent's title, opening with the sending agent's title and id, and goes to
 the receiving agent's model provider as the rest of its conversation does,
 and an agent it starts runs as the member who started it, on that member's
 keys, and is told which agent started it. It stores
-under your account its name and its plan, one Markdown document, which begins as a copy of
-your plan template and is written by coding agents started on it and by
+under your account its name and its plan, one Markdown document, which begins empty
+and is written by coding agents started on it and by
 you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
 unsaved words stay in Luke's memory on your Mac, never on disk. Our service
@@ -259,16 +259,6 @@ open threads beside the plan, and a thread in which a member mentions one of
 them with @ is handed to that agent whole as a request; either way the comments' words
 and their writers' names go to that agent's model provider, as the plan does
 (see "Who we send it to").
-
-**Your plan template.** The template a new task's plan starts from is kept with your
-account preferences on our service, as you write it in Settings › Plan
-template (up to 20,000 characters; a built-in one until you do), sent as you
-pause typing. Our service keeps its history without limit, as it does a
-plan's: the template after each revision (your saves close together count as
-one), whether you wrote it or restored which earlier version, and when, so
-Settings can show and restore an earlier one. A new task's plan begins as a copy of
-it; no model reads the template itself. Deleting your account removes it and
-its history.
 
 **What Luke remembers.** Where its developer turned on the Memory
 experiment, as a coding agent works it may keep a fact or
@@ -582,24 +572,21 @@ show you code, it names a file and lines, and our service reads them from
 its sandbox checkout. The path, the commit the checkout read it at, the
 line numbers, the lines (at most 200, each cut to 400 characters), and the
 model's note on why it showed them (at most 280 characters) are stored with
-the agent's transcript and sent to your Mac, which draws them in the task's
-Code tab; nothing is read from
-your Mac's disk. The service refuses a path outside the checkout and never
+the agent's transcript; nothing is read from
+your Mac's disk, and Luke on your Mac neither draws nor keeps them. The
+service refuses a path outside the checkout and never
 reads a file named `.env` or starting with `.env`. The voice model is told
-the path and line numbers on screen, so the voice can refer to them. When you open
-the task, Luke on your Mac reads back all the code shown on it, by the same
-rules, and holds it in memory, never on disk, until you leave the task or quit
-Luke. It is never part of the task's plan.
+the path and line numbers on screen, so the voice can refer to them. It is
+never part of the task's plan.
 
-**A whole file opened from a snippet.** A snippet in the Code tab can open
-its whole file in a File tab. Our service reads the file from GitHub at the
-commit the agent's checkout read it at, or, for a file you open from the tree, a
-skill, or code shown before that commit was recorded, at the head of the
-default branch: it confirms the workspace's installation still reaches the
+**A whole file in a File tab.** A file named in a mention or an inbox item
+opens whole in a File tab. Our service reads the file from GitHub at the
+commit named, or, for a file you open from the tree or a skill, at the head
+of the default branch: it confirms the workspace's installation still reaches the
 repository and mints a token for that one repository that reads its contents, used for that
-read and never sent to your Mac, logged, or kept. The rules for code on
-screen apply, and a link, a folder, a file over a megabyte, or one that is
-not text is refused. The file is read 500 lines at a time as you scroll, is
+read and never sent to your Mac, logged, or kept. It never reads a file named
+`.env` or starting with `.env`, and a link, a folder, a file over a megabyte,
+or one that is not text is refused. The file is read 500 lines at a time as you scroll, is
 not stored by our service, and is held by Luke only while its tab is open,
 never on disk, except that copying or downloading it reads it whole (up to
 that megabyte, lines uncut) and a download is written where you save it. The
@@ -1114,19 +1101,19 @@ the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
-its whiteboard, its Call and Code tabs, the contents of its File tabs with
+its Call tab, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
 the live view of its page; code drawn in a
-transcript; the API keys and Plan template pages of Settings; an automation's
+transcript; the API keys page of Settings; an automation's
 webhook secret, the one time it is shown; the admin page in the app, which
 only our maintainers can open and which names other people's accounts; and the cards
-that open over a row or a chip on hover, a page's preview among them. The
-whiteboard and a Terminal tab's shell draw their words as pixels, which the
-masking cannot reach, so leaving them out is
-their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
+that open over a row or a chip on hover, a page's preview among them. A
+Terminal tab's shell draws its words as pixels, which the
+masking cannot reach, so leaving it out is
+its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked. Each recording carries Luke's version and whether it is a released
@@ -1639,7 +1626,7 @@ and error, performance, and agent reports by Sentry.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
-  counts, preferences, and plan template with its history, your pinned
+  counts and preferences, your pinned
   repositories, your tasks with their history, whiteboards, pages, coding
   agents, inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the

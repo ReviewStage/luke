@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type AgentNotice, NOTICE_KIND } from "@luke/host/agent-notices";
-import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/settings/settings-controls";
 import { afterEach, test, vi } from "vitest";
 import { electronNoticeDoors } from "./notice-doors";
 

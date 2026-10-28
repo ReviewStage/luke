@@ -24,7 +24,6 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
-  type TasksBoardSaveParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
@@ -98,7 +97,6 @@ export interface TasksProceduresDependencies {
     tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
     tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
     tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-    tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
     adminRead(params: AdminReadParams): Effect.Effect<AdminReadAnswer>;
@@ -382,14 +380,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         agentId: input.agentId,
         ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
       });
-    }),
-    [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: actPort[TASKS_ACT_KIND.TASKS_BOARD_SAVE].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.tasksBoardSave(input);
     }),
     [TASKS_ACT_KIND.TASKS_SET_STANDING]: actPort[TASKS_ACT_KIND.TASKS_SET_STANDING].effect(
       function* ({ input, context, errors }) {

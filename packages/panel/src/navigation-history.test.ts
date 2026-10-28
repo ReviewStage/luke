@@ -1012,7 +1012,7 @@ test("a tab chosen in the task's column or its side panel by a press is a step o
   press();
   window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.PLAN, shown }));
   press();
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.CODE, shown }));
+  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.COMMENTS, shown }));
   assert.equal(window.addresses().length, 3, "each tab chosen is a step");
 
   act(() => window.history().onBack());
@@ -1026,7 +1026,7 @@ test("a tab chosen in the task's column or its side panel by a press is a step o
 test("a tab the window chooses by itself, with no press leading to it, takes the step standing in place", () => {
   const window = mount(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.PLAN }));
   window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.PLAN }));
-  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.CODE }));
+  window.stand(onTabs({ column: AGENT_B, side: SIDE_PANEL_TAB.COMMENTS }));
   assert.equal(
     window.addresses().length,
     1,
@@ -1044,7 +1044,7 @@ test("a task's tabs arriving after it opens, and the side panel opening on its t
   press();
   window.stand(onTabs({ column: AGENT_A }));
   press();
-  window.stand(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.CODE }));
+  window.stand(onTabs({ column: AGENT_A, side: SIDE_PANEL_TAB.COMMENTS }));
   assert.equal(window.addresses().length, 2, "home, then the task on its tabs");
 });
 
@@ -1091,13 +1091,13 @@ test("the side panel's tabs are steps though the task's agents are not read, as 
     const tasks = onTabs({ column: undefined, side, shown });
     return { ...tasks, mainTabs: { ...tasks.mainTabs, tabs: [], openAgents: undefined } };
   };
-  const window = mount(unread(SIDE_PANEL_TAB.CODE));
+  const window = mount(unread(SIDE_PANEL_TAB.COMMENTS));
   press();
   window.stand(unread(SIDE_PANEL_TAB.PLAN));
   assert.equal(window.addresses().length, 2);
 
   act(() => window.history().onBack());
-  assert.deepEqual(shown, ["side:code"]);
+  assert.deepEqual(shown, ["side:comments"]);
 });
 
 test("a task opened again before its agents are read keeps the column it was last seen with, so a step on an agent's tab since closed is still passed over", () => {

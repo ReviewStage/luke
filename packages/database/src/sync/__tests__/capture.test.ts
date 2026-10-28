@@ -193,9 +193,9 @@ it.layer(probeDB)("the drift check on a synced table", (it) => {
       const client = yield* SqlClient.SqlClient;
       yield* client.unsafe("alter table sync_probe add column note text");
 
-      const before = yield* syncDrift([probeWithNoteSync]);
+      const before = yield* syncDrift([...SYNC_TABLES, probeWithNoteSync]);
       yield* installSyncTables([probeWithNoteSync]);
-      const after = yield* syncDrift([probeWithNoteSync]);
+      const after = yield* syncDrift([...SYNC_TABLES, probeWithNoteSync]);
 
       assert.deepEqual(
         before.map((object) => object.object),
@@ -207,7 +207,7 @@ it.layer(probeDB)("the drift check on a synced table", (it) => {
 
   it.effect("a sync trigger no declaration renders fails it", () =>
     Effect.gen(function* () {
-      const drift = yield* syncDrift([]);
+      const drift = yield* syncDrift(SYNC_TABLES);
 
       assert.deepEqual(
         drift.map((object) => [object.table, object.object, object.rendered]).sort(),

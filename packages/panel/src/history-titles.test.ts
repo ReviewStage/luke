@@ -38,10 +38,10 @@ function onTask(
 }
 
 test("a task's step is named by the task, with the side panel's tab while it is open", () => {
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask(SIDE_PANEL_TAB.CODE)), {
+  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask(SIDE_PANEL_TAB.COMMENTS)), {
     label: "Auth refactor",
-    detail: "Code",
-    panes: { column: undefined, side: "Code" },
+    detail: "Comments",
+    panes: { column: undefined, side: "Comments" },
   });
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask({ file: "apps/web/session-store.ts" })), {
     label: "Auth refactor",
@@ -55,7 +55,7 @@ test("a task's step is named by the task, with the side panel's tab while it is 
 });
 
 test("a task on its way, its strips still another's, is named by the task alone", () => {
-  const opening = { ...onTask(SIDE_PANEL_TAB.CODE), activeTaskId: "task-before" };
+  const opening = { ...onTask(SIDE_PANEL_TAB.COMMENTS), activeTaskId: "task-before" };
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, opening), { label: "Auth refactor" });
 });
 

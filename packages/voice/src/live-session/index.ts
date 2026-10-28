@@ -21,15 +21,7 @@ export {
   type LiveAgentSubmission,
 } from "./live-agent.js";
 export type { LiveRecord, SpokenAskAttach } from "./live-record.js";
-export {
-  AVATAR_START_BOUND,
-  LIVE_AVATAR_END,
-  LIVE_AVATAR_STATUS,
-  LIVE_SESSION_END_CAUSE,
-  type LiveAvatarEnd,
-  type LiveAvatarState,
-  LiveSessionHolder,
-} from "./live-session-holder.js";
+export { LIVE_SESSION_END_CAUSE, LiveSessionHolder } from "./live-session-holder.js";
 export {
   type AdoptableSession,
   LiveSessionService,

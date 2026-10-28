@@ -7,12 +7,6 @@ import type {
   MemoriesAnswerView,
   MemoriesReadParams,
   MemoryForgetParams,
-  PlanTemplateAnswerView,
-  PlanTemplateRevisionAnswerView,
-  PlanTemplateRevisionParams,
-  PlanTemplateRevisionsAnswerView,
-  PlanTemplateRevisionsParams,
-  PlanTemplateWriteParams,
   ProviderKeyForAgentsParams,
   ProviderKeyRemoveParams,
   ProviderKeySaveParams,
@@ -45,15 +39,6 @@ export interface AccountAskProceduresDependencies {
     githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
     memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
     memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
-    planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
-    planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
-    planTemplateRevisions(
-      params: PlanTemplateRevisionsParams,
-    ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
-    planTemplateRevision(
-      params: PlanTemplateRevisionParams,
-    ): Effect.Effect<PlanTemplateRevisionAnswerView>;
-    planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
     dictationTranscribe(
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
@@ -134,36 +119,6 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
         return yield* host.memoryForget(input);
       },
     ),
-    [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actPort[
-      ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.planTemplateRead();
-    }),
-    [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE]: actPort[
-      ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.planTemplateWrite(input);
-    }),
-    [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS]: actPort[
-      ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.planTemplateRevisions(input);
-    }),
-    [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISION]: actPort[
-      ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISION
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.planTemplateRevision(input);
-    }),
-    [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE]: actPort[
-      ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.planTemplateRestore(input);
-    }),
     [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: actPort[
       ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE
     ].effect(function* ({ input, context, errors }) {

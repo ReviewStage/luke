@@ -21,7 +21,6 @@ import * as Atom from "effect/reactivity/Atom";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { CallCardContext, type CallCardInput, callControls } from "./call/call-card.js";
-import { useCallCardVideo } from "./call/panel-avatar.js";
 import { useWindowFocused } from "./call/use-window-focused.js";
 import { useOpenApiKeys } from "./openai-key.js";
 import { useOpenLink } from "./tasks/use-open-link.js";
@@ -135,7 +134,6 @@ function StandingCallCard({
   const view = useStandingVoiceView();
   const focused = useWindowFocused();
   const planning = useAppSlice(APP_SLICE.TASKS) ?? IDLE_TASKS_VIEW;
-  const video = useCallCardVideo();
   const shown = available && callCardShown({ view, focused, agentShown });
   const { speakerMuted } = view;
   const card = useMemo(
@@ -144,8 +142,8 @@ function StandingCallCard({
   );
   const controls = useMemo(() => callControls(press, speakerMuted), [press, speakerMuted]);
   const call = useMemo<CallCardInput | undefined>(
-    () => (card === undefined ? undefined : { card, speakerMuted, controls, video }),
-    [card, speakerMuted, controls, video],
+    () => (card === undefined ? undefined : { card, speakerMuted, controls }),
+    [card, speakerMuted, controls],
   );
   return <CallCardContext.Provider value={call}>{children}</CallCardContext.Provider>;
 }

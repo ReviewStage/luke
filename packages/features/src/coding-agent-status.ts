@@ -23,7 +23,10 @@ import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire
  * queueing that the turn never took awaits nothing: that turn was its, and
  * ended without the store hearing it received. A turn failed because its
  * session ended for good leaves every line awaiting nothing, since the
- * session that would have taken one is gone.
+ * session that would have taken one is gone. A Stop wins over every line
+ * written before it was asked, whether its turn still runs or has ended,
+ * since the developer stopped that work too; a line written after it still
+ * opens a turn of its own, and reads running.
  *
  * The rule is pure and takes the instant it reads at, because the two
  * graces are the parts of it the rows alone do not say: a reader following
@@ -69,6 +72,8 @@ export interface StatusTurn {
   readonly status: string;
   /** Whether a Stop was asked of it. */
   readonly cancelRequested: boolean;
+  /** When the Stop was asked, where the reader was told; none where no Stop was, or a row from before the instant was carried. */
+  readonly cancelRequestedAt?: number | undefined;
   /** When it was queued. */
   readonly queuedAt: number;
   /** When it settled; none while it is queued or runs. */
@@ -110,8 +115,9 @@ function turnRuns(turn: StatusTurn): boolean {
 
 /**
  * Where the newest line awaiting a turn stands, and from when its grace is
- * counted where the clock decides it. A turn still running takes it, so it
- * awaits. With none running, a line written before the newest turn was
+ * counted where the clock decides it. A line written before the newest
+ * turn's Stop awaits nothing, since the Stop ended it with the turn. A turn
+ * still running takes it, so it awaits. With none running, a line written before the newest turn was
  * queued was that turn's opener, and the turn ended without the store
  * hearing it received, so it awaits nothing; a line written once the turn
  * was queued was a steer to it and still counts. Else it awaits for the
@@ -126,6 +132,8 @@ function lineOf(
   const line = standing.awaitingLineAt;
   if (line === undefined) return { standing: LINE_STANDING.NONE };
   if (turn?.sessionEnded === true) return { standing: LINE_STANDING.NONE };
+  const stoppedAt = turn?.cancelRequestedAt;
+  if (stoppedAt !== undefined && line < stoppedAt) return { standing: LINE_STANDING.NONE };
   if (turn !== undefined && turnRuns(turn)) return { standing: LINE_STANDING.AWAITS };
   if (turn !== undefined && line < turn.queuedAt) return { standing: LINE_STANDING.NONE };
   const since = Math.max(line, turn?.settledAt ?? 0);
@@ -142,6 +150,16 @@ export function lineAwaitsTurn(
   standing: Pick<StatusStanding, "now" | "awaitingLineAt">,
 ): boolean {
   return lineOf(turn, standing).standing === LINE_STANDING.AWAITS;
+}
+
+/**
+ * Whether a Stop has something to stop: the newest turn still runs, or is
+ * queued to, and no Stop was asked of it yet. What the Stop button is offered
+ * by, so a second press on a turn already stopped, or one pressed while only
+ * a line awaits its turn, is never taken and silently dropped.
+ */
+export function turnStoppable(turn: StatusTurn | undefined): boolean {
+  return turn !== undefined && turnRuns(turn) && !turn.cancelRequested;
 }
 
 /**

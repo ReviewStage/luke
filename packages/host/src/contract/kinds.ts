@@ -16,8 +16,8 @@ export const ACCOUNT_ACT_KIND = {
 } as const;
 
 /**
- * The account's own asks from Settings and a dictating box: its provider keys,
- * its plan template and that template's history, and a dictated clip's words.
+ * The account's own asks from Settings and a dictating box: its provider keys
+ * and a dictated clip's words.
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
@@ -50,18 +50,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_READ: "githubToken.read",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
    * the workspace Settings shows, shared by its members, read as the page
@@ -227,18 +215,6 @@ export const AGENT_INBOX_ACT_KIND = {
 } as const;
 
 /**
- * Luke's avatar as the windows reach it: the panel's word on it, starting,
- * live on its first frame, or ended and why, taken from the panel alone; and
- * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
- * for on the standing call or taken down, taken from the panel and the
- * floating call window, which draw the tile, alone.
- */
-export const AVATAR_ACT_KIND = {
-  AVATAR_REPORT: "avatar.report",
-  VOICE_SET_VIDEO: "voice.setVideo",
-} as const;
-
-/**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
  * read as its workspace keeps them, and generated for its head on Luke's own
  * model key when the developer presses Generate, the generation answered
@@ -304,8 +280,8 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, a call about the open task, and its
- * whiteboard saved. And what one task holds, read as its tabs draw it: its
+ * GitHub connected or disconnected, and a call about the open task. And
+ * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, a call's messages, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
@@ -347,8 +323,6 @@ export const TASKS_ACT_KIND = {
   GITHUB_DISCONNECT: "github.disconnect",
   /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
@@ -622,7 +596,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHANNEL_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
@@ -649,7 +622,6 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  * the host's procedures answer every other.
  */
 export const PLATFORM_PORT_ACT_KIND = {
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,

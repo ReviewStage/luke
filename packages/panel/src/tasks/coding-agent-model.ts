@@ -85,10 +85,10 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
+  callOfLine,
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
   isRecord,
@@ -405,6 +405,15 @@ const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
 /** Whether an agent in this status may still write more. */
 export function agentStillWriting(status: CodingAgentStatus): boolean {
   return FOLLOWED_STATUSES.has(status);
+}
+
+/**
+ * Whether the agent's tab offers Stop: it runs, and its service has not said
+ * a Stop would stop nothing (`stoppable`), as after a Stop already taken, so
+ * a press is never dropped unheard. A starting agent has no turn yet to stop.
+ */
+export function offersStop(agent: Pick<CodingAgentSummary, "status" | "stoppable">): boolean {
+  return agent.status === CODING_AGENT_STATUS.RUNNING && agent.stoppable !== false;
 }
 
 /**
@@ -1055,6 +1064,15 @@ export function messageFailureNote(
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
   if (refused.failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED)
     return callFailure(HOST_REMOVED);
+  // Note that a device away refuses a message in the words it refuses a Start in.
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+    return callFailure(
+      localAgentRefusalWords(
+        refused.localAgentRefusal ?? LOCAL_AGENT_REFUSAL.MAC_AWAY,
+        refused.refusedDevice,
+      ),
+    );
+  }
   // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
   if (
     refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
@@ -1089,12 +1107,14 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    // A message names no repository, no model, no clip, and no device, which queues it while away, so none of these refusals is its own.
+    // A message names no repository, no model, and no clip, so none of these refusals is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
     case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
-    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return `${MESSAGE_NOT_SENT} Try again.`;
+    // A message is refused by a device only while it is away, in the words a Start on it is.
+    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+      return localAgentRefusalWords(LOCAL_AGENT_REFUSAL.MAC_AWAY, undefined);
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back.";

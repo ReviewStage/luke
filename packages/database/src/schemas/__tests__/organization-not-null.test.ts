@@ -20,6 +20,7 @@ import {
   migrationStatements,
   RENAME_PLAN_TO_TASK,
   replayable,
+  syncCaptureTakenOff,
   undoneRename,
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
@@ -95,7 +96,8 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
             prompt: "Sweep the flaky tests.",
           }),
         );
-        // The database as it stood before the migration: the column open, and rows left null.
+        // The database as it stood before the migration: no sync capture yet, the column open, and rows left null.
+        for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
         for (const table of ["automation", "coding_agent"] as const) {
           yield* sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "organization_id" DROP NOT NULL`);
         }

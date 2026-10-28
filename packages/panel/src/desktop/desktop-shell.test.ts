@@ -17,14 +17,14 @@ import {
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
 import { EXPERIMENT, type ExperimentChoices, HOST_CAPABILITY } from "@luke/settings";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { STATUS_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -1323,8 +1323,8 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     [PLACE.AGENT_PAGE]: false,
     [PLACE.PERSON_PAGE]: true,
     [PLACE.AUTOMATIONS]: true,
-    // Note that the panel filling the window holds the keys, on its Board, whose canvas no find reads.
-    [PLACE.SIDE_PANEL_FULL_SCREEN]: false,
+    // Note that the panel filling the window holds the keys, and finds in the tab it shows.
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
     [PLACE.SETTINGS]: false,
     [PLACE.VERSION_HISTORY]: true,
   });

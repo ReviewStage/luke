@@ -20,7 +20,6 @@ import {
 import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
-import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import {
   countWords,
   INTEGRATION_LABEL,
@@ -67,7 +66,6 @@ import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui
 import { searchTokens } from "@luke/ui/search-tokens";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -104,7 +102,8 @@ import {
   dateMentionNode,
   useDatePicker,
 } from "./date-picker.js";
-import { FileCard, newestFileNote } from "./file-ref.js";
+import { FileCard } from "./file-ref.js";
+import { fileFolder, fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { PageCard } from "./page-card.js";
 import { PullRequestMark } from "./pull-request-mark.js";
@@ -132,8 +131,7 @@ import { useTaskStatus } from "./use-known-names.js";
  * The repository's paths are read once per task, the first time an `@` is
  * typed, through the same listing ⌘K finds files with
  * (`ACT_KIND.TASKS_TREE`, the whole tree at the default branch). Each
- * file's row wears its type's icon and hangs the file's card, with Luke's
- * newest note on it read where a tab of it is open (`MentionSource.openFiles`).
+ * file's row wears its type's icon and hangs the file's card.
  *
  * Where the editor's words go to an agent, the list offers the repository's
  * skills too, a pick written as the `/name` chip the `/` list writes
@@ -1295,8 +1293,6 @@ export type MentionAgentsReader = (
 const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
-const NO_SHOWN_CODE: readonly TaskCodeShowing[] = [];
-const NO_OPEN_FILES: readonly MentionOpenFile[] = [];
 
 /** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
 export interface MentionSource {
@@ -1317,16 +1313,6 @@ export interface MentionSource {
   readonly readAgents?: MentionAgentsReader | undefined;
   /** The pull requests the plan's agents published, as its page holds them now; none where the place offers none. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
-  /** Every code Luke showed on the plan, whose newest note on a file its row's card says; none where the place knows none. */
-  readonly shownCode?: readonly TaskCodeShowing[] | undefined;
-  /** The plan's open File tabs, whose pinned commit a file's card is read at; none where the place holds none. */
-  readonly openFiles?: readonly MentionOpenFile[] | undefined;
-}
-
-/** A File tab the plan holds open: its path and the commit it is pinned to, none for the default branch's head. */
-export interface MentionOpenFile {
-  readonly path: string;
-  readonly commit?: string | undefined;
 }
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
@@ -1848,14 +1834,9 @@ export function useMentionPicker({
   ];
 
   // Note that a file's card is made as its row is drawn, because the repository's paths are thousands and only the few listed hang one.
-  const shownCode = source?.shownCode ?? NO_SHOWN_CODE;
-  const openFiles = source?.openFiles ?? NO_OPEN_FILES;
   const fileCard: FileCardOf = (row) => {
     if (!("mention" in row) || row.mention.kind !== MENTION_KIND.FILE) return undefined;
-    const { path } = row.mention;
-    // Note that the note read is of the revision a row opens: the open tab's, else the default branch's head.
-    const commit = openFiles.find((file) => file.path === path)?.commit;
-    return <FileCard path={path} note={newestFileNote(shownCode, path, { repository, commit })} />;
+    return <FileCard path={row.mention.path} />;
   };
   // The list hangs by the word's line, on the side asked; a press outside it and the room closes it as Escape does, and it fades as it closes.
   const rowsShown = !shown ? null : (

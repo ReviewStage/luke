@@ -1,3 +1,5 @@
+import { frameLevel } from "../tasks/frame-level.js";
+
 /**
  * How long after the last loud frame a voice still counts as speaking, so a
  * breath between two words is not read as the turn ending.
@@ -6,19 +8,6 @@ export const VOICE_ACTIVITY_HANGOVER_MS = 220;
 
 /** The loudness a frame must reach to count as a voice at all. */
 const VOICE_ACTIVITY_THRESHOLD = 0.12;
-
-/**
- * One frame's loudness from the analyser's time-domain samples, in the unit
- * interval, scaled so ordinary speech fills the meter.
- */
-export function frameLevel(samples: Uint8Array): number {
-  let energy = 0;
-  for (const sample of samples) {
-    const normalized = (sample - 128) / 128;
-    energy += normalized * normalized;
-  }
-  return Math.min(1, Math.sqrt(energy / samples.length) * 4.5);
-}
 
 /**
  * Whether a voice is still active at `now`, given the last frame that was

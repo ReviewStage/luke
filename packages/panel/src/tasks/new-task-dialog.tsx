@@ -20,7 +20,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
- * Plan mode the plan template and a call with Luke. Tab stays inside the
+ * Plan mode an empty plan and a call with Luke. Tab stays inside the
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's

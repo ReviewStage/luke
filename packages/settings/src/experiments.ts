@@ -10,8 +10,6 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A Browser tab in the side panel: an agent's cloud browser beside the plan, watched and taken over. */
   BROWSER: "browser",
-  /** Calls that open with Luke on video, a Keyframe avatar in the agent's tab. */
-  VIDEO_CALLS: "video-calls",
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
@@ -87,15 +85,6 @@ export const EXPERIMENTS = [
       "sign in or steer.",
     owner: "Dean",
     since: "2026-10-16",
-  },
-  {
-    key: EXPERIMENT.VIDEO_CALLS,
-    name: "Video calls",
-    detail:
-      "Keyframe Labs animates Luke from his voice, so what he says about your plan reaches " +
-      "Keyframe. Your own voice never does.",
-    owner: "Charles",
-    since: "2026-10-15",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

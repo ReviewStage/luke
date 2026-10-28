@@ -799,7 +799,6 @@ function InboxSidePanel({
       isAgentTab(opened) && panel.tab !== undefined && isTranscriptTab(panel.tab)
         ? panel.tab.transcript === opened.agent
         : panel.tab !== undefined && sameTab(opened, panel.tab),
-    shownCode: [],
     pages: taskId === undefined ? undefined : { taskId },
   });
   const transcript = (agentId: string) => {
@@ -835,9 +834,6 @@ function InboxSidePanel({
       holder={SIDE_PANEL_HOLDER.INBOX}
       taskId={panelFor ?? ""}
       repository={repository}
-      board={undefined}
-      shownCode={undefined}
-      codeFailed={undefined}
       pages={pages}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}

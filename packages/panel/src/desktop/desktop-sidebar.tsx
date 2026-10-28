@@ -10,6 +10,7 @@ import {
 import type { TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import type { UpdateControl } from "@luke/settings/settings-controls";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArrowLeftIcon,
@@ -120,7 +121,6 @@ import {
   TASK_MARK,
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
-import type { UpdateControl } from "@luke/voice/settings-controls";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";

@@ -7,7 +7,6 @@ import {
   WindowPushes,
 } from "@luke/host/act-port";
 import { PUSH } from "@luke/host/contract";
-import { AVATAR_FEED_KIND } from "@luke/voice/avatar";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
@@ -102,27 +101,25 @@ it("each push reaches the listeners on its own method, with the payload main pus
   assert.deepEqual(command.heard, [{ command: VOICE_COMMAND.STOP_SPEAKING }]);
 });
 
-it("a call's press is never overtaken by the command sent after it, even behind a burst of the avatar's feed", async () => {
+it("a call's press is never overtaken by the command sent after it, even behind a burst of the call window's moves", async () => {
   const main = mainProcess();
   const panel = main.page(PANEL);
   await panel.opened;
   const keys = hearing<string>();
-  const feeds = hearing<unknown>();
-  panel.listeners.onAvatarFeed(feeds.hear);
+  const moves = hearing<unknown>();
+  panel.listeners.onCallWindowMoved(moves.hear);
   panel.listeners.onTasksTalk(() => keys.hear("talk"));
   panel.listeners.onVoiceCommand(() => keys.hear("command"));
-  panel.listeners.onCallWindowMoved(() => keys.hear("moved"));
 
-  for (let chunk = 0; chunk < 200; chunk += 1) {
-    main.pushes.push(WINDOW, PUSH.AVATAR_FEED, { kind: AVATAR_FEED_KIND.TURN_END });
+  for (let move = 0; move < 200; move += 1) {
+    main.pushes.push(WINDOW, PUSH.CALL_WINDOW_MOVED, undefined);
   }
   main.pushes.push(WINDOW, PUSH.TASKS_TALK, { taskId: "task-1", agentId: "agent-1" });
   main.pushes.push(WINDOW, PUSH.VOICE_COMMAND, { command: VOICE_COMMAND.TOGGLE_MICROPHONE });
-  main.pushes.push(WINDOW, PUSH.CALL_WINDOW_MOVED, undefined);
-  await keys.until(3);
+  await keys.until(2);
 
-  assert.deepEqual(keys.heard, ["talk", "command", "moved"]);
-  assert.equal(feeds.heard.length, 200);
+  assert.deepEqual(keys.heard, ["talk", "command"]);
+  assert.equal(moves.heard.length, 200);
 });
 
 it("a document pushed the moment the stream opens is heard, and a burst of them is heard once, as the newest", async () => {

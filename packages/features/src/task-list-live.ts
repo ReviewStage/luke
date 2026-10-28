@@ -4,6 +4,7 @@ import {
   lineAwaitsTurn,
   type StatusTurn,
   statusClockEdge,
+  turnStoppable,
 } from "./coding-agent-status.js";
 import {
   CODING_AGENT_ARCHIVER,
@@ -141,6 +142,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   turnId: EffectSchema.NullOr(EffectSchema.String),
   turnStatus: EffectSchema.NullOr(EffectSchema.String),
   cancelRequested: EffectSchema.NullOr(EffectSchema.Boolean),
+  /** When the newest turn's Stop was asked; absent from a statement before it was carried. */
+  cancelRequestedAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   queuedAt: EffectSchema.NullOr(countedNumber),
   startedAt: EffectSchema.NullOr(countedNumber),
   settledAt: EffectSchema.NullOr(countedNumber),
@@ -201,6 +204,7 @@ function turnOf(row: AgentLiveRow): StatusTurn | undefined {
     : {
         status: row.turnStatus,
         cancelRequested: row.cancelRequested === true,
+        cancelRequestedAt: row.cancelRequestedAt ?? undefined,
         queuedAt: row.queuedAt ?? row.createdAt,
         settledAt: row.settledAt,
         sessionEnded: row.turnSessionEnded === true,
@@ -405,6 +409,8 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
   );
   const archivedBy = archivedByOf(row);
   const started = runStartedAt(row, now);
+  const status = statusOf(row, now);
+  const stoppable = status !== CODING_AGENT_STATUS.RUNNING || turnStoppable(turnOf(row));
   return {
     id: row.id,
     planId: row.planId,
@@ -416,7 +422,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
     title: row.title,
     ...(row.kind === CODING_AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     createdAt: row.createdAt,
-    status: statusOf(row, now),
+    status,
     ...(row.quietTurn === true ? { quietTurn: true } : undefined),
     turnId: row.turnId,
     brief: row.brief,
@@ -430,6 +436,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),
     ...(started === undefined ? undefined : { runStartedAt: started }),
+    ...(stoppable ? undefined : { stoppable: false }),
   };
 }
 

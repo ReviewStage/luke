@@ -6,15 +6,8 @@ import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
-  readPlanTemplate,
-  restorePlanTemplate,
   writeAccountPreferences,
-  writePlanTemplate,
 } from "@luke/database/models/account-store";
-import {
-  listTemplateRevisions,
-  readTemplateRevision,
-} from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
@@ -89,11 +82,6 @@ const openAccounts = () =>
       readRole: readAccountRole,
       accountFastOffer,
       writePreferences: writeAccountPreferences,
-      readPlanTemplate,
-      writePlanTemplate,
-      listPlanTemplateRevisions: listTemplateRevisions,
-      readPlanTemplateRevision: readTemplateRevision,
-      restorePlanTemplate,
     });
     return {
       admin,

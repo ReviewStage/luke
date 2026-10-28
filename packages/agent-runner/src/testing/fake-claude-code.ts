@@ -41,16 +41,19 @@ function stopHookOf(options: Options) {
  * holds each prompt as the CLI reads it, for a test that must wait on one.
  * Each `result` names the prompts its turn took, as the CLI's does. `chain`
  * is the stored session's entries, which every session it is asked for
- * reads as.
+ * reads as. A CLI that stops `answering` records each control request
+ * (a model change, an interrupt) and never answers it.
  */
 export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function* (
   steps: readonly Step[],
   chain: readonly string[] = [],
+  answering = true,
 ) {
   const prompted = yield* Queue.unbounded<SDKUserMessage>();
   const unread = yield* Queue.unbounded<string>();
   const released = yield* Deferred.make<void>();
   const interrupted = yield* Deferred.make<void>();
+  const closing = yield* Deferred.make<void>();
   const record: CliRecord = {
     options: undefined,
     prompts: [],
@@ -119,23 +122,39 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     const script = Stream.fromIterable<Step>([{ awaitPrompt: true }, ...steps]).pipe(
       Stream.flatMap(play),
     );
-    const messages = Stream.toAsyncIterable(Stream.merge(script, prompts));
+    const messages = Stream.toAsyncIterable(
+      Stream.merge(script, prompts).pipe(Stream.interruptWhen(Deferred.await(closing))),
+    );
+    // Note that the SDK hands out its own generator, whose return waits on the read under way,
+    // which a quiet CLI answers only once it writes again or is closed; so does this one.
+    async function* read() {
+      for await (const message of messages) yield message;
+    }
+    const sdkMessages = read();
 
+    // A request recorded, then answered, or held for good by a CLI that stopped answering: a race
+    // of nothing never settles.
+    const answer = (): Promise<undefined> =>
+      answering ? Promise.resolve(undefined) : Promise.race([]);
     return {
-      [Symbol.asyncIterator]: () => messages[Symbol.asyncIterator](),
-      interrupt: async () => {
+      [Symbol.asyncIterator]: () => sdkMessages,
+      interrupt: () => {
         record.interrupts += 1;
-        Deferred.doneUnsafe(interrupted, Exit.void);
+        if (answering) Deferred.doneUnsafe(interrupted, Exit.void);
+        return answer();
       },
-      setModel: async (model) => {
+      setModel: (model) => {
         record.models.push(model);
+        return answer();
       },
-      applyFlagSettings: async (settings) => {
+      applyFlagSettings: (settings) => {
         if ("effortLevel" in settings) record.efforts.push(settings.effortLevel);
         if ("fastMode" in settings) record.fastModes.push(settings.fastMode);
+        return answer();
       },
       close: () => {
         record.closed = true;
+        Deferred.doneUnsafe(closing, Exit.void);
       },
     };
   };

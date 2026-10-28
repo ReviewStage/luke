@@ -1,5 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
+import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -22,7 +22,6 @@ import {
   Tooltip,
   useResizeEdge,
 } from "@luke/ui";
-import { shownFiles } from "@luke/voice/code-pane-model";
 import {
   type ComponentProps,
   Fragment,
@@ -44,13 +43,11 @@ import { usePhoneRoom } from "../stage-room.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { useFileMenu } from "./file-menu.js";
-import type { FileNotes } from "./file-note.js";
 import { FileTab, type ReadFileWindow } from "./file-tab.js";
 import {
   FILE_READ,
   type FileRead,
   fileUrl,
-  notesOf,
   shortCommit,
   WHOLE_TEXT,
   type WholeText,
@@ -85,8 +82,7 @@ import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from ".
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A task with no repository draws the tab
  * alone, its path plain in the bar. A file opened at a commit, as an inbox
- * item's code or a snippet Luke read from his checkout opens it, is read at
- * that commit, its GitHub page and its copy too, the commit named quietly
+ * item's code opens it, is read at that commit, its GitHub page and its copy too, the commit named quietly
  * beside the path, and drawn afresh when the same file is opened at another.
  *
  * In a side panel too narrow for the file and the tree side by side, the
@@ -654,7 +650,7 @@ export function useFileViewEnd(
   props: Parameters<typeof useFileMenu>[0],
 ): Pick<ComponentProps<typeof FileViewBar>, "menu" | "more"> {
   return {
-    menu: <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true }} />,
+    menu: <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />,
     more: useFileMenu(props),
   };
 }
@@ -666,8 +662,6 @@ export function FileView({
   taskId,
   repository,
   file,
-  snippet,
-  shownCode,
   readFile,
   readFolder,
   readWhole,
@@ -677,17 +671,11 @@ export function FileView({
   treeWidth,
   onBrowse,
   history,
-  onFoldNote,
-  agentLabel,
 }: {
   taskId: string;
   /** The task's repository, `owner/name`, which the tree browses; none draws the tab alone. */
   repository: string | null;
   file: OpenFile;
-  /** The lines Luke showed of the file, drawn where the file cannot be. */
-  snippet: TaskCode | undefined;
-  /** Every code Luke showed on the task, whose files of this repository the tree's filter narrows to. */
-  shownCode: readonly TaskCodeShowing[] | undefined;
   readFile: ReadFileWindow;
   /** Lists one folder of the repository through the service. */
   readFolder: ListFolder;
@@ -701,10 +689,6 @@ export function FileView({
   /** A file chosen in the tree or the breadcrumbs, to show in this tab, or in a tab of its own where `newTab` asks. */
   onBrowse: (path: string, newTab: boolean) => void;
   history: FileHistory;
-  /** Folds or opens the note of the call that showed lines of the file, on this tab. */
-  onFoldNote: FileNotes["onFold"];
-  /** An agent on the task as its tab names it, which heads its notes on the file; none for an agent not listed. */
-  agentLabel?: FileNotes["agentLabel"];
 }): React.JSX.Element {
   // The view's store of listings, one per task and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
@@ -724,24 +708,7 @@ export function FileView({
     return () => kept("");
   }, [taskId, repository]);
 
-  // Note that the list is kept while the task shows nothing new, because
-  // a fresh one would have the tree draw its filter anew.
-  const shown = useMemo(
-    () =>
-      shownFiles((shownCode ?? []).filter(({ code }) => code.repository === repository)).map(
-        (ref) => ref.path,
-      ),
-    [shownCode, repository],
-  );
-
   const commit = file.commit;
-  const notes: FileNotes = {
-    notes: notesOf(shownCode, file.path, repository, commit),
-    folded: file.foldedNotes ?? [],
-    onFold: onFoldNote,
-    taskId,
-    agentLabel,
-  };
 
   const [told, setTold] = useState<TabRead | undefined>(undefined);
   const read =
@@ -785,7 +752,7 @@ export function FileView({
   const onGitHub = ready ? () => openGitHub(fileUrl(read, file)) : undefined;
   // A phone draws no bar: the header's ⋯ offers every control of it, in its order.
   const phone = usePhoneRoom();
-  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true });
+  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES });
   useTabActions(
     phone
       ? [
@@ -841,19 +808,11 @@ export function FileView({
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
-          <FileTab
-            key={commit ?? HEAD_READ}
-            file={file}
-            snippet={snippet}
-            notes={notes}
-            readFile={readAt}
-            onRead={onRead}
-          />
+          <FileTab key={commit ?? HEAD_READ} file={file} readFile={readAt} onRead={onRead} />
         </Fragment>
         {browsing ? (
           <FileTreePane
             file={file.path}
-            shown={shown}
             listFolder={readFolderListing}
             readWhole={listWhole}
             onOpen={browse}

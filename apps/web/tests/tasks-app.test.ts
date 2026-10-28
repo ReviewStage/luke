@@ -20,9 +20,7 @@ import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { boardAnswerSchema, boardSaveAnswerSchema } from "@luke/features/board-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
-import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -38,7 +36,6 @@ import {
 } from "@luke/features/task-issue-wire";
 import {
   PLAN_ACTOR,
-  PLAN_FIELD,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
   TASK_BOUNDS,
@@ -461,8 +458,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
       const { owner, ask } = yield* openAccounts();
       const taskId = startedId(yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })));
       const saved = yield* saveNotes({ userId: owner, taskId: taskId }, [
-        added(PLAN_HEADING.CONTEXT, "Only admins can invite."),
-        added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
+        added("Context", "Only admins can invite."),
+        added("Open questions", "- Who can withdraw an invite?"),
       ]);
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
@@ -504,22 +501,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
       }),
-  );
-
-  it.effect("a start opens as the template, and one without planning opens empty", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts();
-      const documentOf = (answer: Answer) =>
-        readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).plan.document;
-
-      const planned = yield* ask(request(TASKS, owner, { method: "POST", body: RELAY }));
-      const unplanned = yield* ask(
-        request(TASKS, owner, { method: "POST", body: { ...LEDGER, planning: false } }),
-      );
-
-      assert.equal(documentOf(planned).body, DEFAULT_PLAN_TEMPLATE);
-      assert.deepEqual(documentOf(unplanned), { body: "", assumptions: [] });
-    }),
   );
 
   it.effect(
@@ -833,7 +814,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             taskId,
             seq: 1_000,
             actor: sql`'a-later-writer'`,
-            document: DEFAULT_PLAN_TEMPLATE,
+            document: "## Goal\n\nInvite a teammate.\n",
             changes: 1,
             startedAt: now,
             at: now,
@@ -942,7 +923,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
         const body = {
-          document: { base: DEFAULT_PLAN_TEMPLATE, value: `${DEFAULT_PLAN_TEMPLATE}Mine now.\n` },
+          document: { base: "", value: "Mine now.\n" },
         };
 
         assert.deepEqual(
@@ -953,7 +934,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(
             request(EDIT(taskId), owner, {
               method: "POST",
-              body: { field: PLAN_FIELD.OPEN_QUESTIONS, base: [], value: "Not a list." },
+              body: { field: "openQuestions", base: [], value: "Not a list." },
             }),
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
@@ -1835,13 +1816,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
    */
   const twoRevisions = (userId: string, taskId: string) =>
     Effect.gen(function* () {
-      yield* saveNotes({ userId, taskId: taskId }, [
-        added(PLAN_HEADING.CONTEXT, "Only admins can invite."),
-      ]);
+      yield* saveNotes({ userId, taskId: taskId }, [added("Context", "Only admins can invite.")]);
       yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
-      yield* saveNotes({ userId, taskId: taskId }, [
-        added(PLAN_HEADING.GOAL, "Members invite by email."),
-      ]);
+      yield* saveNotes({ userId, taskId: taskId }, [added("Goal", "Members invite by email.")]);
     });
 
   it.effect(

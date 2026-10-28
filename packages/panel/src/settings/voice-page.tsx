@@ -5,6 +5,7 @@ import {
   type SettingsRowsInput,
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+import type { MicrophoneControl } from "@luke/settings/settings-controls";
 import {
   BUTTON_VARIANT,
   Button,
@@ -22,8 +23,7 @@ import {
   microphoneAccessRow,
   OPENAI_KEY_MISSING_NOTE,
   VOICE_KEYLESS_NOTE,
-} from "@luke/voice/microphone-access";
-import type { MicrophoneControl } from "@luke/voice/settings-controls";
+} from "@luke/ui/microphone-access";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { useBusyPress } from "./busy-press.js";
 import { AttentionMark } from "./marks.js";

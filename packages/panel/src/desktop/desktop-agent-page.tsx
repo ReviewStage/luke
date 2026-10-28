@@ -62,7 +62,7 @@ import {
   openPullRequestsHere,
   useReadLinkOpener,
 } from "../tasks/use-open-link.js";
-import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
@@ -140,8 +140,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * `useAgentCallDoors`), told the agent's own task, or none, whatever task is
  * open: the call is keyed by the agent, and asks first where it would hang
  * another agent's call up. While its call stands its foot draws the call as
- * its tab's would, and the code Luke shows on a call into an agent with no
- * task lands in its side panel's Code tab, which no task's record holds.
+ * its tab's would.
  */
 
 /** What the page says where the agent could not be read. */
@@ -369,9 +368,6 @@ export function DesktopAgentPage({
     taskId: agent?.planId ?? undefined,
     archived: agent?.archivedAt !== undefined,
   });
-  // The code a call into the agent showed, where it has no task to hold it.
-  const held = tasks.agentCallCode;
-  const shownCode = agent?.planId == null && held?.agentId === agentId ? held.shownCode : undefined;
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -441,9 +437,6 @@ export function DesktopAgentPage({
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
-    // Code Luke showed on its call opens in the Code tab, its showings' one place on a page no task's File tab reads for.
-    if (target.kind === TOOL_TARGET.SHOWN_CODE && shownCode !== undefined)
-      sidePanel.onChoose(SIDE_PANEL_TAB.CODE);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
     if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
   });
@@ -493,11 +486,10 @@ export function DesktopAgentPage({
         held: views.held,
         chosen: (opened) =>
           sameTab(opened, tab) || (sideTab !== undefined && sameTab(opened, sideTab)),
-        shownCode: shownCode ?? [],
         // Note that an agent on a task shows its pages on the task, so its rows read them there.
         pages: planId === null ? { agentId } : { taskId: planId },
       }),
-    [control, views.held, tab, sideTab, shownCode, planId, agentId],
+    [control, views.held, tab, sideTab, planId, agentId],
   );
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
@@ -698,9 +690,6 @@ export function DesktopAgentPage({
                           holder={SIDE_PANEL_HOLDER.AGENT}
                           taskId={agentId}
                           repository={agentRepository ?? null}
-                          board={undefined}
-                          shownCode={shownCode}
-                          codeFailed={undefined}
                           pages={tasks.agentView.pages}
                           agents={control}
                           openAgents={openAgents}

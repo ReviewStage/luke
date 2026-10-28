@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { MIGRATIONS_FOLDER } from "../core/migrator.js";
+import { renderSyncTable } from "../sync/render.js";
+import { SYNC_TABLES } from "../sync/tables.js";
 
 /**
  * migrations.ts -- one migration's statements as the migrator runs them, and a rename's undone, for a test that stands a database where it stood before a migration.
@@ -11,6 +13,17 @@ const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
 /** The migration that names a plan's row a task, which a test of an earlier migration walks back first. */
 export const RENAME_PLAN_TO_TASK = "20261017014941_rename_plan_to_task";
+
+/**
+ * The statements that take Luke Sync's capture off every synced table, as
+ * the database stood before it. A test that walks today's schema back past
+ * an earlier migration runs them first, because a capture's triggers name
+ * the columns that walk renames or drops, just as a migration that drops
+ * one takes the capture off first (`render.ts`).
+ */
+export function syncCaptureTakenOff(): readonly string[] {
+  return SYNC_TABLES.flatMap((table) => renderSyncTable(table).drop);
+}
 
 /** The migration's statements, in the order the migrator runs them. */
 export function migrationStatements(migration: string): Effect.Effect<readonly string[]> {

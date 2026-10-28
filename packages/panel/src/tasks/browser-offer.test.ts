@@ -89,7 +89,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The plan drawn with its side panel open on its Board, answering the tabs it was asked to show. */
+/** The plan drawn with its side panel open on its Comments, answering the tabs it was asked to show. */
 async function mount(
   agents: readonly CodingAgentSummary[] = [],
   viewed?: string,
@@ -114,7 +114,7 @@ async function mount(
     sidePanel: {
       ...base.sidePanel,
       open: true,
-      tab: SIDE_PANEL_TAB.BOARD,
+      tab: SIDE_PANEL_TAB.COMMENTS,
       onChoose: (tab) => {
         chosen.push(tab);
       },
@@ -251,7 +251,7 @@ test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card 
     // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
     [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(held as never),
   });
-  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.BOARD, { cloudBrowser: tab.id }]);
+  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.COMMENTS, { cloudBrowser: tab.id }]);
 
   const drawn = [...document.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.textContent?.includes("Sign in"),

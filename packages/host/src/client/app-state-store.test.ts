@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { WindowPushes } from "../act-port/push-procedures.js";
@@ -27,6 +27,11 @@ import {
  * slice is replaced whole, the version only ever climbs, and `changes`
  * carries exactly one document per applied patch.
  */
+
+/** Two pages of a plan and the agent that showed them, as the store's identity test holds them. */
+const PAGE_ONE = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d01";
+const PAGE_TWO = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d02";
+const AGENT = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d03";
 
 const RUN = {
   launch: {
@@ -98,7 +103,7 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
     const seen = yield* watchChanges(app, 2, () => {
       app.update({});
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
-      app.update({ voice: { avatar: AVATAR_OFF } });
+      app.update({ voice: {} });
       // The one real patch is the second document `changes` ever carries; the
       // three no-ops before it wrote nothing for a collector to see.
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
@@ -113,7 +118,7 @@ it("two slices in one patch are one version", () => {
   const app = store();
   app.update({
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: { view: IDLE_VOICE_VIEW, avatar: AVATAR_OFF },
+    voice: { view: IDLE_VOICE_VIEW },
   });
   assert.equal(app.snapshot().version, 1);
   assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
@@ -121,34 +126,26 @@ it("two slices in one patch are one version", () => {
 
 it("a slice that moved keeps every part of it that did not, so what a reader held of it is the object it still holds", () => {
   const app = store();
-  const shown = (callId: string, lines: readonly string[]) => ({
-    callId,
-    turnId: "turn-1",
-    shownAt: 0,
-    code: {
-      ref: { path: "src/invites.ts", startLine: 1, endLine: 1 },
-      repository: "acme/relay",
-      firstLine: 1,
-      lineCount: lines.length,
-      lines: [...lines],
-    },
+  const page = (id: string, title: string, agentId: string) => ({
+    id,
+    title,
+    version: 1,
+    at: 0,
+    shownBy: { kind: PAGE_SHOWER.AGENT, agentId },
   });
   app.update({
     tasks: {
       ...app.snapshot().tasks,
       activeTaskId: "plan-1",
-      shownCode: [shown("call-1", ["const a = 1;"]), shown("call-2", ["const b = 2;"])],
+      pages: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, "Billing", AGENT)],
     },
   });
   const held = app.snapshot().tasks;
 
-  // The host's next view: the same data, every object of it new, and the second code grown.
+  // The host's next view: the same data, every object of it new, and the second page retitled.
   const next = {
     ...structuredClone(held),
-    shownCode: [
-      shown("call-1", ["const a = 1;"]),
-      shown("call-2", ["const b = 2;", "const c = 3;"]),
-    ],
+    pages: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, "Billing and plans", AGENT)],
   };
   app.update({ tasks: next });
   const now = app.snapshot().tasks;
@@ -156,9 +153,9 @@ it("a slice that moved keeps every part of it that did not, so what a reader hel
   assert.equal(app.snapshot().version, 2);
   assert.deepEqual(now, next);
   assert.equal(now.document, held.document);
-  assert.equal(now.shownCode?.[0], held.shownCode?.[0]);
-  assert.notEqual(now.shownCode?.[1], held.shownCode?.[1]);
-  assert.equal(now.shownCode?.[1]?.code.ref, held.shownCode?.[1]?.code.ref);
+  assert.equal(now.pages?.[0], held.pages?.[0]);
+  assert.notEqual(now.pages?.[1], held.pages?.[1]);
+  assert.equal(now.pages?.[1]?.shownBy, held.pages?.[1]?.shownBy);
 });
 
 it.effect("a touch re-announces the document without numbering it again", () =>
@@ -176,14 +173,11 @@ it.effect("a touch re-announces the document without numbering it again", () =>
   }),
 );
 
-it("a voice window that went away leaves the document holding no view, and the avatar standing", () => {
+it("a voice window that went away leaves the document holding no view", () => {
   const app = store();
-  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
-  const ended = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
-  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: ended } });
-  app.update({ voice: voiceWindowGone(app.snapshot().voice) });
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true } } });
+  app.update({ voice: voiceWindowGone() });
   assert.equal(app.snapshot().voice.view, undefined);
-  assert.deepEqual(app.snapshot().voice.avatar, ended);
 });
 
 const BOOT: HostBootstrap = {
@@ -288,7 +282,7 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   };
   const first = said("row-1", "Invite a teammate");
   app.update({
-    voice: { avatar: AVATAR_OFF, view: IDLE_VOICE_VIEW },
+    voice: { view: IDLE_VOICE_VIEW },
     callTranscript: { voiceSessionId: "session-1", lines: [first] },
   });
   publish();
@@ -303,7 +297,7 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   publish();
   assert.deepEqual(await delivered(panel), {
     version: 2,
-    entries: { voice: { avatar: AVATAR_OFF, view } },
+    entries: { voice: { view } },
     callTranscript: {
       voiceSessionId: "session-1",
       from: 1,
@@ -312,7 +306,7 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   });
   assert.deepEqual(await delivered(call), {
     version: 2,
-    entries: { voice: { avatar: AVATAR_OFF, view } },
+    entries: { voice: { view } },
   });
   pushes.push(voiceWindow.handle, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   assert.deepEqual((await voice.next()).value, {
@@ -321,14 +315,13 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   });
 });
 
-it("a voice window given up on sets voice unavailable for the run: no view, the avatar standing, and a later bootstrap keeps it", () => {
+it("a voice window given up on sets voice unavailable for the run: no view, and a later bootstrap keeps it", () => {
   const app = store();
   assert.equal(app.snapshot().voice.unavailable, undefined);
-  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: AVATAR_OFF } });
-  app.update({ voice: voiceWindowGaveUp(app.snapshot().voice) });
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true } } });
+  app.update({ voice: voiceWindowGaveUp() });
   assert.equal(app.snapshot().voice.unavailable, true);
   assert.equal(app.snapshot().voice.view, undefined);
-  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   assert.equal(app.snapshot().voice.unavailable, true);
 });

@@ -244,12 +244,6 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
     hint: () => "turns past their bound",
   },
   {
-    key: "calls",
-    label: () => "Calls dropped",
-    value: ({ headline }) => formatPercent(share(headline.calls), RATE_PLACES),
-    hint: ({ headline, windowDays }) => ofHint(headline.calls, "calls", windowDays),
-  },
-  {
     key: "automation-runs",
     label: () => "Automation runs failed",
     value: ({ headline }) => formatPercent(share(headline.automationRuns), RATE_PLACES),

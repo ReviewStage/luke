@@ -73,13 +73,7 @@ import {
   type MemoriesAnswerView,
   memoriesReadParamsSchema,
   memoryForgetParamsSchema,
-  type PlanTemplateAnswerView,
-  type PlanTemplateRevisionAnswerView,
-  type PlanTemplateRevisionsAnswerView,
   type ProviderKeysAnswerView,
-  planTemplateRevisionParamsSchema,
-  planTemplateRevisionsParamsSchema,
-  planTemplateWriteParamsSchema,
   providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -126,7 +120,7 @@ import {
 import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 
 /**
- * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, and what waits across the account.
+ * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, and what waits across the account.
  *
  * Nothing is held here but the transcripts' subscriptions, and the followed
  * inboxes' (`scope-inbox-follow.ts`), heard as `INBOX_CHANGED` events. The window holds the agents it draws and the cursor it reads
@@ -196,13 +190,8 @@ export type CodingAgentClient = Pick<
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
-  | "readPlanTemplate"
   | "readMemories"
   | "forgetMemory"
-  | "writePlanTemplate"
-  | "readPlanTemplateRevisions"
-  | "readPlanTemplateRevision"
-  | "restorePlanTemplate"
   | "transcribeDictation"
   | "answerInbox"
   | "closeInbox"
@@ -493,50 +482,6 @@ function composed(
         );
         const answer = yield* asked(client.forgetMemory(forget));
         return carried<MemoriesAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.PLAN_TEMPLATE_READ]: () =>
-      Effect.map(asked(client.readPlanTemplate()), (answer) =>
-        carried<PlanTemplateAnswerView>(answer),
-      ),
-    [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE]: (params) =>
-      Effect.gen(function* () {
-        const write = yield* readParams(
-          planTemplateWriteParamsSchema,
-          params,
-          "a template write names a template within the bound, or null for the default",
-        );
-        const answer = yield* asked(client.writePlanTemplate(write));
-        return carried<PlanTemplateAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS]: (params) =>
-      Effect.gen(function* () {
-        const page = yield* readParams(
-          planTemplateRevisionsParamsSchema,
-          params,
-          "a page of the template's history names the revision it is read before, or none",
-        );
-        const answer = yield* asked(client.readPlanTemplateRevisions(page));
-        return carried<PlanTemplateRevisionsAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.PLAN_TEMPLATE_REVISION]: (params) =>
-      Effect.gen(function* () {
-        const revision = yield* readParams(
-          planTemplateRevisionParamsSchema,
-          params,
-          "a revision of the template names its number",
-        );
-        const answer = yield* asked(client.readPlanTemplateRevision(revision));
-        return carried<PlanTemplateRevisionAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE]: (params) =>
-      Effect.gen(function* () {
-        const revision = yield* readParams(
-          planTemplateRevisionParamsSchema,
-          params,
-          "a restore of the template names the revision it brings back",
-        );
-        const answer = yield* asked(client.restorePlanTemplate(revision));
-        return carried<PlanTemplateAnswerView>(answer);
       }),
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
       Effect.gen(function* () {

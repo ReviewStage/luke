@@ -350,6 +350,22 @@ export function isDeveloperLine(metadata: UserMessageMetadata): boolean {
   return metadata.channel !== MESSAGE_CHANNEL.VOICE || metadata.author === MESSAGE_AUTHOR.DEVELOPER;
 }
 
+/** The channels a line of a call arrives on: said, either speaker's, or typed into the composer while the call stood. */
+const CALL_CHANNELS: ReadonlySet<unknown> = new Set([MESSAGE_CHANNEL.VOICE, MESSAGE_CHANNEL.TYPED]);
+
+/**
+ * The store's id for the call a line of an agent's transcript was said on,
+ * read off the line's own metadata; none for a line said on no call. A line
+ * typed while the call stood names its call too, so it stands inside it.
+ */
+export function callOfLine(message: { readonly metadata?: unknown }): string | undefined {
+  const { metadata } = message;
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const channel: unknown = Reflect.get(metadata, "channel");
+  const session: unknown = Reflect.get(metadata, "voice_session_id");
+  return CALL_CHANNELS.has(channel) && typeof session === "string" ? session : undefined;
+}
+
 /**
  * A compaction row's account of what it folded: the first message the model
  * still reads after it, which is always knowable, and how many tokens the

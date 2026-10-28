@@ -50,7 +50,6 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
-import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import {
@@ -2481,7 +2480,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           // Luke's notes before the agent's first turn: that turn opens on the plan as its first message.
           yield* TestClock.adjust("1 minute");
-          yield* saveNotes(binding, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
+          yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
           assert.equal(yield* typedAt("turn_0"), undefined);
           // The first turn runs, started at the relay's clock, after Luke's notes.
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
@@ -2497,7 +2496,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
           yield* TestClock.adjust("10 minutes");
           assert.equal(
-            yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")]),
+            yield* agentNotes([added("Approach", "- Invites expire after 7 days.")]),
             ACTION_RESULT_STATUS.ACCEPTED,
           );
           assert.equal(yield* typedAt("turn_1"), undefined);
@@ -2506,11 +2505,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [
-            added(PLAN_HEADING.APPROACH, "- A withdrawn invite never grants access."),
+            added("Approach", "- A withdrawn invite never grants access."),
           ]);
           yield* TestClock.adjust("1 minute");
           assert.equal(
-            yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Resending renews the link.")]),
+            yield* agentNotes([added("Approach", "- Resending renews the link.")]),
             ACTION_RESULT_STATUS.ACCEPTED,
           );
           const changed = (yield* typedAt("turn_1")) ?? "";

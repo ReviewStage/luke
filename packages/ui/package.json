@@ -28,6 +28,7 @@
     "./tokens.css": "./src/tokens/tokens.css",
     "./styles.css": "./src/styles.css",
     "./search-tokens": "./src/search-tokens.js",
+    "./microphone-access": "./src/microphone-access.js",
     "./search-score": "./src/search-score.js",
     "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",
@@ -64,9 +65,7 @@
     "./tasks-model": "./src/tasks-model.js",
     "./pending-values": "./src/pending-values.js",
     "./call-card-model": "./src/call-card-model.js",
-    "./avatar-session-contract": "./src/avatar-session-contract.js",
     "./diagram-contract": "./src/diagram-contract.js",
-    "./avatar-session": "./src/avatar-session.js",
     "./person-page-model": "./src/person-page-model.js",
     "./tailwind/theme.css": "./src/tailwind/theme.css",
     "./tailwind/sources.css": "./src/tailwind/sources.css"

@@ -111,8 +111,6 @@ export const GATEWAY_METHOD = {
   TASKS_COMMENT_ACT: "tasks.commentAct",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
-  /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
@@ -353,16 +351,6 @@ export const GATEWAY_METHOD = {
   MEMORIES_READ: "memories.read",
   /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
   MEMORIES_FORGET: "memories.forget",
-  /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  /** A page of the account's plan template history, read from the service now, newest first; or why there is none. */
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  /** One revision of the account's plan template beside the one before it; or why there is none. */
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  /** One revision of the account's plan template put back as the template; the template as kept, or why it is unchanged. */
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
@@ -470,8 +458,6 @@ export const GATEWAY_METHOD = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  /** Luke's avatar on the standing call asked for or taken down; whether the service was asked. The grant it draws never crosses here. */
-  VOICE_SET_VIDEO: "voice.setVideo",
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
@@ -648,17 +634,6 @@ export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.
  * and the mute carries none of its meaning.
  */
 export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
-
-/** `voice.setVideo`: the developer turning Luke's avatar on or off on the standing call. */
-export const voiceSetVideoParamsSchema = Schema.Struct({ on: Schema.Boolean });
-
-/**
- * What `voice.setVideo` answers: whether the service was asked. The avatar's
- * grant answers the ask on the voice socket and goes from the host to the
- * call window in process alone, so this answer never carries it, and nor
- * does any Gateway event.
- */
-export const voiceSetVideoResultSchema = Schema.Struct({ requested: Schema.Boolean });
 
 /** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
 export const voiceLiveSessionChangedSchema = Schema.Struct({

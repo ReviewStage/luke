@@ -59,7 +59,7 @@ import type { Channel } from "@luke/features/channel-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
-import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
+import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
@@ -128,7 +128,6 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@luke/ui/tasks-model";
-import { fileName, shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
   isValidElement,
@@ -173,7 +172,8 @@ import {
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { ChannelCard } from "../tasks/channel-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
-import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
+import { FileCard, fileLook } from "../tasks/file-ref.js";
+import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
@@ -564,21 +564,15 @@ function ranked<Item>(
 
 /**
  * The open task's files at hand, each once: its file tabs the strip draws,
- * in the strip's order, a tab moved among them included (`inTaskOrder`),
- * then the files shown on it in its repository, as the "+" offers them
- * (`side-panel.tsx`).
+ * in the strip's order, a tab moved among them included (`inTaskOrder`).
  */
 function filesAtHand(
   panel: Pick<SidePanelControl, "files" | "order">,
-  shownCode: readonly TaskCodeShowing[],
-  place: { readonly taskId: string | undefined; readonly repository: string | null },
+  taskId: string | undefined,
 ): readonly string[] {
-  const shown = shownFiles(shownCode.filter(({ code }) => code.repository === place.repository));
-  const drawn = panel.files.filter(
-    (file) => file.browsedOn === place.taskId || shown.some((ref) => ref.path === file.path),
-  );
+  const drawn = panel.files.filter((file) => file.browsedOn === taskId);
   const placed = inTaskOrder(drawn, panel.order, (file) => ({ file: file.path }));
-  return [...new Set([...placed.map((file) => file.path), ...shown.map((ref) => ref.path)])];
+  return [...new Set(placed.map((file) => file.path))];
 }
 
 /**
@@ -690,17 +684,12 @@ function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
   );
 }
 
-/** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
-function fileRow(
-  path: string,
-  read: { readonly shown: readonly TaskCodeShowing[]; readonly repository: string | null },
-  open: (path: string) => void,
-): PaletteRow {
-  const note = newestFileNote(read.shown, path, { repository: read.repository, commit: undefined });
+/** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card. */
+function fileRow(path: string, open: (path: string) => void): PaletteRow {
   return {
     ...fileLook(path),
     loose: true,
-    card: <FileCard path={path} note={note} />,
+    card: <FileCard path={path} />,
     onChoose: () => open(path),
   };
 }
@@ -939,12 +928,12 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
 /**
  * The open task's Inbox and coding agents, as the column's "+" lists them,
  * then what the side panel's "+" offers past its kinds, by its own rules
- * (`panelOffers`): the files Luke showed, the agents' Pull request tabs, the
+ * (`panelOffers`): the agents' Pull request tabs, the
  * plan's pages, a terminal for each agent, and a new Browser tab in each
  * agent's browser; then its archived agents (`archivedAgentRows`), each in
  * its row's look and words, found by its row's words, and beside the task's
  * name; none while no task is open. The "+"'s kinds stand under Commands as
- * Show board and the rest (`panelTabRows`). An agent opens on its task's
+ * Show comments and the rest (`panelTabRows`). An agent opens on its task's
  * tab, or its own page where it has no task, the Inbox the same way, and the panel's
  * places as the "+" opens them, the version history giving way to each, so
  * none opens behind what covers it.
@@ -965,9 +954,8 @@ function agentRows(
   // Note that the plan's places open in its own panel, and in the Inbox's
   // beside an item of the plan, whose panel is the Inbox's.
   const holder = holdsTaskPanel(tasks) ? SIDE_PANEL_HOLDER.TASK : SIDE_PANEL_HOLDER.INBOX;
-  // Note that the Inbox's panel reads the chosen item's pages on its own and draws no code shown (`desktop-inbox.tsx`), so its "+" offers no shown file.
+  // Note that the Inbox's panel reads the chosen item's pages on its own (`desktop-inbox.tsx`).
   const inboxHeld = holder === SIDE_PANEL_HOLDER.INBOX;
-  const shownCode = inboxHeld ? [] : (tasks.shownCode ?? []);
   const pages = (inboxHeld ? tasks.inboxView.pages : tasks.pages) ?? [];
   const places = opensTaskItems(tasks)
     ? panelOffers({
@@ -975,7 +963,6 @@ function agentRows(
         taskId,
         panel: tasks.sidePanel,
         agents: tasks.agents,
-        shownCode,
         pages,
         onNewTerminal: doors.onNewTerminal,
         browsers: doors.browsers,
@@ -984,8 +971,6 @@ function agentRows(
         cards: {
           agents: tasks.agents,
           held: NOTHING_HELD,
-          shown: shownCode,
-          repository: tasks.tasks.find((task) => task.id === taskId)?.repository ?? null,
           pagePlace: { taskId },
           shownAgent: undefined,
           onOpenAgent: (agentId) => show(() => tasks.onShowAgent(taskId, agentId)),
@@ -1316,7 +1301,7 @@ function copyLinkRows(
 }
 
 /**
- * The side panel's kinds, listed with the commands as Show board and the
+ * The side panel's kinds, listed with the commands as Show comments and the
  * rest, a command's verb before the name its tab wears, each wearing its
  * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
  * its tab as the panel's "+" does, over the version history, and only the
@@ -1336,8 +1321,6 @@ function panelTabRows(
     inbox:
       inboxOffered(tasks.agents, tasks.sidePanel) ||
       tasks.listed.inbox.some((waiting) => waiting.taskId === tasks.activeTaskId),
-    // Note that this is the "+"'s own input, though only an agent's page holds Code to it: a task's panel offers Code either way.
-    code: (tasks.shownCode?.length ?? 0) > 0,
   });
   return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
@@ -2164,16 +2147,11 @@ export function CommandPalette({
     () => (paths === undefined || !blankFiles ? undefined : new Set(paths)),
     [paths, blankFiles],
   );
-  // Note that with nothing typed the files open in the strip and shown on the task lead, since they are the likeliest sought.
+  // Note that with nothing typed the files open in the strip lead, since they are the likeliest sought.
   const matchedPaths =
     paths === undefined || listedPaths === undefined
       ? rankedPaths
-      : leadingPaths(
-          paths,
-          listedPaths,
-          filesAtHand(tasks.sidePanel, tasks.shownCode ?? [], { taskId, repository }),
-          limit,
-        );
+      : leadingPaths(paths, listedPaths, filesAtHand(tasks.sidePanel, taskId), limit);
 
   const byRow = (row: PaletteRow) => rowScore(row, sought);
   const runCommand = (command: AppCommand) => choose(() => runAppCommand(command));
@@ -2244,9 +2222,7 @@ export function CommandPalette({
     onTasks(() => shownOverHistory(tasks, () => tasks.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] => {
     if (kind === PALETTE_FILTER.FILES) {
-      return (filesOpen ? matchedPaths : []).map((path) =>
-        fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
-      );
+      return (filesOpen ? matchedPaths : []).map((path) => fileRow(path, openFile));
     }
     if (kind === PALETTE_FILTER.TASKS || kind === PALETTE_FILTER.INBOX) {
       return ranked(undrawnOf[kind](), sought, limit, (row) =>

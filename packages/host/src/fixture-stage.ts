@@ -20,7 +20,6 @@ import {
   type TasksPageParams,
 } from "@luke/features/tasks-view";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
-import { AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceCallTranscript } from "@luke/voice/voice-view";
 import { type AppState, RUN_PROFILE } from "./app-state.js";
 
@@ -76,11 +75,8 @@ export const FIXTURE_PAGE: PageVersion = funnelPage(2, "2026-10-07T16:51:00Z", [
 
 const FIXTURE_PAGE_VERSIONS: readonly PageVersion[] = [FIXTURE_PAGE_FIRST, FIXTURE_PAGE];
 
-/** The call each call profile stages into the agent: Luke's avatar down, or standing with its tile up. */
-const STAGED_AVATARS: ReadonlyMap<string, AvatarState> = new Map([
-  [RUN_PROFILE.AGENT_CALL, AVATAR_OFF],
-  [RUN_PROFILE.AGENT_CALL_VIDEO, { status: AVATAR_STATUS.LIVE }],
-]);
+/** The profiles that stage a call into the agent. */
+const CALL_PROFILES: ReadonlySet<string> = new Set([RUN_PROFILE.AGENT_CALL]);
 
 /** What was said on the call so far, as the voice window would report it. */
 const STAGED_CALL_TRANSCRIPT: VoiceCallTranscript = {
@@ -105,15 +101,14 @@ const STAGED_CALL_TRANSCRIPT: VoiceCallTranscript = {
 
 /**
  * Whether a launch stands on a staged call: a call profile's fixture run,
- * whose call no voice window reports over, whose avatar the host, which
- * holds no call, does not put down, and which the floating call window
- * draws over whichever window has the keyboard.
+ * whose call no voice window reports over, and which the floating call
+ * window draws over whichever window has the keyboard.
  */
 export function callStaged(launch: {
   readonly profile: string;
   readonly fixtureMode: boolean;
 }): boolean {
-  return launch.fixtureMode && STAGED_AVATARS.has(launch.profile);
+  return launch.fixtureMode && CALL_PROFILES.has(launch.profile);
 }
 
 /**
@@ -125,8 +120,7 @@ export function stagedCallState(launch: {
   readonly profile: string;
   readonly fixtureMode: boolean;
 }): Pick<AppState, "voice" | "callTranscript" | "tasks"> | undefined {
-  const avatar = STAGED_AVATARS.get(launch.profile);
-  if (!launch.fixtureMode || avatar === undefined) return undefined;
+  if (!callStaged(launch)) return undefined;
   return {
     voice: {
       view: {
@@ -135,7 +129,6 @@ export function stagedCallState(launch: {
         listening: true,
         call: { agentId: FIXTURE_IDS.AGENT, taskId: FIXTURE_IDS.TASK },
       },
-      avatar,
     },
     callTranscript: STAGED_CALL_TRANSCRIPT,
     // The call's task, which the floating call window's card names, as it reads no fixture of the panel's.

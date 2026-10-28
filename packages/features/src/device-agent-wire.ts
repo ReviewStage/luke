@@ -431,6 +431,13 @@ export const deviceAgentBeatRequestSchema = EffectSchema.Struct({
 export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
   ...deviceField,
   id: wireUuidSchema,
+  /**
+   * The token the Mac minted for a line's claim and carries on every retry
+   * of it, so a claim whose answer was lost is answered again rather than
+   * refused as taken; absent from a build before the field, whose claim is
+   * taken once, and from a request's claim.
+   */
+  claimToken: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 /** A line settled: its id, and for a launch line whose runner exited, its exit code. */
@@ -482,15 +489,35 @@ export const deviceAgentDoneAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
 });
 
+/**
+ * That the service took a beat, and the launches it holds the device to:
+ * the ids of its launch lines still unsettled with no stop queued after
+ * them, claimed or not, read after the beat was written. The device stops a
+ * runner whose launch it does not name and settles a named launch it runs
+ * nothing for; a service from before the field names none, and a build from
+ * before it ignores it.
+ */
+export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
+  done: EffectSchema.Literal(true),
+  openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+});
+
 /** The lines waiting for this Mac, in their order, none where none came while the read was held; nothing claimed. */
 export const deviceAgentLinesAnswerSchema = EffectSchema.Struct({
   lines: EffectSchema.Array(deviceAgentLineSchema),
 });
 
-/** A line claimed for this Mac, with a launch line's secrets, opened once; `not-found` where another claim took it or it was withdrawn. */
+/**
+ * A line claimed for this Mac, with a launch line's secrets, opened once;
+ * `not-found` where another claim took it, it was settled, or it was
+ * withdrawn. A claim asked again under its token is answered the line
+ * again, and a launch line as `secretsGone`, since its first claim took
+ * them.
+ */
 export const deviceAgentLineClaimAnswerSchema = EffectSchema.Struct({
   line: deviceAgentLineSchema,
   secrets: EffectSchema.optionalKey(deviceAgentLaunchSecretsSchema),
+  secretsGone: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 /** The requests waiting for this Mac, oldest first, none where none came while the read was held; nothing claimed. */

@@ -225,7 +225,6 @@ async function inbox(
       { id: panelFor, holds: {}, bare: true },
       [],
       [],
-      [],
       [FUNNEL.id],
       taskAgents.agentIds,
       undefined,

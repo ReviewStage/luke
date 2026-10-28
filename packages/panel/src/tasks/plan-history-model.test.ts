@@ -443,6 +443,4 @@ test("a person's revision the service names nobody for, or read with no account 
     actorName(revisionAuthorOf(named, { ...reader, id: undefined }, [])),
     "Dean Stratakos",
   );
-  // The account's own template is theirs alone, so its every revision is the reader's.
-  assert.equal(actorName(revisionAuthorOf(unnamed, reader, [], true)), "You");
 });

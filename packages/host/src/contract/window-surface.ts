@@ -13,7 +13,7 @@ import {
   MICROPHONE_STATUS,
   MICROPHONE_TRANSPORT,
   type MicrophoneRoute,
-} from "@luke/voice/audio";
+} from "@luke/settings/microphone";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";

@@ -4,6 +4,7 @@ import {
   type SettingsRowsInput,
   settingRowsForPage,
 } from "@luke/settings";
+import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/settings/settings-controls";
 import {
   BUTTON_VARIANT,
   Button,
@@ -13,7 +14,6 @@ import {
   SettingsRowStateLine,
   SettingsSection,
 } from "@luke/ui";
-import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/voice/settings-controls";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 

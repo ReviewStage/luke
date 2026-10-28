@@ -57,13 +57,8 @@ import { skillWord } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
-import {
-  callEndedLine,
-  callOfLine,
-  callPlaces,
-  type TranscriptCallRow,
-} from "@luke/voice/transcript-model";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import { callEndedLine, callPlaces, type TranscriptCallRow } from "@luke/voice/transcript-model";
+import { callOfLine, type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
@@ -100,12 +95,7 @@ import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import {
-  AgentCallControls,
-  type AgentCallDoors,
-  AgentCallFoot,
-  useAgentOnCall,
-} from "./agent-call.js";
+import { AgentCallControls, type AgentCallDoors, useAgentOnCall } from "./agent-call.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -154,6 +144,7 @@ import {
   macOwnerOf,
   messageWords,
   nativeSubagent,
+  offersStop,
   placedMessages,
   planPayerOf,
   providerOf,
@@ -272,7 +263,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
- * the board, an agent, code shown, the plan, or the Inbox, the one
+ * an agent, code shown, the plan, or the Inbox, the one
  * button that opens that tab (`toolTarget`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
@@ -2817,13 +2808,12 @@ function AgentTabView({
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <AgentTabFoot>
-        {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
-            stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+            stop={offersStop(agent) ? onStop : undefined}
             archivedBy={
               agent.archivedAt === undefined || agent.archivedBy === undefined
                 ? undefined
@@ -2836,6 +2826,7 @@ function AgentTabView({
           <AgentComposer
             agentId={agent.id}
             status={agent.status}
+            stoppable={offersStop(agent)}
             composer={composer}
             model={model}
             models={models}
@@ -3216,11 +3207,7 @@ function AgentTabBody({
             <ContinuedComposerNote
               agent={agent}
               doors={continuedDoors}
-              stop={
-                agent.status === CODING_AGENT_STATUS.RUNNING
-                  ? () => control.onStop(agent.id)
-                  : undefined
-              }
+              stop={offersStop(agent) ? () => control.onStop(agent.id) : undefined}
               control={control}
               shown={shown}
             />

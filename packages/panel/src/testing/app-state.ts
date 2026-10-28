@@ -7,12 +7,11 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import type { AppSettingsView } from "@luke/settings/wire";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF } from "@luke/voice/avatar";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge, fakeAppBridgeCalls } from "./app-bridge.js";
 
@@ -49,7 +48,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       upToDate: false,
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: { avatar: AVATAR_OFF },
+    voice: {},
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
@@ -82,7 +81,7 @@ export function deliveryOf(snapshot: AppStateSnapshot): AppStateDelivery {
   };
 }
 
-/** Main's document with the account's experiments as given and the slices patched: a call standing, its avatar, the window's facts. */
+/** Main's document with the account's experiments as given and the slices patched: a call standing, the window's facts. */
 export function stateWith(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot>,

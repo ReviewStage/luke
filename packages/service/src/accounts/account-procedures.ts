@@ -1,5 +1,5 @@
 /**
- * account-procedures.ts -- the signed-in account's own procedures: its deletion, its preferences, its access, its plan template, and its provider keys.
+ * account-procedures.ts -- the signed-in account's own procedures: its deletion, its preferences, its access, and its provider keys.
  *
  * Each resolves the caller before touching anything, and answers nothing
  * about any account but the one the caller is: root AGENTS.md pins that no
@@ -7,8 +7,7 @@
  * answers is a boolean or the caller's own stored value, never a token or
  * a session id. The caller is resolved on the resource itself, before any
  * input is read, so an unsigned caller is refused as unsigned whatever it
- * sent; but for a revision's two procedures, which read the revision their
- * path names first, as they always did.
+ * sent.
  *
  * The preferences snapshot is five parts: the settings preferences the
  * desktop syncs, where the account's Luke links open, a synced setting of
@@ -25,14 +24,6 @@
  * is passed over rather than refused, because it is an older or newer
  * build's experiment and refusing it would refuse the build's every other
  * choice too.
- *
- * The plan template is a path of its own rather than a third part of the
- * snapshot, because the desktop syncs the snapshot and applies it over its
- * own settings, and a twenty-thousand-character text has no place in that
- * loop. It is kept verbatim, and null stands for the built-in default.
- * Every write that changes it is kept as a revision, which its history
- * reads a page at a time and one at a time, and which a restore puts back
- * as a revision of its own, all under the caller's account alone.
  *
  * The access is whether the caller is an admin, read off its own role, so a
  * client can offer the admin dashboard to the account that may open it. It
@@ -54,12 +45,6 @@ import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@luke/features/chapters
 import { contextWindowSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
-import {
-  DEFAULT_PLAN_TEMPLATE,
-  type PlanTemplateAnswer,
-  type PlanTemplateRevisionAnswer,
-  type PlanTemplateRevisionsAnswer,
-} from "@luke/features/plan-document-template";
 import { failureKind } from "@luke/runtime/effect";
 import {
   accountPreferencesFromWire,
@@ -70,7 +55,7 @@ import {
 } from "@luke/settings";
 import type { UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Redacted, Result, Schema } from "effect";
+import { Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";
 import type { EveReach } from "../agents/coder-host/stop.js";
@@ -112,25 +97,6 @@ export interface AccountProcedureSeams extends EveReach {
     userId: string,
     write: AccountPreferencesWrite,
   ) => AccountSeamEffect<AccountPreferencesRow>;
-  /** The account's own template, or null where it holds the default. */
-  readPlanTemplate: (userId: string) => AccountSeamEffect<string | null>;
-  /** Keeps the template verbatim, or null for the default, and answers what is then kept. */
-  writePlanTemplate: (userId: string, template: string | null) => AccountSeamEffect<string | null>;
-  /** A page of the template's revisions, the newest first, before the one `before` names where it names one. */
-  listPlanTemplateRevisions: (
-    userId: string,
-    before?: number,
-  ) => AccountSeamEffect<PlanTemplateRevisionsAnswer>;
-  /** One revision beside the one before it; nothing where the account has no such revision. */
-  readPlanTemplateRevision: (
-    userId: string,
-    seq: number,
-  ) => AccountSeamEffect<Option.Option<PlanTemplateRevisionAnswer["revision"]>>;
-  /** Puts one revision back as the template and answers what is then kept; nothing where the account has no such revision. */
-  restorePlanTemplate: (
-    userId: string,
-    seq: number,
-  ) => AccountSeamEffect<Option.Option<string | null>>;
 }
 
 /** A coding-agent choice as a write names it; the catalog decides whether it is one. */
@@ -156,11 +122,6 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined) {
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
   };
-}
-
-/** The template as the account answers it: its own, or the default where it holds none. */
-function planTemplateAnswer(stored: string | null): PlanTemplateAnswer {
-  return { template: stored ?? DEFAULT_PLAN_TEMPLATE, custom: stored !== null };
 }
 
 /**
@@ -312,58 +273,6 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       const row = yield* hostedStoreOrUnavailable(seams.writePreferences(context.userId, write));
       return snapshotAnswer(row);
     }),
-
-    /** The caller's own template, or the default for an account that kept none. */
-    planTemplate: signedIn.planTemplate.effect(function* ({ context }) {
-      const stored = yield* hostedStoreOrUnavailable(seams.readPlanTemplate(context.userId));
-      return planTemplateAnswer(stored);
-    }),
-
-    /**
-     * Keeps the body's template verbatim, untrimmed and possibly empty, or
-     * goes back to the default on null, and answers the template as it then
-     * stands. A body naming any other key, or a template past the bound, is
-     * refused and nothing is written.
-     */
-    writePlanTemplate: signedIn.writePlanTemplate.effect(function* ({ context, input }) {
-      const stored = yield* hostedStoreOrUnavailable(
-        seams.writePlanTemplate(context.userId, input.template),
-      );
-      return planTemplateAnswer(stored);
-    }),
-
-    /** A page of the caller's template history, the newest first; an account with none answers an empty page. */
-    planTemplateRevisions: signedIn.planTemplateRevisions.effect(function* ({ context, input }) {
-      return yield* hostedStoreOrUnavailable(
-        seams.listPlanTemplateRevisions(context.userId, input.before),
-      );
-    }),
-
-    /** One revision of the caller's template beside the one before it. */
-    planTemplateRevision: hosted.account.planTemplateRevision
-      .use(accountMiddleware(seams.resolveUserId))
-      .effect(function* ({ context, input }) {
-        const revision = yield* hostedStoreOrUnavailable(
-          seams.readPlanTemplateRevision(context.userId, input.seq),
-        );
-        if (Option.isNone(revision)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        return { revision: revision.value };
-      }),
-
-    /**
-     * Puts one revision back as the caller's template, a revision of its
-     * own naming it, and answers the template as a write does. It names
-     * nothing in a body: the revision is the path's.
-     */
-    restorePlanTemplate: hosted.account.restorePlanTemplate
-      .use(accountMiddleware(seams.resolveUserId))
-      .effect(function* ({ context, input }) {
-        const restored = yield* hostedStoreOrUnavailable(
-          seams.restorePlanTemplate(context.userId, input.seq),
-        );
-        if (Option.isNone(restored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        return planTemplateAnswer(restored.value);
-      }),
 
     ...providerKeysProcedures(seams),
     ...memoriesProcedures(seams),

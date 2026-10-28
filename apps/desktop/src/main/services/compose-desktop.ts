@@ -17,7 +17,6 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@luke/host/effect";
-import { callStaged } from "@luke/host/fixture-stage";
 import { openMacTerminals } from "@luke/host/node";
 import {
   confirmingHold,
@@ -34,13 +33,12 @@ import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
-import { Context, Effect, Layer, Stream } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
 import { askBeforeLeaving } from "../window/quit-dialog";
-import { type AvatarLink, linkAvatar } from "./avatar-link";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
@@ -75,8 +73,6 @@ export interface DesktopServices {
   readonly windows: WindowService;
   /** Where every coding-agent answer is noted, for the unseen dots and the counts. */
   readonly notices: AgentNotices;
-  /** Luke's avatar as the host holds it, which the panel's acts reach. */
-  readonly avatar: AvatarLink;
   /**
    * A transcript's fenced block coloured in a process of its own, spawned the
    * first time one is asked for and killed with the launch's scope, so the
@@ -242,15 +238,6 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
-      // The host's avatar, bound from the launch on: its grants to the panel
-      // alone and where it stands to the document, but where a call profile
-      // stages the avatar, which the host, holding no call, would put down.
-      const avatar = yield* linkAvatar({
-        host: callStaged(config.launch) ? { ...host.avatar, states: Stream.never } : host.avatar,
-        state,
-        panel: windows.panels,
-        setVideo: (on) => operator.host.setVideo(on),
-      });
       const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
       // A quit, a restart to update, and a sign-out asked for while a call
       // stands, a panel holds unsaved work, or a terminal of this Mac is open
@@ -348,7 +335,6 @@ export function composeDesktop(
         operator,
         windows,
         notices,
-        avatar,
         colourCode,
         run,
         services,

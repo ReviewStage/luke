@@ -94,7 +94,6 @@ import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { READABLE_CONTROLS_EXAMPLE } from "./examples/readable-controls";
 import { RECT_FLOAT_EXAMPLE } from "./examples/rect-float";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
-import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
@@ -271,7 +270,6 @@ export const EXAMPLES: readonly Example[] = [
   LOADING_INDICATORS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
-  RESIZE_CORNERS_EXAMPLE,
   SLIDER_EXAMPLE,
   VIDEO_PLAYER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,

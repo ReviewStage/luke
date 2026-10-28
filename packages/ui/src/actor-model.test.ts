@@ -153,13 +153,6 @@ test("a plan's edit is named by who wrote it: a member as the members read them,
   );
 });
 
-test("where every edit is the reader's own, as the template's are, each names the reader whatever member it names", () => {
-  const owner = { kind: ACTOR_KIND.PERSON, userId: SAM.userId, name: SAM.name, you: true } as const;
-  const unnamed = { actor: PLAN_ACTOR.DEVELOPER, at: 0, duringCall: false };
-
-  assert.deepEqual(editActor(unnamed, { members: undefined, readerId: undefined, owner }), owner);
-});
-
 test("what someone last did in a plan is the sections whose last change is theirs, the newest change's moment, and a few named before the rest are counted", () => {
   const edit = (section: string, at: number, by = DANA_REF): PlanSectionEdit => ({
     section,

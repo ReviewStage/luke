@@ -25,7 +25,7 @@ import { useLinkStanding } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
- * lone-link-card.tsx -- a link standing alone in its paragraph of words drawn as a document, as its one-line card: a pull request's, a page's, or the lines of a file at a commit as the Code tab's card.
+ * lone-link-card.tsx -- a link standing alone in its paragraph of words drawn as a document, as its one-line card: a pull request's, a page's, or the lines of a file at a commit as an inbox item's code card.
  *
  * What a link earns a card is the link's own (`@luke/features/lone-link`);
  * how each card is drawn is decided here. A pull request is a card of one

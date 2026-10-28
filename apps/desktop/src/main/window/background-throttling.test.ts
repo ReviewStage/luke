@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
 import { beforeEach, expect, test, vi } from "vitest";
 import { CallWindow } from "./call-window";
@@ -8,8 +7,7 @@ import { VoiceWindow } from "./voice-window";
 
 /**
  * Which windows Chromium may throttle while they are hidden or covered: the
- * panel and the call window may, the voice window never, and a panel runs
- * unthrottled only while the avatar's session stands in it.
+ * panel and the call window may, the voice window never.
  */
 
 const { windows, FakeBrowserWindow } = await vi.hoisted(async () => {
@@ -60,12 +58,6 @@ const RUN_MODE: RunMode = {
   animates: false,
   takesFocus: false,
   sendsNetwork: false,
-};
-
-const GRANT: AvatarGrant = {
-  serverUrl: "wss://avatar.test",
-  participantToken: "token",
-  agentIdentity: "agent",
 };
 
 function panels() {
@@ -119,38 +111,4 @@ test("the call window opens throttled", () => {
   }).show();
   expect(windows).toHaveLength(1);
   expect(windows[0]?.webContents.throttled).toBe(true);
-});
-
-test("a panel running the avatar's session is unthrottled until the grant is withdrawn", () => {
-  const panel = panels();
-  const window = panel.primaryPanel();
-  panel.showAvatarSession(GRANT);
-  expect(throttled(window)).toBe(false);
-  panel.showAvatarSession(undefined);
-  expect(throttled(window)).toBe(true);
-});
-
-test("a panel opened or reloaded while the avatar's session stands is unthrottled", () => {
-  const panel = panels();
-  panel.showAvatarSession(GRANT);
-  const window = panel.primaryPanel();
-  // A reload: the page finishes loading again, and the renderer's throttle must not have been lost.
-  windows[0]?.webContents.setBackgroundThrottling(true);
-  windows[0]?.webContents.emit("did-finish-load");
-  expect(throttled(window)).toBe(false);
-
-  windows.length = 0;
-  const reopened = new PanelManager({
-    runMode: RUN_MODE,
-    mediaDuck: { setExchangeActive: () => undefined },
-    preloadPath: "preload.js",
-    rendererHtmlPath: "index.html",
-    rendererUrl: "file:///index.html",
-    zoomFactor: () => 1,
-    placementPath: undefined,
-    closing: () => false,
-  });
-  reopened.showAvatarSession(GRANT);
-  reopened.reconcile();
-  expect(windows[0]?.webContents.throttled).toBe(false);
 });

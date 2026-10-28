@@ -247,18 +247,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Microphone", "permission access allow privacy system settings"],
         }
       : undefined,
-    // The account's plan template, which is the account's on the service: drawn once an account is signed in.
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.PLAN_TEMPLATE,
-          label: "Plan template",
-          page: SETTINGS_VIEW.PLAN_TEMPLATE,
-          haystack: [
-            "Plan template",
-            "new task plan starter document markdown sections headings default",
-          ],
-        }
-      : undefined,
     // What the workspace's agents remember, which is the workspace's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {

@@ -185,9 +185,6 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Browser tab", "cloud browsers"]) {
     assert.deepEqual(experimentalFound(query, true), ["Browser tab"], query);
   }
-  for (const query of ["Video calls", "Keyframe"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
-  }
   for (const query of ["threads by topic", "a stream your agents post to"]) {
     assert.deepEqual(experimentalFound(query, true), ["Channels"], query);
   }
@@ -200,27 +197,11 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Local agents", "Channels", "Memory", "Luke, your operator", "Browser tab", "Video calls"],
+      ["Local agents", "Channels", "Memory", "Luke, your operator", "Browser tab"],
       query,
     );
   }
   assert.deepEqual(experimentalFound("Browser tab", false), []);
-});
-
-test("Video calls is one switch, on the Experimental page, and not among the Voice page's controls", () => {
-  const found = searchSettings(
-    settingsSearchEntries({
-      settings: settingsView(),
-      voiceControlsDrawn: true,
-      accountDrawn: true,
-      capabilities: DESKTOP_CAPABILITIES,
-    }),
-    "Video calls",
-  );
-  assert.deepEqual(
-    (found?.groups ?? []).map((group) => group.page),
-    [SETTINGS_VIEW.EXPERIMENTAL],
-  );
 });
 
 test("no two rows the search can land on wear the same id", () => {
