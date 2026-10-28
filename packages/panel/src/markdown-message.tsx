@@ -450,6 +450,15 @@ const COMPONENTS: MarkdownComponents = {
   a: ({ href, children, node }) => plainLink(href, children, node, undefined),
 };
 
+/**
+ * How a line's code span is drawn: as a transcript's (`.transcript-inline-code`),
+ * since a line, a to-do's step, stands under an agent's message and reads as
+ * its words do. A fence's code in a line is one span too (`MARKDOWN_LOOK.INLINE`).
+ */
+const LINE_CODE: MarkdownComponents["code"] = ({ children }) => (
+  <code className="transcript-inline-code">{children}</code>
+);
+
 /** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */
 function plainLink(
   href: string | undefined,
@@ -665,6 +674,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   diagrams,
   onTask,
   landed,
+  inline,
 }: {
   words: string;
   className?: string;
@@ -684,6 +694,8 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   onTask?: MarkdownTaskToggler | undefined;
   /** Whether the words were just landed on, lit once as every place landed on is. */
   landed?: boolean | undefined;
+  /** Whether the words are one line's, a to-do's step say: drawn in the place's own element as one run of inline words, with no root, its blocks' words run together. */
+  inline?: boolean | undefined;
 }): React.JSX.Element {
   const keyTargets = useWordTargets();
   const rehypePlugins = useMemo(() => {
@@ -705,12 +717,14 @@ export const MarkdownMessage = memo(function MarkdownMessage({
       link === undefined &&
       openLink === undefined &&
       diagrams !== true &&
-      picture === undefined
+      picture === undefined &&
+      inline !== true
     ) {
       return COMPONENTS;
     }
     const drawing: MarkdownComponents = {
       ...COMPONENTS,
+      ...(inline === true ? { code: LINE_CODE } : {}),
       a: ({ href, children, node }) => {
         const drawn =
           href === undefined || link === undefined
@@ -727,11 +741,11 @@ export const MarkdownMessage = memo(function MarkdownMessage({
         (isWireString(src) ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
     }
     return drawing;
-  }, [link, openLink, diagrams, picture]);
+  }, [link, openLink, diagrams, picture, inline]);
   return (
     <FenceEdit.Provider value={edit}>
       <Markdown
-        look={MARKDOWN_LOOK.NOTE}
+        look={inline === true ? MARKDOWN_LOOK.INLINE : MARKDOWN_LOOK.NOTE}
         words={words}
         className={className}
         rehypePlugins={rehypePlugins}

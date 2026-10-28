@@ -40,6 +40,7 @@ import type { Actor } from "@luke/ui/actor-model";
 import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
+import { MarkdownMessage } from "../markdown-message.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -59,6 +60,7 @@ import {
 import { ANSWER_STATUS_TONE } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
+import { useOpenLink } from "./use-open-link.js";
 
 /**
  * inbox-ask-controls.tsx -- what an ask asks for, drawn as the Inbox draws it: a `decide`'s options or its two presses, a `do`'s steps and presses, an `answer`'s fields, open or as an answer left them, and the words an ask stands at once it no longer waits.
@@ -421,18 +423,23 @@ export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
 }
 
+/** Whether a key goes to a link, a step's say, whose own Enter opens it. */
+function opensLink(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.matches("a[href]");
+}
+
 /**
  * Enter in an open item's question, on an option or in a form's field,
  * sends the answer, and never presses the option it stands on, which Space
- * or a press picks. Shift+Enter is no send, and an editor's Enter is the
- * editor's own to hand on.
+ * or a press picks. Shift+Enter is no send, and an editor's Enter and a
+ * link's are their own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
-  if (writesLines(event.target)) return;
+  if (writesLines(event.target) || opensLink(event.target)) return;
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
@@ -484,6 +491,15 @@ function AskPress({
       {label}
     </Button>
   );
+}
+
+/**
+ * A to-do's step as its box's words: its inline Markdown drawn, bold, code,
+ * and links among it, a list or a fence in it run into the line (`inline`),
+ * and a link pressed opening its page without ticking the box (`TextLink`).
+ */
+function StepWords({ step }: { step: string }): React.JSX.Element {
+  return <MarkdownMessage words={step} inline openLink={useOpenLink()} />;
 }
 
 /** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
@@ -574,7 +590,7 @@ function OpenControls({
                     disabled={disabled}
                     onChange={() => onDraft(withStep(ask, draft, at))}
                   >
-                    {step}
+                    <StepWords step={step} />
                   </Checkbox>
                 </li>
               ))}
@@ -722,7 +738,7 @@ function LeftControls({
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
                   <Checkbox checked={ticked.has(at)} readOnly onChange={heldStill}>
-                    {step}
+                    <StepWords step={step} />
                   </Checkbox>
                 </li>
               ))}

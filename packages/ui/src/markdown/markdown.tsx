@@ -17,6 +17,10 @@
  * - A document (`MARKDOWN_LOOK.DOCUMENT`) is parsed whole with real headings
  *   and no root of its own, because it is drawn into `Prose`'s, as the site
  *   renders its privacy policy and changelog at build time.
+ * - A line (`MARKDOWN_LOOK.INLINE`) is parsed whole as a note is, with no
+ *   root of its own, its blocks unwrapped into one run of inline words, so
+ *   it is drawn inside a label or any other element that holds words alone,
+ *   as a to-do's step is.
  *
  * Exported at `@luke/ui/markdown` alone, so the parser rides into no bundle
  * behind the barrel. Whatever a place knows better than this package, a
@@ -24,6 +28,7 @@
  * or a step, so nothing here reaches an app.
  */
 
+import type { ElementContent, Root } from "hast";
 import { memo, type ReactNode, useMemo, useRef } from "react";
 import remarkGfm from "remark-gfm";
 import {
@@ -54,6 +59,7 @@ export const MARKDOWN_LOOK = {
   NOTE: "note",
   TRANSCRIPT: "transcript",
   DOCUMENT: "document",
+  INLINE: "inline",
 } as const;
 
 type MarkdownLook = (typeof MARKDOWN_LOOK)[keyof typeof MARKDOWN_LOOK];
@@ -125,6 +131,47 @@ const NOTE_COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
+/**
+ * The elements a line keeps as they are: the inline ones Markdown writes, and
+ * those a place's own steps mark words with. A task item's box is no word, so
+ * it is not among them.
+ */
+const INLINE_TAGS: ReadonlySet<string> = new Set([
+  "a",
+  "br",
+  "code",
+  "del",
+  "em",
+  "img",
+  "ins",
+  "mark",
+  "span",
+  "strong",
+]);
+
+/** A node's children with every element no line keeps replaced by its own children, and a task item's box dropped. */
+function inlineChildren(children: readonly ElementContent[]): ElementContent[] {
+  return children.flatMap((child): ElementContent[] => {
+    if (child.type !== "element") return [child];
+    if (child.tagName === "input") return [];
+    const kept = inlineChildren(child.children);
+    return INLINE_TAGS.has(child.tagName) ? [{ ...child, children: kept }] : kept;
+  });
+}
+
+/**
+ * The rehype step that draws a line's blocks as one run of words: a
+ * paragraph, a heading, a list, a quote, and a table each give way to their
+ * words, and a fence to its code, drawn as a code span. Note that the line
+ * breaks the tree keeps between blocks stay, so two blocks' words read apart
+ * as a space between them.
+ */
+const unwrapBlocks = () => (tree: Root) => {
+  tree.children = inlineChildren(
+    tree.children.filter((child): child is ElementContent => child.type !== "doctype"),
+  );
+};
+
 /** A serial for each value a step closes over, which Streamdown's processor cache cannot tell apart by itself. */
 const stepSerials = new WeakMap<object, number>();
 let nextStepSerial = 0;
@@ -187,7 +234,7 @@ export interface MarkdownProps {
   /** The words, as written. */
   words: string;
   look: MarkdownLook;
-  /** The place's own class on the root; a document has none, being drawn into `Prose`'s. */
+  /** The place's own class on the root; a document and a line have none, being drawn into the place's own. */
   className?: string | undefined;
   /** Whether a note was just landed on, lit once as every place landed on is (`landed.ts`). */
   landed?: boolean | undefined;
@@ -230,9 +277,16 @@ function WholeWords({
   toggler.current = onTask;
   const toggles = onTask !== undefined;
   // Note that every box is named by its item, so one the reader cannot tick is placed too.
-  const steps = useMemo(() => [placeTaskItems, ...(rehypePlugins ?? [])], [rehypePlugins]);
+  const steps = useMemo(
+    () => [
+      placeTaskItems,
+      ...(rehypePlugins ?? []),
+      ...(look === MARKDOWN_LOOK.INLINE ? [unwrapBlocks] : []),
+    ],
+    [look, rehypePlugins],
+  );
   const drawn = useMemo<Components>(() => {
-    const own = look === MARKDOWN_LOOK.NOTE ? NOTE_COMPONENTS : {};
+    const own = look === MARKDOWN_LOOK.DOCUMENT ? {} : NOTE_COMPONENTS;
     const input = toggles
       ? taskInput((at, ticked) => toggler.current?.(at, ticked) ?? Promise.resolve(false))
       : readTaskInput;
@@ -306,7 +360,9 @@ export const Markdown = memo(function Markdown({
       </Streamdown>
     );
   }
-  if (look === MARKDOWN_LOOK.DOCUMENT) return <WholeWords {...whole} />;
+  if (look === MARKDOWN_LOOK.DOCUMENT || look === MARKDOWN_LOOK.INLINE) {
+    return <WholeWords {...whole} />;
+  }
   return (
     <div className={markdownClass(className)} {...landedMark(landed)}>
       <WholeWords {...whole} />
