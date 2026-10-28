@@ -185,12 +185,19 @@ async function mount(
           fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
           choices.push(from?.issues);
           startedIn.push(workspaceId);
+          // A refusal puts the words back, as the tab does as it opens the card again.
+          const refusal = (refused: Failure | undefined) => {
+            if (refused !== undefined) from?.restore?.();
+            return refused;
+          };
           if (answer instanceof Promise) {
             setOpen(false);
-            return answer;
+            return answer.then(refusal);
           }
           return Promise.resolve(
-            typeof answer === "string" ? { reason: FAILURE_REASON.OTHER, text: answer } : answer,
+            refusal(
+              typeof answer === "string" ? { reason: FAILURE_REASON.OTHER, text: answer } : answer,
+            ),
           );
         },
         onClose: () => setOpen(false),

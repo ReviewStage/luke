@@ -3164,7 +3164,7 @@ test("what the developer opened while New task's agent start was out, a page and
   assert.equal(tab.control().starting, undefined);
 });
 
-test("an agent's start refused after New task was opened again leaves the card that stands as it is", async () => {
+test("an agent's start refused after New task was opened again leaves the card that stands as it is, and its toast's Open opens the refused card in its place", async () => {
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -3198,6 +3198,11 @@ test("an agent's start refused after New task was opened again leaves the card t
   });
   assert.equal(tab.control().newTask.open, true);
   assert.equal(tab.control().newTask.preset, undefined, "the card opened since is not taken over");
+
+  const open = newestToastAction() ?? assert.fail("the toast offers the refused card");
+  act(() => open.click());
+  await settle();
+  assert.deepEqual(tab.control().newTask.preset?.refused?.card, card);
 });
 
 test("New task's agent start opens no draft beside its agent while the task stands open before the start answers", async () => {

@@ -559,6 +559,8 @@ export interface NewTaskStart {
   readonly handed?: NewTaskAgent;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
+  /** Puts the words an agent's start let go back in New task's draft, where it holds nothing since, as its card opens again on a refusal. */
+  readonly restore?: () => void;
 }
 
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
@@ -1084,6 +1086,9 @@ const DELETE_REFUSED_NOTE = "The task could not be deleted. Try again.";
 
 /** What leads why an agent's start was refused where its card cannot open again, the developer having gone on to New task or another start. */
 const START_REFUSED_LEAD = "That task did not start.";
+
+/** The toast's press that opens New task again on the start it says was refused. */
+const START_REFUSED_OPEN = "Open";
 
 /** What a delete the service did not carry answers, so the task stays and says why. */
 const DELETE_REFUSED: ActionResult = {
@@ -2638,13 +2643,27 @@ export function useTasksTab(input: {
     const refusedWith = (note: Failure): Failure => {
       if (handed !== undefined) {
         letGoOfPage();
+        const reopen = () => {
+          from.restore?.();
+          setNewTaskAsk({
+            preset:
+              card === undefined
+                ? undefined
+                : {
+                    ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                    refused: { card, note },
+                  },
+          });
+        };
         // Note that a refusal answered after New task was opened again, or another start pressed,
-        // says why in a toast rather than taking the card or the page they stand on.
+        // says why in a toast rather than taking the card, its words, or the page they stand on,
+        // and its Open brings the refused card back, over whatever card stands then.
         if (newTaskStands.current || lastStart.current !== handed.idempotencyKey) {
           toast({
             words: `${START_REFUSED_LEAD} ${note.text}`,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
+            action: { label: START_REFUSED_OPEN, onPress: reopen },
           });
           return note;
         }
@@ -2653,15 +2672,7 @@ export function useTasksTab(input: {
           setStandIn((now) => now ?? standingBefore);
           setHistoryFor((now) => now ?? historyBefore);
         }
-        setNewTaskAsk({
-          preset:
-            card === undefined
-              ? undefined
-              : {
-                  ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
-                  refused: { card, note },
-                },
-        });
+        reopen();
       }
       return note;
     };

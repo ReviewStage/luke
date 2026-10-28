@@ -458,24 +458,29 @@ export function NewTaskComposer({
     onStarting?.(true);
     setNote(undefined);
     // Note that an agent's start lets its words go as it is pressed, because the card closes at
-    // once and a New task opened before the service answers must open empty; a refusal puts
-    // them back where the box was left empty since.
+    // once and a New task opened before the service answers must open empty; the owner puts
+    // them back as it opens this card again on a refusal (`restore`), where the box was left empty since.
     const taken = draft.draft;
-    if (handing.handed !== undefined) draft.update(() => EMPTY_DRAFT);
+    const agentStart = handing.handed !== undefined;
+    if (agentStart) draft.update(() => EMPTY_DRAFT);
     newTask
       .start(name, repository, workspaceId, {
         ...(issues.length === 0 ? undefined : { issues }),
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(device === undefined ? undefined : { device }),
         ...handing,
+        ...(agentStart
+          ? {
+              restore: () =>
+                draft.update((now) => (hasWordsOrFiles(now.text, now.attachments) ? now : taken)),
+            }
+          : undefined),
       })
       .then((refused) => {
         if (refused === undefined) {
           // A task started lets its words go, so the next New task opens empty.
           pressed.current = undefined;
-          if (handing.handed === undefined) draft.update(() => EMPTY_DRAFT);
-        } else if (handing.handed !== undefined) {
-          draft.update((now) => (hasWordsOrFiles(now.text, now.attachments) ? now : taken));
+          if (!agentStart) draft.update(() => EMPTY_DRAFT);
         }
         setNote(refused);
       })

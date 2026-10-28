@@ -120,12 +120,17 @@ export function NewTaskDialog({
   // Note that the card is drawn from its opening until its fade has run, because its picks are its own and start over each time it opens.
   const { drawn, onExited } = useDrawnThroughExit(newTask.open);
   // Each opening is a card of its own, so one asked while the last still fades, as ⌘N right after
-  // a start is, opens afresh rather than bringing back the closing card and the start it holds.
+  // a start is, opens afresh rather than bringing back the closing card and the start it holds;
+  // so is a card opened on another preset over one standing, as a refused start's Open does.
   const [openings, setOpenings] = useState(0);
   const [wasOpen, setWasOpen] = useState(newTask.open);
-  if (wasOpen !== newTask.open) {
+  const [wasPreset, setWasPreset] = useState(newTask.preset);
+  if (wasOpen !== newTask.open || wasPreset !== newTask.preset) {
+    if (newTask.open && (!wasOpen || wasPreset !== newTask.preset)) {
+      setOpenings((count) => count + 1);
+    }
     setWasOpen(newTask.open);
-    if (newTask.open) setOpenings((count) => count + 1);
+    setWasPreset(newTask.preset);
   }
   if (!drawn) return null;
   return <NewTaskCard key={openings} open={newTask.open} newTask={newTask} onExited={onExited} />;
