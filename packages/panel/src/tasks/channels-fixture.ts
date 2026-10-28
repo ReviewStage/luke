@@ -13,6 +13,7 @@
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   AGENT_CALL_FAILURE,
+  type AgentAccountItems,
   type AgentInboxChanged,
   INBOX_SCOPE_KIND,
 } from "@luke/features/agent-view";
@@ -1233,6 +1234,23 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
     const pushed: AgentInboxChanged["inbox"] = {
       items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
+    };
+    return pushedOnce(pushed);
+  },
+  // The account's feed of every item, which the window's Inbox draws from: each task's threads, and the stray agent's.
+  [ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+    const taskIds = new Set(
+      THREADS.flatMap((each) => (each.taskId === undefined ? [] : [each.taskId])),
+    );
+    const pushed: AgentAccountItems = {
+      whole: true,
+      scopes: [
+        ...[...taskIds].map((id) => ({
+          scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+          items: itemsOf(id),
+        })),
+        { scope: { kind: INBOX_SCOPE_KIND.AGENT, id: STRAY.agentId }, items: strayItems() },
+      ],
     };
     return pushedOnce(pushed);
   },

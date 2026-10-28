@@ -304,6 +304,8 @@ class InboxWorld {
   setTaskless: (taskless: readonly AppInboxTasklessItem[]) => void = () => undefined;
   /** Whether an agent's own inbox read answers that it could not be read. */
   agentReadFails = false;
+  /** Whether the account's feed answers that it is not answering, rather than with every task's items. */
+  feedRefused = false;
   /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
   /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
@@ -431,6 +433,7 @@ beforeEach(() => {
   world.agentInboxes = new Map();
   world.agentReads = [];
   world.agentReadFails = false;
+  world.feedRefused = false;
   world.agentListHeld = false;
   world.holdAgentRead = undefined;
   world.listedWorkspace = undefined;
@@ -614,6 +617,9 @@ const ACCOUNT_FEED: Pick<
         return { done: true, value: undefined };
       }
       sent = true;
+      if (world.feedRefused) {
+        return { done: false, value: { failure: AGENT_CALL_FAILURE.UNANSWERED } };
+      }
       const scopes = [...world.inboxes].map(([id, items]) => ({
         scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
         items,

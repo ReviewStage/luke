@@ -136,6 +136,11 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   );
   const readTasks = read.current[INBOX_SCOPE_KIND.PLAN];
   const readAgents = read.current[INBOX_SCOPE_KIND.AGENT];
+  // Note that a holder the feed holds nothing of is read for the list, but its own read may still hold an item a link names.
+  const settlesTask = (id: string) =>
+    readTasks.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.PLAN].has(id);
+  const settlesAgent = (id: string) =>
+    readAgents.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.AGENT].has(id);
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
@@ -253,11 +258,11 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // Note that a plan's items read before main's latest word of it may lack the item asked for, so only a current read settles it.
   const chosenWaits =
     (taskId !== undefined &&
-      !readTasks.has(taskId) &&
+      !settlesTask(taskId) &&
       !live.read &&
       (holdings.some((holding) => holding.taskId === taskId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
-      !readAgents.has(chosenAgentId) &&
+      !settlesAgent(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
   // Note that the holdings are filtered against the task list, so until it is read they hold nothing and prove nothing.
@@ -272,9 +277,9 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     taskId !== undefined
-      ? readTasks.has(taskId) || live.read || holderEmpty
+      ? settlesTask(taskId) || live.read || holderEmpty
       : chosenAgentId !== undefined
-        ? live.read || readAgents.has(chosenAgentId) || holderEmpty
+        ? live.read || settlesAgent(chosenAgentId) || holderEmpty
         : true;
   // Note that only a task's item waits on the task list, since an agent with no task is read apart from it.
   const missing =

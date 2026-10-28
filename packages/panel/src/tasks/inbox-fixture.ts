@@ -17,7 +17,11 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { AgentInboxChanged } from "@luke/features/agent-view";
+import {
+  type AgentAccountItems,
+  type AgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import {
@@ -604,6 +608,15 @@ const NO_AUTOMATIONS: AutomationListView = { automations: [] };
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ id }) => {
     const pushed: AgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
+    return pushedOnce(pushed);
+  },
+  // The account's feed of every item, which the window's Inbox draws from, each staged task's items whole.
+  [ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+    const scopes = [...INBOXES].map(([id, items]) => ({
+      scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+      items,
+    }));
+    const pushed: AgentAccountItems = { whole: true, scopes };
     return pushedOnce(pushed);
   },
   [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {

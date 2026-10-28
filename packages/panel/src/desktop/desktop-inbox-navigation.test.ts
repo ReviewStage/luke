@@ -105,7 +105,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
-  const { page } = mount([], { windowRoot: true });
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
   await settle();
   const rows = listed(page);
   assert.ok(
@@ -140,25 +140,57 @@ test("the Inbox under the window's root draws each task held whole by the accoun
   }
 });
 
-test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
-  const { page } = mount([], { windowRoot: true });
+test("an Inbox under the window's root whose feed holds nothing of its tasks says so rather than reading for good", async () => {
+  // The feed answers with no task, as it leaves out one whose items all settled past its bound.
+  world.inboxes = new Map();
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
   await settle();
-  world.main.push(
-    { kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id },
-    { failure: AGENT_CALL_FAILURE.UNANSWERED },
-  );
-  act(() => world.setInboxOpen(false));
+  const list = page.querySelector(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  assert.equal(list.querySelector('[aria-busy="true"]'), null, "nothing is still being read");
+});
+
+test("a link to an item the account's feed leaves out waits for its task's own read, saying no Not found, and then shows it", async () => {
+  // The feed leaves the invites task out, as it does one whose items all settled past its bound.
+  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  let land: () => void = () => undefined;
+  world.startRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({ status: FAKE_ANSWER.DONE, value: { items: [EXPIRY], cursor: "1" } });
+        })
+      : undefined;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  act(() => world.chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
   await settle();
 
-  act(() => world.setInboxOpen(true));
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.match(
+    page.querySelector(".inbox-view-items")?.textContent ?? "",
+    /Expire after 7 days\?/u,
+  );
+});
+
+test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
+  world.feedRefused = true;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const retry = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "the list offers to read again");
+
+  world.feedRefused = false;
+  act(() => retry.click());
   await settle();
   assert.ok(
-    world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }),
-    "the failed task is followed anew",
-  );
-  assert.ok(
-    listed(page).some((row) => row.endsWith(EXPIRY.title)),
-    "its items are drawn again",
+    listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+    "the feed is read again and its items drawn",
   );
 });
 
