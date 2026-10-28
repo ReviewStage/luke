@@ -990,6 +990,54 @@ export function turnStoppedUnderReached(
   return Effect.map(findTurnStoppedUnder({ conversationId, key }), (rows) => rows.length > 0);
 }
 
+/**
+ * When the newest turn to end in the conversation `conversationId` names
+ * ended, or null where none has: what a live statement selects beside the
+ * newest turn, whose own end is null while it runs, as
+ * `lastSettledTurnsOfReached` reads it.
+ */
+export function lastSettledTurnAt(conversationId: SQLWrapper): SQL<Date | null> {
+  // Note that the instant is selected bare, as `newestAwaitingLineAt`'s is, since a live statement takes no cast through text.
+  return sql<Date | null>`(${queryBuilder
+    .select({ settledAt: sql<Date | null>`max(${turns.settledAt})` })
+    .from(turns)
+    .where(eq(turns.conversationId, conversationId))})`;
+}
+
+const LastSettledTurnRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  settledAt: InstantColumnSchema,
+});
+
+/** When the newest turn to end in each conversation named ended; a conversation none of whose turns has ended answers no row. */
+const findLastSettledTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: LastSettledTurnRowSchema,
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: turns.conversationId, settledAt: max(turns.settledAt) })
+        .from(turns)
+        .where(and(inArray(turns.conversationId, [...conversationIds]), isNotNull(turns.settledAt)))
+        .groupBy(turns.conversationId),
+    ),
+});
+
+/**
+ * When the newest turn to end in each conversation named ended, whoever owns
+ * it, keyed by conversation; a conversation none of whose turns has ended is
+ * absent. Only for ids a gate already read, as `latestTurnsOfReached`.
+ */
+export function lastSettledTurnsOfReached(
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, Date>, StoreFailure, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLastSettledTurns({ conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.settledAt])),
+  );
+}
+
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
   newestAt: InstantColumnSchema,
@@ -1081,11 +1129,9 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
  * turn of eve's. A line a turn already received under another row
- * (`noReceiptOfLine`) is not counted, and neither is a line said or typed
- * on a call into the agent: the voice answers many spoken ones itself, and
- * one it hands on, as every typed one is, opens its spoken turn through the
- * asks (`asks.ts`), whose turn row is what reads the agent as running, so no
- * line of a call waits on a turn here. Nor is a line its hand-over withdrew,
+ * (`noReceiptOfLine`) is not counted, and neither is a line a past call
+ * left (`lineOfTheAgents`), whose turn the call opened through an ask of its
+ * own rather than through the line. Nor is a line its hand-over withdrew,
  * which the session did not take.
  */
 const newestAwaitingLines = SqlSchema.findAll({

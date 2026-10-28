@@ -27,7 +27,7 @@ import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { eq } from "drizzle-orm";
-import { type Context, Effect, Layer, Option, Redacted, Result, Stream } from "effect";
+import { type Context, Effect, Layer, Option, Redacted, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TURN_ORIGIN } from "../../core.js";
 import { HOSTED_API_ERROR } from "../../http/http.js";
@@ -45,14 +45,14 @@ import {
   nativeRelayFake,
   relayEnvironment,
 } from "../../testing/native-relay-fake.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { NATIVE_RELAY_CALL, NATIVE_RELAY_PATH } from "./native-relay.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -107,10 +107,6 @@ function recordingEve() {
         calls.push(`reset:${sessionId}`);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
-    stream: (sessionId) => {
-      calls.push(`stream:${sessionId}`);
-      return Stream.empty;
-    },
   };
   return { calls, sessions };
 }
@@ -159,7 +155,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code", 
 
 const messageTo = (agent: CodingAgent, text = "Expire invitations after a week.") => ({
   conversationId: agent.conversationId,
-  turn: BRAIN_HOST_TURN.TYPED,
+  turn: EVE_HOST_TURN.TYPED,
   message: text,
 });
 

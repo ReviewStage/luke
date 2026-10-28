@@ -1,7 +1,9 @@
 # Agent guide
 
-Luke is a macOS Electron app for working through a task by voice: the
-developer talks a task through with Luke, who writes its plan down as they go.
+Luke is a macOS Electron app, with a web app beside it, for working through a
+task with coding agents: the developer works a task through with them in typed
+conversations, and they write its plan down as they go and open its pull
+requests.
 
 ## Commands
 
@@ -10,7 +12,7 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
 | `./scripts/check.sh` | Every portable repository, migration, lint, type, and test check: before a release, for a broad refactor, or on request |
-| `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
+| `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
@@ -93,7 +95,7 @@ component, factored out of the surface where it builds the box by hand.
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
-  members who open the task; the service keeps the tab list, each tab's address
+  members who open the task or the agent's own page; the service keeps the tab list, each tab's address
   and title. The model is handed a small copy of each screenshot, whose base64
   is left out of the stored conversation, and the service keeps a full-size copy
   beside the transcript the call is written to, the agent's or its worker's, as
@@ -155,8 +157,8 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (the root `vercel.jso
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
-`TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
-agent's turn, whose one turn is its whole run). It also starts due automation runs, and for coding agents on a member's GitHub
+`TURN_ABANDON`: an hour after it started, or twenty-five hours for an
+agent's turn, whose one turn is its whole run). It also starts due automation runs, and for agents on a member's GitHub
 token it reads their open pull requests' reviews, comments, and checks on that
 token and wakes the agent with them, as the webhook does for the App.
 
@@ -175,7 +177,7 @@ reader alone. Move a rule from `[review]` to a check wherever one can hold it.
 pnpm exec vitest run <path>              # the file you changed
 pnpm check:affected                      # what changed since origin/main, from cache
 ./scripts/check.sh                       # everything CI runs bar Postgres
-pnpm --filter @luke/web test:agent       # offline brain eval, by hand
+pnpm --filter @luke/web test:agent       # the coder's offline eval, by hand
 ```
 
 - `[review]` Run the test files you touched, then push: CI runs the rest and
@@ -332,10 +334,11 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **`packages/host/src/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
   the launch handed them, on the same terms as the client's `app-state-store.ts`.
-- **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
-  strip's two clocks, armed from callbacks belonging to no fiber of their own,
-  start on the services the orchestrator was constructed with; the standing
-  call's lifecycle is a `forkDetach` and needs no door.
+- **`packages/host/src/live-collection.ts`** — TanStack DB takes a write's
+  work as a promise it awaits before it keeps or takes back what the write
+  drew, so the one wait for that work to settle runs on the services the
+  caller handed it; the work itself stays on the caller's fiber. What would
+  end this row is an Effect transaction in TanStack DB.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,

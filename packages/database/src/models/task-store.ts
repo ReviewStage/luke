@@ -55,7 +55,6 @@ import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
-import { voiceSessions } from "../schemas/voice.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -466,7 +465,7 @@ function sectionEditOf(
     ...(writer.agentId === undefined ? undefined : { agentId: writer.agentId }),
     ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
-    duringCall: writer.duringCall === true,
+    duringCall: false,
   };
 }
 
@@ -902,28 +901,6 @@ const removeTask = SqlSchema.findOneOption({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db.delete(task).where(reachableTask(userId, taskId)).returning({ id: task.id, txid: TXID }),
-    ),
-});
-
-/**
- * The task's calls that have ended, and with them the words said on each,
- * which cascade with the session. A call still open is left to the sweep
- * (`purgeDeletedTaskCalls`), which removes it once no call can still be
- * writing it.
- */
-const removeEndedCalls = SqlSchema.void({
-  Request: TaskKeySchema,
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db
-        .delete(voiceSessions)
-        .where(
-          and(
-            eq(voiceSessions.userId, userId),
-            eq(voiceSessions.taskId, taskId),
-            isNotNull(voiceSessions.closedAt),
-          ),
-        ),
     ),
 });
 
@@ -1643,8 +1620,8 @@ export function finishTaskWork<R = never>(
 }
 
 /**
- * Deletes the task, its document, and its ended calls with what was said on
- * them, and stamps its coding agents' conversations cleared; false where the account reached no such task. The agents'
+ * Deletes the task and its document, and stamps its coding agents'
+ * conversations cleared; false where the account reached no such task. The agents'
  * conversations are read before the delete, because the delete cascades
  * the agent rows that name them.
  *
@@ -1688,7 +1665,6 @@ export function deleteTaskCommitted(
         const conversationIds = agents.map((agent) => agent.conversationId);
         const removed = yield* removeTask({ userId, taskId });
         if (Option.isNone(removed)) return Option.none();
-        yield* removeEndedCalls({ userId, taskId });
         yield* stampConversationsDeleted(conversationIds);
         return Option.some({ txid: removed.value.txid });
       }),

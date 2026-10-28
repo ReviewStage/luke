@@ -25,6 +25,7 @@ import { INBOX_MISSING } from "./inbox-ask-words.js";
 import {
   ANSWER_TONE,
   acknowledgedOnOpen,
+  agentGroups,
   asksNod,
   awaitsNod,
   CODE_READ,
@@ -34,10 +35,10 @@ import {
   doDecision,
   EMPTY_INBOX_DRAFT,
   EVERYONES,
-  firstChoice,
   holderName,
   INBOX_DIRECTION,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   INBOX_LINE,
   INBOX_MEDIA,
   INBOX_SHOW,
@@ -72,7 +73,6 @@ import {
   sentStamp,
   shownTicks,
   taskHolder,
-  tasklessGroups,
   waitsOnReader,
   withChoice,
   withDoPress,
@@ -437,7 +437,7 @@ const TASKS = [
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   if (view.grouping === INBOX_GROUPING.TASK) {
     return view.groups.map(
-      ({ holder, items }) => [holderName(holder), items.map((each) => each.id)] as const,
+      ({ holder, items }) => [holderName(holder), items.map(({ item }) => item.id)] as const,
     );
   }
   if (view.grouping === INBOX_GROUPING.PERSON) {
@@ -579,26 +579,6 @@ test("To do lists only what waits, and the item chosen where one is given, as th
   );
 });
 
-test("with nothing chosen, the first listed item that waits stands chosen, else the first listed, and nothing where nothing is listed", () => {
-  const all = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined } as const;
-  assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.TASK }))?.item.id,
-    "threshold",
-  );
-  assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
-    "expiry",
-  );
-  const settled = [
-    { holder: taskHolder(BILLING), items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] },
-  ];
-  assert.equal(
-    firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
-    "done",
-  );
-  assert.equal(firstChoice(inboxList([], { ...all, grouping: INBOX_GROUPING.TASK })), undefined);
-});
-
 test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
   const newest = inboxList(TASKS, {
     grouping: INBOX_GROUPING.NONE,
@@ -720,7 +700,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   );
 });
 
-test("a task done or canceled hides none of its items: its open ones need you and its unread ones wait, To do listing and counting them as any task's, and one is the next", () => {
+test("a task done or canceled hides none of its items: its open ones need you, To do listing and counting them as any task's, and one is the next, while its unread settled ones are All's", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
@@ -738,62 +718,21 @@ test("a task done or canceled hides none of its items: its open ones need you an
     },
   ];
   const counts = inboxCounts(finished, undefined);
-  assert.equal(counts[INBOX_SHOW.TO_DO], 4);
+  assert.equal(counts[INBOX_SHOW.TO_DO], 2);
   assert.equal(counts[INBOX_SHOW.ALL], 4);
   const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
   const toDo = inboxList(finished, { ...view, show: INBOX_SHOW.TO_DO });
-  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open", "done-unread", "canceled-unread"]);
+  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open"]);
   assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
 });
 
-test("To do keeps the reader's own update once it is opened and settled while its task is under way, and lets it go once the task is done, as it lets a settled ask, a resolved update, and a thread only the reader wrote on go; the first choice stays an ask that waits", () => {
-  const said = message({
-    text: "The pull request is ready for your review.",
-    createdAt: 1_000,
-    author: INBOX_MESSAGE_AUTHOR.AGENT,
-  });
-  const asked = asking({ type: INBOX_ASK.ANSWER });
-  const answered = { ...asked, ask: { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.ANSWERED } };
-  const settled = { status: INBOX_STATUS.ANSWERED, startedBy: ME, needsReply: false } as const;
-  const tasks = [
-    {
-      holder: taskHolder({ ...BILLING, status: TASK_STATUS.IN_PROGRESS }),
-      items: [
-        item({ id: "update", thread: [said], ...settled, updatedAt: 3_000 }),
-        item({ id: "asked", thread: [said, answered], ...settled }),
-        item({ id: "resolved", thread: [said], ...settled, status: INBOX_STATUS.CLOSED }),
-        item({
-          id: "sent",
-          thread: [message({ text: "Check the PR?", createdAt: 1_000 })],
-          ...settled,
-        }),
-        item({ id: "waits", thread: [asked], startedBy: ME, updatedAt: 2_000 }),
-      ],
-    },
-    {
-      holder: taskHolder({ ...INVITES, status: TASK_STATUS.DONE }),
-      items: [item({ id: "done-update", thread: [said], ...settled })],
-    },
-  ];
-  const toDo = inboxList(tasks, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.TO_DO,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
-  assert.deepEqual(drawn(toDo), ["update", "waits"]);
-  assert.equal(inboxCounts(tasks, ME.userId)[INBOX_SHOW.TO_DO], 2);
-  assert.equal(firstChoice(toDo)?.item.id, "waits");
-});
-
-test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
+test("a teammate's open item is never the next that needs you, which goes to the reader's own", () => {
   const list = inboxList(SHARED, {
     grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(firstChoice(list)?.item.id, "mine-invites");
   assert.deepEqual(
     ["danas", "mine-invites", "unnamed"].map(
       (id) => nextNeedingYou(list, id, () => false)?.item.id,
@@ -845,7 +784,7 @@ const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   ],
 }));
 
-test("To do lists the reader's own open items and their own unread ones, a settled thread written on again among them, never a teammate's however unread, and All lists every item; each counts its own", () => {
+test("To do lists the reader's own open items, read or not, never a settled one however unread nor a teammate's, and All lists every item; each counts its own", () => {
   const rows = (show: InboxShow) =>
     drawn(
       inboxList(UNREAD_SHARED, {
@@ -855,7 +794,7 @@ test("To do lists the reader's own open items and their own unread ones, a settl
         chosen: undefined,
       }),
     );
-  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-followed", "mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-invites", "mine", "unnamed"]);
   assert.deepEqual(rows(INBOX_SHOW.ALL), [
     "danas-answered",
     "danas",
@@ -866,23 +805,18 @@ test("To do lists the reader's own open items and their own unread ones, a settl
     "unnamed",
   ]);
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId), {
-    [INBOX_SHOW.TO_DO]: 4,
+    [INBOX_SHOW.TO_DO]: 3,
     [INBOX_SHOW.ALL]: 7,
   });
 });
 
-test("the first item chosen and the next one reach the reader's own unread update as they reach what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
+test("the next item reaches the reader's own unread update as it reaches what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
   const all = inboxList(UNREAD_SHARED, {
     grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(
-    firstChoice(all)?.item.id,
-    "mine-followed",
-    "All chooses the reader's own unread update first, past a teammate's newer items",
-  );
   assert.equal(nextNeedingYou(all, "danas", () => false)?.item.id, "mine-followed");
   assert.equal(
     nextNeedingYou(all, "mine-followed", () => false)?.item.id,
@@ -1114,6 +1048,7 @@ function waitingTaskless(
     agentId,
     title: "Quarantine the flaky test?",
     postedAt: 1,
+    updatedAt: 1,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "automation-sweep",
@@ -1124,7 +1059,7 @@ function waitingTaskless(
   };
 }
 
-test("the items of agents with no plan stand under the automation that started them, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
+test("each item of an agent with no plan is held by its agent, and a list grouped by task stands each agent under the automation that started it, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
   // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
@@ -1133,6 +1068,7 @@ test("the items of agents with no plan stand under the automation that started t
   const waiting = [
     waitingTaskless("agent-1"),
     waitingTaskless("agent-2"),
+    // Started by hand, by no automation.
     waitingTaskless("agent-3", { automationId: null, automationName: null }),
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
@@ -1144,29 +1080,44 @@ test("the items of agents with no plan stand under the automation that started t
     }),
   ];
   const read = new Map([
-    ["agent-1", [item({ id: "one", agentId: "agent-1" })]],
+    ["agent-1", [item({ id: "one", agentId: "agent-1", updatedAt: 60 })]],
     [
       "agent-2",
       [
-        item({ id: "two", agentId: "agent-2" }),
-        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED }),
+        item({ id: "two", agentId: "agent-2", updatedAt: 50 }),
+        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED, updatedAt: 10 }),
       ],
     ],
-    ["agent-3", [item({ id: "three", agentId: "agent-3" })]],
-    ["agent-4", [item({ id: "four", agentId: "agent-4" })]],
-    ["agent-6", [item({ id: "six", agentId: "agent-6" })]],
+    ["agent-3", [item({ id: "three", agentId: "agent-3", updatedAt: 40 })]],
+    ["agent-4", [item({ id: "four", agentId: "agent-4", updatedAt: 30 })]],
+    ["agent-5", [item({ id: "five", agentId: "agent-5", updatedAt: 25 })]],
+    ["agent-6", [item({ id: "six", agentId: "agent-6", updatedAt: 20 })]],
   ]);
+  const view = inboxList(agentGroups(waiting, read, "workspace-acme"), {
+    grouping: INBOX_GROUPING.TASK,
+    show: INBOX_SHOW.ALL,
+    chosen: undefined,
+    readerId: undefined,
+  });
 
+  assert.deepEqual(drawn(view), [
+    ["Nightly flake sweep", ["one", "two", "settled"]],
+    ["Other agents", ["three"]],
+    ["Old", ["five"]],
+    ["Luke", ["six"]],
+  ]);
   assert.deepEqual(
-    tasklessGroups(waiting, read, "workspace-acme").map(({ holder, items }) => [
-      holderName(holder),
-      items.map((each) => each.id),
+    listedItems(view).map(({ holder, item }) => [
+      item.id,
+      holder.kind === INBOX_HOLDER.AGENT ? holder.agent.agentId : undefined,
     ]),
     [
-      ["Nightly flake sweep", ["one", "two", "settled"]],
-      ["Other agents", ["three"]],
-      ["Old", []],
-      ["Luke", ["six"]],
+      ["one", "agent-1"],
+      ["two", "agent-2"],
+      ["settled", "agent-2"],
+      ["three", "agent-3"],
+      ["five", "agent-5"],
+      ["six", "agent-6"],
     ],
   );
 });

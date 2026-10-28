@@ -21,15 +21,13 @@ import { taskHistoryLiveStatements } from "./task-history-live.js";
  * A task's newest page of plan history as Realtime would deliver it, over
  * the real migrations on PGlite: the statement run as Realtime runs it, its
  * rows decoded and ordered as the desktop does, beside `listRevisions`, the
- * held read the version history read it with. The two agree as Luke writes
- * on a call, a coding agent and the developer save, a revision is restored,
+ * held read the version history read it with. The two agree as Luke, a
+ * coding agent, and the developer save, a revision is restored,
  * the history outgrows a page, and for an account that does not reach the
  * task.
  *
  * Synthetic accounts, tasks, and words throughout.
  */
-
-const CALL = "rtc-session-live-history";
 
 /** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
@@ -74,7 +72,6 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
         const db = yield* Database;
         yield* saveNotes(binding, [added("Context", "A member cannot bring a teammate in.")], {
           actor: PLAN_ACTOR.NOTETAKER,
-          liveSessionId: CALL,
         });
         const started = yield* createCodingAgent(owner, {
           taskId: task.id,

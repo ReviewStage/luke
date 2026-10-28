@@ -51,6 +51,7 @@ import {
   inboxItemSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
+  inboxReadAllRequestSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
   inboxStartRequestSchema,
@@ -70,7 +71,6 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
-import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
  * coding-agent-view.ts -- a task's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -525,14 +525,6 @@ export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
 
-/** The calls into one agent, as the window hears them: each call's lines and its record, or why there is no answer. */
-export const codingAgentCallsAnswerViewSchema = EffectSchema.Union([
-  taskTranscriptAnswerSchema,
-  failed,
-]);
-
-export type CodingAgentCallsAnswerView = typeof codingAgentCallsAnswerViewSchema.Type;
-
 /** One agent, as the window asks what it published. */
 export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -670,6 +662,31 @@ export const codingAgentInboxChangedSchema = EffectSchema.Struct({
 
 export type CodingAgentInboxChanged = typeof codingAgentInboxChangedSchema.Type;
 
+/** One plan's or agent's items as the account's items are told: which, and every item it holds, none where it holds nothing now. */
+const codingAgentScopeItemsSchema = EffectSchema.Struct({
+  scope: codingAgentInboxScopeSchema,
+  items: EffectSchema.Array(inboxItemSchema),
+});
+
+export type CodingAgentScopeItems = typeof codingAgentScopeItemsSchema.Type;
+
+/**
+ * Every inbox item the account reaches, as the window hears it pushed,
+ * grouped by the plan or the agent with no task it is on: every scope
+ * holding any where `whole`, any scope not named holding none; otherwise
+ * only the scopes that moved, each whole, one holding nothing now with no
+ * items. Or why there are none.
+ */
+export const codingAgentAccountItemsSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    whole: EffectSchema.Boolean,
+    scopes: EffectSchema.Array(codingAgentScopeItemsSchema),
+  }),
+  failed,
+]);
+
+export type CodingAgentAccountItems = typeof codingAgentAccountItemsSchema.Type;
+
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
@@ -729,6 +746,18 @@ export const codingAgentInboxReadStateViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentInboxReadStateView = typeof codingAgentInboxReadStateViewSchema.Type;
+
+/**
+ * Every item of the Inbox marked read, as the window asks it: the workspace
+ * the service marks, as its request names it, and the items the window
+ * lists there, which the host draws read the moment it is asked.
+ */
+export const codingAgentInboxReadAllParamsSchema = EffectSchema.Struct({
+  ...inboxReadAllRequestSchema.fields,
+  itemIds: EffectSchema.Array(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentInboxReadAllParams = typeof codingAgentInboxReadAllParamsSchema.Type;
 
 /** Every item of the Inbox marked read, as the window hears it: how many were unread, or why there is no answer. */
 export const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);

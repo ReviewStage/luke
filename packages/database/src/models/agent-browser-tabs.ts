@@ -1,15 +1,17 @@
 /**
- * agent-browser-tabs.ts -- the Browser tabs open in agents' browsers: an agent's actions write them, and a task's members list them and take one over.
+ * agent-browser-tabs.ts -- the Browser tabs open in agents' browsers: an agent's actions write them, and the members who see the agent list them and take one over.
  *
  * An agent is named here by its own conversation, the one its sandbox is
  * kept for (`schemas/agent-browser-tab.ts`), and a worker writes under its
  * parent's. The agent's side, an
  * upsert as it acts on a tab, a close, and the list of its own tabs, is the
  * service's and reads no account, as the sandbox's terminal lease reads
- * none. A member's side reads through the rules every agent route keeps: a
- * task's tabs are listed only to a member who reaches the task, and a coding
- * agent's only to one who sees that agent (`agentVisibleTo`); any other
- * reads as none at all. Whether the member may drive the tab, which a coding
+ * none. A member's side reads through the rule a whole agent is read by: a
+ * coding agent's tabs are listed only to one who sees that agent and, for
+ * one on a task, that task too (`agentVisibleTo`), so an agent on no task
+ * is reached by the agent alone, and any other reads as none at all. A task's tabs are its agents' together, each read
+ * through the agent's own row (`coding_agent.task_id`), never the task the
+ * tab's row was written under, so a tab follows its agent. Whether the member may drive the tab, which a coding
  * agent on its starter's own token keeps to the starter, is the service's to
  * decide from the agent this answers beside the tab.
  *
@@ -20,15 +22,18 @@
  * leaves the tab to the agent once their instant passes.
  *
  * The agent's side also keeps its pointer on a tab (`pointBrowserTab`), and
- * a member's window follows a task's tabs live
- * (`taskBrowserTabsLiveStatement`), under the same rule as the list.
+ * a member's window follows an agent's or a task's tabs live
+ * (`browserTabsLiveStatement`), under the same rule as the list.
  */
 
-import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
+import {
+  AGENT_BROWSER_TAB_OPENER,
+  type BrowserTabsPlace,
+} from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
 import { BROWSER_CURSOR_KIND, type BrowserCursorMove } from "@luke/features/browser-agent-actions";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, or, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
@@ -38,7 +43,7 @@ import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
-import { agentVisibleTo, reachableTask, taskReachableBy, taskSeenBy } from "./workspace-store.js";
+import { agentVisibleTo, reachableTask } from "./workspace-store.js";
 
 type BrowserTabEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -134,8 +139,9 @@ function shown(text: string): string {
 
 /**
  * The task of the agent whose conversation is named, read from the agent's
- * own row rather than taken from the caller; null for an agent on none. So a
- * tab is never listed on a task its agent is not on.
+ * own row rather than taken from the caller; null for an agent on none. Note
+ * that the column is still written but no read reaches a tab by it: a tab is
+ * reached through its agent's row (`agentOfPlace`).
  */
 function taskOfConversation(conversationId: string) {
   return sql<
@@ -144,11 +150,23 @@ function taskOfConversation(conversationId: string) {
 }
 
 /**
- * The tabs a member reaches: on a task they reach, of an agent they see. A
- * tab no coding agent's conversation names, one a task's Luke opened while a
+ * The condition that a tab's agent, the coding agent its conversation names,
+ * is the one the place names, or one on the task it names, read from the
+ * agent's own row.
+ */
+function agentOfPlace(place: BrowserTabsPlace): SQL {
+  return "taskId" in place
+    ? eq(codingAgent.taskId, place.taskId)
+    : eq(codingAgent.id, place.agentId);
+}
+
+/**
+ * The tabs a member reaches in the place named: of an agent they see whole,
+ * its task included where it is on one (`agentVisibleTo`). A tab
+ * no coding agent's conversation names, one a task's Luke opened while a
  * task had one, is listed to no one.
  */
-function reachedTabs(userId: string, taskId: string, tabId?: string) {
+function reachedTabs(userId: string, place: BrowserTabsPlace, tabId?: string) {
   return Database.use((db) =>
     db
       .select({
@@ -158,13 +176,11 @@ function reachedTabs(userId: string, taskId: string, tabId?: string) {
         agentGithubAccess: codingAgent.githubAccess,
       })
       .from(agentBrowserTab)
-      .innerJoin(task, eq(task.id, agentBrowserTab.taskId))
       .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
       .where(
         and(
-          eq(agentBrowserTab.taskId, taskId),
+          agentOfPlace(place),
           tabId === undefined ? undefined : eq(agentBrowserTab.id, tabId),
-          taskReachableBy(userId),
           agentVisibleTo(userId),
         ),
       )
@@ -172,14 +188,19 @@ function reachedTabs(userId: string, taskId: string, tabId?: string) {
   );
 }
 
+const PlaceSchema = Schema.Union([
+  Schema.Struct({ taskId: Schema.String }),
+  Schema.Struct({ agentId: Schema.String }),
+]);
+
 const findReachedTabs = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    taskId: Schema.String,
+    place: PlaceSchema,
     tabId: Schema.optionalKey(Schema.String),
   }),
   Result: ReachedTabSchema,
-  execute: ({ userId, taskId, tabId }) => reachedTabs(userId, taskId, tabId),
+  execute: ({ userId, place, tabId }) => reachedTabs(userId, place, tabId),
 });
 
 const findReachableTask = SqlSchema.findAll({
@@ -188,6 +209,18 @@ const findReachableTask = SqlSchema.findAll({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db.select({ id: task.id }).from(task).where(reachableTask(userId, taskId)),
+    ),
+});
+
+const findReachableAgent = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId))),
     ),
 });
 
@@ -431,29 +464,32 @@ export function browserTabDriver(
 }
 
 /**
- * The task's tabs, every agent's the member sees, the oldest first, each
- * with the coding agent whose browser holds it; nothing where the member
- * reaches no such task.
+ * The tabs of the place named, the oldest first, each with the coding agent
+ * whose browser holds it: one agent's, or every one of a task's agents' the
+ * member sees; nothing where the member reaches no such agent or task.
  */
-export function listTaskBrowserTabs(
+export function listBrowserTabs(
   userId: string,
-  taskId: string,
+  place: BrowserTabsPlace,
 ): BrowserTabEffect<Option.Option<readonly ReachedBrowserTab[]>> {
   return Effect.gen(function* () {
-    const reached = yield* findReachableTask({ userId, taskId });
+    const reached =
+      "taskId" in place
+        ? yield* findReachableTask({ userId, taskId: place.taskId })
+        : yield* findReachableAgent({ userId, agentId: place.agentId });
     if (reached.length === 0) return Option.none();
-    const rows = yield* findReachedTabs({ userId, taskId });
+    const rows = yield* findReachedTabs({ userId, place });
     return Option.some(rows.map(reachedOf));
   });
 }
 
-/** One tab of the task, where the member reaches it as `listTaskBrowserTabs` would list it; nothing otherwise. */
-export function readTaskBrowserTab(
+/** One tab of the place named, where the member reaches it as `listBrowserTabs` would list it; nothing otherwise. */
+export function readBrowserTab(
   userId: string,
-  taskId: string,
+  place: BrowserTabsPlace,
   tabId: string,
 ): BrowserTabEffect<Option.Option<ReachedBrowserTab>> {
-  return Effect.map(findReachedTabs({ userId, taskId, tabId }), (rows) =>
+  return Effect.map(findReachedTabs({ userId, place, tabId }), (rows) =>
     Option.map(Option.fromNullishOr(rows[0]), reachedOf),
   );
 }
@@ -618,21 +654,21 @@ export function handBackBrowserTab(tabId: string, userId: string): BrowserTabEff
 }
 
 /**
- * One task's tabs written for Neon Realtime, so a member's window follows
- * them, the agent's pointer among them, as they move: each tab
- * `listTaskBrowserTabs` lists the account, under the same rule of who may
+ * One agent's or one task's tabs written for Neon Realtime, so a member's
+ * window follows them, the agent's pointer among them, as they move: each
+ * tab `listBrowserTabs` lists the account, under the same rule of who may
  * read it, every column under the key the wire's tab line reads it by
  * (`@luke/features/agent-browser-tab-wire`'s `agentBrowserTabLineSchema`)
  * and every instant in epoch milliseconds. The account is joined through its
- * membership of the task's workspace, as Neon's guide authorizes a live
+ * membership of the agent's workspace, as Neon's guide authorizes a live
  * read. It reads no clock, as Realtime requires, so a takeover past its
  * instant is delivered as it stands and lapsed by the reader, and keeps no
  * order, which the reader keeps. None where a value cannot be carried, which
  * a caller answers as the tabs not being live.
  */
-export function taskBrowserTabsLiveStatement(
+export function browserTabsLiveStatement(
   userId: string,
-  taskId: string,
+  place: BrowserTabsPlace,
 ): Option.Option<LiveStatement> {
   return liveStatementOf(
     queryBuilder
@@ -661,13 +697,12 @@ export function taskBrowserTabsLiveStatement(
         ),
       )
       .from(agentBrowserTab)
-      .innerJoin(task, eq(task.id, agentBrowserTab.taskId))
-      .innerJoin(
-        member,
-        and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
-      )
       // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
       .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
-      .where(and(eq(agentBrowserTab.taskId, taskId), taskSeenBy(userId), agentVisibleTo(userId))),
+      .innerJoin(
+        member,
+        and(eq(member.organizationId, codingAgent.organizationId), eq(member.userId, userId)),
+      )
+      .where(and(agentOfPlace(place), agentVisibleTo(userId))),
   );
 }

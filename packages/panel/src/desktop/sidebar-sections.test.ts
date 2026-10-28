@@ -9,16 +9,11 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import { applySectionWrite, memberOf } from "@luke/features/task-section-writes";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import {
-  applySectionWrite,
-  memberOf,
-  sectionOrder,
-  sectionTaskIds,
-  workspaceSections,
-} from "@luke/ui/task-sections-model";
+import { sectionOrder, sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -537,22 +532,22 @@ test("deleting the last section hands focus to the first, rather than letting it
   assert.ok(sectionHeader(sidebar, "Someday").contains(document.activeElement));
 });
 
-test("a section holding tasks offers what acts on all of them between Edit and Delete, after its move", async () => {
+test("a section holding tasks offers what acts on all of them between Rename and Delete, after its move", async () => {
   const sidebar = await mountSidebar([], ICONLESS);
 
   openSectionMenu(sidebar, "Launch");
 
   assert.deepEqual(menuLabels(), [
     "Move up",
-    "Edit section",
+    "Rename",
+    "Status",
     "Move all to section",
     "Remove all from section",
-    "Mark all done",
     "Delete section",
   ]);
 });
 
-test("a section holding no task offers only Edit and Delete, after its move", async () => {
+test("a section holding no task offers only Rename and Delete, after its move", async () => {
   const sidebar = await mountSidebar([], {
     sections: ICONLESS.sections,
     entries: ICONLESS.entries.filter((entry) => entry.sectionId !== SOMEDAY),
@@ -561,7 +556,7 @@ test("a section holding no task offers only Edit and Delete, after its move", as
 
   openSectionMenu(sidebar, "Someday");
 
-  assert.deepEqual(menuLabels(), ["Move down", "Edit section", "Delete section"]);
+  assert.deepEqual(menuLabels(), ["Move down", "Rename", "Delete section"]);
 });
 
 test("a section's Move all to section puts every task in it on top of the section chosen, in its order", async () => {
@@ -592,7 +587,7 @@ test("a section's Remove all from section takes every task in it out of every se
   ]);
 });
 
-test("a section's Mark all done marks every task in it done at once, asking nothing even where a task has agents", async () => {
+test("a section's Status sets every task in it at the status picked at once, asking nothing even where a task has agents", async () => {
   const settled: [string[], string][] = [];
   const working: TaskSummary = {
     ...RETRIES,
@@ -604,13 +599,14 @@ test("a section's Mark all done marks every task in it done at once, asking noth
   });
 
   openSectionMenu(sidebar, "Launch");
-  act(() => item("Mark all done").click());
+  act(() => item("Status").click());
+  act(() => item("Done").click());
 
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
-test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Mark done for both", async () => {
+test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Status for both, which S on the focused one opens", async () => {
   const settled: [string[], string][] = [];
   const opened: string[] = [];
   const sidebar = await mountSidebar([], SECTIONS, {
@@ -633,7 +629,20 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
 
   openRowMenu(sidebar, RETRIES.name);
   assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
-  act(() => item("Mark done").click());
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+
+  act(() => rowOf(RETRIES.name).focus());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
+  });
+  await act(async () => undefined);
+  assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
+  assert.ok(document.querySelector('[role="menu"][aria-label="Status"]'), "S opens Status");
+  act(() => item("Done").click());
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
@@ -757,7 +766,7 @@ test("choosing No icon and saving clears a section's icon", async () => {
   assert.ok(actions);
 
   act(() => actions.click());
-  act(() => item("Edit section").click());
+  act(() => item("Rename").click());
   await settleLoaded();
   assert.equal(dialogButton("🚀").getAttribute("aria-pressed"), "true");
   act(() => dialogButton("No icon").click());
@@ -1066,7 +1075,7 @@ test("a color chosen recolors the glyph a section wears", async () => {
   assert.ok(actions);
 
   act(() => actions.click());
-  act(() => item("Edit section").click());
+  act(() => item("Rename").click());
   await settleLoaded();
   assert.equal(dialogButton("Telescope").getAttribute("aria-pressed"), "true");
   act(() => dialogButton("No color").click());
@@ -1231,7 +1240,7 @@ test("editing a section in an emoji the grid leaves out names it in the emoji fi
   assert.ok(actions);
 
   act(() => actions.click());
-  act(() => item("Edit section").click());
+  act(() => item("Rename").click());
   await settleLoaded();
 
   assert.equal(dialogField("Any emoji").value, "🫩");

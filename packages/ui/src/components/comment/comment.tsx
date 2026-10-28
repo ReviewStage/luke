@@ -1,5 +1,6 @@
 import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, type AvatarShape } from "../avatar/avatar.js";
+import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { TIME_LOOK, Time } from "../time/time.js";
 
@@ -23,6 +24,11 @@ import { TIME_LOOK, Time } from "../time/time.js";
  * the disc is decorative to a reader. A name that does more than name, a
  * chip hanging the writer's card, is the caller's (`nameRef`), drawn in
  * the name's place in the same role.
+ *
+ * While a list of comments is read, each stands as its skeleton
+ * (`CommentSkeleton`): the face's disc, a block where the name will be, and
+ * a block for each line of the words, in the same cells, so the list does
+ * not move when the comments land.
  */
 
 /** The element a comment stands in: a box of its own, or a row of a thread's list. */
@@ -49,6 +55,9 @@ export interface CommentAuthor {
 
 /** The comment's frame: a face column beside the name's, the head on the first line and the words under it. */
 const FRAME = "luke-comment grid grid-cols-[auto_minmax(0,1fr)] gap-x-icon-gap gap-y-tight-gap";
+
+/** How wide a skeleton's face stands: a row's disc, as `Comment` draws the face. */
+const SKELETON_FACE = "var(--spacing-avatar-row)";
 const FACE = "luke-comment-face col-start-1 row-start-1 inline-flex self-center";
 const HEAD =
   "luke-comment-head col-start-2 row-start-1 flex min-w-0 items-baseline gap-icon-gap text-label";
@@ -62,6 +71,24 @@ const BODY = "luke-comment-body col-start-2 row-start-2 min-w-0 text-body";
 /** Whether a node draws anything: none, null, and a boolean, as a condition leaves it, draw nothing. */
 function drawsSomething(node: ReactNode): boolean {
   return node !== undefined && node !== null && typeof node !== "boolean";
+}
+
+/**
+ * The comment's frame, the element it stands in, holding its cells.
+ * Note that the element is made rather than written, because a ref typed
+ * for either element is no ref for their union.
+ */
+function Frame({
+  as: Element,
+  ref,
+  children,
+  ...attributes
+}: {
+  as: CommentElement;
+  ref?: Ref<HTMLElement> | undefined;
+  children: ReactNode;
+} & Omit<HTMLAttributes<HTMLElement>, "children" | "className" | "style">): React.JSX.Element {
+  return createElement(Element, { ...attributes, ref, className: FRAME }, children);
 }
 
 /** The face's cell. */
@@ -108,39 +135,69 @@ export function Comment({
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "className" | "style">): React.JSX.Element {
   // Note that a glyph drawn conditionally may arrive as nothing to draw, which is no glyph, so the letter still stands.
   const glyph = drawsSomething(author.glyph) ? author.glyph : undefined;
-  // Note that the element is made rather than written, because a ref typed
-  // for either element is no ref for their union.
-  return createElement(
-    Element,
-    { ...attributes, ref, className: FRAME },
-    <FaceCell>
-      <Avatar
-        name={author.name}
-        {...(author.id === undefined ? {} : { id: author.id })}
-        src={author.picture}
-        shape={author.shape ?? AVATAR_SHAPE.CIRCLE}
-        glyph={glyph}
-        tiled={glyph !== undefined}
-        size={AVATAR_SIZE.ROW}
-        decorative
-      />
-    </FaceCell>,
-    <HeadLine>
-      <Text className={NAME} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN} truncate>
-        {nameRef ?? author.name}
-      </Text>
-      {at === undefined ? null : (
-        <Text
-          className={TIME}
-          variant={TEXT_VARIANT.CAPTION}
-          tone={TEXT_TONE.MUTED}
-          as={TEXT_ELEMENT.SPAN}
-        >
-          <Time at={at} now={now} look={TIME_LOOK.SINCE} />
+  return (
+    <Frame as={Element} ref={ref} {...attributes}>
+      <FaceCell>
+        <Avatar
+          name={author.name}
+          {...(author.id === undefined ? {} : { id: author.id })}
+          src={author.picture}
+          shape={author.shape ?? AVATAR_SHAPE.CIRCLE}
+          glyph={glyph}
+          tiled={glyph !== undefined}
+          size={AVATAR_SIZE.ROW}
+          decorative
+        />
+      </FaceCell>
+      <HeadLine>
+        <Text className={NAME} variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN} truncate>
+          {nameRef ?? author.name}
         </Text>
-      )}
-      {trailing === undefined ? null : <span className={TRAILING}>{trailing}</span>}
-    </HeadLine>,
-    children === undefined ? null : <BodyCell>{children}</BodyCell>,
+        {at === undefined ? null : (
+          <Text
+            className={TIME}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            as={TEXT_ELEMENT.SPAN}
+          >
+            <Time at={at} now={now} look={TIME_LOOK.SINCE} />
+          </Text>
+        )}
+        {trailing === undefined ? null : <span className={TRAILING}>{trailing}</span>}
+      </HeadLine>
+      {children === undefined ? null : <BodyCell>{children}</BodyCell>}
+    </Frame>
+  );
+}
+
+/** One line of a comment's words while it is read, as wide as the share of the line it is given. */
+export interface CommentSkeletonLine {
+  /** What tells the line from its neighbours, as a list's key. */
+  readonly key: string;
+  readonly width: string;
+}
+
+/** A comment while it is read: its face's disc, a block `name` wide where the name will stand, and its words' `lines`. */
+export function CommentSkeleton({
+  name,
+  lines,
+}: {
+  name: string;
+  lines: readonly CommentSkeletonLine[];
+}): React.JSX.Element {
+  return (
+    <Frame as={COMMENT_ELEMENT.DIV}>
+      <FaceCell>
+        <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_FACE} />
+      </FaceCell>
+      <HeadLine>
+        <Skeleton width={name} />
+      </HeadLine>
+      <BodyCell>
+        {lines.map((line) => (
+          <Skeleton key={line.key} width={line.width} />
+        ))}
+      </BodyCell>
+    </Frame>
   );
 }

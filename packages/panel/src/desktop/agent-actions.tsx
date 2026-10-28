@@ -8,6 +8,7 @@ import {
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { pressAct } from "../act.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
@@ -91,24 +92,35 @@ export interface AgentMenuDoors {
   section?: MenuEntry | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
+  onOpenInTask?: (() => void) | undefined;
   /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Deletes the agent for good, asked first (`agent-delete.tsx`). */
   deletion?: MenuAction | undefined;
+  /** Whether U and P act on the agent from its row while the row is focused, a sidebar row's, so its read mark and pin print them. */
+  rowKeys?: boolean | undefined;
 }
 
 /**
  * The agent's menu, built once for every surface that draws it, in the
  * groups every menu of the window keeps: Copy link and the transcript's two
  * copies; Rename and the read mark; Pin and Move to section; Show terminal,
- * which prints ⌘J only where the menu is the chosen tab's, since the chord
- * opens that tab's terminal; Archive or Unarchive; and last and alone,
- * Permanently delete. A group with nothing in it is left out, so a surface
+ * and Open in task, for an agent drawn apart from its task; Archive or
+ * Unarchive; and last and alone, Permanently delete. The copies, Show
+ * terminal, Open in task, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, ⌘O,
+ * and ⌘⌫ only where the menu is the chosen tab's or the agent's page's,
+ * since each chord acts on that agent; the read mark and Pin print U and P
+ * there too, and on a sidebar row, whose focus the letters act on
+ * (`rowKeys`). A group with nothing in it is left out, so a surface
  * with few doors draws the few groups it has in the same order.
  */
 export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
-  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal } = doors;
+  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
+    doors;
   const { archive, deletion } = doors;
+  const chosen = doors.chosen === true;
+  const lettered = chosen || doors.rowKeys === true;
   const copies: MenuEntry[] = [
     ...(copyLink === undefined ? [] : [copyLink]),
     ...(onCopy === undefined
@@ -117,18 +129,18 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
           commandAction(
             PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
             () => onCopy(TRANSCRIPT_COPY.CONCISE),
-            false,
+            chosen,
           ),
           commandAction(
             PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
             () => onCopy(TRANSCRIPT_COPY.FULL),
-            false,
+            chosen,
           ),
         ]),
   ];
   const named: MenuEntry[] = [
     ...(onRename === undefined ? [] : [commandAction(PANEL_COMMAND.RENAME, onRename, false)]),
-    ...(read === undefined ? [] : [markReadItem(read)]),
+    ...(read === undefined ? [] : [markReadItem(read, lettered)]),
   ];
   const organized: MenuEntry[] = [
     ...(agentPin === undefined
@@ -137,22 +149,28 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
           commandAction(
             agentPin.pinned ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.PIN_AGENT,
             agentPin.onToggle,
-            false,
+            lettered,
           ),
         ]),
     ...(section === undefined ? [] : [section]),
   ];
-  const opened: MenuEntry[] =
-    onOpenTerminal === undefined
+  const opened: MenuEntry[] = [
+    ...(onOpenTerminal === undefined
       ? []
-      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, doors.chosen === true)];
+      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, chosen)]),
+    ...(onOpenInTask === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.OPEN_IN_TASK, onOpenInTask, chosen)]),
+  ];
   return [
     copies,
     named,
     organized,
     opened,
     archive === undefined ? [] : [archive],
-    deletion === undefined ? [] : [deletion],
+    deletion === undefined
+      ? []
+      : [chosen ? { ...deletion, command: APP_COMMAND.DELETE } : deletion],
   ].filter((group) => group.length > 0);
 }
 
@@ -312,7 +330,7 @@ export function useAgentActions(
 ): AgentActions {
   const { label, shown, terminals, onDeleted } = input;
   const copied = useTranscriptCopier();
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const copyLink = useCopyLinkItem()(agentPlace(agent.id));
   const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);

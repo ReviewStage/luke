@@ -29,14 +29,22 @@ export interface MenuAction extends Omit<SharedMenuAction, "hint"> {
 }
 
 /** An item that opens a menu of the window's own items beside it rather than acting. */
-interface MenuSubmenu {
+export interface MenuSubmenu {
   label: string;
   icon?: React.JSX.Element;
   items: readonly MenuAction[];
+  /** The shortcut that opens it, printed muted before its chevron. */
+  command?: KeyedCommand;
 }
 
 /** One line of a menu: an action, or a submenu of them. */
 export type MenuEntry = MenuAction | MenuSubmenu;
+
+/** What a menu draws beyond its items: what it acts on, which heads it as a phone's sheet, and a foot under the items, as a task's menu says who created and last edited it. */
+export interface MenuEnds {
+  readonly subject?: MenuSubject | undefined;
+  readonly footer?: React.ReactNode;
+}
 
 /** The shared item for one of the window's, its command's chord as its hint. */
 function sharedAction({ command, ...action }: MenuAction): SharedMenuAction {
@@ -45,9 +53,12 @@ function sharedAction({ command, ...action }: MenuAction): SharedMenuAction {
 }
 
 function sharedEntry(entry: MenuEntry): SharedMenuEntry {
-  return "items" in entry
-    ? { ...entry, items: entry.items.map(sharedAction) }
-    : sharedAction(entry);
+  if (!("items" in entry)) return sharedAction(entry);
+  const { command, ...submenu } = entry;
+  const items = submenu.items.map(sharedAction);
+  return command === undefined
+    ? { ...submenu, items }
+    : { ...submenu, items, hint: <Shortcut chord={APP_SHORTCUTS[command].chord} /> };
 }
 
 /** A row's menu (`ListRow`'s `menu`) of the window's items, each item's chord at its end; `thing` is what the row is, which names its ⋯ and the menu, and `shown` whether the surface the row stands on is, which the menu does not outlive. */
@@ -63,14 +74,11 @@ export function rowMenu(
 export function ActionMenu({
   groups,
   ...props
-}: {
+}: MenuEnds & {
   label: string;
   /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
   menu: DrawnMenu;
-  /** What it acts on, which heads it as a phone's sheet. */
-  subject?: MenuSubject | undefined;
   heading?: React.ReactNode;
-  footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;

@@ -14,9 +14,11 @@ import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CHIP_WIDTH,
   ErrorState,
+  FailureNote,
   GAP,
   Inline,
   type MenuRow,
@@ -30,16 +32,19 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useExperiment } from "../use-app-state.js";
+import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
 
 /**
- * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands, how much it matters, and where its agents run.
+ * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands, how much it matters, which repository it is about, and where its agents run.
  *
  * The key is the task's workspace prefix and its number (`ACME-42`), drawn
  * small in monospace above the title, as the task's own page names it. Under
@@ -47,9 +52,16 @@ import { TaskRunsOnChip } from "./runs-on.js";
  * (`picker-row.tsx`): the status, each of the five with its mark, the
  * priority, each with its bars, and the assignee, each member of the
  * workspace by face and name, the reader first, and No assignee on the
- * dashed unassigned mark; and, while local agents are on, a fourth for
- * where its agents run (`runs-on.tsx`). A pick is handed back for the page to send;
+ * dashed unassigned mark; then, where the page hands its doors, the
+ * repository's chip (`repository-chip.tsx`), the owner's picture and
+ * `owner/name`, or Choose a repository while the task has none, which drops
+ * the search over every repository the workspace reaches, and which ⌘K's
+ * Change repository opens the same way; and, while local agents are on, a
+ * fifth for where its agents run (`runs-on.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
+ * S, pressed while not typing, opens the status chip's menu, as Linear's S
+ * does, and a task row's menu lists what each chip lists
+ * (`standing-submenus.tsx`).
  * A task from a service before statuses has no key and no chips.
  */
 
@@ -78,13 +90,15 @@ export const TASK_PRIORITY_WORDS = {
   [TASK_PRIORITY.LOW]: "Low",
 } as const satisfies Record<TaskPriority, string>;
 
-const STATUS_ROWS: readonly MenuRow[] = TASK_STATUS_ORDER.map((status) => ({
+/** The status chip's rows, each status by its mark, which a task row's Status submenu lists too. */
+export const STATUS_ROWS: readonly MenuRow[] = TASK_STATUS_ORDER.map((status) => ({
   id: status,
   label: TASK_STATUS_WORDS[status],
   icon: <TaskStatusMark status={status} />,
 }));
 
-const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priority) => ({
+/** The priority chip's rows, each priority by its bars, which a task row's Priority submenu lists too. */
+export const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priority) => ({
   id: priority,
   label: TASK_PRIORITY_WORDS[priority],
   icon: <TaskPriorityMark priority={priority} />,
@@ -129,6 +143,28 @@ export function assigneeRows(
       terms: row.terms,
       card: row.card,
     })),
+  ];
+}
+
+/**
+ * The assignee's menu for a task (`assigneeRows`), with the member it is
+ * assigned to after them where the members do not name them, as while they
+ * are unread, so they still stand checked by the name the task carries: what
+ * a row's assignee chip and a task row's Assignee submenu both list.
+ */
+export function useAssigneeRows(assignee: TaskSummary["assignee"]): readonly MenuRow[] {
+  const { members, readerId } = useMemberDirectory();
+  const person = usePerson(assignee);
+  const value = assignee?.userId ?? NO_ASSIGNEE;
+  const listed = assigneeRows(members, readerId);
+  if (listed.some((row) => row.id === value)) return listed;
+  return [
+    ...listed,
+    {
+      id: value,
+      label: assignee?.name ?? NO_ASSIGNEE_WORDS,
+      icon: <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />,
+    },
   ];
 }
 
@@ -180,11 +216,26 @@ function TaskAssigneePicker({
   );
 }
 
-/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the member's devices, as the models answer last listed them, which say whether a cloud task shows its Runs on. */
+/** The repository chip's doors, as the page hands them: what its menu offers, where a pick is sent, the asks from elsewhere to open its menu, and why the service refused the last pick, said beside it. */
+export interface TaskRepositoryDoor {
+  readonly chooser: RepositoryChooser;
+  readonly onChoose: (repository: string) => void;
+  /** Counts the asks from elsewhere to open the menu, ⌘K's Change repository, each opening it. */
+  readonly openRequest?: number | undefined;
+  /** Hears each ask the chip opened its menu for, so the page lets it go. */
+  readonly onAsked?: ((request: number) => void) | undefined;
+  /** Why the service refused the last pick; none once one is kept. */
+  readonly note?: string | undefined;
+}
+
+/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, the repository chip's doors, none where the task's repository is not changed from here, and the member's devices, as the models answer last listed them, which say whether a cloud task shows its Runs on. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
   readonly onSet?: ((standing: TaskStanding) => void) | undefined;
+  readonly repository?: TaskRepositoryDoor | undefined;
   readonly devices?: readonly MacOffer[] | undefined;
+  /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
+  readonly inSight?: boolean | undefined;
 }
 
 /**
@@ -252,11 +303,14 @@ export function TaskKeyLine({
 function TaskStatusPicker({
   label = "Status",
   status,
+  openRequest,
   onPick,
 }: {
   /** The chip's name for a reader; the task page's own where none is named. */
   label?: string | undefined;
   status: TaskStatus;
+  /** Counts the S key's asks to open the menu, each opening it. */
+  openRequest?: number | undefined;
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((status: TaskStatus) => void) | undefined;
 }): React.JSX.Element {
@@ -271,6 +325,7 @@ function TaskStatusPicker({
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
+      openRequest={openRequest}
       onPick={(id) => {
         const picked = statusOf(id);
         if (picked !== undefined && picked !== status) onPick?.(picked);
@@ -280,51 +335,90 @@ function TaskStatusPicker({
 }
 
 /**
- * The task's status, priority, and assignee chips, under its title, and
- * where its agents run while the Local agents experiment is on and the
- * member has a device or the task runs on one; nothing for a task from a
- * service before them.
+ * The task's status, priority, and assignee chips, under its title, its
+ * repository's where the page hands the chip's doors, with the service's
+ * refusal of the last pick beside it, and where its agents run while the
+ * Local agents experiment is on and the member has a device or the task
+ * runs on one. A task from a service before statuses draws none of the
+ * standing chips, and still its repository's, which does not wait on them,
+ * since the plan's menu leaves Change repository to the chip.
  */
 export function TaskStandingChips({
   task,
   onSet,
+  repository,
   devices,
+  inSight = true,
 }: {
   task: Task;
   onSet: ((standing: TaskStanding) => void) | undefined;
+  repository?: TaskRepositoryDoor | undefined;
   devices?: readonly MacOffer[] | undefined;
+  /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
+  inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
-  if (status === undefined || priority === undefined) return null;
+  const standing = status !== undefined && priority !== undefined;
+  // S opens the status chip's menu while the chip is in sight and takes a pick, each press counted so it opens it again.
+  const [statusAsks, setStatusAsks] = useState(0);
+  useAppCommand(
+    APP_COMMAND.SET_STATUS,
+    onSet !== undefined && standing && inSight
+      ? () => setStatusAsks((asks) => asks + 1)
+      : undefined,
+  );
+  if (!standing && repository === undefined) return null;
   const runsOnDrawn =
-    localAgents && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
+    standing &&
+    localAgents &&
+    ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
-        <TaskStatusPicker
-          status={status}
-          onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
-        />
-        <Picker
-          label="Priority"
-          value={priority}
-          valueLabel={TASK_PRIORITY_WORDS[priority]}
-          valueIcon={<TaskPriorityMark priority={priority} />}
-          rows={PRIORITY_ROWS}
-          noMatch="No priorities match"
-          align={POPOVER_ALIGN.START}
-          width={CHIP_WIDTH.AUTO}
-          disabled={onSet === undefined}
-          onPick={(id) => {
-            const picked = priorityOf(id);
-            if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
-          }}
-        />
-        <TaskAssigneePicker
-          assignee={task.assignee}
-          onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
-        />
+        {status === undefined || priority === undefined ? null : (
+          <>
+            <TaskStatusPicker
+              status={status}
+              openRequest={statusAsks}
+              onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
+            />
+            <Picker
+              label="Priority"
+              value={priority}
+              valueLabel={TASK_PRIORITY_WORDS[priority]}
+              valueIcon={<TaskPriorityMark priority={priority} />}
+              rows={PRIORITY_ROWS}
+              noMatch="No priorities match"
+              align={POPOVER_ALIGN.START}
+              width={CHIP_WIDTH.AUTO}
+              disabled={onSet === undefined}
+              onPick={(id) => {
+                const picked = priorityOf(id);
+                if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
+              }}
+            />
+            <TaskAssigneePicker
+              assignee={task.assignee}
+              onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
+            />
+          </>
+        )}
+        {repository === undefined ? null : (
+          // Keyed by the task, so another task starts the chip and its menu afresh and the same task keeps them.
+          <RepositoryChip
+            key={task.id}
+            place={CHIP_PLACE.FIELD}
+            value={task.repository}
+            chooser={repository.chooser}
+            onChoose={repository.onChoose}
+            openRequest={repository.openRequest}
+            onAsked={repository.onAsked}
+            align={POPOVER_ALIGN.START}
+            width={CHIP_WIDTH.AUTO}
+          />
+        )}
+        {repository?.note === undefined ? null : <FailureNote>{repository.note}</FailureNote>}
         {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
       </Inline>
     </div>

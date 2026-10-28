@@ -776,13 +776,13 @@ test("a server or tool of an account past a provider's first names it by its con
   }
 });
 
-test("a page or an agent of a plan is its Luke link, read back by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
+test("a page of a plan is its Luke link, an agent of one is the agent's own, an older link under its task read back as it, by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
   const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
-  const agent: Mention = { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: "agent-1" };
+  const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-1" };
   const taskLink = `https://tryluke.dev/acme/plan/${TASK_ID}`;
 
   assert.equal(encodeMention(page, PLACE), `${taskLink}/page/page-1`);
-  assert.equal(encodeMention(agent, PLACE), `${taskLink}/agent/agent-1`);
+  assert.equal(encodeMention(agent, PLACE), "https://tryluke.dev/acme/agent/agent-1");
   assert.deepEqual(
     decodeMention(`tryluke://tryluke.dev/acme/plan/${TASK_ID}/agent/agent-1`, null),
     agent,

@@ -39,6 +39,7 @@ function automationQuestion(startedBy?: string): AppInboxTasklessItem {
     agentId: "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4",
     title: "Quarantine the flaky test?",
     postedAt: 1,
+    updatedAt: 1,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",

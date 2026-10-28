@@ -2,7 +2,7 @@ import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import {
   type InboxViewChoices,
@@ -13,7 +13,6 @@ import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
   EVERYONES,
-  firstChoice,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -21,19 +20,20 @@ import {
   type InboxListed,
   type InboxShow,
   type InboxWhose,
+  inboxAgentOf,
   inboxCounts,
   listedItems,
-  type TasklessInboxAgent,
-  taskHolder,
-  tasklessGroups,
 } from "./inbox-model.js";
-import { useSettledReads } from "./inbox-settling.js";
 import { useCodingAgents } from "./use-coding-agents.js";
 import { useHeldInboxList } from "./use-held-inbox-list.js";
-import { useInboxItems } from "./use-inbox-items.js";
+import {
+  agentHoldings,
+  inboxGroups,
+  taskHoldings,
+  useHolderInboxItems,
+} from "./use-holder-inbox-items.js";
 import { useInboxReadMarks } from "./use-inbox-read-marks.js";
 import { useTaskInbox } from "./use-task-inbox.js";
-import { useTasklessInboxItems } from "./use-taskless-inbox-items.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -70,19 +70,6 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** Each task holding items as the list groups it, with its items as last read; a task the list given does not hold is left out. */
-function holdingGroups(
-  holdings: readonly AppInboxTaskHolding[],
-  listed: TasksControl["tasks"],
-  itemsOf: (taskId: string) => readonly InboxItem[] | undefined,
-): InboxGroup[] {
-  return holdings.flatMap((holding) => {
-    const task = listed.find((each) => each.id === holding.taskId);
-    if (task === undefined) return [];
-    return [{ holder: taskHolder(task), items: itemsOf(holding.taskId) ?? [] }];
-  });
-}
-
 /** A channel's own scope, as the reader last turned it while that channel stood. */
 interface ChannelScope {
   readonly channelId: string;
@@ -112,10 +99,10 @@ function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   };
 }
 
-/** The choice that opens a listed item: by its task, or by its agent where it has none. */
+/** The choice that opens a listed item: by its task, and its agent, which its link names, or by its agent where it has none. */
 export function choiceOf({ holder, item }: InboxListed): InboxChoice {
   return holder.kind === INBOX_HOLDER.TASK
-    ? { taskId: holder.task.id, itemId: item.id }
+    ? { taskId: holder.task.id, itemAgentId: item.agentId, itemId: item.id }
     : { agentId: item.agentId, itemId: item.id };
 }
 
@@ -140,12 +127,15 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     () => listedHoldings(inboxTasks, listedTasks),
     [inboxTasks, listedTasks],
   );
-  const read = useInboxItems({ holdings });
   const waitingTaskless = tasks.inboxTaskless;
-  const tasklessReads = useTasklessInboxItems(waitingTaskless);
-  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
-  const tasklessItems = useSettledReads(tasklessReads.items);
-  const taskless = { ...tasklessReads, items: tasklessItems };
+  const read = useHolderInboxItems(
+    useMemo(
+      () => [...taskHoldings(holdings), ...agentHoldings(waitingTaskless)],
+      [holdings, waitingTaskless],
+    ),
+  );
+  const readTasks = read.current[INBOX_SCOPE_KIND.PLAN];
+  const readAgents = read.current[INBOX_SCOPE_KIND.AGENT];
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
@@ -182,40 +172,44 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // at once, and only while it holds, since one that failed stops hearing what changed.
   const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
   const holdsLive = live.read && !live.failed;
-  const itemsOf =
-    (reads: typeof read) =>
-    (each: string): readonly InboxItem[] | undefined =>
-      holdsLive && each === taskId ? liveItems : reads.items.get(each);
-  const taskEntries = holdingGroups(holdings, tasks.tasks, itemsOf(read));
-  const tasklessRead =
-    holdsLive && chosenAgentId !== undefined
-      ? new Map(taskless.items).set(chosenAgentId, liveItems)
-      : taskless.items;
+  const chosenHolder =
+    taskId !== undefined
+      ? { kind: INBOX_SCOPE_KIND.PLAN, id: taskId }
+      : chosenAgentId === undefined
+        ? undefined
+        : { kind: INBOX_SCOPE_KIND.AGENT, id: chosenAgentId };
+  const held =
+    holdsLive && chosenHolder !== undefined
+      ? {
+          ...read.items,
+          [chosenHolder.kind]: new Map(read.items[chosenHolder.kind]).set(
+            chosenHolder.id,
+            liveItems,
+          ),
+        }
+      : read.items;
   // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
   const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
-  const settledAgent: TasklessInboxAgent[] =
+  const settledAgent =
     chosenAgentId !== undefined &&
     holdsLive &&
     pageAgent !== undefined &&
     !waitingTaskless.some((each) => each.agentId === chosenAgentId)
       ? [
-          {
-            agentId: pageAgent.id,
-            ...(pageAgent.kind === undefined ? undefined : { agentKind: pageAgent.kind }),
-            agentTitle: pageAgent.title,
-            agentModel: pageAgent.model,
-            automationId: pageAgent.automationId ?? null,
-            automationName: null,
-            repository: agents.agentRepository ?? null,
-            ...(agents.workspaceId === undefined ? undefined : { workspaceId: agents.workspaceId }),
-          },
+          inboxAgentOf({
+            ...pageAgent,
+            repository: agents.agentRepository,
+            workspaceId: agents.workspaceId,
+          }),
         ]
       : [];
-  // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
-  const everyChannel: readonly InboxGroup[] = [
-    ...taskEntries,
-    ...tasklessGroups([...waitingTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
-  ];
+  // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@luke/host`'s `inbox-collections.ts`).
+  const everyChannel: readonly InboxGroup[] = inboxGroups(held, {
+    tasks: holdings,
+    listed: tasks.tasks,
+    agents: [...waitingTaskless, ...settledAgent],
+    workspaceId: tasks.workspace?.id,
+  });
   const standing =
     channelId === undefined
       ? everyChannel
@@ -259,28 +253,28 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // Note that a plan's items read before main's latest word of it may lack the item asked for, so only a current read settles it.
   const chosenWaits =
     (taskId !== undefined &&
-      !read.current.has(taskId) &&
+      !readTasks.has(taskId) &&
       !live.read &&
       (holdings.some((holding) => holding.taskId === taskId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
-      !taskless.current.has(chosenAgentId) &&
+      !readAgents.has(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
   // Note that the holdings are filtered against the task list, so until it is read they hold nothing and prove nothing.
   const listUnread = !tasks.listRead && !tasks.listFailed;
   const reading =
     listUnread ||
-    holdings.some((holding) => !read.items.has(holding.taskId)) ||
-    waitingTaskless.some((each) => !taskless.items.has(each.agentId));
+    holdings.some((holding) => !read.items[INBOX_SCOPE_KIND.PLAN].has(holding.taskId)) ||
+    waitingTaskless.some((each) => !read.items[INBOX_SCOPE_KIND.AGENT].has(each.agentId));
   // An item asked for by a link or a notification that no read holds once every read has landed is
   // not there for the reader, whether it was deleted or is of a task they cannot read, and its pane
-  // says so rather than giving way to the first item.
+  // says so rather than standing empty.
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     taskId !== undefined
-      ? read.current.has(taskId) || live.read || holderEmpty
+      ? readTasks.has(taskId) || live.read || holderEmpty
       : chosenAgentId !== undefined
-        ? live.read || taskless.current.has(chosenAgentId) || holderEmpty
+        ? live.read || readAgents.has(chosenAgentId) || holderEmpty
         : true;
   // Note that only a task's item waits on the task list, since an agent with no task is read apart from it.
   const missing =
@@ -302,23 +296,14 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     retryLive();
     retryAgents();
   }, [retryLive, retryAgents]);
-  // Note that an item a link or a notification asked for is never given way to, found or not, and that only an Inbox standing has an item to stand in.
-  const standIn =
-    view.open && chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
-      ? firstChoice(list)
-      : undefined;
   const { onChoose } = view;
   const choose = useCallback((listed: InboxListed) => onChoose(choiceOf(listed)), [onChoose]);
-  useEffect(() => {
-    if (standIn !== undefined) choose(standIn);
-  }, [standIn, choose]);
   // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.
-  const failed = read.failed || taskless.failed || tasks.listFailed;
+  const failed = read.failed || tasks.listFailed;
   const onRetry = () => {
     read.onRetry();
-    taskless.onRetry();
     if (tasks.listFailed) tasks.onRetryList();
   };
   return {
@@ -328,7 +313,6 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     folds,
     openAutomation,
     read,
-    taskless,
     asked,
     chosenTask,
     taskId,

@@ -676,7 +676,7 @@ function onTask(workspaces: TasksControl["workspaces"]): TasksControl {
   });
 }
 
-test("each step's address is the path of the link ⌥⌘C copies there", async () => {
+test("each step's address is the path of the link ⇧⌘C copies there", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const listed = { workspaces: [ACME], workspace: ACME };
@@ -815,7 +815,6 @@ test("an Inbox told no column of its own until an item stands alone in it takes 
         open: true,
         chosen,
         single: chosen !== undefined,
-        listed: false,
       },
     });
   const window = mount(base);

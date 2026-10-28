@@ -117,16 +117,16 @@ export function browserLiveConcern(
         const read = yield* readParams(
           browserLiveConnectParamsSchema,
           params,
-          "opening a live view names the connection, the task, and the tab",
+          "opening a live view names the connection, the agent, and the tab",
         );
         if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
-        const { connectionId, taskId, tabId } = read;
+        const { connectionId, agentId, tabId } = read;
         if (socketOrigin === undefined) {
           return yield* Effect.fail(new RefusedRefusal({ message: "no live view is served" }));
         }
         const connection: Connection = { socket: undefined, held: [] };
         connections.set(connectionId, connection);
-        const address = `${socketOrigin}${browserLivePath({ taskId, tabId })}`;
+        const address = `${socketOrigin}${browserLivePath({ agentId, tabId })}`;
         yield* FiberMap.run(fibers, connectionId, session(connectionId, connection, address));
         return {};
       }),

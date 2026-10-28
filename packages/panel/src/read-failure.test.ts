@@ -200,8 +200,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           onChoose: ignore,
           onOpenItem: () => undefined,
           onOpenChannel: () => undefined,
-          listed: false,
-          onListed: ignore,
+          onClear: ignore,
           pages: undefined,
           onTaskAgents: () => undefined,
         },
@@ -277,8 +276,7 @@ const INBOX_VIEW = {
   onChoose: ignore,
   onOpenItem: () => undefined,
   onOpenChannel: () => undefined,
-  listed: false,
-  onListed: ignore,
+  onClear: ignore,
   pages: undefined,
   onTaskAgents: () => undefined,
 } as const;
@@ -303,7 +301,7 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
 
 const REVISION: PlanRevisionLine = {
   seq: 2,
-  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true },
+  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: false },
   startedAt: 20,
   changes: 2,
 };

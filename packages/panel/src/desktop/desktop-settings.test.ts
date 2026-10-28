@@ -112,7 +112,7 @@ function settingsProps(
   view: SettingsView,
   onViewChange: (view: SettingsView) => void,
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
-  settings: SettingsPanelProps["settings"] = settingsView({ voiceAvailable: true }),
+  settings: SettingsPanelProps["settings"] = settingsView(),
 ) {
   return {
     account: ACCOUNT,
@@ -301,7 +301,7 @@ test("Settings names its page once, by the page's own header, which also holds t
   const page = mount(
     createElement(SettingsHarness, {
       opensOn: SETTINGS_VIEW.APPEARANCE,
-      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+      stored: settingsView({ zoom: 125 }),
     }),
   );
 
@@ -379,6 +379,31 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
   assert.equal(shownTitle(on), "Memory");
 });
 
+test("the sidebar lists Hosts under Account after Agents, and its search finds it, only while the account has Local agents on", async () => {
+  const off = mount(createElement(SettingsHarness));
+  assert.deepEqual(pageGroups(off)[1]?.rows, PAGE_GROUPS[1]?.rows);
+  assert.deepEqual(foundUnder(off, "Add hosts"), []);
+
+  const experiments = experimentsOn(EXPERIMENT.LOCAL_AGENTS);
+  handState(experiments);
+  const on = mount(createElement(SettingsHarness, { stored: settingsView({ experiments }) }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(pageGroups(on)[1]?.rows, [
+    "Account",
+    "Agents",
+    "Hosts",
+    "Integrations",
+    "Skills",
+    "Experimental",
+  ]);
+  openPage(on, "Hosts");
+  assert.equal(shownTitle(on), "Hosts");
+  assert.deepEqual(foundUnder(on, "Add hosts"), ["Hosts"]);
+});
+
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
   openPage(page, "Workspace");
@@ -425,7 +450,7 @@ test("the Settings search finds each moved option under its new page", () => {
 test("Open Luke at login stands on This Mac under Startup, drawn as the choice already stored, and Appearance holds it no more", () => {
   const page = mount(
     createElement(SettingsHarness, {
-      stored: settingsView({ voiceAvailable: true, openAtLogin: false }),
+      stored: settingsView({ openAtLogin: false }),
     }),
   );
 
@@ -805,7 +830,7 @@ test("on a phone a page is headed by the way back to the list, its title, and it
           listings += 1;
         },
       },
-      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+      stored: settingsView({ zoom: 125 }),
     }),
   );
 
@@ -839,7 +864,7 @@ test("a wide room keeps the page list's Back row and title and a page's own titl
   const page = mount(
     createElement(SettingsHarness, {
       opensOn: SETTINGS_VIEW.APPEARANCE,
-      stored: settingsView({ voiceAvailable: true, zoom: 125 }),
+      stored: settingsView({ zoom: 125 }),
     }),
   );
 

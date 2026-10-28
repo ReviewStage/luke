@@ -39,6 +39,8 @@ export const SETTINGS_SEARCH_ROW = {
   API_KEY_OPENAI: "api-key-openai",
   /** Skills' Add a skill row. */
   ADD_SKILL: "add-skill",
+  /** Hosts' Add hosts button, under its list. */
+  ADD_HOSTS: "add-hosts",
   /** The Workspace page's identity row, where an owner or an admin renames the workspace. */
   WORKSPACE_RENAME: "workspace-rename",
 } as const;
@@ -51,7 +53,6 @@ export const SETTINGS_SEARCH_ROW = {
  * without one.
  */
 export const EXPERIMENT_ANCHOR = {
-  [EXPERIMENT.BROWSER]: "experiment-browser",
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
   [EXPERIMENT.LOCAL_AGENTS]: "experiment-local-agents",

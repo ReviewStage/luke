@@ -1123,7 +1123,7 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   automationId: codingAgentPageSchema.fields.automationId,
   workspaceId: codingAgentPageSchema.fields.workspaceId,
   repository: codingAgentPageSchema.fields.repository,
-  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  /** Epoch milliseconds the agent last moved: its start, or its newest run to end's end, whichever is later; a run's start is none. */
   activityAt: countedNumber,
   /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
@@ -1695,8 +1695,8 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
 /**
  * What the reviewer and label pickers of an agent's Pull request tab offer
  * (GET), read of its repository rather than its pull request: the
- * repository's labels, the users who may be asked for a review (its
- * collaborators), and its organization's teams that reach it, each up to
+ * repository's labels, the users who may be asked for a review (those it
+ * may assign), and its organization's teams that reach it, each up to
  * the bound; each empty where the Luke GitHub App may not read it.
  */
 export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({
@@ -2047,8 +2047,6 @@ const codingAgentSenderSchema = EffectSchema.Struct({
    * kept, once that agent is gone, and from a service older than it.
    */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** The task that agent works on, where `agentId` is given and it works on one. */
-  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
@@ -2103,12 +2101,6 @@ export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
 const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, so an agent's tab knows which
-   * turn a line said on a call answers (`readFrom`); absent on any other
-   * row, and from a service older than it.
-   */
-  turnId: EffectSchema.optionalKey(EffectSchema.String),
-  /**
    * What opened a brain turn, as its row recorded it, on the turn's
    * journal: a spoken turn is the voice's, whose words Luke says aloud
    * whether or not a line on screen asked for it, as the look around a
@@ -2153,21 +2145,6 @@ const codingAgentMessageSchema = EffectSchema.Struct({
    */
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
-  ),
-  /**
-   * The turn whose work a line the agent said on a call answers: the turn
-   * the ask it followed ran in, by the turn's id as its journal names it
-   * (`turnId`), and where that ask joined a typed turn under way, how many
-   * of the turn's steps had begun before it, so the tab folds only the work
-   * after them under the line. Absent on a line that followed no ask, or
-   * one whose ask has learned no turn, on every other row, and from a
-   * service older than it.
-   */
-  readFrom: EffectSchema.optionalKey(
-    EffectSchema.Struct({
-      turnId: EffectSchema.String,
-      afterStep: EffectSchema.optionalKey(countedNumber),
-    }),
   ),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),

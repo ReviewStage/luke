@@ -6,8 +6,10 @@
  * as stored and beside it, joined in rather than read after, what the
  * service's page carries for it (`transcript.ts`'s `transcriptMessageOf`):
  * what sent a developer's line and where in a turn under way it arrived,
- * the turn whose work a line said on a call answers, and for a turn's
- * journal when the turn began and what it ran on and spent. The rows are
+ * and for a turn's journal when the turn began and what it ran on and
+ * spent. Note that the row still carries `turnId`, and `askTurnId` and
+ * `askAfterStep`, always null, for a released desktop that decodes them;
+ * this build reads none of them. The rows are
  * keyed by the message's id, as Neon's guide asks. Its parts are rows of
  * their own (`windowParts`), keyed by the message's id and the part's index,
  * the heavy ones cut as a page asked cut cuts them, so a journal that grows
@@ -49,7 +51,6 @@ export const transcriptWindowRowSchema = Schema.Struct({
   id: Schema.String,
   seq: countedNumber,
   clientId: Schema.String,
-  turnId: NullableString,
   role: Schema.Literals(Object.values(MESSAGE_ROLE)),
   /** How many parts the message holds, which `windowParts` carries a row each. */
   partCount: countedNumber,
@@ -65,13 +66,11 @@ export const transcriptWindowRowSchema = Schema.Struct({
   memberName: NullableString,
   /** The coding agent that sent the line, while it stands. */
   agentId: NullableString,
+  /** That agent's task, which the window reads no more, since a link names the agent; still selected while desktops that decode it as required stand. */
   agentTaskId: NullableString,
   /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
   journalId: NullableString,
   afterStep: NullableNumber,
-  /** The turn the ask a line said on a call followed ran in, and the steps begun before the ask joined it. */
-  askTurnId: NullableString,
-  askAfterStep: NullableNumber,
   /** The turn the row was written in: when it began as a working line counts it, and what it ran on and spent. */
   turnStartedAt: NullableNumber,
   turnStatus: NullableString,
@@ -127,9 +126,6 @@ function senderOf(row: TranscriptWindowRow): CodingAgentSender | undefined {
             agent: true,
             ...(row.senderModel === null ? undefined : { model: row.senderModel }),
             ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-            ...(row.agentId === null || row.agentTaskId === null
-              ? undefined
-              : { taskId: row.agentTaskId }),
           };
     default:
       return undefined;
@@ -149,9 +145,8 @@ function spokenOnCall(row: TranscriptWindowRow): boolean {
  * A row of the window as the tab draws it, the message the service's page
  * would carry for it: for a developer's line what sent it, when, and where
  * in a turn under way it arrived; for a line said on a call when its words
- * began and the turn whose work it answers; and for a turn's journal when
- * the turn began and what it ran on and, once the journal closed, when it
- * did and what it spent.
+ * began; and for a turn's journal when the turn began and what it ran on
+ * and, once the journal closed, when it did and what it spent.
  */
 function windowMessageOf(
   row: TranscriptWindowRow,
@@ -190,25 +185,10 @@ function windowMessageOf(
         : { arrivedIn: { journalId: row.journalId, afterStep: row.afterStep } }),
     };
   }
-  if (spokenOnCall(row)) {
-    return {
-      ...message,
-      sentAt: row.placedAt,
-      ...(row.askTurnId === null
-        ? undefined
-        : {
-            readFrom: {
-              turnId: row.askTurnId,
-              ...(row.askAfterStep === null ? undefined : { afterStep: row.askAfterStep }),
-            },
-          }),
-    };
-  }
+  if (spokenOnCall(row)) return { ...message, sentAt: row.placedAt };
   if (row.turnStartedAt === null || row.turnStatus === null) return message;
   return {
     ...message,
-    // Note that a turn's journal shares the turn's id as its client id, which no other row of the turn does.
-    ...(row.clientId === row.turnId ? { turnId: row.turnId } : undefined),
     startedAt: row.turnStartedAt,
     ...(row.finishedAt === null ? undefined : { finishedAt: row.finishedAt }),
     ...turnRecordOf({

@@ -94,7 +94,7 @@ function mount(page: DrawnPage = SETTINGS_PAGE.APPEARANCE): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(rows(page, settingsView({ voiceAvailable: true }), writes)));
+  act(() => root.render(rows(page, settingsView(), writes)));
   return container;
 }
 

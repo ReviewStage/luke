@@ -385,8 +385,9 @@ export const standingGithubRow = (now: number): GitHubAccountRow => ({
 });
 
 /**
- * A user with one GitHub account row, its tokens sealed the way a sign-in
- * leaves them; the standing row off the clock when none is given. The user's id.
+ * A user with one GitHub account row, the fixture member's GitHub account,
+ * its tokens sealed the way a sign-in leaves them; the standing row off the
+ * clock when none is given. The user's id.
  */
 export const openGithubUser = (standing?: GitHubAccountRow) =>
   Effect.gen(function* () {
@@ -397,7 +398,7 @@ export const openGithubUser = (standing?: GitHubAccountRow) =>
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     yield* db.insert(account).values({
       id: `account-${randomUUID()}`,
-      accountId: "4242",
+      accountId: GITHUB_FIXTURE_MEMBER.ID,
       providerId: GITHUB_PROVIDER_ID,
       userId,
       accessToken: yield* sealed(row.accessToken),

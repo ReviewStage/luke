@@ -8,7 +8,9 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { Duration, Effect, Option, Stream } from "effect";
+import { Duration, Effect, Option } from "effect";
+import { cancelledTurn } from "../agents/coder-host/stop.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -16,9 +18,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   EveUnreachable,
-} from "../agents/brain-host/eve-sessions.js";
-import { cancelledTurn } from "../agents/coder-host/stop.js";
-import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+} from "../agents/eve-host/eve-sessions.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching } from "../testing/github-app-fake.js";
 import { NATIVE_WAKEUP_SWEEP, sweepNativeWakeups } from "./native-wakeup-sweep.js";
@@ -63,7 +63,6 @@ function fakeEve(refusing = false) {
           }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { sent, eveFor: () => Effect.succeed(sessions) };
 }

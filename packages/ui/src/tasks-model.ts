@@ -1,11 +1,6 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  type RepositoryPin,
-  TASK_PRIORITY,
   TASK_STATUS,
   type Task,
-  type TaskPriority,
-  type TaskStanding,
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
@@ -17,14 +12,6 @@ import {
   type TasksView,
 } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
-import {
-  type PendingValue,
-  type PendingValues,
-  pendingSettled,
-  pendingValue,
-  pendingWithout,
-  type SameValue,
-} from "./pending-values.js";
 
 /**
  * tasks-model.ts -- what the panel's Tasks tab draws, decided from the document alone.
@@ -211,22 +198,8 @@ export function startFailureNote(failure: StartCallFailure): string {
 /** What a task's name says, where it was edited, when the service refused the rename. */
 export const RENAME_FAILED_NOTE = "The task could not be renamed. Try again.";
 
-/** The names given to tasks that main's view has yet to carry, by task id. */
-export type PendingRenames = PendingValues<string, string>;
-
-/** Names drawn over the ones a view carries, by task id: the pending ones' values, or a name being typed. */
+/** Names drawn over the ones a view carries, by task id: a name being typed. */
 export type TaskNames = ReadonlyMap<string, string>;
-
-/** Whether two names are one. */
-const sameName: SameValue<string> = (a, b) => a === b;
-
-/** The task the view holds: its row in the list, else the open document. */
-function viewedTask(view: TasksView, taskId: string): TaskSummary | undefined {
-  const listed = view.tasks.find((task) => task.id === taskId);
-  if (listed !== undefined) return listed;
-  const held = view.document.task;
-  return held?.id === taskId ? held : undefined;
-}
 
 /** The view with each name given drawn in place of the one it replaces, in the list and on the open document alike. */
 export function renamedView(view: TasksView, renames: TaskNames): TasksView {
@@ -241,25 +214,6 @@ export function renamedView(view: TasksView, renames: TaskNames): TasksView {
     tasks: view.tasks.map(named),
     document: held === undefined ? view.document : { ...view.document, task: named(held) },
   };
-}
-
-/** The pending name a rename asks for, over the name the view gives the task and any rename of it still pending. */
-export function renameAsked(
-  renames: PendingRenames,
-  view: TasksView,
-  taskId: string,
-  name: string,
-): PendingValue<string> {
-  return pendingValue(renames.get(taskId), name, viewedTask(view, taskId)?.name, sameName);
-}
-
-/** The pending names the view still leaves standing at `now` (`pending-values.ts`). */
-export function settledRenames(
-  renames: PendingRenames,
-  view: TasksView,
-  now: number | undefined,
-): PendingRenames {
-  return pendingSettled(renames, (taskId) => viewedTask(view, taskId)?.name, sameName, now);
 }
 
 /** What a press of the task menu does to a task's place: pins it or unpins it. */
@@ -369,293 +323,6 @@ export function settleFailedNote(status: TaskStatus, refused: number): string {
 /** What the toast says when the service refused an Undo putting a status back. */
 export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put back. Try again.";
 
-/** A task's pin as the list carries it, only where it stands. */
-type MarkStamps = Pick<TaskSummary, "pinnedAt">;
-
-/** A pin given to a task: the instant it was asked, or null for one taken away. */
-export interface PendingMark {
-  readonly pinnedAt: number | null;
-}
-
-/** The pins given to tasks that main's view has yet to carry, by task id. */
-export type PendingMarks = PendingValues<string, PendingMark>;
-
-/** The stamp a press asks for, made at `at`. */
-function pendingMark(mark: TaskMark, at: number): PendingMark {
-  switch (mark) {
-    case TASK_MARK.PIN:
-      return { pinnedAt: at };
-    case TASK_MARK.UNPIN:
-      return { pinnedAt: null };
-  }
-}
-
-/** Whether two pins are one as the list draws them: pinned or not, whenever it was. */
-const sameMark: SameValue<PendingMark> = (a, b) => (a.pinnedAt === null) === (b.pinnedAt === null);
-
-/** A row's pin as a pending mark reads it. */
-function viewedMark(row: MarkStamps | undefined): PendingMark | undefined {
-  return row === undefined ? undefined : { pinnedAt: row.pinnedAt ?? null };
-}
-
-/**
- * A stamp after a pending change: none asked leaves the one standing, null
- * takes it away, and an instant stands only where none already does, so a
- * task pinned twice keeps its place among the pinned.
- */
-function stampAfter(standing: number | undefined, asked: number | null | undefined) {
-  if (asked === undefined) return standing;
-  if (asked === null) return undefined;
-  return standing ?? asked;
-}
-
-/** A row or the open document with its pending pin drawn in place of what it carries; an unpin takes the pin's place with it. */
-function marked<Row extends TaskSummary>(
-  row: Row,
-  mark: PendingMark | undefined,
-): Omit<Row, keyof MarkStamps | "pinPosition"> & MarkStamps & Pick<TaskSummary, "pinPosition"> {
-  const { pinnedAt, pinPosition, ...rest } = row;
-  const pinned = stampAfter(pinnedAt, mark?.pinnedAt);
-  return {
-    ...rest,
-    ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
-    ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
-  };
-}
-
-/** The view with each pending pin drawn in place, in the list and on the open document alike. */
-export function markedView(view: TasksView, marks: PendingMarks): TasksView {
-  if (marks.size === 0) return view;
-  const held = view.document.task;
-  return {
-    ...view,
-    tasks: view.tasks.map((task) => marked(task, marks.get(task.id)?.value)),
-    document:
-      held === undefined
-        ? view.document
-        : { ...view.document, task: marked(held, marks.get(held.id)?.value) },
-  };
-}
-
-/** The pending pin a press asks for, over the pin the view carries and any pin of the task still pending. */
-export function markAsked(
-  marks: PendingMarks,
-  view: TasksView,
-  taskId: string,
-  mark: TaskMark,
-  at: number,
-): PendingValue<PendingMark> {
-  const viewed = viewedMark(viewedTask(view, taskId));
-  return pendingValue(marks.get(taskId), pendingMark(mark, at), viewed, sameMark);
-}
-
-/** The pending pins the view still leaves standing at `now` (`pending-values.ts`). */
-export function settledMarks(
-  marks: PendingMarks,
-  view: TasksView,
-  now: number | undefined,
-): PendingMarks {
-  return pendingSettled(marks, (taskId) => viewedMark(viewedTask(view, taskId)), sameMark, now);
-}
-
-/**
- * Where tasks were sent to stand here that main's view has yet to carry, by
- * task id: a status, a priority, and an assignee (null for no one),
- * each apart from the others and from the pins, so each lands or is refused
- * on its own.
- */
-export interface PendingStandings {
-  readonly status: PendingValues<string, TaskStatus>;
-  readonly priority: PendingValues<string, TaskPriority>;
-  readonly assignee: PendingValues<string, PendingAssignee>;
-}
-
-/** Who a task was sent to be assigned to, by their id and the name they are drawn by; null for no one. */
-type PendingAssignee = { readonly userId: string; readonly name: string } | null;
-
-/** No task waiting on where it was sent to stand. */
-export const NO_PENDING_STANDINGS: PendingStandings = {
-  status: new Map(),
-  priority: new Map(),
-  assignee: new Map(),
-};
-
-/** What one press asked of a task's standing, each part it changes, which a refusal lets go of. */
-export interface StandingAsk {
-  readonly status?: PendingValue<TaskStatus>;
-  readonly priority?: PendingValue<TaskPriority>;
-  readonly assignee?: PendingValue<PendingAssignee>;
-}
-
-/** Whether two standings are one. */
-const sameStanding: SameValue<string | null> = (a, b) => a === b;
-
-/** Whether two assignees are one person, or both no one, whatever name each is drawn by. */
-const sameAssignee: SameValue<PendingAssignee> = (a, b) =>
-  sameStanding(a?.userId ?? null, b?.userId ?? null);
-
-/** A task's priority, No priority for one from a service before priorities. */
-function standingPriority(task: Pick<TaskSummary, "priority">): TaskPriority {
-  return task.priority ?? TASK_PRIORITY.NONE;
-}
-
-/** A task's assignee, null where it is assigned to no one. */
-function standingAssignee(task: Pick<TaskSummary, "assignee">): PendingAssignee {
-  return task.assignee ?? null;
-}
-
-/** The name the view knows a member by, from a task assigned to them or made by them; none where it knows none. */
-function memberName(view: TasksView, userId: string): string {
-  for (const task of view.tasks) {
-    if (task.assignee?.userId === userId) return task.assignee.name;
-    if (task.createdBy?.userId === userId) return task.createdBy.name;
-  }
-  return "";
-}
-
-/** A row assigned to the member given, or to no one. */
-function assignedTo<Row extends TaskSummary>(row: Row, assignee: PendingAssignee): Row {
-  if (assignee !== null) return { ...row, assignee };
-  const { assignee: _assignee, ...unassigned } = row;
-  return unassigned as Row;
-}
-
-/** Whether any task waits on where it was sent. */
-function anyStanding(standings: PendingStandings): boolean {
-  return standings.status.size + standings.priority.size + standings.assignee.size > 0;
-}
-
-/** The tasks waiting on where they were sent to stand. */
-export function standingTasks(standings: PendingStandings): readonly string[] {
-  return [...standings.status.keys(), ...standings.priority.keys(), ...standings.assignee.keys()];
-}
-
-/** The view with each pending standing drawn in place, in the list and on the open document alike. */
-export function standingView(view: TasksView, standings: PendingStandings): TasksView {
-  if (!anyStanding(standings)) return view;
-  const stood = <Row extends TaskSummary>(row: Row): Row => {
-    const status = standings.status.get(row.id);
-    const priority = standings.priority.get(row.id);
-    const assignee = standings.assignee.get(row.id);
-    const placed: Row = {
-      ...row,
-      ...(status === undefined ? {} : { status: status.value }),
-      ...(priority === undefined ? {} : { priority: priority.value }),
-    };
-    return assignee === undefined ? placed : assignedTo(placed, assignee.value);
-  };
-  const held = view.document.task;
-  return {
-    ...view,
-    tasks: view.tasks.map(stood),
-    document: held === undefined ? view.document : { ...view.document, task: stood(held) },
-  };
-}
-
-/**
- * The pending standing a press asks for, over where the view stands the task
- * and anything of it still pending. Each part is an object of its own, so
- * whoever set it lets go of it alone, and never of a later press's for the
- * same task. A member assigned is drawn by the name the press knows them by
- * (`assigneeName`, the member directory's), else the one the list does.
- */
-export function standingAsked(
-  standings: PendingStandings,
-  view: TasksView,
-  taskId: string,
-  standing: TaskStanding,
-  assigneeName?: string,
-): StandingAsk {
-  const task = viewedTask(view, taskId);
-  const { status, priority, assigneeId } = standing;
-  return {
-    ...(status === undefined
-      ? {}
-      : {
-          status: pendingValue(
-            standings.status.get(taskId),
-            status,
-            task === undefined ? undefined : standingStatus(task),
-            sameStanding,
-          ),
-        }),
-    ...(priority === undefined
-      ? {}
-      : {
-          priority: pendingValue(
-            standings.priority.get(taskId),
-            priority,
-            task === undefined ? undefined : standingPriority(task),
-            sameStanding,
-          ),
-        }),
-    ...(assigneeId === undefined
-      ? {}
-      : {
-          assignee: pendingValue(
-            standings.assignee.get(taskId),
-            assigneeId === null
-              ? null
-              : { userId: assigneeId, name: assigneeName ?? memberName(view, assigneeId) },
-            task === undefined ? undefined : standingAssignee(task),
-            sameAssignee,
-          ),
-        }),
-  };
-}
-
-/** The pending standings with what a press asked of a task drawn over the view. */
-export function withStanding(
-  standings: PendingStandings,
-  taskId: string,
-  ask: StandingAsk,
-): PendingStandings {
-  const set = <V>(held: PendingValues<string, V>, pending: PendingValue<V> | undefined) =>
-    pending === undefined ? held : new Map(held).set(taskId, pending);
-  return {
-    status: set(standings.status, ask.status),
-    priority: set(standings.priority, ask.priority),
-    assignee: set(standings.assignee, ask.assignee),
-  };
-}
-
-/** The pending standings with what a refused press asked of a task let go, each part only while it is still the one standing. */
-export function standingWithout(
-  standings: PendingStandings,
-  taskId: string,
-  ask: StandingAsk,
-): PendingStandings {
-  const drop = <V>(held: PendingValues<string, V>, pending: PendingValue<V> | undefined) =>
-    pending === undefined ? held : pendingWithout(held, taskId, pending);
-  return {
-    status: drop(standings.status, ask.status),
-    priority: drop(standings.priority, ask.priority),
-    assignee: drop(standings.assignee, ask.assignee),
-  };
-}
-
-/** The pending standings the view still leaves standing at `now` (`pending-values.ts`); the same record where nothing changed. */
-export function settledStandings(
-  standings: PendingStandings,
-  view: TasksView,
-  now: number | undefined,
-): PendingStandings {
-  const read =
-    <V>(of: (task: TaskSummary) => V) =>
-    (taskId: string) => {
-      const task = viewedTask(view, taskId);
-      return task === undefined ? undefined : of(task);
-    };
-  const status = pendingSettled(standings.status, read(standingStatus), sameStanding, now);
-  const priority = pendingSettled(standings.priority, read(standingPriority), sameStanding, now);
-  const assignee = pendingSettled(standings.assignee, read(standingAssignee), sameAssignee, now);
-  const same =
-    status === standings.status &&
-    priority === standings.priority &&
-    assignee === standings.assignee;
-  return same ? standings : { status, priority, assignee };
-}
-
 /**
  * What an Undo of setting tasks at a status still puts back: only the tasks
  * that still stand there, since one given another status since was chosen
@@ -678,92 +345,11 @@ export const REPOSITORY_PIN_FAILED_NOTES = {
   UNPIN: "The repository could not be unpinned. Try again.",
 } as const;
 
-/** A repository pinned or unpinned here that main's view has yet to carry: which, and the instant it was asked. */
-export interface PendingRepositoryPin {
-  readonly pinned: boolean;
-  readonly at: number;
-}
-
-/** The repository pins given here that main's view has yet to carry, by repository. */
-export type PendingRepositoryPins = ReadonlyMap<string, PendingRepositoryPin>;
-
-/**
- * The repositories the sidebar draws pinned, newest pinned first: the pins
- * main's view carries, with every pin and unpin given here and not yet
- * carried drawn over them, so a press moves its group at once.
- */
-export function pinnedRepositories(
-  pins: readonly RepositoryPin[] | undefined,
-  pending: PendingRepositoryPins,
-): readonly string[] {
-  const standing = (pins ?? []).filter((pin) => pending.get(pin.repository)?.pinned !== false);
-  const added = [...pending]
-    .filter(
-      ([repository, pin]) => pin.pinned && !standing.some((each) => each.repository === repository),
-    )
-    .map(([repository, pin]) => ({ repository, pinnedAt: pin.at }));
-  return [...added, ...standing]
-    .sort((a, b) => b.pinnedAt - a.pinnedAt)
-    .map((pin) => pin.repository);
-}
-
-/** The pending repository pins the view still contradicts; one it now carries has landed and is let go. */
-export function unsettledRepositoryPins(
-  pending: PendingRepositoryPins,
-  pins: readonly RepositoryPin[] | undefined,
-): PendingRepositoryPins {
-  const unsettled = [...pending].filter(
-    ([repository, pin]) =>
-      (pins ?? []).some((each) => each.repository === repository) !== pin.pinned,
-  );
-  return unsettled.length === pending.size ? pending : new Map(unsettled);
-}
-
 /** What the toast says when the service refused an agent's pin, by whether it was a pin or an unpin. */
 export const AGENT_PIN_FAILED_NOTES = {
   PIN: "The agent could not be pinned. Try again.",
   UNPIN: "The agent could not be unpinned. Try again.",
 } as const;
-
-/** An agent with no plan pinned or unpinned here that main's view has yet to carry: which, and the instant it was asked. */
-interface PendingAgentPin {
-  readonly pinned: boolean;
-  readonly at: number;
-}
-
-/** The agent pins given here that main's view has yet to carry, by agent. */
-export type PendingAgentPins = ReadonlyMap<string, PendingAgentPin>;
-
-/**
- * The agents with no plan as the sidebar draws them: every pin and unpin
- * given here and not yet carried drawn over the pin main's view carries, so
- * a press moves the agent's row at once, as a plan's pin does. A pin
- * already carried keeps its instant, as the service keeps it.
- */
-export function agentsPinned(
-  agents: readonly TasklessAgent[],
-  pending: PendingAgentPins,
-): readonly TasklessAgent[] {
-  if (pending.size === 0) return agents;
-  return agents.map((agent) => {
-    const pin = pending.get(agent.id);
-    if (pin === undefined) return agent;
-    const { pinnedAt, ...unpinned } = agent;
-    return pin.pinned ? { ...unpinned, pinnedAt: pinnedAt ?? pin.at } : unpinned;
-  });
-}
-
-/** The pending agent pins the view still contradicts; one it now carries has landed, and one of an agent it no longer lists is let go. */
-export function unsettledAgentPins(
-  pending: PendingAgentPins,
-  agents: readonly TasklessAgent[],
-): PendingAgentPins {
-  const unsettled = [...pending].filter(([agentId, pin]) => {
-    const agent = agents.find((each) => each.id === agentId);
-    return agent !== undefined && (agent.pinnedAt !== undefined) !== pin.pinned;
-  });
-  return unsettled.length === pending.size ? pending : new Map(unsettled);
-}
 
 /** What the toast says when the service refused a pin's new place, which is put back. */
 export const PIN_MOVE_FAILED_NOTE = "The pin could not be moved. Try again.";
@@ -773,60 +359,6 @@ export interface PinMove {
   readonly agent: boolean;
   readonly id: string;
   readonly position: string;
-}
-
-/** A place a drag here gave a pin: the position, and whether the service has answered the write. */
-interface PendingPinPosition {
-  readonly position: string;
-  readonly answered: boolean;
-}
-
-/** Where pins dragged here stand until main's view carries them, by the plan's or the agent's id. */
-export type PendingPinPositions = ReadonlyMap<string, PendingPinPosition>;
-
-/** A row of the list with the place a drag here gave its pin drawn over the one it carries. */
-function placed<Row extends { readonly id: string; readonly pinPosition?: string }>(
-  row: Row,
-  pending: PendingPinPositions,
-): Row {
-  const place = pending.get(row.id);
-  return place === undefined ? row : { ...row, pinPosition: place.position };
-}
-
-/** The view with each pin dragged here drawn at its new place, the plans' and the agents' with no plan alike, so a drop stands at once. */
-export function positionedView(view: TasksView, pending: PendingPinPositions): TasksView {
-  if (pending.size === 0) return view;
-  const agents = view.tasklessAgents;
-  return {
-    ...view,
-    tasks: view.tasks.map((task) => placed(task, pending)),
-    ...(agents === undefined
-      ? undefined
-      : { tasklessAgents: agents.map((agent) => placed(agent, pending)) }),
-  };
-}
-
-/**
- * The dragged places the view still contradicts. One it now carries has
- * landed, one of a pin it no longer holds has nothing left to place, and one
- * the service already answered is let go too, since the host wrote what it
- * answered before it answered: a view that still differs is newer word, a
- * drag on another Mac since, which the pin then follows.
- */
-export function unsettledPinPositions(
-  pending: PendingPinPositions,
-  view: TasksView,
-): PendingPinPositions {
-  const rows: readonly {
-    readonly id: string;
-    readonly pinnedAt?: number;
-    readonly pinPosition?: string;
-  }[] = [...view.tasks, ...(view.tasklessAgents ?? [])];
-  const unsettled = [...pending].filter(([id, place]) => {
-    const row = rows.find((each) => each.id === id);
-    return !place.answered && row?.pinnedAt !== undefined && row.pinPosition !== place.position;
-  });
-  return unsettled.length === pending.size ? pending : new Map(unsettled);
 }
 
 /** The tasks the sidebar lists, each in its place. */

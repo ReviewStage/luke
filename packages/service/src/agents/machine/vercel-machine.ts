@@ -18,8 +18,10 @@
  * checkout with the `agent` user, and drops to that user with every
  * capability gone (`../sandbox-capabilities.ts`). The harness's credential
  * and the bearer are in that command's environment and nowhere else: never
- * in its argv, its config line, a file, or a tag. Its first lines are
- * written to its stdin.
+ * in its argv, its config line, a file, or a tag. Its config line is
+ * written to its stdin, which carries nothing more: the runner reads every
+ * later line from Luke (`../coder-host/runner-sessions.ts`), so this machine
+ * writes no line to it.
  *
  * The doors read the sandbox carrying the agent's session id as its tag, as
  * every agent's sandbox does, and only its running session: nothing is
@@ -130,12 +132,23 @@ export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
-  /** The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
+  /**
+   * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
+   * the launch was started with that a warm runner cannot take up later
+   * (`launchFingerprint`), then the mark again and `LINES_READ_MARK`, since
+   * every launch reads its lines from Luke. Note that the read mark is
+   * written for a deployment from before this one, which reads a launch
+   * without it as one whose stdin it writes, and is read here by no one:
+   * no launch from before the read still ran as this deployment went out.
+   */
   LAUNCH: "lukeRunnerLaunch",
 } as const;
 
-/** What parts a launch tag's first event number from its fingerprint. */
+/** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
 const LAUNCH_FINGERPRINT_MARK = "-";
+
+/** What a launch tag's last part reads for a launch that reads its lines from Luke. */
+const LINES_READ_MARK = "lines";
 
 /**
  * Where a message's files that the harness takes no block of are written
@@ -157,6 +170,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   writableRoots: [],
   signedIn: {},
   isolation: undefined,
+  linesRead: true,
 };
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
@@ -271,14 +285,14 @@ export interface TaggedRunner {
   readonly fingerprint?: string;
 }
 
-/** The launch tag read: its first event number and its fingerprint where it has one; none where the tag is missing or unreadable. */
+/** The launch tag read: its first event number, and its fingerprint where it has one, of a launch that reads its lines, as every sandbox's does; none where the tag is missing or unreadable. */
 function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
   const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
     LAUNCH_FINGERPRINT_MARK,
   );
   const firstSequence = Number(sequence);
   if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }) };
+  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }), linesRead: true };
 }
 
 /** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
@@ -293,11 +307,13 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   return { sandboxSessionId, commandId, ...launch };
 }
 
-/** The launch tag's value for the mark given. */
+/** The launch tag's value for the mark given. Note that a launch that reads its lines always has a fingerprint, since both came in after fingerprints, so its read mark never stands in a fingerprint's place. */
 function launchTagOf(mark: RunnerMark): string {
-  return mark.fingerprint === undefined
-    ? String(mark.firstSequence)
-    : [mark.firstSequence, mark.fingerprint].join(LAUNCH_FINGERPRINT_MARK);
+  if (mark.fingerprint === undefined) return String(mark.firstSequence);
+  const parts = [mark.firstSequence, mark.fingerprint];
+  return (mark.linesRead === true ? [...parts, LINES_READ_MARK] : parts).join(
+    LAUNCH_FINGERPRINT_MARK,
+  );
 }
 
 /** The tags a sandbox carries for the record given, beside its session's and its agent's. */
@@ -490,7 +506,9 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
     writeFiles: (place, files) => api.writeFiles(place.running, files),
 
-    writeLine: (handle, text) => api.writeStdin(handle.running, handle.command, text),
+    // Note that a sandbox's runner reads every line past its config from Luke, so a line written
+    // here is a caller's mistake, refused loudly rather than written where nothing reads it.
+    writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from Luke")),
 
     runnerExit: (handle, within) => api.commandExit(handle.running, handle.command, within),
 

@@ -465,13 +465,6 @@ export function editActor(
   }
 }
 
-/** Whose call an edit was written on: the member it names, the reader among them; nobody for an edit off a call, or a call the service names nobody for. */
-export function editCallOwner(edit: PlanLastEdit, reader: EditReader): Actor | undefined {
-  if (!edit.duringCall) return undefined;
-  if (edit.by === undefined) return undefined;
-  return editPerson(edit, reader);
-}
-
 /** What an actor last did in a plan: the sections whose last change is theirs, in the plan's order, and the newest of those changes. */
 export interface ActorActivity {
   readonly sections: readonly string[];

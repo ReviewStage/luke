@@ -125,7 +125,6 @@ export const THING_CARD: ThingCards = {
     <VersionChipCard taskId={version.planId} revision={version.revision} fallback={at.own} />
   ),
   [THING_KIND.COMMENT]: OWN_CARD,
-  [THING_KIND.TURN]: OWN_CARD,
   [THING_KIND.PAGE]: (page, at) => (
     <PageChipCard
       place={"taskId" in page ? { taskId: page.taskId } : { agentId: page.agentId }}
@@ -137,7 +136,7 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.AGENT]: (agent, at) => (
     <MentionedAgentCard
       agentId={agent.agentId}
-      taskId={agent.taskId}
+      taskId={undefined}
       name={at.name}
       workspaceId={at.wordsWorkspaceId}
       reading={reading(at)}

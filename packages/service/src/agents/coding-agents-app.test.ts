@@ -44,8 +44,6 @@ import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask, readTask, savePlanText, updateTask } from "@luke/database/models/task-store";
-import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
-import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentPin } from "@luke/database/schemas";
@@ -57,7 +55,6 @@ import { inboxItem } from "@luke/database/schemas/inbox";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { task as taskTable } from "@luke/database/schemas/task";
-import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import {
   CONVERSATION_KIND,
   MESSAGE_SENDER,
@@ -71,7 +68,6 @@ import {
   openWorkspace,
   startTask,
 } from "@luke/database/testing";
-import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   ACCOUNT_INBOX_ARCHIVED,
@@ -164,8 +160,6 @@ import {
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
-import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -188,7 +182,6 @@ import {
   Redacted,
   Result,
   type Schema,
-  Stream,
 } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -248,7 +241,13 @@ import {
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
-import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import { CODER } from "./coder-host/bounds.js";
+import { instancePublishedCache } from "./coder-host/published.js";
+import { REPLAY_BOUNDS } from "./coder-host/replay.js";
+import type { SummaryModelOf } from "./coder-host/replay-summary.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { codingAgentsApp } from "./coding-agents-app.js";
+import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -256,13 +255,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   EveUnreachable,
-} from "./brain-host/eve-sessions.js";
-import { CODER } from "./coder-host/bounds.js";
-import { instancePublishedCache } from "./coder-host/published.js";
-import { REPLAY_BOUNDS } from "./coder-host/replay.js";
-import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { codingAgentsApp } from "./coding-agents-app.js";
+} from "./eve-host/eve-sessions.js";
 import { messagesProcedures } from "./messages-procedures.js";
 import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
@@ -289,7 +282,6 @@ const AGENT_STARTS = "/api/agents/agents";
 /** A Start in a workspace with no task, by the workspace's id. */
 const WORKSPACE_STARTS = "/api/workspaces/agents";
 const AGENT = "/api/agents/agent";
-const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
@@ -505,7 +497,6 @@ function fakeEve(
           return { outcome: EVE_RESET_OUTCOME.RESET };
         }),
       ),
-    stream: () => Stream.empty,
   });
   return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs, resetSaw };
 }
@@ -1100,7 +1091,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             authorization: `Bearer ${owner}`,
             message: {
               conversationId: stored.value.conversationId,
-              turn: BRAIN_HOST_TURN.TYPED,
+              turn: EVE_HOST_TURN.TYPED,
               message: SNAPSHOT,
             },
             sessionId: eve.opened[0]?.sessionId ?? "",
@@ -2309,163 +2300,59 @@ function linesAnswering(pending: readonly PendingNode[]): (call: GraphqlCall) =>
 }
 
 it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
-  /** A call into the agent registered under the account, its segments one line by each speaker, the voice's rows written into the agent's conversation as the voice writes them; answers the call's session id and its start. */
+  /** A call an earlier version took into the agent: one line by each speaker, as its voice wrote them into the agent's conversation, each placed at the instant its words began; answers the call's id and its start. */
   const callInto = (
     agent: { readonly id: string; readonly conversationId: string },
-    caller: string,
     starter: string,
-    taskId: string,
     words: readonly [developer: string, agent: string],
   ) =>
     Effect.gen(function* () {
-      const liveSessionId = `live-${randomUUID()}`;
-      const voiceSessionId = yield* voiceSessionRecord().register({
-        userId: caller,
-        sessionId: liveSessionId,
-        taskId,
-        agentId: agent.id,
-        attachId: randomUUID(),
-        model: "gpt-live",
-      });
-      assert.ok(voiceSessionId !== undefined);
-      const db = yield* Database;
-      yield* db.insert(voiceTranscriptSegments).values([
-        {
-          voiceSessionId,
-          seq: 1,
-          role: VOICE_SEGMENT_ROLE.USER,
-          text: words[0],
-          startMs: 0,
-          endMs: 900,
-        },
-        {
-          voiceSessionId,
-          seq: 2,
-          role: VOICE_SEGMENT_ROLE.ASSISTANT,
-          text: words[1],
-          startMs: 1_500,
-          endMs: 2_400,
-        },
-      ]);
-      const voice = voiceWriter({ store: yield* storeWriter({ tools: CODER_TOOL_SET }) });
-      const target = {
-        userId: caller,
-        liveSessionId,
-        conversation: { userId: starter, conversationId: agent.conversationId },
-      };
+      const voiceSessionId = randomUUID();
+      const startedAt = Date.parse("2026-10-20T12:00:00Z");
       const developerRow = randomUUID();
       const agentRow = randomUUID();
-      yield* voice.upsertSpokenRow(target, {
-        rowId: developerRow,
-        speaker: TRANSCRIPT_SPEAKER.USER,
-        startMs: 0,
-        endMs: 900,
-      });
-      yield* voice.upsertSpokenRow(target, {
-        rowId: agentRow,
-        speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
-        startMs: 1_500,
-        endMs: 2_400,
-      });
-      const [session] = yield* db
-        .select({ startedAt: voiceSessions.startedAt })
-        .from(voiceSessions)
-        .where(eq(voiceSessions.id, voiceSessionId));
-      assert.ok(session !== undefined);
-      return { voiceSessionId, startedAt: session.startedAt.getTime(), developerRow, agentRow };
+      const db = yield* Database;
+      yield* db.insert(messages).values([
+        {
+          userId: starter,
+          conversationId: agent.conversationId,
+          seq: 1_000,
+          clientId: developerRow,
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: words[0], state: "done" }],
+          metadata: {
+            author: MESSAGE_AUTHOR.DEVELOPER,
+            channel: MESSAGE_CHANNEL.VOICE,
+            voice_session_id: voiceSessionId,
+            from_ms: 0,
+            to_ms: 900,
+          },
+          placedAt: new Date(startedAt),
+          finishedAt: new Date(startedAt + 900),
+        },
+        {
+          userId: starter,
+          conversationId: agent.conversationId,
+          seq: 1_001,
+          clientId: agentRow,
+          role: MESSAGE_ROLE.ASSISTANT,
+          parts: [{ type: "text", text: words[1], state: "done" }],
+          metadata: {
+            author: MESSAGE_AUTHOR.VOICE_MODEL,
+            channel: MESSAGE_CHANNEL.VOICE,
+            voice_session_id: voiceSessionId,
+            from_ms: 1_500,
+            to_ms: 2_400,
+          },
+          placedAt: new Date(startedAt + 1_500),
+          finishedAt: new Date(startedAt + 2_400),
+        },
+      ]);
+      return { voiceSessionId, startedAt, developerRow, agentRow };
     });
 
   it.effect(
-    "a blank Start, on a task with no repository or with one, hands the agent nothing and opens no session, and the agent reads as blank and as done, not failed, long past the grace a first turn lands in; a blank Start naming a prompt is refused, and any other Start on a task with no repository still is",
-    () =>
-      Effect.gen(function* () {
-        const bare = yield* openTask({ repository: null });
-        const coded = yield* openTask();
-        const standingOf = (opened: typeof bare) =>
-          Effect.map(readTask(opened.owner, opened.task.id), (read) => {
-            const { status, assignee } = Option.getOrThrow(read).task;
-            return { status, assignee: assignee?.userId };
-          });
-        const before = yield* standingOf(coded);
-        assert.notEqual(before.status, TASK_STATUS.IN_PROGRESS);
-        assert.equal(before.assignee, undefined);
-
-        const blankOn = (opened: typeof bare) =>
-          Effect.map(
-            opened.ask(
-              startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID(), blank: true }),
-            ),
-            (started) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent,
-          );
-        const onBare = yield* blankOn(bare);
-        const onCoded = yield* blankOn(coded);
-
-        for (const agent of [onBare, onCoded]) {
-          assert.equal(agent.brief, CODING_AGENT_BRIEF.BLANK);
-          assert.equal(agent.model, CODING_AGENT_DEFAULT_CHOICE.model);
-          assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
-          assert.equal(agent.status, CODING_AGENT_STATUS.COMPLETED);
-        }
-        const stored = (owner: string, id: string) =>
-          Effect.map(readCodingAgent(owner, id), (read) => {
-            const { planSnapshot, prompt, repository } = Option.getOrThrow(read);
-            return { planSnapshot, prompt, repository };
-          });
-        assert.deepEqual(yield* stored(bare.owner, onBare.id), {
-          planSnapshot: null,
-          prompt: null,
-          repository: null,
-        });
-        assert.deepEqual(yield* stored(coded.owner, onCoded.id), {
-          planSnapshot: null,
-          prompt: null,
-          repository: RELAY_FULL_NAME,
-        });
-        assert.deepEqual([...bare.eve.opened, ...coded.eve.opened], []);
-        // No work was handed, so the task stands where it was, though its starter is now on it.
-        assert.deepEqual(yield* standingOf(coded), {
-          status: before.status,
-          assignee: coded.owner,
-        });
-
-        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.minutes(1)));
-        const listed = readAnswer(
-          codingAgentListAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* bare.ask(request(TASK_AGENTS, bare.owner, { id: bare.task.id })),
-        );
-        assert.deepEqual(
-          listed.agents.map((agent) => [agent.id, agent.brief, agent.status]),
-          [[onBare.id, CODING_AGENT_BRIEF.BLANK, CODING_AGENT_STATUS.COMPLETED]],
-        );
-        const page = readAnswer(
-          codingAgentPageAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* bare.ask(request(AGENT, bare.owner, { id: onBare.id })),
-        );
-        assert.equal(page.agent.status, CODING_AGENT_STATUS.COMPLETED);
-
-        assert.deepEqual(
-          yield* bare.ask(
-            startAs(bare.owner, bare.task.id, {
-              idempotencyKey: randomUUID(),
-              blank: true,
-              prompt: "Expire invitations.",
-            }),
-          ),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
-        assert.deepEqual(
-          yield* bare.ask(startAs(bare.owner, bare.task.id, { idempotencyKey: randomUUID() })),
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
-        );
-        assert.deepEqual(bare.eve.opened, []);
-      }),
-  );
-
-  it.effect(
-    "an agent's transcript carries the lines said on calls into it in the order said, each on the voice channel naming its call and at the instant its words began, the agent's own with no turn's record though it was read aloud from one, and a line said awaits no turn",
+    "an agent's transcript carries the lines an earlier version said on calls into it in the order said, each on the voice channel naming its call and at the instant its words began, the agent's own with no turn's record though it was read aloud from one, and a line said awaits no turn",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openTask({ repository: null });
@@ -2475,10 +2362,7 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
         ).agent;
         const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
-        const call = yield* callInto(agent, owner, owner, task.id, [
-          "What did you change?",
-          "I moved the export.",
-        ]);
+        const call = yield* callInto(agent, owner, ["What did you change?", "I moved the export."]);
         const read = Effect.map(ask(request(AGENT_MESSAGES, owner, { id: agent.id })), (answered) =>
           readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
@@ -2539,35 +2423,6 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           { startedAt: spoken.startedAt, model: spoken.model, sentAt: spoken.sentAt },
           { startedAt: undefined, model: undefined, sentAt: call.startedAt + 1_500 },
         );
-      }),
-  );
-
-  it.effect(
-    "an agent's calls read as none by a member of its workspace, since Luke takes no calls, and as not found by anyone outside it or for an agent that is none",
-    () =>
-      Effect.gen(function* () {
-        const { owner, task, ask } = yield* openTask({ repository: null });
-        const outsider = yield* openTask();
-        const agent = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
-        ).agent;
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-
-        assert.deepEqual(
-          readAnswer(
-            taskTranscriptAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(AGENT_CALLS, owner, { id: agent.id })),
-          ),
-          { transcript: { calls: [], earlierOmitted: false } },
-        );
-        assert.deepEqual(
-          yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
-          notFound,
-        );
-        assert.deepEqual(yield* ask(request(AGENT_CALLS, owner, { id: randomUUID() })), notFound);
       }),
   );
 });
@@ -4187,7 +4042,7 @@ const AGENT_REVIEW_OPTIONS = "/api/agents/review-options";
 
 it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
   it.effect(
-    "the repository's labels, collaborators named against the workspace, and teams, read on the App's token; teams it may not read list none",
+    "the repository's labels, assignable users named against the workspace, and teams, read on the App's token; teams it may not read list none",
     () =>
       Effect.gen(function* () {
         const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
@@ -4199,7 +4054,10 @@ it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
             switch (path) {
               case `${repository}/labels`:
                 return Response.json([{ name: "bug", color: "d73a4a" }]);
+              // Note that GitHub lists an installation token no collaborator whose access comes through the organization, so it answers none.
               case `${repository}/collaborators`:
+                return Response.json([]);
+              case `${repository}/assignees`:
                 return Response.json([
                   {
                     login: "priyan",
@@ -4945,7 +4803,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a teammate's delete of a running agent stops it, retires its session, and takes it with its pins, its inbox, and the words said on its calls, keeping the calls and stamping its conversation deleted",
+    "a teammate's delete of a running agent stops it, retires its session, and takes it with its pins and its inbox, stamping its conversation deleted",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -4971,26 +4829,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           },
         );
         assert.ok(Result.isSuccess(posted));
-        const call = yield* voiceSessionRecord().register({
-          userId: owner,
-          sessionId: `live-${randomUUID()}`,
-          taskId: task.id,
-          agentId: agent.id,
-          attachId: randomUUID(),
-          model: "gpt-live",
-        });
-        assert.ok(call !== undefined);
-        yield* Database.use((db) =>
-          db.insert(voiceTranscriptSegments).values({
-            voiceSessionId: call,
-            seq: 1,
-            role: VOICE_SEGMENT_ROLE.USER,
-            text: "Use the new table.",
-            startMs: 0,
-            endMs: 900,
-          }),
-        );
-
         const deleted = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(deleted.body));
@@ -5007,14 +4845,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(
           [
             yield* db
-              .select({ seq: voiceTranscriptSegments.seq })
-              .from(voiceTranscriptSegments)
-              .where(eq(voiceTranscriptSegments.voiceSessionId, call)),
-            yield* db
-              .select({ agentId: voiceSessions.agentId })
-              .from(voiceSessions)
-              .where(eq(voiceSessions.id, call)),
-            yield* db
               .select({ userId: agentPin.userId })
               .from(agentPin)
               .where(eq(agentPin.codingAgentId, agent.id)),
@@ -5023,8 +4853,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               .from(inboxItem)
               .where(eq(inboxItem.id, posted.success.id)),
           ],
-          [[], [{ agentId: null }], [], []],
-          "the call's record stays for the cost pages, and nothing else of the agent's",
+          [[], []],
+          "nothing of the agent's stays",
         );
       }),
   );
@@ -5965,16 +5795,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
-          // Another agent is marked as one beside its name, its model, and itself on its task, with no kind an older window would refuse.
+          // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
             "Take the split view.",
-            {
-              name: "Add PR overview tab",
-              agent: true,
-              model: agent.model,
-              agentId: agent.id,
-              taskId: task.id,
-            },
+            { name: "Add PR overview tab", agent: true, model: agent.model, agentId: agent.id },
           ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
@@ -6017,7 +5841,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               sessionId,
               {
                 conversationId: eve.opened[0]?.message.conversationId,
-                turn: BRAIN_HOST_TURN.TYPED,
+                turn: EVE_HOST_TURN.TYPED,
                 message: "Use the helper.",
               },
             ],
@@ -6070,7 +5894,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.ok(Option.isSome(shown));
         const place = { workspace: "acme", repository: task.repository };
-        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: task.id, agentId: other.agent.id }, "Store", place)}.`;
+        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: other.agent.id }, "Store", place)}.`;
 
         yield* sent(words);
 
@@ -6122,15 +5946,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* moved(oneOff.agent.id, task.workspaceId);
         yield* moved(foreign.agent.id, elsewhere);
         const place = { workspace: "acme", repository: task.repository };
-        const mention = (agentId: string, taskId: string | undefined, name: string) =>
-          mentionMarkdown(
-            taskId === undefined
-              ? { kind: MENTION_KIND.AGENT, agentId }
-              : { kind: MENTION_KIND.AGENT, taskId, agentId },
-            name,
-            place,
-          );
-        const words = `Line up with ${mention(onBilling.agent.id, billing.id, "Billing agent")}, ${mention(oneOff.agent.id, undefined, "Sweeper")} and ${mention(foreign.agent.id, undefined, "Stranger")}.`;
+        const mention = (agentId: string, name: string) =>
+          mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId }, name, place);
+        const words = `Line up with ${mention(onBilling.agent.id, "Billing agent")}, ${mention(oneOff.agent.id, "Sweeper")} and ${mention(foreign.agent.id, "Stranger")}.`;
 
         yield* sent(words);
 

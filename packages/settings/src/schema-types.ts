@@ -3,7 +3,6 @@ import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
-import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {
   /** Who is signed in and the ways out, the page Settings opens on. */
@@ -18,6 +17,8 @@ export const SETTINGS_PAGE = {
    * the service rather than stored settings.
    */
   CODING_AGENTS: "coding-agents",
+  /** The member's own machines that run their local agents, Linux servers and Macs alike, each the service's rather than a stored setting. */
+  HOSTS: "hosts",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
   /** The skills the account installs into Luke for its agents, its own and its workspace's, each the service's rather than a stored setting. */
@@ -51,7 +52,9 @@ export const SETTING_SECTION = {
   TEXT: "text",
   /** Where the account's Luke links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
-  /** Whether this Luke counts how its features are used, a group of its own on Account, under Links. */
+  /** What New task does once a task starts, a group of its own on Account, under Links. */
+  TASKS: "tasks",
+  /** Whether this Luke counts how its features are used, a group of its own on Account, under Tasks. */
   PRIVACY: "privacy",
   /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
   STARTUP: "startup",
@@ -75,8 +78,6 @@ export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETT
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   LOGIN_ITEM: "login-item",
-  VOICE: "voice",
-  MEDIA_DUCK: "media-duck",
   USAGE_DATA: "usage-data",
 } as const;
 
@@ -111,8 +112,8 @@ export interface SettingGuardResult<Value> {
  * can no longer lead to a page without its row.
  */
 export interface SettingsVisibility {
-  /** The runtime facts a row's own condition is judged from, and the experiments the account has on. */
-  settings: RuntimeStatus & { experiments: ExperimentChoices };
+  /** The experiments the account has on, which a gated feature's row stands on. */
+  settings: { experiments: ExperimentChoices };
   /** Whether the Account section stands. */
   accountDrawn: boolean;
   /** What the platform offers, which a platform feature's row stands on. */

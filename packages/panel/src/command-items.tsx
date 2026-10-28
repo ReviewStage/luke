@@ -9,7 +9,10 @@
  * its words from the shortcuts table (`@luke/settings/shortcuts`), whose
  * label is its verb and noun, so the menu bar, the Keyboard shortcuts page,
  * ⌘K, and the menus never word it apart; a command no chord reaches is
- * worded here alone.
+ * worded here alone. A chord that acts on whichever thing is focused, as
+ * ⌥⌘C copies the plan or an agent's transcript and ⌘⌫ deletes a task or an
+ * agent, keeps its own words in the table, which ⌘K and the menu bar say,
+ * and each thing's item says its own verb (`keyedAs`).
  *
  * Note that the item is no `@luke/ui/command` `CommandItem`, which is one row
  * of the dialog, its words to search and what choosing it does: a place
@@ -74,6 +77,21 @@ function keyed(command: KeyedCommand, icon: React.JSX.Element, noun?: string): P
   return { verb: label.slice(0, label.length - ending.length), noun, icon, command };
 }
 
+/**
+ * One thing's item for a chord several kinds of thing share, worded here,
+ * since the table's label names them all: "Copy plan" and "Copy concise
+ * transcript" for the one ⌥⌘C. Note that it is not what ⌘K finds the
+ * command by, which is the table's own item (`keyed`).
+ */
+function keyedAs(
+  command: KeyedCommand,
+  verb: string,
+  icon: React.JSX.Element,
+  noun?: string,
+): PanelCommand {
+  return { verb, noun, icon, command };
+}
+
 /** A command no chord reaches, worded here. */
 function unkeyed(verb: string, icon: React.JSX.Element, noun?: string): PanelCommand {
   return { verb, noun, icon, command: undefined };
@@ -81,29 +99,38 @@ function unkeyed(verb: string, icon: React.JSX.Element, noun?: string): PanelCom
 
 /** Every command a menu offers beside ⌘K, by what it does. */
 export const PANEL_COMMAND = {
-  COPY_PLAN: keyed(APP_COMMAND.COPY_PLAN, <GLYPH.COPY />),
+  COPY_CONTENT: keyed(APP_COMMAND.COPY_CONTENT, <GLYPH.COPY />),
+  COPY_PLAN: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy plan", <GLYPH.COPY />),
   COPY_LINK: keyed(APP_COMMAND.COPY_LINK, <GLYPH.LINK />),
-  MARK_TASK_DONE: keyed(APP_COMMAND.MARK_TASK_DONE, <GLYPH.DONE />),
-  DELETE_TASK: keyed(APP_COMMAND.DELETE_TASK, <GLYPH.DELETE />, NOUN.TASK),
-  PIN_TASK: unkeyed("Pin", <GLYPH.PIN />, NOUN.TASK),
-  UNPIN_TASK: unkeyed("Unpin", <GLYPH.UNPIN />, NOUN.TASK),
-  PIN_AGENT: unkeyed("Pin", <GLYPH.PIN />, NOUN.AGENT),
-  UNPIN_AGENT: unkeyed("Unpin", <GLYPH.UNPIN />, NOUN.AGENT),
-  MARK_UNREAD: unkeyed("Mark as unread", <MailIcon />),
-  MARK_READ: unkeyed("Mark as read", <MailOpenIcon />),
+  MARK_TASK_DONE: unkeyed("Mark done", <GLYPH.DONE />),
+  DELETE: keyed(APP_COMMAND.DELETE, <GLYPH.DELETE />),
+  DELETE_TASK: keyedAs(APP_COMMAND.DELETE, "Permanently delete", <GLYPH.DELETE />, NOUN.TASK),
+  PIN: keyed(APP_COMMAND.PIN, <GLYPH.PIN />),
+  PIN_TASK: keyedAs(APP_COMMAND.PIN, "Pin", <GLYPH.PIN />, NOUN.TASK),
+  UNPIN_TASK: keyedAs(APP_COMMAND.PIN, "Unpin", <GLYPH.UNPIN />, NOUN.TASK),
+  PIN_AGENT: keyedAs(APP_COMMAND.PIN, "Pin", <GLYPH.PIN />, NOUN.AGENT),
+  UNPIN_AGENT: keyedAs(APP_COMMAND.PIN, "Unpin", <GLYPH.UNPIN />, NOUN.AGENT),
+  TOGGLE_READ: keyed(APP_COMMAND.TOGGLE_READ, <MailIcon />),
+  MARK_UNREAD: keyedAs(APP_COMMAND.TOGGLE_READ, "Mark as unread", <MailIcon />),
+  MARK_READ: keyedAs(APP_COMMAND.TOGGLE_READ, "Mark as read", <MailOpenIcon />),
   RENAME: unkeyed("Rename", <GLYPH.RENAME />),
   RENAME_TASK: unkeyed("Rename", <GLYPH.RENAME />, NOUN.TASK),
-  VERSION_HISTORY: unkeyed("Version history", <HistoryIcon />),
+  VERSION_HISTORY: keyed(APP_COMMAND.VERSION_HISTORY, <HistoryIcon />),
   PIN_TAB: unkeyed("Pin", <GLYPH.PIN />, NOUN.TAB),
   UNPIN_TAB: unkeyed("Unpin", <GLYPH.UNPIN />, NOUN.TAB),
   CLOSE_TAB: keyed(APP_COMMAND.CLOSE_TAB, <GLYPH.CLOSE />, NOUN.TAB),
-  CLOSE_OTHER_TABS: unkeyed("Close others", <ListXIcon />),
+  CLOSE_OTHER_TABS: keyedAs(APP_COMMAND.CLOSE_OTHER_TABS, "Close others", <ListXIcon />),
   SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),
-  COPY_CONCISE_TRANSCRIPT: unkeyed("Copy concise transcript", <GLYPH.COPY />),
-  COPY_FULL_TRANSCRIPT: unkeyed("Copy full transcript", <ScrollTextIcon />),
+  OPEN_IN_TASK: keyed(APP_COMMAND.OPEN_IN_TASK, <GLYPH.TASK />),
+  COPY_CONCISE_TRANSCRIPT: keyedAs(
+    APP_COMMAND.COPY_CONTENT,
+    "Copy concise transcript",
+    <GLYPH.COPY />,
+  ),
+  COPY_FULL_TRANSCRIPT: keyed(APP_COMMAND.COPY_FULL_TRANSCRIPT, <ScrollTextIcon />),
   ARCHIVE_AGENT: unkeyed("Archive", <GLYPH.ARCHIVE />, NOUN.AGENT),
   UNARCHIVE_AGENT: unkeyed("Unarchive", <GLYPH.UNARCHIVE />, NOUN.AGENT),
-  DELETE_AGENT: unkeyed("Permanently delete", <GLYPH.DELETE />, NOUN.AGENT),
+  DELETE_AGENT: keyedAs(APP_COMMAND.DELETE, "Permanently delete", <GLYPH.DELETE />, NOUN.AGENT),
   MOVE_TO_SECTION: unkeyed("Move to section", <GLYPH.MOVE />),
   GROUP_BY: unkeyed("Group by", <ListIcon />),
   ORDER_BY: unkeyed("Order by", <ClockIcon />),
@@ -112,14 +139,20 @@ export const PANEL_COMMAND = {
   CANCEL_TASK: unkeyed("Cancel task", <TaskStatusMark status={TASK_STATUS.CANCELED} />),
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
-  OPEN_ON_GITHUB: unkeyed("Open on GitHub", <GLYPH.OPEN_ON_GITHUB />),
+  OPEN_ON_GITHUB: keyed(APP_COMMAND.OPEN_ON_GITHUB, <GLYPH.OPEN_ON_GITHUB />),
   COPY_GITHUB_LINK: unkeyed("Copy GitHub link", <GLYPH.LINK />),
 } as const satisfies Record<string, PanelCommand>;
 
-/** Each command a chord reaches, by that chord's command. */
+/**
+ * Each command a chord reaches, by that chord's command: the item worded as
+ * the table labels it, never one thing's own item for a chord several share.
+ */
 const BY_COMMAND: ReadonlyMap<AppCommand, PanelCommand> = new Map(
   Object.values(PANEL_COMMAND).flatMap((item): [AppCommand, PanelCommand][] =>
-    item.command === undefined ? [] : [[item.command, item]],
+    item.command === undefined ||
+    commandWords(item, COMMAND_PLACE.PALETTE) !== appCommandLabel(item.command)
+      ? []
+      : [[item.command, item]],
   ),
 );
 

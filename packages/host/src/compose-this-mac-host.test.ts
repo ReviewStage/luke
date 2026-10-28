@@ -1,5 +1,5 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the desktop turns it on: the Mac enrolled under the device id the app already had before the login item is registered, and a Mac Luke removed never enrolled again but by the member's own act.
+ * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the desktop turns it on: the Mac enrolled under the device id the app already had before the login item is registered, never turned on beside the install command's `luke-host`, and a Mac Luke removed never enrolled again but by the member's own act.
  *
  * The composer runs over a real state folder of its own, holding the device
  * id the account already had, and a fake service and login item that each
@@ -55,8 +55,10 @@ const until = (holds: () => boolean) =>
  * Local agents experiment on until the test turns it off, or off from the
  * start where `off` says so, the account's device id already kept there, a
  * service that enrolls the Mac and lists the setup `setup` says until the
- * test lists another (none where it cannot answer), and a login
- * item that refuses as many unregisters as `refusedUnregisters` says; what
+ * test lists another (none where it cannot answer), a login
+ * item that refuses as many unregisters as `refusedUnregisters` says, and
+ * the install command's standalone `luke-host` installed where
+ * `standaloneInstalled` says; what
  * each fake was asked, in the order it was asked.
  */
 const thisMac = (
@@ -65,6 +67,7 @@ const thisMac = (
     refusedUnregisters?: number;
     off?: boolean;
     setup?: Option.Option<ThisMacSetup>;
+    standaloneInstalled?: boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -125,6 +128,7 @@ const thisMac = (
               platform: DEVICE_PLATFORM.DARWIN,
               arch: DEVICE_ARCH.ARM64,
             }),
+            standaloneInstalled: Effect.succeed(options.standaloneInstalled === true),
           }),
         ),
       ),
@@ -168,6 +172,35 @@ it.effect(
           deviceSecret: SECRET,
           serviceOrigin: SERVICE,
         });
+      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+    ),
+);
+
+it.effect(
+  "turning on beside the install command's luke-host fails saying how to remove it, and enrolls nothing",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const { asked, call } = yield* thisMac(stateRoot, { standaloneInstalled: true });
+        let standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
+        for (
+          let round = 0;
+          round < 20_000 && standing.standing !== THIS_MAC_HOST_STANDING.FAILED;
+          round += 1
+        ) {
+          yield* TestClock.adjust(Duration.millis(100));
+          yield* Effect.yieldNow;
+          standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
+        }
+
+        assert.ok(
+          standing.standing === THIS_MAC_HOST_STANDING.FAILED &&
+            standing.reason.includes("sudo luke-host uninstall"),
+          "the turn-on failed, saying how to remove the install command's luke-host",
+        );
+        assert.deepEqual(asked, []);
+        assert.ok(Option.isNone(yield* readHostDevice(stateRoot)));
       }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
     ),
 );

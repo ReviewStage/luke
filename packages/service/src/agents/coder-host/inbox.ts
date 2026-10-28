@@ -105,7 +105,7 @@ import {
  * on the thread, since replying never answers: a member's message on the
  * thread reaches the agent as one of the developer's messages, and so does
  * an answer it waits on. No call holds the turn, since a coder session
- * takes no input mid-turn (`brain-host/eve-sessions.ts`'s `requestInput`).
+ * takes no input mid-turn (`eve-host/eve-sessions.ts`'s `requestInput`).
  * Every call answers with the agent's whole inbox as it stands, each
  * thread's messages in order with their asks and answers, so the model
  * holds its threads whatever its context has lost to compaction. A worker
@@ -564,12 +564,9 @@ function inboxOwner(agent: InboxAgent): PageOwner {
     : { kind: PAGE_OWNER.TASK, taskId: agent.taskId };
 }
 
-/** An item's mention under the workspace step given, by its link under its task, or under its agent where that works on no task. */
+/** An item's mention under the workspace step given, by its link under its agent, whichever task that works on. */
 function itemMention(agent: InboxAgent, step: string, item: InboxItem): string {
-  const place =
-    agent.taskId === null
-      ? { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id }
-      : { kind: LINK_PLACE.INBOX_ITEM, planId: agent.taskId, itemId: item.id };
+  const place = { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id } as const;
   return mentionMarkdownLink(item.title, linkOf(place, step));
 }
 

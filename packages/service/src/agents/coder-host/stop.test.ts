@@ -9,30 +9,25 @@ import type { EveChannelInput } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
-import { actedForAccount } from "../brain-host/auth.js";
+import { actedForAccount } from "../eve-host/auth.js";
 import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_AUTHENTICATOR,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_TURN,
-  type BrainHostTurn,
-} from "../brain-host/bounds.js";
-import type { SessionOwnership } from "../brain-host/door.js";
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_AUTHENTICATOR,
+  EVE_HOST_DEPLOYMENT_PRINCIPAL,
+  EVE_HOST_HEADER,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_TURN,
+  type EveHostTurn,
+} from "../eve-host/bounds.js";
+import type { SessionOwnership } from "../eve-host/door.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
-import {
-  CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
-  CODER_DEPLOYMENT_TURNS,
-  coderChannelInput,
-} from "./channel.js";
+} from "../eve-host/eve-sessions.js";
+import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type EveReach, eveFor } from "./stop.js";
 
 /**
@@ -109,7 +104,6 @@ const DOOR: EveChannelInput["auth"] = coderChannelInput(
     secret: Redacted.make(SECRET),
     admits: CODER_DEPLOYMENT_TURNS,
     presents: CODER_DEPLOYMENT_PRESENCE,
-    streams: CODER_DEPLOYMENT_STREAMS,
   },
   async () => undefined,
 ).auth;
@@ -156,7 +150,7 @@ function eveOverHttp() {
     received.push({
       route,
       authorization: headers.get("authorization"),
-      account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+      account: headers.get(EVE_HOST_HEADER.ACCOUNT),
       cookie: headers.get("cookie"),
       admitted,
       admittedFor: actedForAccount(admitted ?? null),
@@ -178,7 +172,7 @@ function identityOf(principal: SessionAuthContext | undefined) {
 }
 
 /** A message of the kind given on one of the accounts' conversations. */
-function messageOn<Turn extends BrainHostTurn>(conversationId: string, turn: Turn) {
+function messageOn<Turn extends EveHostTurn>(conversationId: string, turn: Turn) {
   return { conversationId, turn, message: "Expire invitations after a week." };
 }
 
@@ -206,8 +200,8 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
           return [
             (yield* coder.cancel(OWN_SESSION, "turn_0")).outcome,
             (yield* coder.reset(OWN_SESSION)).outcome,
-            (yield* coder.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED))).outcome,
-            (yield* coder.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED)))
+            (yield* coder.open(messageOn(OWN_CONVERSATION, EVE_HOST_TURN.TYPED))).outcome,
+            (yield* coder.send(OWN_SESSION, messageOn(OWN_CONVERSATION, EVE_HOST_TURN.TYPED)))
               .outcome,
           ];
         }).pipe(Effect.provide(Layer.merge(eve.layer, WITH_SECRET)));
@@ -219,9 +213,9 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
           EVE_SEND_OUTCOME.ACCEPTED,
         ]);
         const own = [
-          BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+          EVE_HOST_AUTHENTICATOR.ACCOUNT,
           null,
-          BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+          EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
           ACCOUNT,
         ];
         assert.deepEqual(
@@ -229,7 +223,7 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
             authorization,
             account,
             identity: identityOf(admitted),
-            carrier: admitted?.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
+            carrier: admitted?.attributes[EVE_HOST_ATTRIBUTE.CARRIER],
           })),
           Array.from({ length: 4 }, () => ({
             authorization: BEARER,
@@ -247,8 +241,8 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
       Effect.gen(function* () {
         const eve = eveOverHttp();
         // The browser's request names another account in the header the door reads, which it has no say over.
-        const cookieRequest = routeRequest({ cookie: COOKIE, [BRAIN_HOST_HEADER.ACCOUNT]: OTHER });
-        const typed = (conversationId: string) => messageOn(conversationId, BRAIN_HOST_TURN.TYPED);
+        const cookieRequest = routeRequest({ cookie: COOKIE, [EVE_HOST_HEADER.ACCOUNT]: OTHER });
+        const typed = (conversationId: string) => messageOn(conversationId, EVE_HOST_TURN.TYPED);
         const outcomes = yield* Effect.gen(function* () {
           const coder = yield* eveFor<EveTypedTurn>(REACH, cookieRequest, ACCOUNT);
           return [
@@ -304,9 +298,9 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
             routeRequest({ cookie: COOKIE }),
             ACCOUNT,
           );
-          yield* overBearer.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
-          yield* overCookie.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
-          yield* overCookie.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
+          yield* overBearer.open(messageOn(OWN_CONVERSATION, EVE_HOST_TURN.TYPED));
+          yield* overCookie.open(messageOn(OWN_CONVERSATION, EVE_HOST_TURN.TYPED));
+          yield* overCookie.send(OWN_SESSION, messageOn(OWN_CONVERSATION, EVE_HOST_TURN.TYPED));
           yield* overCookie.cancel(OWN_SESSION, "turn_0");
           yield* overCookie.reset(OWN_SESSION);
         }).pipe(Effect.provide(Layer.merge(eve.layer, WITH_SECRET)));
@@ -314,17 +308,17 @@ it.layer(getTestDB())("eve reached as a route's caller", (it) => {
         const [bearer, ...carried] = eve.received.map(({ admitted }) => admitted);
         assert.equal(eve.received.length, 5);
         assert.deepEqual(identityOf(bearer), [
-          BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+          EVE_HOST_AUTHENTICATOR.ACCOUNT,
           null,
-          BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+          EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
           ACCOUNT,
         ]);
-        assert.equal(bearer?.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], undefined);
+        assert.equal(bearer?.attributes[EVE_HOST_ATTRIBUTE.CARRIER], undefined);
         for (const principal of carried) {
           assert.deepEqual(identityOf(principal), identityOf(bearer));
           assert.equal(
-            principal?.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
-            BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+            principal?.attributes[EVE_HOST_ATTRIBUTE.CARRIER],
+            EVE_HOST_DEPLOYMENT_PRINCIPAL,
           );
         }
       }),

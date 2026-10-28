@@ -8,6 +8,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import type { TaskSectionWrite } from "@luke/features/task-section-wire";
+import { isAgentEntry, type SectionMember } from "@luke/features/task-section-writes";
 import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import type { UpdateControl } from "@luke/settings/settings-controls";
@@ -33,11 +34,11 @@ import {
   joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
-  MarkDoneIcon,
   MoreButton,
   motionKey,
   motionRows,
   NAV_COUNT_SHOWN,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
@@ -107,21 +108,13 @@ import {
   taskRowTime,
 } from "@luke/ui/task-list-model";
 import {
-  isAgentEntry,
   memberSection,
   placeWrites,
-  type SectionMember,
   sectionOrder,
   unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import {
-  repositoryPageUrl,
-  SETTLED_STATUS,
-  settleOffered,
-  TASK_MARK,
-  TASKS_PAGE,
-} from "@luke/ui/tasks-model";
+import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
@@ -148,7 +141,7 @@ import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
-import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
+import { inColumn, type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
@@ -163,12 +156,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import {
-  needsYouNoun,
-  useChannelWaiting,
-  useInboxWaiting,
-  useTasksWaiting,
-} from "./places-waiting.js";
+import { FOR_YOU_NOUN, useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -193,6 +181,7 @@ import {
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view.js";
+import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
 import { ChosenTasksContext, useTasksSelection } from "./tasks-selection.js";
@@ -394,8 +383,6 @@ interface RowContext {
   readonly onDeletedAgent: (agentId: string) => () => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (task: TaskSummary) => boolean;
-  /** How many questions wait on the reader on each task, by its id, as the Inbox counts them (`useTasksWaiting`). */
-  readonly waitingOn: ReadonlyMap<string, number>;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -490,7 +477,6 @@ function TaskRows({
             current={context.marked(row.task.id, undefined)}
             open={context.current(row.task.id)}
             unread={context.unread(row.task)}
-            waiting={context.waitingOn.get(row.task.id) ?? 0}
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
@@ -555,7 +541,9 @@ const placeOf = (row: PinnedRow): PinPlace => row.place;
  * not yet dragged on top, newest pinned first (`pin-order.ts`): the pinned
  * plans, the pinned agents with no plan among them, and the tabs pinned to
  * the sidebar on plans the list holds. A tab of an archived or deleted plan
- * is drawn nowhere, its plan being out of the list.
+ * is drawn nowhere, its plan being out of the list; nor is a Plan tab an
+ * earlier version pinned, which is made its plan's own pin as soon as the
+ * list names the plan (`use-tasks-tab.ts`).
  */
 function pinnedRows(
   pinned: readonly TaskSummary[],
@@ -579,7 +567,7 @@ function pinnedRows(
   );
   const tabRows = tasks.sidePanel.pins.flatMap((pin): PinnedRow[] => {
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return task === undefined
+    return task === undefined || pin.tab === SIDE_PANEL_TAB.PLAN
       ? []
       : [{ kind: TASK_ROW.TASK, task, pin, place: { position: pin.position, at: pin.at } }];
   });
@@ -737,7 +725,6 @@ function PinnedRows({
                 current={context.marked(task.id, undefined)}
                 open={context.current(task.id)}
                 unread={context.unread(task)}
-                waiting={context.waitingOn.get(task.id) ?? 0}
                 now={context.now}
                 onOpen={() => context.onOpen(task.id)}
               />
@@ -842,32 +829,27 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Mark all done sets every task under the header Done, which the
- * sidebar's status filter then leaves out, and Open on GitHub opens the
- * repository's page, under GitHub's mark rather than the owner's picture,
- * since it is about GitHub. Mark all done asks nothing first, since it
- * stops no agent. The tasks with no repository have no pin, since they
- * always stand last, and no page to open. A group of tasks all done
- * already offers no Mark all done, so the plans with no repository offer
- * nothing there.
+ * account, Status sets every task under the header at one, its toast's Undo
+ * putting each back, and Open on GitHub opens the repository's page, under
+ * GitHub's mark rather than the owner's picture, since it is about GitHub.
+ * Status asks nothing first, since no status stops an agent. The tasks with
+ * no repository have no pin, since they always stand last, and no page to
+ * open, so they offer Status alone.
  */
-function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuAction[][] {
+function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuEntry[][] {
   const { repository } = group;
   const listed = groupTasks(group);
-  const settle: MenuAction[] = !listed.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
-    ? []
-    : [
-        {
-          label: "Mark all done",
-          icon: <MarkDoneIcon />,
-          onSelect: () =>
-            tasks.onSettleTasks(
-              listed.map(({ id }) => id),
-              SETTLED_STATUS.DONE,
-            ),
-        },
-      ];
-  if (repository === null) return settle.length === 0 ? [] : [settle];
+  const status: MenuEntry[] =
+    listed.length === 0
+      ? []
+      : [
+          statusSubmenu(
+            tasks,
+            listed.map(({ id }) => id),
+            sharedStatus(listed),
+          ),
+        ];
+  if (repository === null) return status.length === 0 ? [] : [status];
   const pin: MenuAction = tasks.pinnedRepositories.includes(repository)
     ? {
         label: "Unpin",
@@ -880,7 +862,7 @@ function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): Me
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => tasks.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [[pin, ...settle], [github]];
+  return [status, [pin], [github]].filter((each) => each.length > 0);
 }
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
@@ -1375,10 +1357,9 @@ function ListSkeleton(): React.JSX.Element {
 
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many items wait on the developer across every
- * task at its end, the sum of the counts the Inbox's rows show, in even
- * figures and the needs-you tone the rows it counts wear, since they wait on
- * the developer, and nothing at none. Its chord takes the count's place
+ * the tray, its name, and how many threads For you lists at its end
+ * (`useInboxWaiting`), in even figures and the unread dot's blue, and
+ * nothing at none. Its chord takes the count's place
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
  * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
@@ -1400,8 +1381,8 @@ function SidebarInboxRow({
       current={current ? NAV_CURRENT.PAGE : undefined}
       count={{
         value: waiting,
-        noun: needsYouNoun(waiting),
-        tone: STATUS_TONE.ATTENTION,
+        noun: FOR_YOU_NOUN,
+        tone: NAV_COUNT_TONE.UNREAD,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
@@ -1794,7 +1775,6 @@ function SidebarColumn({
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
   const channelWaiting = useChannelWaiting(tasks);
-  const waitingOn = useTasksWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1967,7 +1947,6 @@ function SidebarColumn({
       if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
     },
     unread,
-    waitingOn,
     unseenAgent: (agentId) =>
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
@@ -2260,7 +2239,6 @@ function SidebarColumn({
                             current={context.marked(row.task.id, undefined)}
                             open={current(row.task.id)}
                             unread={unread(row.task)}
-                            waiting={context.waitingOn.get(row.task.id) ?? 0}
                             now={now}
                             faces={context.faces}
                             onOpen={() => context.onOpen(row.task.id)}
@@ -2384,6 +2362,7 @@ function SidebarColumn({
         onSignOut={onSignOut}
       />
       {sectionDialogs.dialog}
+      {selection.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
     </PanePin>

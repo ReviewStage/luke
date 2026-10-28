@@ -178,9 +178,8 @@ export function runMessageAgent(
       const eve = call.eveAs?.(target.userId);
       if (eve === undefined) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_SERVICE);
       const step = yield* workspaceStepOf(userId, workspace.value);
-      const mentioned = { kind: MENTION_KIND.AGENT, agentId: sender.id } as const;
       const mention = writtenMention(
-        sender.taskId === null ? mentioned : { ...mentioned, taskId: sender.taskId },
+        { kind: MENTION_KIND.AGENT, agentId: sender.id },
         agentName(sender),
         step,
       );

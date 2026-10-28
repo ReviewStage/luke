@@ -66,7 +66,12 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { copyLinkItem, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import {
+  copyLinkItem,
+  LinkWorkspaceProvider,
+  useChordLinks,
+  useCopyLinkItem,
+} from "../copy-link-item.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
@@ -100,7 +105,6 @@ import {
   SectionSkeleton,
 } from "./person-frame.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
-import { useTasksWaiting } from "./places-waiting.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
@@ -335,6 +339,7 @@ function PersonActions({
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const menu = useMenu(tasks.shown);
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
@@ -349,7 +354,7 @@ function PersonActions({
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
   const showTasks = you ? "Show my tasks in the sidebar" : "Show their tasks in the sidebar";
   const copies = [
-    ...(link === undefined ? [] : [copyLinkItem(copy, link)]),
+    ...(link === undefined ? [] : [copyLinkItem(copy, link, chord)]),
     ...(email === undefined
       ? []
       : [{ label: "Copy email", icon: <MailIcon />, onSelect: () => copy(email, "Email copied") }]),
@@ -611,7 +616,6 @@ function TaskRows({
 }): React.JSX.Element {
   const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
   const drawn = useLeaving(shown, taskKey);
-  const waitingOn = useTasksWaiting(tasks);
   return (
     <>
       {drawn.map(({ key, value: task }) => (
@@ -622,7 +626,6 @@ function TaskRows({
           now={now}
           face={false}
           unread={unread(task)}
-          waiting={waitingOn.get(task.id) ?? 0}
           onOpen={() => tasks.onSelect(task.id)}
         />
       ))}
@@ -675,11 +678,13 @@ function PersonColumn({
   const read = useWaitingItems(tasks);
   // With Channels on what waits is threads, so its wait and its failure say so.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  // An item on a task is theirs where it waits on them (`inboxWaitsOn`), its task's assignee or else its agent's starter, by the task's row from a service that names neither.
+  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
-      holder.kind === INBOX_HOLDER.TASK &&
-      (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
+      (inboxWaitsOn(item)?.userId ??
+        (holder.kind === INBOX_HOLDER.TASK
+          ? agentStarter(holder.task, item.agentId)
+          : undefined)) === userId,
   );
   const { inboxView } = tasks;
   const openItem = (listed: InboxListed) =>

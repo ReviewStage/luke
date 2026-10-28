@@ -181,8 +181,8 @@ export interface MentionDoors {
   readonly onOpenTask: (mention: PlanMention) => void;
   /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
   readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
-  /** One of the plan's agents as its chip wears it; none where the place knows the plan's agents not. */
-  readonly agentOf?: ((agentId: string) => MentionedAgentLook) | undefined;
+  /** One of the plan's agents as its chip wears it, none for an agent not of the plan; the door is none where the place knows the plan's agents not. */
+  readonly agentOf?: ((agentId: string) => MentionedAgentLook | undefined) | undefined;
   /** The card a pull request one of the plan's agents opened hangs on its Pull request tab, by any link to it; none for any other, or where the place knows the plan's agents not. */
   readonly pullRequestOf?: ((url: string) => ReactNode | undefined) | undefined;
 }
@@ -226,13 +226,6 @@ const GONE_WORDS = "No longer in the plan";
 
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
-
-/** What an agent's card says of it, where the place has no card of its tab: on this task, another, or none. */
-const AGENT_WORDS = {
-  THIS_TASK: "A coding agent on this task",
-  OTHER_TASK: "A coding agent on another task",
-  NO_TASK: "A coding agent on no task",
-} as const;
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
@@ -307,7 +300,7 @@ function leavesFor(mention: Mention, target: string, doors: MentionDoors): boole
 function agentTiles(doors: MentionDoors): AgentTiles | undefined {
   const { agentOf } = doors;
   if (agentOf === undefined) return undefined;
-  return { taskId: doors.taskId, tileOf: (agentId) => agentOf(agentId).actor };
+  return { tileOf: (agentId) => agentOf(agentId)?.actor };
 }
 
 /** The mark a mention's chip leads with: its thing's (`thing-mark.tsx`), as a link to the same thing leads with it. */
@@ -342,16 +335,11 @@ function MentionGlyph({
 function noteOf(
   mention: Mention,
   state: MentionState,
-  taskId: string,
   standing: LinkStanding | undefined,
 ): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
   if (mention.kind === MENTION_KIND.LINK) return standing === undefined ? mention.url : undefined;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
-  if (mention.kind === MENTION_KIND.AGENT) {
-    if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
-    return mention.taskId === taskId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
-  }
   return undefined;
 }
 
@@ -381,16 +369,14 @@ function MentionCard({
   const repository = doors.place.repository ?? undefined;
   // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
-    mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.taskId
-      ? doors.agentOf?.(mention.agentId)?.card
-      : undefined;
+    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
   if (tabCard !== undefined) return tabCard;
   // A pull request one of the plan's agents opened hangs its Pull request tab's card, as the tab does.
   const changesCard =
     mention.kind === MENTION_KIND.LINK ? doors.pullRequestOf?.(mention.url) : undefined;
   if (changesCard !== undefined) return changesCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
-  const note = noteOf(mention, state, doors.taskId, standing);
+  const note = noteOf(mention, state, standing);
   const glyph = (
     <MentionGlyph
       mention={mention}

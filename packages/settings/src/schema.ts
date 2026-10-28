@@ -1,5 +1,4 @@
 import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
-import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -99,9 +98,6 @@ function macCommandModeGuard(value: UnparsedWireValue) {
   return optional(value, isMacCommandMode);
 }
 
-/** A key the host still reads whose row is gone: it is stored and described, and drawn nowhere. */
-const neverDrawn = (): boolean => false;
-
 /** A platform that asks for the microphone and routes it itself, as dictation listens on it. */
 const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
   view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
@@ -178,23 +174,6 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   /*
-   * The voice a call spoke with. Its row is gone with calling, and the host
-   * still reads the key until the voice capability goes.
-   */
-  voice: choiceSetting({
-    field: "voice",
-    id: APP_SETTING_ID.VOICE,
-    label: "Voice",
-    values: LIVE_VOICE_LIST,
-    token: (voice) => voice,
-    guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
-    default: LIVE_DEFAULTS.VOICE,
-    page: SETTINGS_PAGE.THIS_MAC,
-    order: 30,
-    sideEffect: SETTING_SIDE_EFFECT.VOICE,
-    visible: neverDrawn,
-  }),
-  /*
    * Where a Luke link opened in a browser goes: it stays on the web, or the
    * web hands it to Luke for Mac (`@luke/features/link-open`). The account's,
    * so the web reads it on a signed-in load; it rides the preferences
@@ -219,6 +198,23 @@ export const APP_SETTING_SCHEMA = {
     visible: accountDrawn,
   }),
   /*
+   * Whether a task New task starts opens, as it always did, or the window
+   * stays on the page it was on and a toast says the task started, with
+   * Open. Kept on this device, as how the window moves is the device's.
+   */
+  openNewTask: toggleSetting({
+    field: "openNewTask",
+    id: APP_SETTING_ID.OPEN_NEW_TASK,
+    label: "Open a task once it starts",
+    default: true,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.TASKS,
+    order: 305,
+    visible: accountDrawn,
+    // Nothing to run per write: New task reads the setting as a task starts.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  /*
    * Whether this Luke sends its counts of how features are used. On by
    * default in a packaged build, the app people download, and off in a
    * development one, so a run from source counts nothing until its
@@ -239,21 +235,6 @@ export const APP_SETTING_SCHEMA = {
     order: 310,
     visible: accountDrawn,
     sideEffect: SETTING_SIDE_EFFECT.USAGE_DATA,
-  }),
-  /*
-   * Whether a call quieted other apps' media. Its row and the desktop's media
-   * duck are gone with calling; the key stays until the stored settings stop
-   * carrying it.
-   */
-  duckOtherMedia: toggleSetting({
-    field: "duckOtherMedia",
-    id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
-    label: "Quiet Music and Spotify",
-    default: true,
-    page: SETTINGS_PAGE.THIS_MAC,
-    order: 90,
-    sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
-    visible: neverDrawn,
   }),
   preferBuiltInMicrophone: toggleSetting({
     field: "preferBuiltInMicrophone",

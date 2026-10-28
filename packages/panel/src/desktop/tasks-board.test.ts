@@ -373,7 +373,7 @@ test("a press on a card opens its task", async () => {
   assert.deepEqual(opened, ["t-42"]);
 });
 
-test("a card's box chooses it without opening it, ⌘-click one in another column, and the bar's Mark done settles both at once", async () => {
+test("a card's box chooses it without opening it, ⌘-click one in another column, and the bar's Status settles both at once", async () => {
   const settled: [string[], string][] = [];
   const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
     onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
@@ -391,10 +391,14 @@ test("a card's box chooses it without opening it, ⌘-click one in another colum
   const bar = board.querySelector<HTMLElement>('[role="toolbar"]') ?? assert.fail("the bar stands");
   assert.match(bar.textContent ?? "", /2 selected/u);
 
-  const markDone = [...bar.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => each.textContent?.trim() === "Mark done",
+  const status = [...bar.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent?.trim() === "Status",
   );
-  act(() => (markDone ?? assert.fail("the bar offers Mark done")).click());
+  act(() => (status ?? assert.fail("the bar offers Status")).click());
+  const done = [...document.querySelectorAll<HTMLElement>('[role="menu"] .luke-menu-item')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "Done",
+  );
+  act(() => (done ?? assert.fail("Status offers Done")).click());
   assert.deepEqual(settled, [[["t-39", "t-42"], TASK_STATUS.DONE]]);
   assert.equal(board.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
@@ -741,7 +745,7 @@ test("a right-click on a card drops the task's own menu", async () => {
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
-  assert.ok(labels.includes("Mark done"), "the menu offers Mark done");
+  assert.ok(labels.includes("Status"), "the menu offers Status");
   assert.deepEqual(opened, []);
 });
 

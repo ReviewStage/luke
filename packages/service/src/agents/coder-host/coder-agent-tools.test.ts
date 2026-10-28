@@ -125,8 +125,6 @@ import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-co
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
-import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
   CODING_AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
@@ -137,6 +135,8 @@ import {
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
+import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { claimRuntimeSession } from "../eve-host/conversation.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
 import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
@@ -144,12 +144,7 @@ import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { MESSAGE_AGENT_REFUSAL, MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import {
-  CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
-  CODER_DEPLOYMENT_TURNS,
-  coderChannelInput,
-} from "./channel.js";
+import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
@@ -261,8 +256,8 @@ function seat(target: ConversationTarget): SessionAuth {
     principalType: "user",
     authenticator: "test",
     attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+      [EVE_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
+      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
     },
   };
   return { current: own, initiator: own };
@@ -615,7 +610,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: tasks.invitations, name: "Teammate invitations" },
     onYourTask: true,
     archived: true,
-    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
+    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
@@ -626,7 +621,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: tasks.billing, name: "Billing" },
     onYourTask: false,
     archived: false,
-    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
+    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -732,14 +727,14 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   // The agent is answered with the mention its starter names it by, its model's name while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;
   assert.equal(opening?.path, "/eve/coder/v1/session");
-  assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), caller.userId);
+  assert.equal(opening?.headers.get(EVE_HOST_HEADER.ACCOUNT), caller.userId);
   const message = sentWords(opening?.body);
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
@@ -963,7 +958,7 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
 });
 
 test("start_agent with a title names the agent by it from the start, and a title generated later never covers it; an empty or over-long title starts nothing", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
@@ -982,7 +977,7 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(named.title, title);
   assert.equal(
     started.agent.mention,
-    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
 
   // The title generated as the agent's words arrive is filled only where none stands.
@@ -1271,7 +1266,7 @@ test("start_agent continues a teammate's agent that ended, on that agent's own t
   );
   const first = {
     id: stored.id,
-    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${stored.id})`,
+    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/agent/${stored.id})`,
   };
   assert.deepEqual(second.earlierContinuations, [first]);
 
@@ -2281,8 +2276,8 @@ function openingsOf(
     .map(
       (sent) =>
         [
-          sent.headers.get(BRAIN_HOST_HEADER.CONVERSATION),
-          sent.headers.get(BRAIN_HOST_HEADER.TURN),
+          sent.headers.get(EVE_HOST_HEADER.CONVERSATION),
+          sent.headers.get(EVE_HOST_HEADER.TURN),
           JSON.stringify(JSON.parse(sent.body).message),
         ] as const,
     );
@@ -2343,10 +2338,7 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   const opened = openingsOf(eve);
   assert.equal(opened.length, 1);
-  assert.deepEqual(opened[0]?.slice(0, 2), [
-    agents.teammates.conversationId,
-    BRAIN_HOST_TURN.TYPED,
-  ]);
+  assert.deepEqual(opened[0]?.slice(0, 2), [agents.teammates.conversationId, EVE_HOST_TURN.TYPED]);
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
   const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
@@ -2465,7 +2457,6 @@ function sessionEndsOf(host: CoderHost) {
       secret: undefined,
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
-      streams: CODER_DEPLOYMENT_STREAMS,
     },
     (sessionId) => database.run(host.sessionEnded(sessionId)),
   );
@@ -4010,7 +4001,7 @@ test("list_automations, create_automation, update_automation, and delete_automat
   );
   assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
   // eve is reached as the creator the run starts as, not as the teammate who fired it.
-  assert.equal(eve.sent.at(-1)?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), agents.caller.userId);
+  assert.equal(eve.sent.at(-1)?.headers.get(EVE_HOST_HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),

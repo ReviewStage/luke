@@ -1,4 +1,5 @@
 import { ownFailedAutomationRuns } from "@luke/database/models/automation-store";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import type { AccountFailedRun, AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
@@ -18,7 +19,6 @@ import {
   taskInboxItems,
   taskInboxStamps,
 } from "../../inbox/inbox-store.js";
-import { NO_TOPICS } from "../../sync/watch.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -27,7 +27,10 @@ import { CODER } from "./bounds.js";
  * The cursor is a digest of where every item stands (`http/held-read.ts`),
  * so a post, a close, an answer, and a new item each move it, and a reader
  * that holds it hears the next change once. A read whose cursor is
- * still the inbox's is held, looked at again every `MESSAGES_POLL`, each
+ * still the inbox's is held, looked at again as each write to the task's
+ * items, their threads, files, and read marks lands, which notifies the
+ * task's topic, as the task's live read is woken (`taskInboxLive`), or
+ * every `MESSAGES_POLL` where Luke Sync cannot wake it, each
  * look reading where the items stand and none of their words, and let
  * go at `MESSAGES_HOLD` as a transcript read is (`transcript.ts`), so the
  * Inbox tab hears an item the moment it lands without asking on a clock of
@@ -43,7 +46,10 @@ import { CODER } from "./bounds.js";
  * an item too, settled ones included, read once per answer rather than on
  * each look: a task's list moves with its open items, since every item
  * opens before it settles, and what moves it alone, such as an archive, is
- * answered at the hold's end at the latest. Note that it looks every
+ * answered at the hold's end at the latest. It looks again on the
+ * account's topic, which an item written anywhere in its workspaces, its
+ * own read marks, and its automations' runs notify, as the account's live
+ * read is woken (`inboxLive`); where Luke Sync cannot wake it, it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
  * A reader that asks is listed the archived tasks holding items beside the
@@ -52,7 +58,10 @@ import { CODER } from "./bounds.js";
  * ride beside the tasks' under keys of their own, and move the same cursor.
  * So does the newest run of each of the account's own automations that
  * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
- * is what its owner is told of whichever plan is open.
+ * is what its owner is told of whichever plan is open; a run ageing out of
+ * that window is a change no write makes, so it shows at the hold's end.
+ * An agent's inbox is held on the agent's topic as a task's is on the
+ * task's (`agentInboxLive`).
  */
 
 /** How far back a run that failed to start is still carried to its automation's owner, as the live read keeps it too. */
@@ -73,13 +82,14 @@ function itemStamps(items: InboxAnswer["items"]): readonly InboxCursorStamp[] {
   }));
 }
 
-/** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends. */
+/** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends, looking again as a write on the topics lands. */
 function heldUntilMoved(
   stamps: InboxStoreEffect<readonly InboxCursorStamp[]>,
   after: string,
+  topics: readonly SyncTopic[],
   poll: Duration.Duration,
 ): InboxStoreEffect<void> {
-  return heldOpen(stamps, after, NO_TOPICS, poll, CODER.MESSAGES_HOLD);
+  return heldOpen(stamps, after, topics, poll, CODER.MESSAGES_HOLD);
 }
 
 /** The newest run of each of the account's own automations that failed to start in the window, as its owner is told of it. */
@@ -108,7 +118,12 @@ export function agentInboxPast(
   agentId: string,
   after: string,
 ): InboxStoreEffect<InboxAnswer> {
-  return heldUntilMoved(memberAgentInboxStamps(userId, agentId), after, CODER.MESSAGES_POLL).pipe(
+  return heldUntilMoved(
+    memberAgentInboxStamps(userId, agentId),
+    after,
+    [[TOPIC.AGENT, agentId]],
+    CODER.MESSAGES_POLL,
+  ).pipe(
     Effect.andThen(memberAgentInboxItems(userId, agentId)),
     Effect.map((items) => ({ items, cursor: cursorOf(itemStamps(items)) })),
   );
@@ -120,7 +135,12 @@ export function taskInboxPast(
   taskId: string,
   after: string,
 ): InboxStoreEffect<InboxAnswer> {
-  return heldUntilMoved(taskInboxStamps(userId, taskId), after, CODER.MESSAGES_POLL).pipe(
+  return heldUntilMoved(
+    taskInboxStamps(userId, taskId),
+    after,
+    [[TOPIC.TASK, taskId]],
+    CODER.MESSAGES_POLL,
+  ).pipe(
     Effect.andThen(taskInboxItems(userId, taskId)),
     Effect.map((items) => ({ items, cursor: cursorOf(itemStamps(items)) })),
   );
@@ -167,7 +187,10 @@ export function accountInboxPast(
       readAt,
     };
   });
-  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
-    Effect.andThen(read),
-  );
+  return heldUntilMoved(
+    accountStamps(userId),
+    after,
+    [[TOPIC.ACCOUNT, userId]],
+    CODER.ACCOUNT_INBOX_POLL,
+  ).pipe(Effect.andThen(read));
 }

@@ -62,7 +62,7 @@ import { DateTime, Duration, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
-import type { AdmittedConversation } from "../agents/brain-host/conversation.js";
+import type { AdmittedConversation } from "../agents/eve-host/conversation.js";
 import { heldProjection, turnServersOf } from "../agents/native-events/native-projection.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -205,6 +205,16 @@ function refusedFor(connection: HandedConnection, sentence: string): ConnectionR
   });
 }
 
+/**
+ * The line a listing refused its grant or token logs: a warning, but where
+ * the member must only connect the integration (again), which is their
+ * account's state and would be repeated by every launch, at debug.
+ */
+function noToolsLogged(name: string, refusal: ConnectionRefusal): Effect.Effect<void> {
+  const line = `integration server ${name} lists no tools: ${refusal.error}`;
+  return refusal.requiresSignIn ? Effect.logDebug(line) : Effect.logWarning(line);
+}
+
 /** The account the connection names, as the token reads take it. */
 function accountOf({ provider, connectionName, instanceKey }: HandedConnection) {
   return { provider, connectionName, connectSubject: instanceKey };
@@ -345,7 +355,8 @@ export function nativeAgentConnections(
  * token, and otherwise the provider's own list on the grant's token, kept
  * for the next listing. A connection the agent is not handed lists none,
  * and so does one whose grant or list failed, with one log line naming the
- * connection and why in words that carry no credential.
+ * connection and why in words that carry no credential, a warning but for
+ * a connection the member must connect (`noToolsLogged`).
  */
 export function listConnectionTools(
   admitted: AdmittedConversation,
@@ -356,7 +367,7 @@ export function listConnectionTools(
     if (Option.isNone(connection)) return [];
     const grant = yield* connectionGrant(admitted, connection.value);
     if (Result.isFailure(grant)) {
-      yield* Effect.logWarning(`integration server ${name} lists no tools: ${grant.failure.error}`);
+      yield* noToolsLogged(name, grant.failure);
       return [];
     }
     const from = yield* DateTime.nowAsDate;
@@ -372,7 +383,7 @@ export function listConnectionTools(
       listMcpToolSchemas(url, token),
     );
     if (Result.isFailure(read)) {
-      yield* Effect.logWarning(`integration server ${name} lists no tools: ${read.failure.error}`);
+      yield* noToolsLogged(name, read.failure);
       return [];
     }
     const tools = read.success;

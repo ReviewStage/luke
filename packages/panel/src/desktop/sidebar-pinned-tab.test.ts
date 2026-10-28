@@ -190,15 +190,6 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
 });
 
-test("a pinned Plan tab hangs its task's own card, an agent's pin its own", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-  restOn(drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 }));
-  await settled();
-  const taskCard = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.match(taskCard?.textContent ?? "", /Teammate invitations/u);
-  assert.equal(card(), null, "no pin card stands beside it");
-});
-
 test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {
   const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const held: TaskSummary = {
@@ -412,7 +403,7 @@ describe("a pinned Changes tab's card", () => {
 });
 
 test("a pinned tab's ⋯ and its right-click open the same menu, the ⋯ a Tab stop after its press", () => {
-  const press = drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 });
+  const press = drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.INBOX, label: "Inbox", at: 1 });
   const more = document.querySelector<HTMLButtonElement>('button[aria-label="Pinned tab actions"]');
   assert.ok(more, "the row draws a ⋯");
   assert.equal(more.tabIndex, 0);

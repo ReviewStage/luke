@@ -281,7 +281,6 @@ function toolPart(tool: string, callId: string, input: WireRecord, output: WireR
 /** The developer's ask that began the agent's one turn. */
 const ASK: CodingAgentMessage = {
   id: "fixture-agent-ask",
-  turnId: TURN_ID,
   role: MESSAGE_ROLE.USER,
   parts: [
     {
@@ -295,7 +294,6 @@ const ASK: CodingAgentMessage = {
 /** The agent's reads, its edit, its tests, and the pull request it opened, answering the ask. */
 const WORK: CodingAgentMessage = {
   id: "fixture-agent-work",
-  turnId: TURN_ID,
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
     {
@@ -386,13 +384,9 @@ const FAILED_CHECKS_URL = `https://github.com/${REPOSITORY}/commit/${FAILED_SHA}
 /** The agent's one turn: the developer's ask, then its work. */
 const MESSAGES: readonly CodingAgentMessage[] = [ASK, WORK];
 
-/** The first turn's id where later turns followed it, the newest of which is `TURN_ID`. */
-const FIRST_TURN_ID = "3b7d1f5a-0c2e-4d4f-8a6b-1c3e5f7a9b0d";
-
 /** One follow-up turn: the developer's ask at `at`, or the line `steered` says carried it, then the agent's work on it, `parts`, done two minutes later. */
 function followUp(input: {
   readonly id: string;
-  readonly turnId: string;
   readonly at: number;
   readonly ask: string;
   readonly steered?: Pick<CodingAgentMessage, "metadata" | "sentBy"> | undefined;
@@ -401,7 +395,6 @@ function followUp(input: {
   return [
     {
       id: `${input.id}-ask`,
-      turnId: input.turnId,
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: input.ask }],
       sentAt: input.at,
@@ -409,7 +402,6 @@ function followUp(input: {
     },
     {
       id: `${input.id}-work`,
-      turnId: input.turnId,
       role: MESSAGE_ROLE.ASSISTANT,
       parts: input.parts,
       startedAt: input.at,
@@ -424,11 +416,10 @@ function followUp(input: {
  * transcript scrolls. The newest is the summary's turn.
  */
 const LONG_MESSAGES: readonly CodingAgentMessage[] = [
-  { ...ASK, turnId: FIRST_TURN_ID },
-  { ...WORK, turnId: FIRST_TURN_ID },
+  ASK,
+  WORK,
   ...followUp({
     id: "fixture-agent-pending",
-    turnId: "4c8e2a6b-1d3f-4e5a-9b7c-2d4e6f8a0b2e",
     at: STARTED_AT + 10 * MINUTE,
     ask: [
       `@grace requested changes on your pull request [@#${PULL_REQUEST.number}](${REVIEW_URL}).`,
@@ -473,7 +464,6 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
   }),
   ...followUp({
     id: "fixture-agent-race",
-    turnId: "5d9f3b7c-2e4a-4f6b-8c8d-3e5f7a9b1c3f",
     at: STARTED_AT + 20 * MINUTE,
     ask: 'Thread message on "Invite links" (key invite-links):\n\nWhat happens if two people open the same link at once?',
     steered: {
@@ -513,7 +503,6 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
   }),
   ...followUp({
     id: "fixture-agent-label",
-    turnId: TURN_ID,
     at: STARTED_AT + 30 * MINUTE,
     ask: `A check failed on your branch \`${PULL_REQUEST.head}\`: ${FAILED_CHECKS_URL}\n\nRead why, fix the cause, and push.`,
     steered: {
@@ -976,7 +965,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   }),
   [ACT_KIND.CODING_AGENTS_PICTURE]: () => longRunPicture(),
-  [ACT_KIND.CODING_AGENTS_CALLS]: () => ({ transcript: { calls: [], earlierOmitted: false } }),
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => ({
     repository: REPOSITORY,
     branch: PULL_REQUEST.head,
@@ -1086,10 +1074,8 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     ],
   };
   const { html: _html, ...pageLine } = FIXTURE_PAGE;
-  // Note that the call's work is left out, because it is of the tasks profiles' call, not this agent's.
-  const { activity: _activity, ...still } = open;
   return {
-    ...still,
+    ...open,
     tasks: open.tasks.map((task) => (task.id === taskId ? { ...task, agents } : task)),
     taskAgents: [agent],
     pages: [pageLine],

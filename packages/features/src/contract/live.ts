@@ -3,7 +3,8 @@
  *
  * What waits on the developer across the account, as the address to
  * subscribe at and one sealed statement per part of the account inbox's
- * answer; the task list, as its tasks and every agent of them and with no
+ * answer; every inbox item the account reaches, as where each stands and
+ * those changed since `?since=` whole; the task list, as its tasks and every agent of them and with no
  * task; and one task's record, pages, and calls, named by `?id=`, as the
  * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
@@ -36,6 +37,8 @@ import {
 } from "../automation-live.js";
 import { channelsLiveAnswerSchema } from "../channel-live.js";
 import {
+  ACCOUNT_INBOX_ITEMS,
+  accountInboxItemsLiveAnswerSchema,
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
@@ -78,6 +81,14 @@ const liveAccountInboxSchema = EffectSchema.Struct({
   [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: EffectSchema.optionalKey(
     EffectSchema.Literal(ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
   ),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text; none for every item. */
+const liveAccountInboxItemsSchema = EffectSchema.Struct({
+  [ACCOUNT_INBOX_ITEMS.SINCE]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -140,6 +151,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
     .input(liveAccountInboxSchema)
     .output(EffectSchema.flip(accountInboxLiveAnswerSchema)),
+  inboxItems: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX_ITEMS }))
+    .input(liveAccountInboxItemsSchema)
+    .output(EffectSchema.flip(accountInboxItemsLiveAnswerSchema)),
   taskRecord: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
     .input(liveTaskSchema)
@@ -158,6 +173,10 @@ export const liveContract = {
     .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
   taskBrowserTabs: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
+  agentBrowserTabs: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_BROWSER_TABS }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
   tasks: hostedProcedure

@@ -20,7 +20,7 @@ import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import { nativeCallKeyOf } from "@luke/database/models/native-call-keys";
 import { isRecord, type UnparsedWireValue } from "@luke/wire";
 import type { Effect } from "effect";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 
 /** How long a call of the same input runs under the first call's key: past every harness's tool timeout and the retry it prompts, and short of an agent repeating itself on purpose. */
 export const NATIVE_CALL_KEY_WINDOW_MS = 10 * 60_000;

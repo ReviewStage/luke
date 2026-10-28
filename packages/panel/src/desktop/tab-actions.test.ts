@@ -36,10 +36,12 @@ import { DesktopTasks } from "./desktop-tasks.js";
  * content actions: on an agent's or a subagent's tab the actions its
  * right-click offers on what it shows, the one agent menu, without the
  * tab's own keeping (Close, Close others, Pin), which stays on the
- * right-click alone; the task's column keeps the task's own ⋯ beside it,
- * until it moves to the Plan tab. A tab with no content action shows no ⋯,
+ * right-click alone; the task's column draws no ⋯ of the task's, whose own
+ * document menu the Plan tab's ⋯ and right-click offer instead, pinning
+ * the task rather than the tab. A tab with no content action shows no ⋯,
  * and no tab wears one of its own. A Pull request tab's ⋯ also offers what
- * its body hands up, Open on GitHub and Refresh, which no other tab's offers.
+ * its body hands up, Open on GitHub and Refresh, which no other tab's offers
+ * but the Plan tab's, the task's own.
  */
 
 const TASK: Task = {
@@ -261,10 +263,10 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
   assert.ok(!agentMore.includes("Mark done"), "none of the task's");
 });
 
-test("the column's toolbar draws the chosen agent's ⋯ beside the task's own, and the task's alone on the draft's tab", async () => {
+test("the column's toolbar draws the chosen agent's ⋯ alone, no ⋯ of the task's beside it, and none on the draft's tab", async () => {
   const cases = [
-    [{ agent: AGENT.id }, ["Task actions", `${AGENT.title} actions`]],
-    [{ draft: "draft-1" }, ["Task actions"]],
+    [{ agent: AGENT.id }, [`${AGENT.title} actions`]],
+    [{ draft: "draft-1" }, []],
   ] as const;
   for (const [main, labels] of cases) {
     const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.INBOX });
@@ -279,6 +281,36 @@ test("the column's toolbar draws the chosen agent's ⋯ beside the task's own, a
     act(() => roots.pop()?.unmount());
     container.remove();
   }
+});
+
+test("the Plan tab's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab and leaves out Mark done, Cancel task, and Change repository, while the column's ⋯ stays the agent's", async () => {
+  const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.PLAN });
+  const { main, side } = bars(container);
+  const fromMore = pressBarMore(side);
+  assert.deepEqual(fromMore, [
+    "Copy plan",
+    "Copy link",
+    "Rename",
+    "Version history",
+    "Mark as unread",
+    "Pin",
+    "Move to section",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
+  // The right-click leads with the tab's keeping, which holds no Pin tab: the one Pin is the task's, among its own.
+  const fromRightClick = rightClickChosen(side);
+  const keeping = fromRightClick.slice(0, fromRightClick.indexOf("Copy plan"));
+  assert.ok(
+    keeping.includes("Close") && !keeping.includes("Pin"),
+    `keeping: ${keeping.join(", ")}`,
+  );
+  assert.deepEqual(fromRightClick.slice(keeping.length), fromMore);
+  const agentMore = pressBarMore(main);
+  assert.ok(
+    !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
+    "the column's ⋯ offers none of the task's items",
+  );
 });
 
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
@@ -313,7 +345,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers but the Plan tab's, the task's own, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -337,7 +369,7 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
   act(() => more?.click());
   const github = [
     ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
-  ].find((each) => each.textContent === "Open on GitHub");
+  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "Open on GitHub");
   assert.ok(github, "the ⋯ offers Open on GitHub");
   await act(async () => github.click());
   assert.deepEqual(opened, [PULL_REQUEST.url]);
@@ -347,9 +379,11 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
   for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
     const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
     const items = pressBarMore(bars(each).side);
+    // The Plan tab's Open on GitHub is the task's repository's, not the pull request's.
     assert.ok(
-      !items.includes("Open on GitHub") && !items.includes("Refresh"),
-      `the ${JSON.stringify(other)} tab offers neither`,
+      (other === SIDE_PANEL_TAB.PLAN || !items.includes("Open on GitHub")) &&
+        !items.includes("Refresh"),
+      `the ${JSON.stringify(other)} tab offers no Refresh`,
     );
     act(() => roots.pop()?.unmount());
     each.remove();
@@ -366,22 +400,11 @@ function installClipboard(): string[] {
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
+  const agent = `https://tryluke.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
-    [
-      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX },
-      "main",
-      `${task}/agent/${AGENT.id}`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: SUBAGENT },
-      "side",
-      `${task}/agent/${AGENT.id}/worker/call-1`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
-      "side",
-      `${task}/agent/${AGENT.id}/changes`,
-    ],
+    [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
+    [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
+    [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
     [{ main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.PLAN }, "side", task],
   ];

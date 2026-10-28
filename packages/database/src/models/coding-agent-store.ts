@@ -61,9 +61,8 @@ import {
   type StoredPullRequest,
   type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
-import { asks, conversations, messages, turns } from "../schemas/storage.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
-import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
@@ -77,6 +76,7 @@ import {
   awaitingLinesOf,
   awaitingLinesOfReached,
   type LatestTurn,
+  lastSettledTurnsOfReached,
   latestTurnsOf,
   latestTurnsOfReached,
   type TurnUsageRow,
@@ -128,8 +128,8 @@ import type { ConversationTarget } from "./writer.js";
  * the pair under the child and the tabs read the worker's transcript under
  * the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
- * which is kept on the delegation for that. Note that nothing here reaches the brain host's modules,
- * because the routes bundle this module and the brain host's modules reach
+ * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
+ * because the routes bundle this module and the eve host's modules reach
  * eve, which runs in a service of its own (`function-bundles.ts`). The
  * title is written two ways: filled where none stands, which is how the
  * one generated as the agent starts lands without ever covering a name the
@@ -252,6 +252,7 @@ export type CodingAgentLatestTurn = LatestTurn;
 export {
   awaitingLinesOf,
   awaitingLinesOfReached,
+  lastSettledTurnsOfReached,
   latestTurnsOf,
   latestTurnsOfReached,
   type TurnUsageRow,
@@ -1332,11 +1333,11 @@ const AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
  */
 const findNativeAgentConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ agentId: Schema.String }),
-  Result: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
-        .select({ conversationId: conversations.id })
+        .select({ conversationId: conversations.id, userId: codingAgent.userId })
         .from(codingAgent)
         .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
         .where(
@@ -2138,47 +2139,10 @@ export interface CodingAgentDeleteGuard<R> {
   ) => Effect.Effect<void, StoreFailure, R>;
 }
 
-/** Every call into the agent, open or ended, locked against a segment its voice writes meanwhile, which waits and then finds the conversation stamped (`voice-writer.ts`). */
-const lockAgentCalls = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: IdRowSchema,
-  execute: (agentId) =>
-    Database.use((db) =>
-      db
-        .select({ id: voiceSessions.id })
-        .from(voiceSessions)
-        .where(eq(voiceSessions.agentId, agentId))
-        .for("update"),
-    ),
-});
-
-/**
- * The words said on every call into the agent, open or ended; the calls
- * themselves stay, their agent set null by the delete, since the admin's
- * activity and cost pages read them.
- */
-const deleteAgentCallWords = SqlSchema.void({
-  Request: Schema.String,
-  execute: (agentId) =>
-    Database.use((db) =>
-      db
-        .delete(voiceTranscriptSegments)
-        .where(
-          inArray(
-            voiceTranscriptSegments.voiceSessionId,
-            db
-              .select({ id: voiceSessions.id })
-              .from(voiceSessions)
-              .where(eq(voiceSessions.agentId, agentId)),
-          ),
-        ),
-    ),
-});
-
 /**
  * Deletes the agent for good: its row, which takes its pins, its inbox, and
  * its pull request polls with it and leaves what else named it naming no
- * one; the words said on its calls; and its conversation stamped deleted, so
+ * one; and its conversation stamped deleted, so
  * the purge takes its transcript seven days on, as a task's delete does
  * for each of its agents. Answers the transaction its row went in, as a
  * task's delete does; none where the account reaches no such agent.
@@ -2212,9 +2176,6 @@ export function deleteCodingAgent<R = never>(
         if (Option.isNone(agent)) return Option.none();
         if (!(yield* guard.standsStopped(agent.value))) return yield* new TaskAgentUnstopped();
         yield* guard.beforeDelete([agent.value.conversationId]);
-        // Note that the calls are locked before their words go, so a call still open writes no word between.
-        yield* lockAgentCalls(agentId);
-        yield* deleteAgentCallWords(agentId);
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return Option.none();
         yield* stampConversationsDeleted([deleted.conversationId]);
@@ -3340,6 +3301,8 @@ function newestTurnEndedAt(conversationId: string): CodingAgentStoreEffect<Date 
 export interface NativeRunStanding {
   /** The agent's conversation, which a Terminal's lease is held on. */
   readonly conversationId: string;
+  /** The agent's starter, whose account a line to its runner is queued under. */
+  readonly userId: string;
   /** When its newest turn ended; null while that turn is queued or running (a runner waiting on a wakeup among it), or before it has any turn. */
   readonly endedAt: Date | null;
 }
@@ -3359,8 +3322,12 @@ export function readNativeRunStanding(
     if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
     const found = yield* findNativeAgentConversation({ agentId });
     if (Option.isNone(found)) return Option.none();
-    const { conversationId } = found.value;
-    return Option.some({ conversationId, endedAt: yield* newestTurnEndedAt(conversationId) });
+    const { conversationId, userId } = found.value;
+    return Option.some({
+      conversationId,
+      userId,
+      endedAt: yield* newestTurnEndedAt(conversationId),
+    });
   });
 }
 
@@ -3603,10 +3570,9 @@ export type LineSent =
       readonly agent: SendingAgent | undefined;
     };
 
-/** The coding agent that sent a line, as it stands now: its id, and the task it works on, none for one on no task. */
+/** The coding agent that sent a line, as it stands now, by its id. */
 interface SendingAgent {
   readonly id: string;
-  readonly taskId: string | undefined;
 }
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
@@ -3618,7 +3584,6 @@ const LineSenderRowSchema = Schema.Struct({
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
-  agentTaskId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -3639,7 +3604,6 @@ const findLineSenders = SqlSchema.findAll({
           senderName: messages.senderName,
           senderModel: messages.senderModel,
           agentId: codingAgent.id,
-          agentTaskId: codingAgent.taskId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
@@ -3683,10 +3647,7 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
             kind: MESSAGE_SENDER.AGENT,
             name: row.senderName,
             model: row.senderModel ?? undefined,
-            agent:
-              row.agentId === null
-                ? undefined
-                : { id: row.agentId, taskId: row.agentTaskId ?? undefined },
+            agent: row.agentId === null ? undefined : { id: row.agentId },
           };
   }
 }
@@ -3772,71 +3733,6 @@ export function linePlacesOf(
     findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
     (rows) =>
       new Map(rows.map(({ id, journalId, afterStep }) => [id, { journalId, afterStep }] as const)),
-  );
-}
-
-/**
- * The turn an ask the voice handed on ran in, as its binding names it: the
- * turn, and for an ask that joined a typed turn under way how many of that
- * turn's steps had begun before it (`asks.joined_after_step`), from which
- * its answer is read.
- */
-export interface AskTurn {
-  readonly turnId: string;
-  readonly afterStep?: number;
-}
-
-const findAskTurns = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    clientIds: Schema.Array(Schema.String),
-  }),
-  Result: Schema.Struct({
-    clientId: Schema.String,
-    turnId: Schema.String,
-    afterStep: Schema.NullOr(Schema.Int),
-  }),
-  execute: ({ userId, conversationId, clientIds }) =>
-    Database.use((db) =>
-      db
-        .select({
-          clientId: asks.clientId,
-          turnId: sql<string>`${asks.turnId}::text`,
-          afterStep: asks.joinedAfterStep,
-        })
-        .from(asks)
-        .where(
-          and(
-            eq(asks.userId, userId),
-            eq(asks.conversationId, conversationId),
-            inArray(asks.clientId, [...clientIds]),
-            isNotNull(asks.turnId),
-          ),
-        ),
-    ),
-});
-
-/**
- * The turn each of these asks of the account's conversation ran in, by the
- * ask's client id, for the asks that have learned one: an ask still unbound,
- * and one of another conversation or account, names none. None asked, none
- * read.
- */
-export function askTurnsOf(
-  target: ConversationTarget,
-  clientIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, AskTurn>> {
-  if (clientIds.length === 0) return Effect.succeed(new Map());
-  return Effect.map(
-    findAskTurns({ userId: target.userId, conversationId: target.conversationId, clientIds }),
-    (rows) =>
-      new Map(
-        rows.map(({ clientId, turnId, afterStep }) => [
-          clientId,
-          afterStep === null ? { turnId } : { turnId, afterStep },
-        ]),
-      ),
   );
 }
 

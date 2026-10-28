@@ -21,7 +21,7 @@ import {
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useRef } from "react";
-import { useAppCommand } from "../app-commands.js";
+import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -36,6 +36,7 @@ import type { AgentFork } from "../tasks/fork-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
+import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
@@ -48,6 +49,7 @@ import {
   AddTabSkeleton,
   DoorsTab,
   type HeldTranscripts,
+  type ShownTab,
   type TabDoors,
   type TabLook,
   type TabPin,
@@ -132,6 +134,7 @@ function RenamableTab({
   rename,
   field,
   slot,
+  onShown,
 }: {
   look: TabLook;
   doors: TabDoors;
@@ -141,6 +144,8 @@ function RenamableTab({
   field?: { label: string; maxLength: number } | undefined;
   /** The toolbar's slot the chosen tab's ⋯ stands in. */
   slot?: HTMLElement | null | undefined;
+  /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
+  onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
   const editing = rename?.editing === true;
@@ -166,28 +171,41 @@ function RenamableTab({
       editor={editor}
       tabRef={tab}
       slot={slot}
+      onShown={onShown}
     />
   );
 }
 
-/** An agent's tab, whose menu offers the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
-function AgentMenuTab({
+/**
+ * An agent's tab, whose menu offers the agent's own actions
+ * (`agent-actions.tsx`), renamed in place while its task is not archived:
+ * the task's column's, and the side panel's beside the Inbox; while it is
+ * the tab shown, a phone's header is handed it, whole doors and all, to
+ * offer what its ⋯ would (`DoorsTab`'s `onShown`).
+ */
+export function AgentMenuTab({
   agent,
   agents,
   look,
   doors,
   shown,
+  keys,
   terminals,
   slot,
+  onShown,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
+  /** Whether the strip drawing the tab offers its keys, which the chosen agent's copies and delete answer while it does. */
+  keys: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
   slot: HTMLElement | null | undefined;
+  /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
+  onShown: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, {
     label: look.label,
@@ -195,14 +213,34 @@ function AgentMenuTab({
     terminals,
     onDeleted: doors.onClose,
   });
+  // The chosen agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫ while the column has the keys, over the open task's plan and its delete.
+  const { onCopy, deletion } = actions.doors;
+  const focused = keys && doors.chosen;
+  useAppCommand(
+    APP_COMMAND.COPY_CONTENT,
+    focused && onCopy !== undefined ? () => onCopy(TRANSCRIPT_COPY.CONCISE) : undefined,
+    FOCUSED_OFFER,
+  );
+  useAppCommand(
+    APP_COMMAND.COPY_FULL_TRANSCRIPT,
+    focused && onCopy !== undefined ? () => onCopy(TRANSCRIPT_COPY.FULL) : undefined,
+    FOCUSED_OFFER,
+  );
+  useAppCommand(
+    APP_COMMAND.DELETE,
+    focused && deletion !== undefined && deletion.disabled !== true ? deletion.onSelect : undefined,
+    FOCUSED_OFFER,
+  );
+  const whole: TabDoors = { ...doors, ...actions.doors };
   return (
     <>
       <RenamableTab
         look={look}
-        doors={{ ...doors, ...actions.doors }}
+        doors={whole}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
+        onShown={onShown}
       />
       {actions.dialog}
     </>
@@ -438,6 +476,7 @@ export function MainTabStrip({
   shown,
   onOpenTerminal,
   slot,
+  onShown,
 }: {
   task: TaskSummary;
   main: MainTabsControl;
@@ -459,6 +498,8 @@ export function MainTabStrip({
   onOpenTerminal?: ((agentId: string) => void) | undefined;
   /** The toolbar's slot the chosen agent's ⋯ is drawn into; none where the toolbar keeps none, as a phone's. */
   slot?: HTMLElement | null | undefined;
+  /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the agent's ⋯ would (`task-pane-switcher.tsx`); none where the toolbar draws the ⋯. */
+  onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -473,8 +514,23 @@ export function MainTabStrip({
   const strip = own;
   useStripLooks(LOOK_STRIP.COLUMN, task.id, strip);
   const copyLink = useCopyLinkItem();
+  // Close others closes every tab but `entry` that closes, then shows it; none where no other tab closes.
+  const closeOthersOf = (entry: DrawnTab): (() => void) | undefined => {
+    const others = strip.flatMap((other) =>
+      other === entry || other.close === undefined ? [] : [other.close],
+    );
+    if (others.length === 0) return undefined;
+    return () => {
+      for (const close of others) close();
+      main.onChoose(entry.tab);
+    };
+  };
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
+  useAppCommand(
+    APP_COMMAND.CLOSE_OTHER_TABS,
+    keys && chosen !== undefined ? closeOthersOf(chosen) : undefined,
+  );
   const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
     const pinned = pinnedOf(tab);
     return {
@@ -485,25 +541,14 @@ export function MainTabStrip({
   const doorsOf = (entry: DrawnTab): TabDoors => {
     // An agent's link is its own action (`agent-actions.tsx`).
     const linked: LinkPlace | undefined =
-      entry.agent === undefined
-        ? undefined
-        : { kind: LINK_PLACE.AGENT, planId: task.id, agentId: entry.agent.id };
-    const others = strip.flatMap((other) =>
-      other === entry || other.close === undefined ? [] : [other.close],
-    );
+      entry.agent === undefined ? undefined : { kind: LINK_PLACE.AGENT, agentId: entry.agent.id };
     const { agent } = entry;
     const pinTab: ColumnPinnableTab | undefined =
       agent === undefined ? undefined : { agent: agent.id };
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
-      onCloseOthers:
-        others.length === 0
-          ? undefined
-          : () => {
-              for (const close of others) close();
-              main.onChoose(entry.tab);
-            },
+      onCloseOthers: closeOthersOf(entry),
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
@@ -520,7 +565,12 @@ export function MainTabStrip({
       >
         {strip.map((entry) =>
           entry.agent === undefined ? (
-            <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry)} />
+            <DoorsTab
+              key={tabKey(entry.tab)}
+              look={entry.look}
+              doors={doorsOf(entry)}
+              onShown={onShown}
+            />
           ) : (
             <AgentMenuTab
               key={tabKey(entry.tab)}
@@ -529,8 +579,10 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
+              keys={keys}
               terminals={{ onOpenTerminal }}
               slot={slot}
+              onShown={onShown}
             />
           ),
         )}

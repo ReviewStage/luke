@@ -311,9 +311,9 @@ export function nextFailedRunExpiry(
  * An open task's plan, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
  * and carries none of their words: the plan's last save (`plan`), the pages agents showed (`pages`), the
- * calls about the task (`calls`), and the code its agents showed (`code`),
- * which answers no rows now that no agent shows code but stands because a
- * released desktop requires it. The desktop reads a part again once its mark moves,
+ * calls about the task (`calls`) and the code its agents showed (`code`),
+ * which this build no longer reads but a released desktop still requires.
+ * The desktop reads a part again once its mark moves,
  * rather than when a call's activity or end suggests it might have. The
  * service answers `not-found` for a task the account does not reach, and
  * `unavailable` where its deployment's Realtime is misconfigured, which the
@@ -343,30 +343,16 @@ const taskPageLiveRowSchema = EffectSchema.Struct({
   version: EffectSchema.Finite,
 });
 
-/** One call about the task as its row delivers it: when and how it ended, null while it stands; what it metered and its model; its last fragment; and how many rows the voice wrote for it. */
-const taskCallLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  closedAt: EffectSchema.NullOr(EffectSchema.Finite),
-  closeReason: EffectSchema.NullOr(EffectSchema.String),
-  usage: EffectSchema.NullOr(
-    EffectSchema.Struct({ seconds: EffectSchema.Finite, confirmed: EffectSchema.Boolean }),
-  ),
-  model: EffectSchema.NullOr(EffectSchema.String),
-  lastSegment: EffectSchema.Finite,
-  spoken: EffectSchema.Finite,
-});
-
 /** One journal of an agent on the task as its row delivered it while agents showed code: the ids of the calls that showed it, as JSON text. None is delivered now. */
 const taskCodeLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   calls: EffectSchema.String,
 });
 
-/** The task's plan, pages, calls, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+/** The task's plan, pages, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
   plan: EffectSchema.Array(taskPlanLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),
-  calls: EffectSchema.Array(taskCallLiveRowSchema),
   code: EffectSchema.Array(taskCodeLiveRowSchema),
 });
 
@@ -696,17 +682,103 @@ function inboxItemOfLiveRow(
   };
 }
 
-/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
-export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+/** Items as the held read orders a scope's: every open one, then the settled, each the latest changed first. */
+export function inboxInOrder(items: readonly InboxItem[]): readonly InboxItem[] {
   const ordered = latestFirst((item: InboxItem) => item.id);
-  const threads = groupedBy(rows.messages, (message) => message.itemId);
-  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
-  const items = rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf));
   return [
     ...items.filter((item) => item.status === INBOX_STATUS.OPEN).toSorted(ordered),
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
   ];
 }
+
+/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
+export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+  const threads = groupedBy(rows.messages, (message) => message.itemId);
+  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
+  return inboxInOrder(rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf)));
+}
+
+/**
+ * The account's inbox items as one read follows them (`/api/live/inbox-items`):
+ * the query naming the instant the reader holds every item changed since,
+ * in epoch milliseconds (`SINCE`); the parts its poll is held on alone
+ * (`HELD_ON`), so a reader whose `since` moved with no item moving is held
+ * still; and how far back a settled item is carried (`SETTLED_WINDOW_MILLIS`),
+ * an open one always.
+ */
+export const ACCOUNT_INBOX_ITEMS = {
+  SINCE: "since",
+  HELD_ON: ["stamps"],
+  SETTLED_WINDOW_MILLIS: 7 * 24 * 60 * 60 * 1000,
+} as const;
+
+/**
+ * Where a polled read's named parts stand as one value (`liveDigestOf` over
+ * those parts alone): what a reader of a read held on some of its parts
+ * sends as `after`.
+ */
+export function liveDigestOn(
+  queries: Readonly<Record<string, { readonly digest?: string; readonly cursor?: unknown }>>,
+  parts: readonly string[],
+): string | undefined {
+  return liveDigestOf(Object.fromEntries(parts.map((part) => [part, queries[part] ?? {}])));
+}
+
+/**
+ * Every inbox item the account reaches, sealed for following: the address;
+ * where each item stands (`stamps`), every open item and every settled one
+ * changed in the last week, on the account's tasks and of its agents with
+ * no task; and the items among them changed since the reader's `since`,
+ * whole, with their threads and files, as a plan's inbox carries them
+ * (`scopeInboxLiveAnswerSchema`). Its poll is held on `stamps` alone
+ * (`ACCOUNT_INBOX_ITEMS.HELD_ON`), whose digest the reader sends as `after`
+ * (`liveDigestOn`).
+ */
+export const accountInboxItemsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    stamps: sealedLiveQuerySchema,
+    items: sealedLiveQuerySchema,
+    messages: sealedLiveQuerySchema,
+    files: sealedLiveQuerySchema,
+  }),
+});
+
+export type AccountInboxItemsLiveAnswer = typeof accountInboxItemsLiveAnswerSchema.Type;
+
+/**
+ * Where one item stands as its row carries it: its plan, null for an item
+ * of an agent with no task, and its agent; its stamp; whether it is unread
+ * for the reader, which a read mark moves without moving `updatedAt`; who
+ * it waits on; the channel it lives in, which a move between channels
+ * changes alone; and how many messages its thread holds, which a withdrawn
+ * message moves.
+ */
+const inboxItemStampRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  planId: EffectSchema.NullOr(EffectSchema.String),
+  agentId: EffectSchema.String,
+  revision: countedNumber,
+  version: countedNumber,
+  status: inboxItemSchema.fields.status,
+  updatedAt: countedNumber,
+  unread: EffectSchema.Boolean,
+  waitsOn: EffectSchema.String,
+  channelId: EffectSchema.String,
+  messages: countedNumber,
+});
+
+/** The account's items' rows as one delivery carries them, decoded whole where they arrive. */
+export const accountInboxItemsLiveRowsSchema = EffectSchema.Struct({
+  stamps: EffectSchema.Array(inboxItemStampRowSchema),
+  ...scopeInboxLiveRowsSchema.fields,
+});
+
+/** Each part's rows of the account's inbox items, decoded. */
+export type AccountInboxItemsLiveRows = typeof accountInboxItemsLiveRowsSchema.Type;
+
+/** Where one item stands as its stamp row carries it. */
+export type InboxItemStamp = AccountInboxItemsLiveRows["stamps"][number];
 
 /** Two keys compared in order: the first that differs decides. */
 function byKeys(...keys: readonly (readonly [number | string, number | string])[]): number {
@@ -814,17 +886,21 @@ export const taskHistoryLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskHistoryLiveAnswer = typeof taskHistoryLiveAnswerSchema.Type;
 
-/** One revision as its row delivers it: who wrote it, the member and the agent as their rows name them now, the call it was written on, and its instants in epoch milliseconds. */
+/**
+ * One revision as its row delivers it: who wrote it, the member and the
+ * agent as their rows name them now, and its instants in epoch
+ * milliseconds. Note that the row still carries `liveSessionId` and
+ * `callId`, always null, for a released desktop that decodes them; this
+ * build reads neither.
+ */
 const taskHistoryLiveRowSchema = EffectSchema.Struct({
   seq: planRevisionSeqSchema,
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
   editorId: EffectSchema.NullOr(EffectSchema.String),
   editorName: EffectSchema.NullOr(EffectSchema.String),
-  liveSessionId: EffectSchema.NullOr(EffectSchema.String),
   agentId: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.NullOr(EffectSchema.String),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
-  callId: EffectSchema.NullOr(EffectSchema.String),
   changes: countedNumber,
   restoredFrom: EffectSchema.NullOr(planRevisionSeqSchema),
   at: countedNumber,
@@ -853,10 +929,9 @@ function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
         : undefined),
       ...(row.agentId === null ? undefined : { agentId: row.agentId }),
       at: row.at,
-      duringCall: row.liveSessionId !== null,
+      duringCall: false,
     },
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.callId === null ? undefined : { callId: row.callId }),
     startedAt: row.startedAt,
     changes: row.changes,
     ...(row.restoredFrom === null || row.restoredAt === null

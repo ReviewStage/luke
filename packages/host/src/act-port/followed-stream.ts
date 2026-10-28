@@ -7,7 +7,8 @@ import { Effect, MutableHashMap, Option, Queue, Semaphore, Stream } from "effect
  * Gateway as the first stream of it opens and lets it go once the last one
  * closes, so two panels drawing the same thing share one follow. Every change
  * the host tells of it reaches every stream of it, and a stream that opens
- * on one already followed is told its last change at once.
+ * on one already followed is told its last change at once, or, for a follow
+ * told only what moved (`fold`), every change folded into one.
  */
 
 export interface FollowedDependencies<Scope, Changed, Value, Key = string> {
@@ -18,6 +19,8 @@ export interface FollowedDependencies<Scope, Changed, Value, Key = string> {
   readonly onChanged: (listener: (changed: Changed) => void) => () => void;
   /** What a change the host told says of `scope`, none where it is another's. */
   readonly valueOf: (changed: Changed, scope: Scope) => Option.Option<Value>;
+  /** A change folded into those held before it, which a stream that opens later is told; the change alone where none is named. */
+  readonly fold?: (held: Value, changed: Value) => Value;
 }
 
 /** One followed thing: how many streams stand open of it, and its last change, once there is one. */
@@ -45,7 +48,12 @@ export function followedStream<Scope, Changed, Value, Key = string>(
           dependencies.onChanged((changed) => {
             const value = dependencies.valueOf(changed, scope);
             if (Option.isNone(value)) return;
-            MutableHashMap.set(open, key, { ...held(), last: value });
+            const standing = held();
+            const last =
+              dependencies.fold === undefined || Option.isNone(standing.last)
+                ? value
+                : Option.some(dependencies.fold(standing.last.value, value.value));
+            MutableHashMap.set(open, key, { ...standing, last });
             Queue.offerUnsafe(queue, value.value);
           }),
         ),

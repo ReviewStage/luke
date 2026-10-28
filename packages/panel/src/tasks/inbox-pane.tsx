@@ -126,12 +126,15 @@ import {
   answerOf,
   askNumberedPick,
   EMPTY_INBOX_DRAFT,
+  holderAutomationId,
+  holderName,
   INBOX_HOLDER,
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
   itemWorkspaceId,
   knownAsk,
+  operatorHolder,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
@@ -293,11 +296,14 @@ function useOptionNumbers(
       if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
         return;
       const number = Number(event.key);
+      // Note that a number picks only an option drawn, never one stepped aside while the box starts a new thread.
+      const row = optionRows(shown)[number - 1];
+      if (row === undefined) return;
       const picked = pick?.(draft, number);
       if (picked === undefined) return;
       event.preventDefault();
       control.onDraft(item, picked);
-      optionRows(shown)[number - 1]?.focus();
+      row.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -723,7 +729,10 @@ function AskBox({
       <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
         <CardHead>
           <span className={INBOX_ASK_KIND}>{askHeadWords(ask, undefined)}</span>
-          <span className={INBOX_ASK_STANDING}>{ANSWERED}</span>
+          <span className={INBOX_ASK_STANDING}>
+            <CheckIcon aria-hidden="true" />
+            {ANSWERED}
+          </span>
         </CardHead>
       </Card>
     </div>
@@ -836,14 +845,14 @@ function phoneItemGroups(
       ? []
       : [
           {
-            label: "Previous item",
+            label: "Previous inbox item",
             icon: <ChevronUpIcon />,
             disabled: pager.onPrevious === undefined,
             onSelect: () => pager.onPrevious?.(),
             command: APP_COMMAND.PREVIOUS_INBOX_ITEM,
           },
           {
-            label: "Next item",
+            label: "Next inbox item",
             icon: <ChevronDownIcon />,
             disabled: pager.onNext === undefined,
             onSelect: () => pager.onNext?.(),
@@ -865,21 +874,24 @@ function phoneItemGroups(
                 status: holder.task.status,
               }).icon,
               onSelect: onOpenHolder,
+              command: APP_COMMAND.OPEN_IN_TASK,
             },
           ]
         : [
             {
               label: OPEN_AUTOMATION,
-              detail: holder.name,
+              detail: holderName(holder),
               icon: <ZapIcon />,
               onSelect: onOpenHolder,
             },
           ];
+  // ⌘O opens the item's task, or its agent where no task holds it (`desktop-inbox.tsx`).
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
     icon: <BotIcon />,
     onSelect: by.onOpen,
+    ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
   };
   const panel: MenuAction[] =
     phone.onShowPanel === undefined
@@ -893,30 +905,31 @@ const OPEN_TASK = "Open task";
 const OPEN_AUTOMATION = "Open automation";
 const OPEN_AGENT = "Open agent";
 
-/** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_THING = "Item";
+/** What the pane's ⋯ menu is called, which is its tooltip too, as the item's row names its own. */
+const ITEM_THING = "Inbox item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
- * agent's tab end theirs: Mark as read or unread, naming U, as the item's
- * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open, Close
- * without answering, asked first (`inbox-close.tsx`). It is keyed by its
+ * agent's tab end theirs, offering what the item's row's menu offers in the
+ * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
+ * agent; Mark as read or unread, naming U; Move to channel…; and, while the
+ * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
  */
 function InboxItemMenu({
-  holder,
   item,
   shown,
   onMark,
+  onMove,
   onClose,
   lead = NO_LEAD,
   heading,
 }: {
-  holder: InboxHolder;
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
+  onMove: InboxPaneDoors["onMove"];
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -924,8 +937,9 @@ function InboxItemMenu({
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const { close, groups: itemGroups } = useInboxItemActions(holder, item, {
+  const { close, groups: itemGroups } = useInboxItemActions(item, {
     onMark,
+    onMove,
     onClose,
     shown,
     keyed: true,
@@ -1069,7 +1083,7 @@ function AnswerMentions({
 /** The words a dictation into an item's box is likely to say: its repository's, its title's, and its thread's. */
 function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[] {
   const repository =
-    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.repository || null;
+    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.agent.repository;
   const body = (item.thread ?? []).map((message) => message.text).join("\n");
   return dictationKeywords({ repository, title: item.title, body });
 }
@@ -1087,6 +1101,8 @@ export interface InboxPaneDoors {
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
+  /** Asks which channel the item's thread moves to, from the bar's ⋯ menu; none where Channels is off. */
+  readonly onMove?: ((item: InboxItem) => void) | undefined;
 }
 
 /** What starts a new thread from an item's box instead of a reply, where the page offers one. */
@@ -1138,14 +1154,15 @@ function useAutomationCrumb(
   holder: InboxHolder,
   onOpen: (() => void) | undefined,
 ): Crumb | undefined {
-  const automationId = holder.kind === INBOX_HOLDER.AUTOMATION ? holder.automationId : null;
+  const automationId = holderAutomationId(holder);
   const known = useAutomation(automationId ?? undefined);
-  if (holder.kind !== INBOX_HOLDER.AUTOMATION) return undefined;
+  if (holder.kind !== INBOX_HOLDER.AGENT) return undefined;
+  const name = holderName(holder);
   return {
-    label: holder.name,
+    label: name,
     // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
     glyph: <HolderGlyph holder={holder} />,
-    hint: holder.name,
+    hint: name,
     card:
       known === undefined ? undefined : (
         <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
@@ -1187,7 +1204,7 @@ function Crumbs({
 }): React.JSX.Element {
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
   // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
-  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
+  const operator = operatorHolder(holder);
   const crumbs: Crumb[] = [
     taskCrumb(holder, doors) ?? (operator ? undefined : automation),
     // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
@@ -1218,7 +1235,7 @@ function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefine
 /** The path's agent crumb, wearing its mark, or Luke's face for Luke's own, and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
 function agentCrumb(holder: InboxHolder, by: ItemAgent, fixed = false): Crumb {
   const { name, agent } = by.subject;
-  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
+  const operator = operatorHolder(holder);
   return {
     label: name,
     glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
@@ -1334,7 +1351,7 @@ export function InboxPane({
     onEnter: () => sendFromPane(pane.current),
   };
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
-  const workspaceId = itemWorkspaceId(holder, item.agentId);
+  const workspaceId = itemWorkspaceId(holder);
   const onDraft = (next: InboxDraft) => control.onDraft(item, next);
   // The open ask's controls stand in the draft reply, over its note.
   const asking = openAskOf(thread);
@@ -1395,10 +1412,10 @@ export function InboxPane({
           end={
             <InboxItemMenu
               key={item.id}
-              holder={holder}
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
+              onMove={doors.onMove}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1437,10 +1454,10 @@ export function InboxPane({
               )}
               <InboxItemMenu
                 key={item.id}
-                holder={holder}
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
+                onMove={doors.onMove}
                 onClose={doors.onClose}
               />
             </>

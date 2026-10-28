@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
-import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -93,7 +92,7 @@ test("a delivery that moves only the settings leaves every other slice the objec
   const { drawn, deliver } = await window(first);
   const held = drawn.at(-1);
 
-  const moved = stateWith(experimentsOn(EXPERIMENT.BROWSER), { version: 2 });
+  const moved = stateWith(experimentsOn(EXPERIMENT.MEMORY), { version: 2 });
   await deliver(moved);
   const now = drawn.at(-1);
 
@@ -105,8 +104,8 @@ test("a delivery that moves only the settings leaves every other slice the objec
   assert.equal(now.inbox, held.inbox);
   assert.equal(now.run, held.run);
   assert.equal(
-    now.settings?.status,
-    held.settings?.status,
+    now.settings?.stored,
+    held.settings?.stored,
     "inside the settings, too, what did not move is what was held",
   );
 });
@@ -123,42 +122,9 @@ test("a delivery naming one slice replaces that slice alone, and every slice it 
   assert.deepEqual(now, { ...first, version: 2, network: { online: false } });
   assert.equal(now.settings, held.settings);
   assert.equal(now.tasks, held.tasks);
-  assert.equal(now.voice, held.voice);
+  assert.equal(now.audio, held.audio);
   assert.equal(now.inbox, held.inbox);
   assert.equal(now.window, held.window);
-});
-
-test("a call's transcript is laid over the lines held, its lines before the change the objects the window held", async () => {
-  const line = (rowId: string, words: string) => ({
-    rowId,
-    speaker: TRANSCRIPT_SPEAKER.USER,
-    words,
-    startMs: 0,
-    endMs: 100,
-  });
-  const first = stateWith(
-    {},
-    {
-      callTranscript: { voiceSessionId: "session-1", lines: [line("row-1", "Invite")] },
-    },
-  );
-  const { drawn, push } = await window(first);
-  const held = drawn.at(-1);
-
-  await push({
-    version: 2,
-    entries: {},
-    callTranscript: { voiceSessionId: "session-1", from: 1, lines: [line("row-2", "by email")] },
-  });
-  const now = drawn.at(-1);
-
-  assert.ok(held && now);
-  assert.deepEqual(now.callTranscript, {
-    voiceSessionId: "session-1",
-    lines: [line("row-1", "Invite"), line("row-2", "by email")],
-  });
-  assert.equal(now.callTranscript?.lines[0], held.callTranscript?.lines[0]);
-  assert.equal(now.tasks, held.tasks);
 });
 
 test("a delivery older than the document held is dropped", async () => {

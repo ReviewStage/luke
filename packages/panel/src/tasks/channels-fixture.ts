@@ -646,7 +646,7 @@ const THREADS: ThreadSeed[] = [
           `![The update manifest as every Mac reads it](${inboxAttachmentAddress(
             {
               kind: LINK_PLACE.INBOX_ITEM,
-              planId: TASK.RELEASE,
+              agentId: seed(TASK.RELEASE).agentId,
               itemId: fixtureId("d4000004", 12),
             },
             RELEASE_PICTURE,
@@ -1018,12 +1018,13 @@ function waiting(): readonly AppInboxTask[] {
 function taskless(): readonly AppInboxTasklessItem[] {
   return strayItems()
     .filter((each) => each.status === INBOX_STATUS.OPEN)
-    .map(({ id, agentId, title, postedAt }) => ({
+    .map(({ id, agentId, title, postedAt, updatedAt }) => ({
       id,
       agentId,
       agentKind: CODING_AGENT_KIND.OPERATOR,
       title,
       postedAt,
+      updatedAt,
       ...channelOf(id),
       agentTitle: STRAY.agentTitle,
       agentModel: MODEL,

@@ -71,7 +71,7 @@ import {
   type IntegrationConnectionRow,
   readIntegrationConnections,
 } from "../../integrations/integration-store.js";
-import type { ConversationAdmission } from "../brain-host/conversation.js";
+import type { ConversationAdmission } from "../eve-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
 /** One connection a turn is handed: one account at a provider, by the name it goes by. */

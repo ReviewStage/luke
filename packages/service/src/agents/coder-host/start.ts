@@ -92,13 +92,13 @@ import {
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
@@ -712,8 +712,10 @@ const stoppedSource = (
     HttpClient.HttpClient | DatabaseServices
   >,
   source: CodingAgent,
+  /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
+  by: string | undefined,
 ) =>
-  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
+  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source, undefined, by).pipe(
     Effect.catch((refusal) =>
       Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
     ),
@@ -1161,7 +1163,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
-        turn: BRAIN_HOST_TURN.TYPED,
+        turn: EVE_HOST_TURN.TYPED,
         message: eveContent(handed, files, mentioned),
         lineId: line,
       })
@@ -1184,7 +1186,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     }
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
-  if (continued) yield* stoppedSource(eve, from.source);
+  if (continued) yield* stoppedSource(eve, from.source, ask.startedBy?.id);
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.

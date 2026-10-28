@@ -62,9 +62,9 @@ import {
   type ChatGptSignInAnswerView,
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountItems,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
@@ -79,6 +79,7 @@ import {
   type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
+  type CodingAgentInboxReadAllParams,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
@@ -120,8 +121,8 @@ import {
   type CodingAgentWorkspaceListParams,
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
+  codingAgentAccountItemsSchema,
   codingAgentAgentAnswerSchema,
-  codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDeleteAnswerViewSchema,
@@ -171,7 +172,6 @@ import {
   type ProviderKeysAnswerView,
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
-import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -372,16 +372,7 @@ import {
   type GatewayClient,
   type GatewayMethod,
   gatewayEventReader,
-  type VoiceCreateLiveSessionResult,
-  type VoiceEndLiveSessionParams,
-  type VoiceLiveSessionChanged,
-  type VoiceReportLiveTransportParams,
-  voiceCreateLiveSessionResultSchema,
-  voiceLiveSessionChangedSchema,
-  voiceStopSpeakingResultSchema,
 } from "@luke/gateway";
-import type { AgentWireTrace } from "@luke/gateway/devtrace";
-import type { LiveDiagnostics } from "@luke/live";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -389,7 +380,6 @@ import type {
   SettingsResetScope,
 } from "@luke/settings";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -411,7 +401,7 @@ import {
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
- * voice, task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
+ * task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
  * act procedure that asked yields it, and the act port runs it once on the launch's
  * own runtime. The host is this same process, so an answer that is not the
@@ -426,8 +416,6 @@ export interface HostBootstrap {
   sessionReplay: { permitted: boolean; accountId?: string };
   /** What the signed-in account may open in the app, as the host last read it. */
   access: AppAccessSlice;
-  voiceAvailable: boolean;
-  agentTraceEnabled: boolean;
 }
 
 interface HostSettingsChange {
@@ -479,26 +467,6 @@ export interface HostOperator {
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
-  /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
-  liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
-  /**
-   * The peer's SDP offer, and the agent the call speaks into with its task where it has one,
-   * answered with the session the host created; a host that creates none
-   * answers nothing.
-   */
-  createLiveSession(
-    sdp: string,
-    about: VoiceCallAbout,
-  ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
-  /** The peer's hang-up of the session it names; one the host no longer holds is left alone. */
-  endLiveSession(request: VoiceEndLiveSessionParams): Effect.Effect<void>;
-  reportLiveTransport(report: VoiceReportLiveTransportParams): Effect.Effect<void>;
-  /** The peer's own idle decision, from its local signals alone; the host decides the close. */
-  reportLiveActivity(idle: boolean): Effect.Effect<void>;
-  /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
-  stopSpeaking(): Effect.Effect<boolean>;
-  /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
-  recordAgentTrace(trace: AgentWireTrace): Effect.Effect<void>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -728,8 +696,6 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
-  /** The calls into one agent, each with its lines and its record; or why there is no answer. */
-  codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
@@ -840,7 +806,7 @@ export interface HostOperator {
   codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   codingAgentReviewOptions(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
@@ -905,13 +871,21 @@ export interface HostOperator {
     params: CodingAgentInboxReadStateParams,
   ): Effect.Effect<CodingAgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
+  codingAgentInboxReadAll(
+    params: CodingAgentInboxReadAllParams,
+  ): Effect.Effect<CodingAgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   codingAgentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
   codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits across the followed account, or why there is none, each time it moves. */
   onAccountInboxChanged(listener: (answer: CodingAgentAccountInboxAnswerView) => void): () => void;
+  /** Every inbox item the account reaches, followed from now until let go or signed out, heard through `onAccountItemsChanged`; following again starts over, told whole. */
+  codingAgentAccountItemsFollow(): Effect.Effect<void>;
+  /** The account's items let go: nothing more is heard of them until they are followed again. */
+  codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
+  /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move. */
+  onAccountItemsChanged(listener: (told: CodingAgentAccountItems) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
   transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
@@ -935,7 +909,6 @@ export interface HostOperator {
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
-  onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
@@ -979,7 +952,7 @@ export interface HostOperator {
   /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
   browserLiveConnect(params: {
     connectionId: string;
-    taskId: string;
+    agentId: string;
     tabId: string;
   }): Effect.Effect<boolean>;
   /** One text frame for the service on a live view's connection. */
@@ -1262,43 +1235,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
     deleteAccount: () =>
       accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
-    liveDiagnostics: () =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
-        Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
-      ),
-    createLiveSession: (sdp, { taskId, agentId }) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
-          sdp,
-          agentId,
-          ...(taskId === undefined ? undefined : { taskId }),
-        }),
-        (answer) =>
-          answer.ok
-            ? Result.getSuccess(
-                readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : Option.none(),
-      ),
-    endLiveSession: (request) => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION, request)),
-    reportLiveTransport: (report) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, report)),
-    reportLiveActivity: (idle) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
-    stopSpeaking: () =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING), (answer) =>
-        answer.ok
-          ? (Result.getOrUndefined(
-              readEither(voiceStopSpeakingResultSchema, { excess: EXCESS_KEYS.DROP })(
-                answer.result,
-              ),
-            )?.stopped ?? false)
-          : false,
-      ),
-    recordAgentTrace: (trace) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) })),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
@@ -1422,13 +1358,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksBrowserTabs: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, params),
         answerOf(tasksBrowserTabsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
-          taskId: params.taskId,
           agentId: params.agentId,
           address: params.address,
         }),
@@ -1917,11 +1852,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(codingAgentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
-    codingAgentCalls: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
-        answerOf(codingAgentCallsAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
     channelsList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHANNELS_LIST, params),
@@ -2293,10 +2223,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentInboxReadAll: (params) =>
       Effect.map(
-        client.call(
-          GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
-          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
-        ),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, {
+          ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
+          itemIds: params.itemIds,
+        }),
         answerOf(codingAgentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentAccountInboxFollow: () =>
@@ -2311,6 +2241,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             readEither(codingAgentAccountInboxAnswerViewSchema, { excess: EXCESS_KEYS.DROP })(
               payload,
             ),
+          ),
+        listener,
+      ),
+    codingAgentAccountItemsFollow: () =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW, {})),
+    codingAgentAccountItemsUnfollow: () =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW, {})),
+    onAccountItemsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentAccountItemsSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),
@@ -2387,15 +2330,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ...(payload.pending === true ? { pending: true } : undefined),
               }
             : undefined,
-        listener,
-      ),
-    onVoiceLiveSessionChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
         listener,
       ),
     onTasksChanged: (listener) =>
@@ -2510,7 +2444,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, {
           connectionId: params.connectionId,
-          taskId: params.taskId,
+          agentId: params.agentId,
           tabId: params.tabId,
         }),
         (answer) => answer.ok,

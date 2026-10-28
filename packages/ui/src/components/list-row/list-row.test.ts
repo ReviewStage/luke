@@ -196,6 +196,13 @@ test("a row's press and its acts are separate buttons in its item, neither insid
   expect(container.querySelector("ul")?.getAttribute("aria-label")).toBe("Members");
 });
 
+test("a row's acts are a group named by its title, so a reader hears which row's they are", () => {
+  const container = draw(createElement(Members));
+  const group = button(container, "More for grace").closest('[role="group"]');
+  const named = document.getElementById(group?.getAttribute("aria-labelledby") ?? "");
+  expect(named?.textContent).toBe("Grace Hopper");
+});
+
 test("pressing an act does not press its row, and pressing a row opens it", () => {
   const container = draw(createElement(Members));
   press(button(container, "More for ada"));

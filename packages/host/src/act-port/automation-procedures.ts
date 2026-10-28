@@ -21,8 +21,7 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * automation-procedures.ts -- the Automations pages' asks of the host about the account's automations.
  *
  * The one check these procedures make is who asked: only a panel draws the
- * Automations pages, so every one refuses the takeover and the hidden voice
- * window, in its own sentence. What the service answers comes back as the
+ * Automations pages, so every one refuses the takeover, in its own sentence. What the service answers comes back as the
  * panel's own answer, or why there is none. A follow is a stream the panel
  * holds open while it draws a workspace's automations or an automation's
  * runs: the host follows it from the first stream of it to the last, and

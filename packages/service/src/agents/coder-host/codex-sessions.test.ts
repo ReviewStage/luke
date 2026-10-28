@@ -54,15 +54,21 @@ import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-cr
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
-import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
+import {
+  fixtureToken,
+  launchLines,
+  linesOf,
+  runnerSandboxApi,
+  runnerTook,
+} from "../../testing/runner-sandbox-fake.js";
 import { AgentSandboxImage } from "../agent-sandbox-image.js";
+import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
-} from "../brain-host/eve-sessions.js";
-import { claimedDeviceAgentLine } from "../device-agent.js";
+} from "../eve-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
@@ -86,6 +92,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 
 const SNAPSHOT = "snap_fixture_image";
 const EVENTS_URL = "https://luke.test/api/agents/runner-events";
+const LINES_URL = "https://luke.test/api/agents/runner-lines";
 const MCP_URL = "https://luke.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
@@ -223,6 +230,7 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
   const options: CodexSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
+    linesUrl: LINES_URL,
     mcpUrl: MCP_URL,
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
@@ -390,7 +398,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
-        const [config, first] = linesOf(command) as [CodexConfig, InputLine];
+        const [config, first] = (yield* launchLines(command)) as [CodexConfig, InputLine];
         assert.deepEqual(config, {
           harness: RUNNER_HARNESS.CODEX,
           cwd: "/workspace/repository",
@@ -400,6 +408,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           developerInstructions: INSTRUCTIONS,
           firstSequence: 0,
           eventsUrl: EVENTS_URL,
+          linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           tokenUrl: TOKEN_URL,
@@ -413,7 +422,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(JSON.stringify(command).includes("access-0"), false);
         const visible = JSON.stringify([
           command.args,
-          command.stdin,
+          yield* launchLines(command),
           api.sandboxes,
           [...(api.uploads[0]?.values() ?? [])],
         ]);
@@ -539,7 +548,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
-        const lines = linesOf(api.commands[0]).slice(2) as InputLine[];
+        const lines = (yield* launchLines(api.commands[0])).slice(2) as InputLine[];
         assert.deepEqual(lines[0], {
           type: INPUT_LINE.MODEL,
           model: "gpt-4.1",
@@ -578,6 +587,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         // The events route records Codex's thread as the runner reports it, and the run ends.
         assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, THREAD), true);
+        yield* runnerTook(agent.id);
         const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
         sequence.next = 17;
         const ended = yield* runnerEnded({
@@ -598,7 +608,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
         assert.equal(openai.state.renewals, 1);
-        const [config, first] = linesOf(relaunch) as [CodexConfig, InputLine];
+        const [config, first] = (yield* launchLines(relaunch)) as [CodexConfig, InputLine];
         assert.equal(config.harness, RUNNER_HARNESS.CODEX);
         assert.equal(config.threadId, THREAD);
         assert.equal(config.firstSequence, 17);

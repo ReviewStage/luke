@@ -13,15 +13,15 @@ import {
   type DeploymentTurnTable,
   deploymentActor,
   lukeAccount,
-} from "../brain-host/auth.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
-import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
-import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/door.js";
+} from "../eve-host/auth.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { EVE_HOST_TURN_POLICY } from "../eve-host/channel.js";
+import { messageAuth, ownedAuth, type SessionOwnership } from "../eve-host/door.js";
 
 /**
  * channel.ts -- how the coding-agent service's eve channel is configured.
  *
- * The same door as the brain's (`brain-host/door.ts`): whoever the
+ * The same door as the brain's (`eve-host/door.ts`): whoever the
  * inner walk admits is refused for a session or a conversation that is not
  * theirs before any route runs, and every message carries the request's
  * conversation and turn kind into the session's auth. Who walks in is the
@@ -59,7 +59,7 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * same word as a failed one, because to the developer the two are one: the
  * agent is gone and no message reaches it.
  */
-const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
+const TURN_POLICY: TurnPolicy = EVE_HOST_TURN_POLICY.STEER;
 
 /**
  * The files eve takes on a message: the images and PDFs the message route
@@ -87,19 +87,18 @@ const UPLOAD_POLICY = {
  * (`coder-host/start.ts`): the row the Start made stands before eve is
  * asked, so the door's ownership check bounds the opening to a
  * conversation the named account owns, as it bounds every caller. A typed
- * message presents the account's own identity (`brain-host/auth.ts`'s
+ * message presents the account's own identity (`eve-host/auth.ts`'s
  * `DEPLOYMENT_PRESENCE`): eve steers a running turn only with a message
  * whose principal is the turn's own, and an agent's turn runs under the
  * developer's bearer, so the message is minted as the developer's own
  * tuple, authenticator, type, and id, and the record says the deployment
  * carried it in the `luke:carrier` attribute rather than in the principal;
  * the opening is minted the same way, so the agent's session runs as the
- * developer whether the developer or Luke started it. A spoken turn is
- * admitted on neither, since Luke takes no calls. A caller of another role
+ * developer whether the developer or Luke started it. A caller of another role
  * adds its row here and nowhere else.
  * Note that the table holds no row for a cancel or a reset, and needs none:
  * neither opens a turn, so the deployment's authenticator admits both on
- * every channel without asking the table (`brain-host/auth.ts`). What
+ * every channel without asking the table (`eve-host/auth.ts`). What
  * bounds them is the door's ownership check, which admits them only on a
  * session a conversation the named account reaches recorded. A cancel is
  * how a continue a coding agent starts (`start_agent`'s `from`) stops the
@@ -109,31 +108,20 @@ const UPLOAD_POLICY = {
  * (`agents/retire-sessions.ts`).
  */
 export const CODER_DEPLOYMENT_TURNS = {
-  [DEPLOYMENT_ACT.OPEN]: {
-    [BRAIN_HOST_TURN.TYPED]: true,
-    [BRAIN_HOST_TURN.SPOKEN]: false,
-    [BRAIN_HOST_TURN.UNHEARD]: false,
-  },
-  [DEPLOYMENT_ACT.FOLLOW_UP]: {
-    [BRAIN_HOST_TURN.TYPED]: true,
-    [BRAIN_HOST_TURN.SPOKEN]: false,
-    [BRAIN_HOST_TURN.UNHEARD]: false,
-  },
+  [DEPLOYMENT_ACT.OPEN]: { [EVE_HOST_TURN.TYPED]: true },
+  [DEPLOYMENT_ACT.FOLLOW_UP]: { [EVE_HOST_TURN.TYPED]: true },
 } as const satisfies DeploymentTurnTable;
 
 /**
  * Whose identity the deployment presents here: the account's, with the
  * deployment named as its carrier. eve steers a running turn only with a
- * message whose principal is the turn's own (`brain-host/auth.ts`'s
+ * message whose principal is the turn's own (`eve-host/auth.ts`'s
  * `DEPLOYMENT_PRESENCE`), and an agent's turn runs under the developer's
  * bearer, so another agent's message joins the turn under way at its next
  * step, as a line the developer typed does. A cancel and a reset are minted
  * as the account's too, which eve's cancel and reset routes read nothing of.
  */
 export const CODER_DEPLOYMENT_PRESENCE = DEPLOYMENT_PRESENCE.ACCOUNT;
-
-/** The deployment reads no session's stream here: only the voice function did, following a spoken ask's turn. */
-export const CODER_DEPLOYMENT_STREAMS = false;
 
 export function coderChannelInput(
   resolveUserId: BearerAccount,

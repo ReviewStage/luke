@@ -22,7 +22,7 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { STATUS_TONE } from "@luke/ui";
+import { NAV_COUNT_TONE } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -185,8 +185,7 @@ function mount(
         onChoose: ignore,
         onOpenItem: () => undefined,
         onOpenChannel: () => undefined,
-        listed: false,
-        onListed: ignore,
+        onClear: ignore,
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -431,7 +430,8 @@ test("an account with no plan is welcomed on New task's composer, and the title 
   assert.ok(newTask, "the title bar offers New task");
   act(() => newTask.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-  assert.equal(dialog?.querySelector("h2")?.textContent, "New task");
+  const name = dialog?.getAttribute("aria-labelledby") ?? assert.fail("the dialog is named");
+  assert.equal(document.getElementById(name)?.textContent, "New task");
   act(() => {
     dialog?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
@@ -609,15 +609,17 @@ function rowReadMark(name: string, choose = false): string | undefined {
   });
   const menu = document.querySelector('[role="menu"]');
   assert.ok(menu, `${name}'s menu opens`);
+  // Note that the item is read by its words, since its U is drawn beside them.
+  const words = (each: Element) => each.querySelector(".luke-menu-item-label")?.textContent ?? "";
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
-    /^Mark as (un)?read$/u.test(each.textContent ?? ""),
+    /^Mark as (un)?read$/u.test(words(each)),
   );
   act(() => {
     if (choose) item?.click();
     else menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
   assert.equal(document.querySelector('[role="menu"]') === null, true, "the menu closes");
-  return item?.textContent ?? undefined;
+  return item === undefined ? undefined : words(item);
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
@@ -839,18 +841,18 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
     },
     { overlay: SIDEBAR_OVERLAY.OPEN },
   );
-  const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
+  const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 for you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
   assert.match(
     placeRow(page, "Inbox")?.textContent ?? "",
-    /^Inbox3 need you/u,
+    /^Inbox3 for you/u,
     "the drawer counts the same",
   );
-  // Note that the counts wear the needs-you tone the rows they count do, not a tally's ink.
+  // Note that the drawer's count wears the unread dot's blue, not a tally's ink.
   const toneOf = (row: HTMLElement | undefined) =>
     row?.querySelector(".luke-nav-item-count")?.getAttribute("data-tone");
-  assert.equal(toneOf(placeRow(page, "Inbox")), STATUS_TONE.ATTENTION);
+  assert.equal(toneOf(placeRow(page, "Inbox")), NAV_COUNT_TONE.UNREAD);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -878,7 +880,6 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
     inboxView: {
       ...tasksControl().inboxView,
       open: true,
-      listed: false,
       chosen: { taskId: "task-1", itemId: "item-1" },
     },
   });
@@ -887,7 +888,7 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
   document.body.innerHTML = "";
 
   const onList = await mountNarrow({
-    inboxView: { ...tasksControl().inboxView, open: true, listed: true },
+    inboxView: { ...tasksControl().inboxView, open: true },
   });
   assert.equal(barItem(onList, "Inbox").getAttribute("aria-current"), "page");
   act(() => root?.unmount());
@@ -1285,7 +1286,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

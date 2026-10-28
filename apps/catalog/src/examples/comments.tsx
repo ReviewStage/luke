@@ -4,6 +4,7 @@ import {
   BUTTON_SIZE,
   COMMENT_ELEMENT,
   Comment,
+  CommentSkeleton,
   GAP,
   LAYOUT_ELEMENT,
   MoreButton,
@@ -69,6 +70,20 @@ function Comments(): React.JSX.Element {
             >
               Nice, merging once CI is green.
             </Comment>
+          </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="comment-skeleton" title="Being read, in the comment's own cells">
+        <div className="catalog-frame">
+          <Stack gap={GAP.BLOCK}>
+            <CommentSkeleton name="20%" lines={[{ key: "line", width: "80%" }]} />
+            <CommentSkeleton
+              name="28%"
+              lines={[
+                { key: "line", width: "95%" },
+                { key: "end", width: "45%" },
+              ]}
+            />
           </Stack>
         </div>
       </CatalogSection>

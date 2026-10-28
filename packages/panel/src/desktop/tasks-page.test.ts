@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { inPinOrder } from "@luke/features/pin-order";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
+import { applySectionWrite } from "@luke/features/task-section-writes";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -15,7 +16,7 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { applySectionWrite, NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
+import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -291,7 +292,7 @@ test("a refresh that failed after the tasks were read keeps the rows drawn under
   assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
-test("a row and a card count the questions waiting on the reader, as the sidebar does, a notice and a teammate's question counting nowhere", async () => {
+test("a row and a card count the questions waiting on the reader, a notice and a teammate's question counting nowhere, while the sidebar counts the notice too, as For you lists it", async () => {
   const page = await mountPage();
   const sidebar = { count: -1 };
   function Sidebar() {
@@ -318,7 +319,7 @@ test("a row and a card count the questions waiting on the reader, as the sidebar
   const listSays = (key: string) => says(rowOf(page, key));
 
   assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 0, 1]);
-  assert.equal(sidebar.count, 3);
+  assert.equal(sidebar.count, 4);
 
   act(() => buttonNamed(page, "Columns").click());
   const cardSays = (key: string) =>

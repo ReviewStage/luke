@@ -17,23 +17,29 @@
  * is woken and answers without it.
  */
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
+import { agentPin } from "../schemas/agent-pin.js";
 import { attachment } from "../schemas/attachment.js";
-import { invitation, member, user } from "../schemas/auth.js";
+import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
 import { codingAgent, codingAgentDelegation } from "../schemas/coding-agent.js";
+import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
+import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { macCommand } from "../schemas/mac-command.js";
+import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
-import { asks, conversations, messages, turns } from "../schemas/storage.js";
+import { runnerLine } from "../schemas/runner-line.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { taskPin } from "../schemas/task-pin.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { TOPIC } from "./notification.js";
 import { defineSyncTable, type SyncTable } from "./sync-table.js";
@@ -99,6 +105,24 @@ export const invitationSync = defineSyncTable(invitation, {
   topics: [{ kind: TOPIC.WORKSPACE, column: invitation.organizationId }],
 });
 
+/** A workspace, on its own topic, so its name, slug, and photo reach every member. */
+export const organizationSync = defineSyncTable(organization, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: organization.id }],
+});
+
+/** The workspace made for an account first, on the workspace's topic and the account's. */
+export const personalWorkspaceSync = defineSyncTable(personalWorkspace, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: personalWorkspace.organizationId },
+    { kind: TOPIC.ACCOUNT, column: personalWorkspace.userId },
+  ],
+});
+
+/** A GitHub App installation connected to a workspace, on the workspace's topic. */
+export const githubInstallationSync = defineSyncTable(githubInstallation, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: githubInstallation.organizationId }],
+});
+
 /** A member's own GitHub token, on the member's topic. */
 export const githubPersonalTokenSync = defineSyncTable(githubPersonalToken, {
   topics: [{ kind: TOPIC.ACCOUNT, column: githubPersonalToken.userId }],
@@ -135,6 +159,16 @@ export const repositoryPinSync = defineSyncTable(repositoryPin, {
   topics: [{ kind: TOPIC.ACCOUNT, column: repositoryPin.userId }],
 });
 
+/** A task an account pinned, on the account's topic. */
+export const taskPinSync = defineSyncTable(taskPin, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: taskPin.userId }],
+});
+
+/** An agent with no task an account pinned, on the account's topic. */
+export const agentPinSync = defineSyncTable(agentPin, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: agentPin.userId }],
+});
+
 /**
  * A command an agent queued for the account's Mac, on the account's topic,
  * which the Mac's read of the commands it may claim is woken on. Note that
@@ -143,6 +177,42 @@ export const repositoryPinSync = defineSyncTable(repositoryPin, {
  */
 export const macCommandSync = defineSyncTable(macCommand, {
   topics: [{ kind: TOPIC.ACCOUNT, column: macCommand.userId }],
+});
+
+/**
+ * A line queued for a cloud agent's runner, on the agent's topic, which the
+ * runner's held read waits on (`@luke/service`'s `runner-lines-app.ts`).
+ * Note that its acceptance is ignored, because the runner's read waits on
+ * new lines alone, and every message the runner takes stamps one.
+ */
+const runnerLineSync = defineSyncTable(runnerLine, {
+  topics: [{ kind: TOPIC.AGENT, column: runnerLine.agentId }],
+  ignore: [runnerLine.acceptedAt],
+});
+
+/**
+ * A line queued for a local agent's runner, on its account's topic, which
+ * the account's Macs' held read of their lines and a wait for a runner's
+ * exit are woken on. Note that what the line says is ignored, because it is
+ * written once as the line is queued and never changed, and an update
+ * comparing it would weigh a files line's every file at its claim and its
+ * settle.
+ */
+const deviceAgentLineSync = defineSyncTable(deviceAgentLine, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: deviceAgentLine.userId }],
+  ignore: [deviceAgentLine.payload],
+});
+
+/**
+ * A request of a local agent's tool to its Mac, on its account's topic,
+ * which the Macs' held read of their requests and the tool's wait for the
+ * answer are woken on. Note that the file an answer carries is ignored,
+ * because an update comparing it would weigh the file, and the answer moves
+ * `settled_at` beside it, so it still notifies.
+ */
+const deviceAgentRequestSync = defineSyncTable(deviceAgentRequest, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: deviceAgentRequest.userId }],
+  ignore: [deviceAgentRequest.bytes],
 });
 
 /** A comment thread on a task's plan, on the task's topic. */
@@ -269,9 +339,7 @@ export const automationRunSync = defineSyncTable(automationRun, {
  * A revision of a task's plan, on the task's topic. Note that its text is
  * ignored, because every save folded into a revision rewrites it, and the
  * same save moves `at` and `changes` beside it, which the history reads, so
- * a save still notifies. The call it was written on (`live_session_id`) is
- * set once and watched; the cut of voice calls drops it, re-rendering this
- * capture as it does.
+ * a save still notifies.
  */
 export const planRevisionSync = defineSyncTable(planRevision, {
   topics: [{ kind: TOPIC.TASK, column: planRevision.taskId }],
@@ -362,17 +430,6 @@ export const turnsSync = defineSyncTable(turns, {
 });
 
 /**
- * An ask, on its conversation's topic. Note that its dispatch claim is
- * ignored, because every hand-over writes and clears it, and so are the
- * voice session it was delegated in, its place in that session, and how far
- * its turn was told to the voice, which no view reads.
- */
-export const asksSync = defineSyncTable(asks, {
-  topics: [{ kind: TOPIC.CONVERSATION, column: asks.conversationId }],
-  ignore: [asks.dispatchClaim, asks.voiceSessionId, asks.askRevision, asks.toldSeq, asks.endToldAt],
-});
-
-/**
  * A worker's delegation as it was recorded, on its parent conversation's
  * topic, looked up through the worker's own conversation, so the agent's
  * transcript hears the call that opened the worker.
@@ -394,13 +451,21 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   memberSync,
   userSync,
   invitationSync,
+  organizationSync,
+  personalWorkspaceSync,
+  githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   taskSectionSync,
   taskSectionEntrySync,
   agentSectionEntrySync,
   repositoryPinSync,
+  taskPinSync,
+  agentPinSync,
   macCommandSync,
+  runnerLineSync,
+  deviceAgentLineSync,
+  deviceAgentRequestSync,
   planCommentThreadSync,
   planCommentSync,
   inboxItemSync,
@@ -416,6 +481,5 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   messagesSync,
   conversationsSync,
   turnsSync,
-  asksSync,
   codingAgentDelegationSync,
 ];

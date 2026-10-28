@@ -4,13 +4,21 @@
  * It keeps every sandbox, command, stdin, upload, network policy, and run it
  * was asked for, opens and resumes sandboxes as Vercel does, and answers a
  * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`).
- * Synthetic team, project, and tokens throughout.
+ * Beside it, the lines a launch reads from Luke's store (`runner_line`),
+ * read back the way a test reads a command's stdin, and stamped taken as a
+ * runner's ACCEPTED would, which no fake runner posts. Synthetic team,
+ * project, and tokens throughout.
  */
 
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
+import type { RunnerConfig } from "@luke/agent-runner/protocol";
+import { Database } from "@luke/database/core/query";
+import { runnerLine } from "@luke/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { Effect } from "effect";
 import {
   sandboxListRefusal,
   sandboxStopRefusal,
@@ -52,6 +60,8 @@ export interface FakeSandbox {
 export interface FakeCommand {
   readonly id: string;
   readonly sandboxSessionId: string;
+  /** The agent the command's sandbox was tagged for as it started, whose queued lines a launch reads. */
+  readonly agentId: string | undefined;
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd: string | undefined;
@@ -147,6 +157,14 @@ export function runnerSandboxApi() {
   const holdPolicy = { remaining: 0 };
   /** Whether a read that waits for a running command's exit is held until the reader gives up. */
   const waits = { hold: false };
+  /**
+   * The call to a session at which its sandbox begins to stop, as a launch's
+   * end or the sweep stops it a moment before a send reaches it, by the
+   * path past the session: that call and every one after it are answered
+   * 422 `sandbox_stopping`, as Vercel answers them, until a resume opens the
+   * sandbox's next session.
+   */
+  const stopsAt: { call?: ((rest: string) => boolean) | undefined } = {};
   /** What a test does the moment a detached command has started, before the API answers; the exit a waited run ends on, 0 unless it says; and what it does as a waited run arrives, before it ends. */
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
@@ -252,7 +270,9 @@ export function runnerSandboxApi() {
       if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
       }
-      if (resuming && sandbox.status === "stopped") {
+      // A resume of a sandbox still stopping waits the stop out and opens its next session, which
+      // `@vercel/sandbox`'s `withResume` relies on.
+      if (resuming && (sandbox.status === "stopped" || sandbox.status === "stopping")) {
         sandbox.status = "running";
         sandbox.currentSessionId = id("sbs");
         sandbox.resumedWith.push(sandbox.timeout);
@@ -272,6 +292,25 @@ export function runnerSandboxApi() {
         command.exitCode = command.exitCode ?? 143;
       }
       return Response.json({ session: { id: sessionId } });
+    }
+    const current = sandboxes.find((each) => !each.deleted && each.currentSessionId === sessionId);
+    if (current?.status === "running" && stopsAt.call?.(rest) === true) {
+      stopsAt.call = undefined;
+      current.status = "stopping";
+      for (const command of commands.filter((each) => each.sandboxSessionId === sessionId)) {
+        command.exitCode = command.exitCode ?? 143;
+      }
+    }
+    if (current?.status === "stopping") {
+      return Response.json(
+        {
+          error: {
+            code: "sandbox_stopping",
+            message: "Sandbox is stopping and no longer accepts commands.",
+          },
+        },
+        { status: 422 },
+      );
     }
     if (rest === "snapshot") {
       // A snapshot stops the session it is taken of, so a second one asked of it is refused.
@@ -320,6 +359,8 @@ export function runnerSandboxApi() {
       const command: FakeCommand = {
         id: id("cmd"),
         sandboxSessionId: sessionId,
+        agentId: sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags
+          .lukeAgent,
         command: asked.command,
         args: asked.args,
         cwd: asked.cwd,
@@ -396,6 +437,7 @@ export function runnerSandboxApi() {
     failPolicy,
     holdPolicy,
     waits,
+    stopsAt,
     hooks,
   };
 }
@@ -408,3 +450,31 @@ export function linesOf(command: FakeCommand | undefined): unknown[] {
     .filter((text) => text !== "")
     .map((text) => JSON.parse(text));
 }
+
+/**
+ * The lines a launch was handed: its config on its stdin, then each line
+ * queued for it to read, in the order they were queued (`runner_line`).
+ */
+export const launchLines = (command: FakeCommand | undefined) =>
+  Effect.gen(function* () {
+    assert.ok(command?.agentId !== undefined);
+    const [config, ...stdin] = linesOf(command) as [RunnerConfig, ...unknown[]];
+    const db = yield* Database;
+    const queued = yield* db
+      .select({ text: runnerLine.text })
+      .from(runnerLine)
+      .where(
+        and(eq(runnerLine.agentId, command.agentId), eq(runnerLine.launch, config.firstSequence)),
+      )
+      .orderBy(asc(runnerLine.seq));
+    return [config, ...stdin, ...queued.map((row): unknown => JSON.parse(row.text))];
+  });
+
+/** Every message queued for the agent's runner stamped taken, as each one's ACCEPTED would, which the fake runner never posts. */
+export const runnerTook = (agentId: string) =>
+  Effect.flatMap(Database, (db) =>
+    db
+      .update(runnerLine)
+      .set({ acceptedAt: new Date(0) })
+      .where(and(eq(runnerLine.agentId, agentId), isNull(runnerLine.acceptedAt))),
+  );

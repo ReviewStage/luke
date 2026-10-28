@@ -25,38 +25,21 @@ const noHostSettingSideEffect: HostSettingSideEffect = () => Effect.void;
 
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {
-  setVoice: (voice: StoredAppSettings["voice"]) => Effect.Effect<void>;
-  /**
-   * The standing live session ended gracefully, where one stands. GPT Live
-   * fixes a session's voice when the session is created and documents no way
-   * to change it after, so a conversation left standing would keep the old
-   * voice for as long as it idled, which reads as the choice not taking.
-   */
-  readonly endLiveSession: Effect.Effect<void>;
   /** Product events armed or disarmed, as the usage data switch now stands. */
   shareUsageData: (on: boolean) => Effect.Effect<void>;
 }
 
 /**
- * The side effects a setting has in the host. The client applies its own — the
- * login item and the duck —
- * from the same answered snapshot; nothing here reaches a window.
+ * The side effects a setting has in the host. The client applies its own, the
+ * login item, from the same answered snapshot; nothing here reaches a window.
  */
 export function hostSettingSideEffects(dependencies: HostSettingSideEffectDependencies) {
   return {
     [SETTING_SIDE_EFFECT.NONE]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     // The store answers the switch resolved by the build, so nothing stored
     // never reads as on here.
     [SETTING_SIDE_EFFECT.USAGE_DATA]: ({ settings }) =>
       dependencies.shareUsageData(settings.usageData === true),
-    // The stored voice reaches the source first, so the session the peer
-    // opens next is created under it; only then is the standing session
-    // ended, since its own voice cannot move and the developer is listening
-    // for the one they chose. A sign-in's reconcile runs this too, when no
-    // session can stand, so the end is a no-op there.
-    [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) =>
-      Effect.andThen(dependencies.setVoice(settings.voice), dependencies.endLiveSession),
   } satisfies HostSettingSideEffects;
 }

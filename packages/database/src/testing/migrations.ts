@@ -46,7 +46,7 @@ export function undoneRename(statement: string): string {
   throw new Error(`the migration holds a statement that is no rename: ${statement}`);
 }
 
-/** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`) and Chat's (`drop_chat`). */
+/** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`), Chat's (`drop_chat`), and the cut features' (`drop_retired_storage`). */
 const DROPPED_TABLES = [
   "chat_attachment",
   "inbox_attachment",
@@ -57,11 +57,41 @@ const DROPPED_TABLES = [
   "chat_read",
   "chat_message",
   "workspace_chat",
+  "asks",
+  "account_plan_template_revision",
+  "task_board",
+  "task_issue",
+  "workspace_integration_connection",
+  "voice_avatar_sessions",
+  "voice_transcript_segments",
+  "voice_sessions",
+  "voice_session_usage",
 ] as const;
 
-/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, left out. */
+/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`). */
+const DROPPED_COLUMNS = [
+  {
+    table: "automation",
+    columns: ["plan_id", "task_id"],
+    indexes: ["automation_trigger_plan", "automation_trigger_task"],
+  },
+] as const;
+
+/** Whether the statement names a column since dropped, or an index that went with it. */
+function namesDroppedColumn(statement: string): boolean {
+  return DROPPED_COLUMNS.some(
+    ({ table, columns, indexes }) =>
+      indexes.some((index) => statement.includes(`"${index}"`)) ||
+      (statement.includes(`"${table}"`) &&
+        columns.some((column) => statement.includes(`"${column}"`))),
+  );
+}
+
+/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table or column since dropped, or an index or constraint named after one, left out. */
 export function replayable(statements: readonly string[]): readonly string[] {
-  return statements.filter((statement) =>
-    DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)),
+  return statements.filter(
+    (statement) =>
+      DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)) &&
+      !namesDroppedColumn(statement),
   );
 }

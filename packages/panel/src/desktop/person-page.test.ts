@@ -342,8 +342,7 @@ function mountWith(
         onChoose: (chosen) => opened.inbox.push(chosen),
         onOpenItem: (chosen) => opened.inbox.push(chosen),
         onOpenChannel: () => undefined,
-        listed: false,
-        onListed: () => undefined,
+        onClear: () => undefined,
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -502,7 +501,9 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   button(page, "Retry budget dashboard").click();
 
   assert.deepEqual(opened.agents, [[RETRIES.id, BACKOFF.id]]);
-  assert.deepEqual(opened.inbox, [{ taskId: RETRIES.id, itemId: RETRY_429.id }]);
+  assert.deepEqual(opened.inbox, [
+    { taskId: RETRIES.id, itemAgentId: RETRY_429.agentId, itemId: RETRY_429.id },
+  ]);
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
@@ -570,6 +571,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
         agentId: SWEEP_AGENT,
         title: SWEEP_ITEM.title,
         postedAt: SWEEP_ITEM.postedAt,
+        updatedAt: SWEEP_ITEM.updatedAt,
         agentTitle: "Flake sweep",
         agentModel: "anthropic/claude-opus-5.5",
         automationId: null,
@@ -978,7 +980,7 @@ test("an agent's row offers Copy link and Archive, and Copy link copies its link
   act(() => button(document.body, "Copy link").click());
   await settle();
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${CACHE.id}/agent/${CACHE_KEYS.id}`]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${CACHE_KEYS.id}`]);
 });
 
 test("an automation's row offers Copy link, copying its link under the page's workspace", async () => {

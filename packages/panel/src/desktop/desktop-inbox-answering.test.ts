@@ -73,6 +73,8 @@ import {
   mountThread,
   needsYouMark,
   noticeOf,
+  ON_EXPIRY,
+  ON_THRESHOLD,
   openOptions,
   pressKey,
   READER,
@@ -146,26 +148,24 @@ function answeredPicks(page: HTMLElement): (string | null | undefined)[] {
 function optionHeads(page: HTMLElement): (string | null)[] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
-  return [...pane.querySelectorAll<HTMLElement>('[role="radio"], [role="checkbox"]')].map((each) =>
-    wordsOf(each),
-  );
+  return openOptions(pane).map((each) => wordsOf(each));
 }
 
 test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
   world.listedWorkspace = ACME;
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Inbox item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
   assert.deepEqual(menuWords(), [
-    "Mark as unreadU",
-    "—",
     "Copy link",
+    "—",
+    "Mark as unreadU",
     "—",
     "Resolve without answering",
   ]);
@@ -198,7 +198,7 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   act(() => ellipsis().click());
   assert.deepEqual(
     menuWords(),
-    ["Mark as unreadU", "—", "Copy link"],
+    ["Copy link", "—", "Mark as unreadU"],
     "a settled item offers no Close",
   );
 });
@@ -241,39 +241,8 @@ test("an open item's row offers Resolve without answering beside its mark and la
   assert.equal(hoverClose(threshold), null, "the closed row offers Close no longer");
 });
 
-/** The act channel answering every close as `answer` does, written down by item. */
-function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: boolean }): string[] {
-  const sent: string[] = [];
-  const bridge = appBridge();
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...bridge,
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return previous(request);
-      sent.push(request.payload.itemId);
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: answer(request.payload.itemId),
-      });
-    },
-  });
-  return sent;
-}
-
-/** Closes the item from its pane's ⋯ menu, answering the question Close. */
-async function closeFromPane(page: HTMLElement): Promise<void> {
-  const ellipsis =
-    itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Item actions"]',
-    ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
-  act(() => ellipsis.click());
-  act(() => menuItem("Resolve without answering").click());
-  await settle();
-  await confirmClose();
-}
-
 test("a close taken lets go of the item's draft, though another item is chosen", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   typeInComposer(itemPane(page), "Use 90% instead");
   await settle();
@@ -294,24 +263,8 @@ test("a close taken lets go of the item's draft, though another item is chosen",
   assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
 });
 
-test("a close the agent changed its item before is not taken: the item stands as the agent now asks it, though no read holds the newer revision yet", async () => {
-  const { page } = mount();
-  await settle();
-  const changed = { ...THRESHOLD, revision: 2, title: "Alert at 85%?", updatedAt: 6_000 };
-  const sent = answeredCloses(() => ({ item: changed, taken: false }));
-
-  await closeFromPane(page);
-
-  assert.deepEqual(sent, [THRESHOLD.id]);
-  assert.equal(
-    needsYouMark(rowNamed(page, "Alert at 85%?")),
-    "*",
-    "it needs you as the agent now asks it",
-  );
-});
-
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(optionHeads(page), [
     "Retry 3 times over an hourRecommended1Backs off 5, 15, then 40 minutes.",
@@ -325,14 +278,14 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
     options: [{ label: "Retry 3 times over an hour" }, { label: "Retry once" }],
   };
   world.inboxes.set(BILLING.id, [asking(THRESHOLD, ask), RETRY]);
-  const again = mount();
+  const again = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour1", "Retry once2"]);
 });
 
 test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and J still steps the list", async () => {
   const keys = standKeymap();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const pane = itemPane(page);
   assert.deepEqual(
@@ -373,7 +326,7 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
 });
 
 test("Enter on a focused option sends the reply carrying the pick and never presses the option; with nothing picked, Send stands held, and Enter sends nothing and says an option is missing", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const sent = heldMessages(repliedOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000090"));
   const pane = itemPane(page);
@@ -411,7 +364,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
     options: [{ label: "Email" }, { label: "Slack" }, { label: "Pager" }],
   });
   world.inboxes.set(BILLING.id, [several, RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const sent = heldMessages(repliedOn(several, "c1b2c3d4-0000-4000-8000-000000000091"));
   const pane = itemPane(page);
@@ -720,10 +673,10 @@ const THRESHOLD_ANSWERED: InboxItem = {
   updatedAt: 6_000,
 };
 
-test("an answer leaves Needs you the moment it is sent, its plan's count dropping with it, and no stale read brings it back: not its plan's own held read, nor the list's once another plan's item is chosen, nor main's word before it caught up", async () => {
-  const { page } = mount();
+test("an answer leaves Needs you the moment it is sent, its row staying where it stood and its plan's count dropping with it", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const { sent, answer } = gatedAnswers();
+  const { sent } = gatedAnswers();
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
 
   answerWithNote(page, "Use 90%");
@@ -742,38 +695,6 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
-
-  await act(async () => answer({ item: THRESHOLD_ANSWERED }));
-  await settle();
-  // The plan's inbox is pushed as it stood before the answer, read before it was taken.
-  await act(async () =>
-    world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [THRESHOLD, RETRY] }),
-  );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
-
-  // The choice moves to another plan's item, so the answered one's plan is drawn from the list's read, which main has not moved yet.
-  act(() => rowNamed(page, "Expire after 7 days?").click());
-  await settle();
-  assert.equal(readTitle(page), "Expire after 7 days?");
-  assert.equal(
-    needsYouMark(rowNamed(page, "Alert at 80%?")),
-    "",
-    "the stale read brings nothing back",
-  );
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
-
-  // Main catches up, and the list reads the plan again, holding the answer itself.
-  world.inboxes.set(BILLING.id, [THRESHOLD_ANSWERED, RETRY]);
-  act(() =>
-    world.setHolding([
-      { taskId: BILLING.id, items: 2, updatedAt: 6_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
-    ]),
-  );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
-  assert.equal(readTitle(page), "Expire after 7 days?", "the choice never jumps back");
 });
 
 /** The list as drawn, each row by its title alone and each group by its name, what marks a row and what a group counts left out, so a row that moves or changes group is told from one that only changes its marks. */
@@ -786,7 +707,7 @@ function placesOf(page: HTMLElement): string[] {
 test("on To do, answering the chosen item draws its row gray where it stood, and choosing another row clears it", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
@@ -823,7 +744,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
 
@@ -879,7 +800,7 @@ test.for(ANSWER_VIEWS)(
 );
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { answer } = gatedAnswers();
   answerWithNote(page, "Use 90%");
@@ -932,7 +853,7 @@ test("a nod on a notice the agent posted over first is not taken: the notice sta
 });
 
 test("an item its agent posts again after it was answered needs you again once a read holds the newer revision, though the list's older read still stands for it elsewhere", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { answer } = gatedAnswers();
   answerWithNote(page, "Use 90%");

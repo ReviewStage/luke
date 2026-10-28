@@ -89,7 +89,6 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
-import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { ensureOperator } from "./coder-host/operator.js";
 import {
   agentPullRequestReach,
@@ -126,6 +125,7 @@ import {
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
@@ -486,15 +486,6 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       };
     }),
     /**
-     * The calls into the agent: none, since Luke takes no calls. A released
-     * desktop still asks on every agent tab, so the read still answers, for
-     * an agent the caller reaches and as not found for any other.
-     */
-    calls: signedIn.calls.effect(function* ({ input, context }) {
-      yield* reachedAgentById(context.userId, input.id);
-      return { transcript: { calls: [], earlierOmitted: false } };
-    }),
-    /**
      * The agent changed for what follows, answered as it then stands. A
      * title renames it, written whole, or cleared where it is empty, so the
      * tab falls back to the model's name. `archived` archives the agent,
@@ -648,7 +639,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * What the reviewer and label pickers offer, of the agent's repository
      * rather than its pull request, on a token minted for it: its labels, its
-     * collaborators named against the workspace's members, and the teams
+     * assignable users named against the workspace's members, and the teams
      * that reach it.
      */
     reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {

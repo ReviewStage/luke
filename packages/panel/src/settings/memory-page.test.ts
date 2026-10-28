@@ -10,18 +10,20 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { chooseMenuItem, menuItems } from "../testing/phone-head.js";
 import { MemorySection } from "./memory-page.js";
 
 /**
  * Settings › Memory over a bridge answering as the host would: the memories
  * of the workspace Settings shows are read for that workspace, listed in the
- * service's order with their words whole and whose words they are; Forget
- * stands only on a memory the reader may forget, asks first in the confirm
- * dialog, and the memory leaves the list once the service says so; a
- * private memory is marked Only you and a shared one is not; a forget
- * that fails says so in the dialog and keeps the memory listed; another
- * workspace reads its own memories; and a read that fails offers to try
- * again. Synthetic workspaces, members, and memories.
+ * service's order with their words whole and whose words they are; the workspace's and the reader's own stand
+ * on two sides of a switcher, each counting what the search leaves of it;
+ * Forget is offered from a memory's ⋯, unavailable on one the reader may not
+ * forget, asks first in the confirm dialog, and the memory leaves the list
+ * once the service says so; several chosen are forgotten one after another
+ * on one question; a forget that fails says so in the dialog and keeps the
+ * memory listed; another workspace reads its own memories; and a read that
+ * fails offers to try again. Synthetic workspaces, members, and memories.
  */
 
 const READER = "user-reader";
@@ -164,7 +166,7 @@ async function mount(
   };
 }
 
-const rows = (page: HTMLElement) => [...page.querySelectorAll<HTMLElement>(".menu-row")];
+const rows = (page: HTMLElement) => [...page.querySelectorAll<HTMLElement>(".memory-row")];
 
 const words = (page: HTMLElement) =>
   rows(page).map((row) => row.querySelector(".memory-text")?.textContent);
@@ -181,14 +183,23 @@ const button = (within: Element, label: string) =>
 const dialog = () =>
   document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 
-/** A memory's Forget button, which stands on the row itself rather than behind a ⋯. */
-const forgetButton = (page: HTMLElement, memory: MemorySummary) =>
-  rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-label="Forget"]') ??
-  assert.fail("no Forget button");
+/** A memory row's own press, which ⌘ chooses. */
+const pressOf = (page: HTMLElement, memory: MemorySummary) =>
+  rowOf(page, memory).querySelector<HTMLButtonElement>("[data-card-press]") ??
+  assert.fail("no press on the row");
 
-/** Presses Forget on a memory's row, which puts its question up. */
+/** Opens a memory's ⋯. */
+function openMenu(page: HTMLElement, memory: MemorySummary): void {
+  const more =
+    rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-label="Memory actions"]') ??
+    assert.fail("no ⋯ on the row");
+  act(() => more.click());
+}
+
+/** Chooses Forget from a memory's ⋯, which puts its question up. */
 function askForget(page: HTMLElement, memory: MemorySummary): void {
-  act(() => forgetButton(page, memory).click());
+  openMenu(page, memory);
+  chooseMenuItem("Forget");
 }
 
 /** Asks Forget, then presses the dialog's own Forget; answers whether it asked before forgetting. */
@@ -198,6 +209,33 @@ async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean
   act(() => button(dialog(), "Forget").click());
   await settle();
   return askedFirst;
+}
+
+/** The switcher's sides, each its name and its count. */
+const sides = (page: HTMLElement) =>
+  [...page.querySelectorAll<HTMLElement>('[aria-label="Whose memories"] [role="radio"]')].map(
+    (side) => side.textContent,
+  );
+
+/** Shows the switcher's side whose name starts with `name`. */
+function showSide(page: HTMLElement, name: string): void {
+  const side =
+    [...page.querySelectorAll<HTMLElement>('[aria-label="Whose memories"] [role="radio"]')].find(
+      (each) => each.textContent?.startsWith(name),
+    ) ?? assert.fail(`no ${name} side`);
+  act(() => side.click());
+}
+
+/** Types `query` over whatever the search holds, as the developer would. */
+async function searchFor(page: HTMLElement, query: string): Promise<void> {
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Search memories"]') ??
+    assert.fail("no search");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, query);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
 }
 
 test("what Luke kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
@@ -214,8 +252,10 @@ test("what Luke kept in the workspace is read for it and listed in the service's
     /keep what you settle in Acme and recall it in later tasks/u,
   );
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
-  assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Kept by You · Oct 12, 2026/u);
-  assert.match(rowOf(page, TESTS).textContent ?? "", /Kept by Dean · /u);
+  const keeper = (memory: MemorySummary) =>
+    rowOf(page, memory).querySelector(".luke-comment-head")?.textContent ?? "";
+  assert.match(keeper(DEPLOYS), /^You/u);
+  assert.match(keeper(TESTS), /^Dean/u);
   assert.ok(
     rowOf(page, DEPLOYS).closest(".ph-no-capture"),
     "the rows are under the unrecorded class",
@@ -256,6 +296,47 @@ test("Forget asks first, then forgets the memory for good and lists what the ser
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
+test("a memory a search hid comes back unchosen, so a later act on what is chosen leaves it be", async () => {
+  const { page } = await mount();
+  act(() => {
+    pressOf(page, DEPLOYS).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    );
+  });
+
+  await searchFor(page, "store");
+  await searchFor(page, "");
+
+  // Note that the element is checked as a yes or no, because a failure's diff of an element would print the whole document.
+  assert.ok(page.querySelector('[role="toolbar"]') === null, "nothing stands chosen");
+  assert.equal(pressOf(page, DEPLOYS).getAttribute("data-selected"), null);
+});
+
+test("a keeper the filter keeps stays named by their chip on the side that holds none of theirs", async () => {
+  stored = [
+    DEPLOYS,
+    TESTS,
+    {
+      ...DEPLOYS,
+      id: "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a7b",
+      text: "Answer in short paragraphs.",
+      private: true,
+    },
+  ];
+  const { page } = await mount();
+  const filter =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Filter"]') ??
+    assert.fail("no Filter");
+  act(() => filter.click());
+  chooseMenuItem("Kept by");
+  chooseMenuItem("Dean");
+
+  showSide(page, "Only you");
+
+  assert.match(page.textContent ?? "", /Kept by Dean/u);
+  assert.deepEqual(words(page), []);
+});
+
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {
   refuseForget = true;
   const { page } = await mount();
@@ -269,28 +350,86 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
   );
 });
 
-test("a private memory is marked Only you, a shared one is not, and its Forget says only the reader's agents lose it", async () => {
+test("a private memory stands on the reader's own side, counted there, and its Forget says only the reader's agents lose it", async () => {
   stored = [{ ...DEPLOYS, private: true }, TESTS];
   const { page } = await mount();
 
-  assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Only you/u);
-  assert.doesNotMatch(rowOf(page, TESTS).textContent ?? "", /Only you/u);
-  act(() => forgetButton(page, DEPLOYS).click());
+  assert.deepEqual(sides(page), ["Acme1", "Only you1"]);
+  assert.deepEqual(words(page), [TESTS.text]);
+  showSide(page, "Only you");
+  assert.deepEqual(words(page), [DEPLOYS.text]);
+  askForget(page, DEPLOYS);
   assert.match(dialog().textContent ?? "", /Your Luke will not recall it again/u);
 });
 
-test("a memory whose member's account is gone reads as kept by a former member", async () => {
-  stored = [{ ...TESTS, keptBy: null }];
+test("the search keeps the memories whose words or keeper hold it, and each side counts what it leaves there", async () => {
+  const mine: MemorySummary = {
+    ...DEPLOYS,
+    id: "3d4e5f6a-7b8c-4d9e-8f0a-1b2c3d4e5f6a",
+    text: "My previews deploy to Vercel's staging team.",
+    private: true,
+  };
+  stored = [DEPLOYS, TESTS, mine];
   const { page } = await mount();
 
-  assert.match(rowOf(page, TESTS).textContent ?? "", /Kept by a former member · /u);
+  await searchFor(page, "vercel");
+
+  assert.deepEqual(sides(page), ["Acme1", "Only you1"]);
+  assert.deepEqual(words(page), [DEPLOYS.text]);
+  await searchFor(page, "dean");
+  assert.deepEqual(sides(page), ["Acme1", "Only you0"]);
+  assert.deepEqual(words(page), [TESTS.text]);
 });
 
-test("a memory the reader may not forget offers no Forget at all", async () => {
+test("a memory the reader may not forget offers Forget unavailable, saying who may", async () => {
   const { page } = await mount();
 
-  assert.equal(rowOf(page, TESTS).querySelector('button[aria-label="Forget"]'), null);
-  assert.ok(forgetButton(page, DEPLOYS));
+  openMenu(page, TESTS);
+
+  assert.deepEqual(
+    menuItems().find((item) => item.label === "Forget"),
+    { label: "Forget", disabled: true },
+  );
+  assert.match(
+    document.querySelector('[role="menu"]')?.textContent ?? "",
+    /Only Dean, or an owner or admin/u,
+  );
+});
+
+test("several memories chosen are forgotten on one question, one after another, those the reader may not forget left and said so", async () => {
+  const pricing: MemorySummary = {
+    ...DEPLOYS,
+    id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+    text: "Pricing lives in the billing service.",
+  };
+  stored = [DEPLOYS, pricing, TESTS];
+  const { page } = await mount();
+
+  for (const memory of [DEPLOYS, pricing, TESTS]) {
+    act(() => {
+      pressOf(page, memory).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+      );
+    });
+  }
+  act(() => button(page.querySelector('[role="toolbar"]') ?? page, "Forget").click());
+  assert.match(
+    dialog().textContent ?? "",
+    /Forget 3 memories\?.*1 memory you may not forget stays\./u,
+  );
+  act(() => button(dialog(), "Forget").click());
+  await settle();
+
+  assert.deepEqual(
+    sent
+      .filter((request) => request.kind === ACT_KIND.MEMORIES_FORGET)
+      .map((request) => request.payload),
+    [
+      { workspaceId: ACME.id, id: DEPLOYS.id },
+      { workspaceId: ACME.id, id: pricing.id },
+    ],
+  );
+  assert.deepEqual(words(page), [TESTS.text]);
 });
 
 test("showing another workspace reads that workspace's memories in place of the first's", async () => {

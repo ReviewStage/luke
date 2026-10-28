@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
+import { createChannel } from "@luke/database/models/channel-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { queueMacCommand } from "@luke/database/models/mac-command-store";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -10,13 +11,18 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
+import { INBOX_ASK } from "@luke/features/inbox-wire";
 import {
+  ACCOUNT_INBOX_ITEMS,
+  accountInboxItemsLiveAnswerSchema,
+  accountInboxItemsLiveRowsSchema,
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
   LIVE_USER_QUERY,
   liveDigestOf,
+  liveDigestOn,
   macCommandsLiveAnswerSchema,
   macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
@@ -40,10 +46,11 @@ import {
 } from "@luke/features/workspace-live";
 import type { WireBoundaryInput } from "@luke/wire";
 import { sql } from "drizzle-orm";
-import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { moveChannelThread, postInboxThread } from "../inbox/inbox-store.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
@@ -232,10 +239,12 @@ const askTask = (options: {
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
+  /** The client the live statements run on; the test's database's own where left out. */
+  readonly sql?: SqlClient.SqlClient;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(SqlClient.SqlClient, options.sql ?? (yield* SqlClient.SqlClient)),
       Layer.succeed(Database, yield* Database),
       // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
@@ -430,6 +439,204 @@ it.layer(getTestDB())("a task's live reads", (it) => {
   );
 });
 
+/** A row a statement answered, column by column. */
+type KeptRow = Readonly<Record<string, unknown>>;
+
+/**
+ * The test's database client, keeping every row a statement run on it as
+ * text (`unsafe`, which a poll's sealer reads through) answers, so a test
+ * sees what left the database rather than how often it was asked.
+ */
+function keepingRows(sql: SqlClient.SqlClient, kept: KeptRow[]): SqlClient.SqlClient {
+  return new Proxy(sql, {
+    get: (target, key, receiver) =>
+      key === "unsafe"
+        ? (text: string, params?: ReadonlyArray<unknown>) =>
+            Effect.tap(target.unsafe<KeptRow>(text, params), (rows) =>
+              Effect.sync(() => kept.push(...rows)),
+            )
+        : Reflect.get(target, key, receiver),
+  });
+}
+
+/** The rows kept that carry a column of the read's own, rather than a look's digest alone. */
+const rowsOfTheRead = (kept: readonly KeptRow[]) =>
+  kept.filter((row) => Object.keys(row).some((column) => column !== "digest"));
+
+it.layer(getTestDB())("a held live read's looks", (it) => {
+  const path = "/api/live/task-pages";
+
+  /** One page shown on the task, so its pages read has a row to carry. */
+  const showPage = (userId: string, taskId: string) =>
+    Effect.map(
+      writePage(
+        userId,
+        taskPageOwner(taskId),
+        { title: "Invite funnel", html: "<p>One</p>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
+      Option.getOrThrow,
+    );
+
+  it.effect(
+    "a poll held over rows that never move carries none of them off the database: it looks at their digests alone to the hold's end, and answers unchanged",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        yield* showPage(dana, started.id);
+        const kept: KeptRow[] = [];
+        const sql = keepingRows(yield* SqlClient.SqlClient, kept);
+
+        const first = yield* askTask({ bearer: dana, taskId: started.id, path, sql });
+        const seen = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body);
+        assert.equal(rowsOfTheRead(kept).length, 1, "a first read carries the page's row");
+        const digest = liveDigestOf(seen.queries);
+        assert.ok(digest !== undefined);
+
+        const looked = kept.length;
+        const unchanged = yield* Effect.forkChild(
+          askTask({ bearer: dana, taskId: started.id, path, sql, poll: true, after: digest }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+          (yield* Fiber.join(unchanged)).body,
+        );
+        assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
+        assert.equal(liveDigestOf(held.queries), digest);
+        const hold = kept.slice(looked);
+        assert.ok(hold.length > 0, "the hold looked at the rows' digests");
+        assert.deepEqual(rowsOfTheRead(hold), [], "no row of the read left the database");
+      }),
+  );
+
+  it.effect(
+    "a poll whose rows moved is answered them with the digest they stand at, so a reader that holds it is held again rather than answered at once",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const poll = (after: string) =>
+          askTask({ bearer: dana, taskId: started.id, path, poll: true, after });
+        const first = yield* askTask({ bearer: dana, taskId: started.id, path });
+        const digest = liveDigestOf(
+          Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body).queries,
+        );
+        assert.ok(digest !== undefined);
+
+        const moved = yield* Effect.forkChild(poll(digest));
+        yield* TestClock.adjust(Duration.seconds(3));
+        const shown = yield* showPage(dana, started.id);
+        yield* TestClock.adjust(Duration.seconds(3));
+        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+          (yield* Fiber.join(moved)).body,
+        );
+        assert.deepEqual(
+          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+            pages: answer.queries.pages.rows,
+          }).pages.map((page) => [page.id, page.version]),
+          [[shown.id, 1]],
+        );
+        const standing = liveDigestOf(answer.queries);
+        assert.ok(standing !== undefined && standing !== digest);
+
+        const again = yield* Effect.forkChild(poll(standing));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+          (yield* Fiber.join(again)).body,
+        );
+        assert.equal(held.queries.pages.rows, undefined, "the rows answered stand at their digest");
+        assert.equal(liveDigestOf(held.queries), standing);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the account's inbox items' live read", (it) => {
+  it.effect(
+    "a poll held on where the items stand stays held when only the reader's `since` moved past the items it was answered, and is answered once an item moves between channels",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const task = yield* startTask(dana, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(dana, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        const posted = yield* postInboxThread(
+          { userId: dana, taskId: task.id, agentId: started.value.agent.id },
+          {
+            key: "review",
+            title: "Review the invite flow",
+            body: "It is up.",
+            ask: { type: INBOX_ASK.DO, steps: [] },
+          },
+        );
+        const itemsPath = (query: Readonly<Record<string, string>>) =>
+          `/api/live/inbox-items?${new URLSearchParams(query)}`;
+
+        const first = yield* ask({ bearer: dana, path: itemsPath({}) });
+        assert.equal(first.status, HOSTED_HTTP_STATUS.OK);
+        const seen = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(first.body);
+        assert.equal(seen.queries.items.rows?.length, 1, "the item is carried whole");
+        const after = liveDigestOn(seen.queries, ACCOUNT_INBOX_ITEMS.HELD_ON);
+        assert.ok(after !== undefined);
+
+        // The reader holds every item now, so it asks only for those changed from here on.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const since = String(yield* Clock.currentTimeMillis);
+        const poll = yield* Effect.forkChild(
+          ask({
+            bearer: dana,
+            path: itemsPath({ since, [LIVE_POLL.QUERY]: LIVE_POLL.ON, [LIVE_POLL.AFTER]: after }),
+          }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(
+          (yield* Fiber.join(poll)).body,
+        );
+        assert.equal(held.queries.stamps.rows, undefined, "the poll was held to its end");
+        assert.equal(liveDigestOn(held.queries, ACCOUNT_INBOX_ITEMS.HELD_ON), after);
+
+        // A move between channels changes nothing of the item but its channel, which its stamp carries.
+        const reviews = Result.getOrThrow(
+          yield* createChannel(
+            dana,
+            task.workspaceId,
+            { name: "reviews", purpose: "Where reviews wait.", project: false },
+            new Date(yield* Clock.currentTimeMillis),
+          ),
+        );
+        const itemId = Result.getOrThrow(posted).id;
+        assert.ok(Result.isSuccess(yield* moveChannelThread(dana, itemId, reviews.id)));
+        const again = yield* Effect.forkChild(
+          ask({
+            bearer: dana,
+            path: itemsPath({ since, [LIVE_POLL.QUERY]: LIVE_POLL.ON, [LIVE_POLL.AFTER]: after }),
+          }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(
+          (yield* Fiber.join(again)).body,
+        );
+        assert.deepEqual(
+          moved.queries.stamps.rows === undefined
+            ? undefined
+            : Schema.decodeUnknownSync(accountInboxItemsLiveRowsSchema.fields.stamps)(
+                moved.queries.stamps.rows,
+              ).map((stamp) => stamp.channelId),
+          [reviews.id],
+          "the moved item's stamp is answered",
+        );
+      }),
+  );
+});
+
 /** The procedures answering an agent's transcript's live read as `bearer`, the worker's where `call` names one. */
 const askTranscript = (options: {
   readonly bearer: string;
@@ -576,20 +783,29 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
       }),
   );
 
-  it.effect("a polled statement's rows in another order digest alike", () =>
-    Effect.gen(function* () {
-      const sealer = pollSealer(yield* SqlClient.SqlClient);
-      const one = yield* sealer.seal({
-        sql: "select * from (values (1), (2)) as rows(n) order by n",
-        params: [],
-      });
-      const other = yield* sealer.seal({
-        sql: "select * from (values (1), (2)) as rows(n) order by n desc",
-        params: [],
-      });
-      assert.notDeepEqual(one.rows, other.rows);
-      assert.equal(one.digest, other.digest);
-    }),
+  it.effect(
+    "a polled statement's rows in another order digest alike, and a look at its digest alone reads the digest its rows are answered with, none included",
+    () =>
+      Effect.gen(function* () {
+        const sealer = pollSealer(yield* SqlClient.SqlClient);
+        const ascending = {
+          sql: "select * from (values (1), (2)) as rows(n) order by n",
+          params: [],
+        };
+        const one = yield* sealer.seal(ascending);
+        const other = yield* sealer.seal({
+          sql: "select * from (values (1), (2)) as rows(n) order by n desc",
+          params: [],
+        });
+        assert.notDeepEqual(one.rows, other.rows);
+        assert.equal(one.digest, other.digest);
+        assert.equal((yield* sealer.digest(ascending)).digest, one.digest);
+
+        const none = { sql: "select * from (values (1)) as rows(n) where n > $1", params: [1] };
+        const empty = yield* sealer.seal(none);
+        assert.deepEqual(empty.rows, []);
+        assert.equal((yield* sealer.digest(none)).digest, empty.digest);
+      }),
   );
 
   it.effect(

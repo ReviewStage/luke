@@ -30,14 +30,14 @@ import { agentName } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { sweepAutomations } from "../../automations/automation-sweep.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -45,7 +45,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT } from "./instructions.js";
 import { ensureOperator } from "./operator.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
@@ -88,7 +88,6 @@ function recordingEve(refusing = false) {
     send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   /** The sessions opened over the conversation named. */
   const openedOver = (conversationId: string) =>
@@ -493,7 +492,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
         assert.equal(again.agent.id, first.agent.id);
         const firstOpenings = EVE.openedOver(first.agent.conversationId);
         assert.equal(firstOpenings.length, 1, "one opening, and none for the repeat ensure");
-        assert.equal(firstOpenings[0]?.turn, BRAIN_HOST_TURN.TYPED);
+        assert.equal(firstOpenings[0]?.turn, EVE_HOST_TURN.TYPED);
         assert.equal(EVE.openedOver(reset.agent.conversationId).length, 1);
         const db = yield* Database;
         const senders = yield* db

@@ -7,7 +7,6 @@ import { Database } from "../core/query.js";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "../models/columns.js";
 import { user } from "../schemas/auth.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import type { HostedStoreTestRun } from "./hosted-store-database.js";
 
@@ -33,8 +32,6 @@ const IdRowSchema = Schema.Struct({ id: Schema.String });
 type ConversationInsert = typeof conversations.$inferInsert;
 type MessageInsert = typeof messages.$inferInsert;
 type TurnInsert = typeof turns.$inferInsert;
-type VoiceSessionInsert = typeof voiceSessions.$inferInsert;
-type VoiceSegmentInsert = typeof voiceTranscriptSegments.$inferInsert;
 
 export interface ConversationRow {
   readonly userId: string;
@@ -283,120 +280,6 @@ export function readMessagesByConversationTyped(
           .orderBy(messages.seq),
       ),
       (rows) => rows.map((row) => decodeMessageRow(row)),
-    ),
-  );
-}
-
-export interface VoiceSessionInsertRow {
-  readonly userId: string;
-  readonly liveSessionId: string;
-  readonly delegationMode: VoiceSessionInsert["delegationMode"];
-  readonly deviceId?: string | null | undefined;
-  readonly closedAt?: Date | null | undefined;
-  readonly closeReason?: VoiceSessionInsert["closeReason"];
-  readonly usage?: VoiceSessionInsert["usage"];
-}
-
-export function insertVoiceSession(
-  run: HostedStoreTestRun,
-  row: VoiceSessionInsertRow,
-): Promise<string> {
-  return run(
-    Effect.gen(function* () {
-      const db = yield* Database;
-      const rows = yield* db
-        .insert(voiceSessions)
-        .values({
-          userId: row.userId,
-          deviceId: row.deviceId ?? null,
-          liveSessionId: row.liveSessionId,
-          delegationMode: row.delegationMode,
-          closedAt: row.closedAt ?? null,
-          closeReason: row.closeReason ?? null,
-          usage: row.usage ?? null,
-        })
-        .returning({ id: voiceSessions.id });
-      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
-    }),
-  );
-}
-
-const VoiceSessionRowSchema = Schema.Struct({
-  id: Schema.String,
-  userId: Schema.String,
-  deviceId: Schema.NullOr(Schema.String),
-  liveSessionId: Schema.String,
-  agentId: Schema.NullOr(Schema.String),
-  delegationMode: Schema.String,
-  startedAt: InstantColumnSchema,
-  closedAt: Schema.NullOr(InstantColumnSchema),
-  closeReason: Schema.NullOr(Schema.String),
-  usage: Schema.NullOr(Schema.Unknown),
-  detachedAt: Schema.NullOr(InstantColumnSchema),
-});
-export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
-const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
-
-export function readVoiceSessionsByUserTyped(
-  run: HostedStoreTestRun,
-  userId: string,
-): Promise<readonly VoiceSessionRow[]> {
-  return run(
-    Effect.map(
-      Database.use((db) => db.select().from(voiceSessions).where(eq(voiceSessions.userId, userId))),
-      (rows) => rows.map((row) => decodeVoiceSessionRow(row)),
-    ),
-  );
-}
-
-export interface VoiceSegmentInsertRow {
-  readonly voiceSessionId: string;
-  readonly seq: number;
-  readonly role: VoiceSegmentInsert["role"];
-  readonly text: string;
-  readonly startMs: number;
-  readonly endMs: number;
-}
-
-export function insertVoiceTranscriptSegment(
-  run: HostedStoreTestRun,
-  row: VoiceSegmentInsertRow,
-): Promise<void> {
-  return run(
-    Effect.asVoid(
-      Database.use((db) =>
-        db.insert(voiceTranscriptSegments).values({
-          voiceSessionId: row.voiceSessionId,
-          seq: row.seq,
-          role: row.role,
-          text: row.text,
-          startMs: row.startMs,
-          endMs: row.endMs,
-        }),
-      ),
-    ),
-  );
-}
-
-export function readVoiceSessionByLiveSessionId(run: HostedStoreTestRun, liveSessionId: string) {
-  return run(
-    Database.use((db) =>
-      db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)),
-    ),
-  );
-}
-
-export function readVoiceTranscriptSegmentsBySession(
-  run: HostedStoreTestRun,
-  voiceSessionId: string,
-) {
-  return run(
-    Database.use((db) =>
-      db
-        .select()
-        .from(voiceTranscriptSegments)
-        .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId))
-        .orderBy(voiceTranscriptSegments.seq),
     ),
   );
 }

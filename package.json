@@ -32,7 +32,6 @@
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "test": "node scripts/turbo.mjs run test:vitest --concurrency=1",
-    "trace:export": "tsx tools/trace-export/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "lint-staged": {

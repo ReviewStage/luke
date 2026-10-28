@@ -1,4 +1,5 @@
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
+import { CLAUDE_CODE_UNRECORDED_TOOL } from "@luke/features/agent-tools";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
@@ -13,7 +14,7 @@ import {
   sessionKey,
   TURN_FAILURE,
 } from "../../core.js";
-import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN, EVE_HOST_TURN_KIND } from "../eve-host/bounds.js";
 import {
   NATIVE_ENDING,
   NATIVE_MOMENT,
@@ -48,6 +49,9 @@ import {
  * (`runner-events-app.ts`), so a test reads what a stream amounts to
  * without a database.
  */
+
+/** The harness's own tools a call of which the record leaves out without reporting it. */
+const UNRECORDED_TOOLS: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_UNRECORDED_TOOL));
 
 /** A step's words: those it completed, those still forming, and how much of them the writer was told. */
 const DraftSchema = Schema.Struct({
@@ -95,9 +99,6 @@ const TurnSchema = Schema.Struct({
   told: Schema.Number,
   /** How many steps the turn has opened. */
   steps: Schema.Number,
-  /** Whether a line of Luke's was already taken into the turn, so a later one joined it: false from its opening until the
-   * first, and absent on a turn saved before this was kept, which is read as taken, as every such turn was bound. */
-  taken: Schema.optionalKey(Schema.Boolean),
   step: Schema.optionalKey(StepSchema),
   /** The calls the turn holds, by id, under the name each is stored under. */
   calls: Schema.Record(Schema.String, Schema.String),
@@ -158,7 +159,7 @@ export const NATIVE_WRITE = {
   ENQUEUE: "enqueue",
   /** Hand the writer one event of the turn. */
   EVENT: "event",
-  /** Take the awaiting line written under the client id into the turn, and bind the ask delivered under it, a call's, to the turn. */
+  /** Take the awaiting line written under the client id into the turn. */
   TAKE_LINE: "take_line",
   /** Record the harness's session id on the conversation. */
   SESSION: "session",
@@ -179,8 +180,6 @@ export type NativeWrite =
       readonly kind: typeof NATIVE_WRITE.TAKE_LINE;
       readonly turnId: string;
       readonly clientId: string;
-      /** How many steps of the turn had begun where the line joined one under way, zero among them; none where it opened the turn. */
-      readonly joinedAfterStep?: number;
     }
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
   | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
@@ -275,9 +274,9 @@ class Fold {
     if (held !== undefined) return held;
     const id = nativeTurnId(this.#context.conversationId, this.#context.sequence);
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
-    const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
+    const { origin, trigger } = EVE_HOST_TURN_KIND[EVE_HOST_TURN.TYPED];
     const opened = this.#tell(
-      { id, told: 0, steps: 0, calls: {}, taken: false, openedAt: this.#context.now },
+      { id, told: 0, steps: 0, calls: {}, openedAt: this.#context.now },
       { kind: RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
     );
     this.#setTurn(opened);
@@ -348,7 +347,11 @@ class Fold {
 
   #toolStarted(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.TOOL_STARTED }>): void {
     if (!this.#context.registered(moment.name)) {
-      this.#context.report(`A call to ${moment.name} names no stored tool and is not recorded.`);
+      // Note that a call of the harness's own unrecorded tools is left out without a word,
+      // because every launch makes them and none is work a record could miss.
+      if (!UNRECORDED_TOOLS.has(moment.name)) {
+        this.#context.report(`A call to ${moment.name} names no stored tool and is not recorded.`);
+      }
       return;
     }
     const turn = this.#step(undefined);
@@ -460,20 +463,11 @@ class Fold {
   fold(moment: NativeMoment): void {
     switch (moment.kind) {
       case NATIVE_MOMENT.LINE_ACCEPTED: {
-        // Note that a line taken into a turn another line already opened joined it at the steps begun so
-        // far, none among them, which is where a call's ask that joined it is told from and what keeps its
-        // Stop its own, as eve's relay binds one (`brain-host/relay.ts`). The turn's first line has none,
-        // though the harness may have opened the turn a moment before it named the line (Codex does). A turn saved
-        // before `taken` was kept reads as taken, so a call joining it after a deploy still stops only its own ask.
-        const before = this.state.turn;
-        const joined = before === undefined || before.taken === false ? undefined : before.steps;
         const turn = this.turn();
-        this.#setTurn({ ...turn, taken: true });
         this.writes.push({
           kind: NATIVE_WRITE.TAKE_LINE,
           turnId: turn.id,
           clientId: moment.clientId,
-          ...(joined === undefined ? undefined : { joinedAfterStep: joined }),
         });
         return;
       }

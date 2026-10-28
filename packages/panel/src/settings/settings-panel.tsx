@@ -15,6 +15,7 @@ import { AccountSection } from "./account-section.js";
 import { AppearanceSection } from "./appearance-page.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 import { ExperimentalPage } from "./experimental-page.js";
+import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
@@ -24,6 +25,7 @@ import { PrivacySection } from "./privacy-section.js";
 import { settingsRowsInput, shownWorkspace } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { SkillsPage } from "./skills-page.js";
+import { TasksSection } from "./tasks-section.js";
 import { UpdatesSection } from "./updates.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 import { useSettingsWrites } from "./writes.js";
@@ -93,6 +95,7 @@ export function SettingsPanel({
               onDeleteAccount={onDeleteAccount}
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
+            {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
         ) : (
@@ -121,6 +124,8 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
+
+      {view === SETTINGS_VIEW.HOSTS ? <HostsSection signedIn={signedIn} /> : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />

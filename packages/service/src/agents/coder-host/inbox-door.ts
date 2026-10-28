@@ -15,7 +15,7 @@ import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { Effect, Option } from "effect";
 import type { UnparsedWireValue } from "../../core.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   type ChannelToolResult,
   createAgentChannel,

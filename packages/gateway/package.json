@@ -3,10 +3,9 @@
   "version": "0.23.0",
   "private": true,
   "type": "module",
-  "description": "The Gateway: the one protocol between the desktop renderer and the host, and the trace record of what crosses it",
+  "description": "The Gateway: the one protocol between the desktop renderer and the host",
   "exports": {
     ".": "./src/index.js",
-    "./devtrace": "./src/devtrace.js",
     "./protocol": "./src/protocol.js",
     "./window-session": "./src/window-session.js"
   },
@@ -16,7 +15,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@luke/live": "workspace:*",
     "@luke/wire": "workspace:*",
     "effect": "catalog:"
   },

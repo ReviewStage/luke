@@ -16,6 +16,7 @@ import {
   DIALOG_VEIL,
   Dialog,
   DialogCard,
+  FailureNote,
   IconButton,
   IMAGE_OPENING,
   type ImageOpening,
@@ -32,6 +33,7 @@ import {
   VideoPlayer,
   ZoomImage,
 } from "@luke/ui";
+import { DIAGRAM_DRAWING } from "@luke/ui/diagram-contract";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -43,6 +45,7 @@ import {
   ZoomOutIcon,
 } from "lucide-react";
 import { useId, useState } from "react";
+import { DIAGRAM_REFUSED_LINE } from "../bundle-loader.js";
 import {
   copyImageThroughShell,
   copyThroughShell,
@@ -51,13 +54,14 @@ import {
 } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
+import { diagramAlt, useAppearance, useDrawing } from "../diagram-drawing.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { linkPressOf } from "./use-open-link.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
- * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a video played there, a text file drawn as every code is, or any other file by its icon with a way to save it.
+ * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a video played there, a Mermaid file drawn as its diagram, a text file drawn as every code is, or any other file by its icon with a way to save it.
  *
  * A picture opens fitted to the window, or at its own pixels where the place
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
@@ -66,7 +70,12 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
  * such as one an agent recorded and opened from its Expand,
  * plays at once as large as the card lets it, with the player's own
- * controls, Full screen among them (`@luke/ui`'s VideoPlayer).
+ * controls, Full screen among them (`@luke/ui`'s VideoPlayer). A Mermaid
+ * file (`.mmd`, `.mermaid`) is drawn as its diagram, through the diagram
+ * bundle a plan's fences draw through (`../diagram-drawing.ts`), and then
+ * shown, zoomed, and copied as a picture is; while it is drawn, or where
+ * Mermaid refused it, its code stands as a text file's does, with Copy text,
+ * a refusal saying so over it.
  *
  * The files of one message are walked in place with the arrows standing on
  * the dimmed window either side of the card, a press on a file's preview in
@@ -261,15 +270,16 @@ function viewerGroups(input: {
   readonly count: number;
   readonly walk: (step: number) => void;
   readonly text: string | undefined;
-  readonly image: boolean;
-  /** Whether the file is a video, which the place's action is offered for as a picture is. */
-  readonly video: boolean;
+  /** The picture shown, the file's own or its diagram's, which is copied and zoomed; none where no picture is shown. */
+  readonly picture: string | undefined;
+  /** Whether the file is a picture or a video, which the place's action is offered for. */
+  readonly media: boolean;
   readonly zoom: ImageZoom;
   readonly action: ViewerAction | undefined;
   readonly copyText: (words: string, label: string) => void;
   readonly copyImage: (url: string, label: string) => void;
 }): MenuAction[][] {
-  const { file, at, count, walk, text, image, video, zoom, action } = input;
+  const { file, at, count, walk, text, picture, media, zoom, action } = input;
   const place = `${String(at + 1)} of ${String(count)}`;
   const walking: MenuAction[] =
     count > 1
@@ -298,12 +308,12 @@ function viewerGroups(input: {
             onSelect: () => input.copyText(text, COPIED.TEXT),
           },
         ]),
-    ...(image
+    ...(picture !== undefined
       ? [
           {
             label: `Copy ${COPY_WHAT.IMAGE}`,
             icon: <CopyIcon aria-hidden="true" />,
-            onSelect: () => input.copyImage(file.url, COPIED.IMAGE),
+            onSelect: () => input.copyImage(picture, COPIED.IMAGE),
           },
           {
             label: VIEWER_LABEL.ZOOM_OUT,
@@ -319,7 +329,7 @@ function viewerGroups(input: {
       : []),
   ];
   const keeping: MenuAction[] = [
-    ...(action === undefined || !(image || video) ? [] : actionItems(action, file)),
+    ...(action === undefined || !media ? [] : actionItems(action, file)),
     {
       label: VIEWER_LABEL.DOWNLOAD,
       icon: <DownloadIcon aria-hidden="true" />,
@@ -341,19 +351,29 @@ function actionItems(action: ViewerAction, file: FileChip): MenuAction[] {
     : [{ label: action.label, icon, onSelect: () => action.onOpen(address) }];
 }
 
-/** The file shown: the picture, the video playing, its text drawn as every code is, or the icon, name, and size over Download. */
+/** How a Mermaid file's diagram stands: its picture once drawn, whether Mermaid refused it, and the Retry that loads the bundle again where it failed to. */
+interface DiagramShown {
+  readonly picture: string | undefined;
+  readonly refused: boolean;
+  readonly retry: (() => void) | undefined;
+}
+
+/** The file shown: the picture or the diagram, the video playing, its text drawn as every code is, or the icon, name, and size over Download. */
 function AttachmentBody({
   file,
   base64,
   text,
+  diagram,
   zoom,
 }: {
   file: FileChip;
   base64: string;
   text: string | undefined;
+  diagram: DiagramShown;
   zoom: ImageZoom;
 }): React.JSX.Element {
-  if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
+  const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  if (image || diagram.picture !== undefined) {
     return (
       // Two fingers anywhere on the frame pinch the picture (`@luke/ui`'s ZoomImage), never the page.
       <div
@@ -361,7 +381,11 @@ function AttachmentBody({
         className="attachment-viewer-body min-h-0 flex-auto grid touch-none place-items-center overflow-hidden bg-surface"
         {...DIALOG_VEIL}
       >
-        <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
+        <ZoomImage
+          zoom={zoom}
+          src={diagram.picture ?? file.url}
+          alt={image ? file.name : diagramAlt(text ?? "")}
+        />
       </div>
     );
   }
@@ -379,6 +403,9 @@ function AttachmentBody({
   if (text !== undefined) {
     return (
       <div className="attachment-viewer-body min-h-0 flex-auto attachment-viewer-lines mx-auto flex w-viewer-text flex-col bg-card-code">
+        {diagram.refused ? (
+          <FailureNote onRetry={diagram.retry}>{DIAGRAM_REFUSED_LINE}</FailureNote>
+        ) : null}
         <WholeFile
           name={file.name}
           text={text.replace(/\r\n/gu, "\n")}
@@ -441,7 +468,23 @@ export function AttachmentViewer({
   const copyText = useCopyToast();
   const copyImage = useImageCopyToast();
   const file = files[at];
-  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
+  const base64 = file === undefined ? "" : chipBase64(file);
+  const view = file === undefined ? ATTACHMENT_VIEW.OTHER : attachmentView(file);
+  const text =
+    view === ATTACHMENT_VIEW.TEXT || view === ATTACHMENT_VIEW.DIAGRAM
+      ? attachmentText(base64)
+      : undefined;
+  const drawn = useDrawing(view === ATTACHMENT_VIEW.DIAGRAM ? text : undefined, useAppearance());
+  const diagram: DiagramShown = {
+    picture: drawn.drawing?.kind === DIAGRAM_DRAWING.DRAWN ? drawn.drawing.url : undefined,
+    refused: drawn.drawing?.kind === DIAGRAM_DRAWING.REFUSED,
+    retry: drawn.retry,
+  };
+  // The picture shown, which is zoomed and copied: the file's own, or its diagram's once drawn.
+  const picture = view === ATTACHMENT_VIEW.IMAGE ? file?.url : diagram.picture;
+  const zoom = useImageZoom(file?.name ?? "", picture ?? file?.url ?? "", opening);
+  // The words Copy text copies, offered only where they are what is shown, so a diagram drawn offers Copy image alone.
+  const words = picture === undefined ? text : undefined;
   // A picture opened from its tile grows from it, and goes back into it
   // only while the picture it was opened on is the one shown. Note that the
   // place is asked beside the file's bytes, because two files may hold the
@@ -451,14 +494,14 @@ export function AttachmentViewer({
   const close = () => expand.close(onClose);
 
   if (file === undefined) return null;
-  const base64 = chipBase64(file);
-  const text = attachmentView(file) === ATTACHMENT_VIEW.TEXT ? attachmentText(base64) : undefined;
   // Note that the walk goes round from either end rather than stopping,
   // because a button that went disabled under the pointer would drop the
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
-  const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
-  const video = attachmentView(file) === ATTACHMENT_VIEW.VIDEO;
+  const image = picture !== undefined;
+  const video = view === ATTACHMENT_VIEW.VIDEO;
+  // The place's own action takes the file itself, so it is offered for a picture or a video, never a diagram's code.
+  const media = view === ATTACHMENT_VIEW.IMAGE || video;
   // A phone walks the files from its ⋯ and the arrow keys, with no room beside the card for the arrows or under it for the strip.
   const walking = !phone && files.length > 1;
   // A picture or a video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does,
@@ -495,7 +538,7 @@ export function AttachmentViewer({
     >
       <div
         className="attachment-viewer ph-no-capture flex size-full min-h-0 flex-col gap-luke-16"
-        data-view={attachmentView(file)}
+        data-view={view}
         data-opening={opening}
         data-hug={hug}
         {...DIALOG_VEIL}
@@ -557,9 +600,9 @@ export function AttachmentViewer({
                           at,
                           count: files.length,
                           walk,
-                          text,
-                          image,
-                          video,
+                          text: words,
+                          picture,
+                          media,
                           zoom,
                           action,
                           copyText,
@@ -590,10 +633,10 @@ export function AttachmentViewer({
                   {note === undefined || note === null ? null : (
                     <span className={`my-0 mr-auto ml-block-gap ${NOTE_CLASS}`}>{note}</span>
                   )}
-                  {text === undefined ? null : <CopyTextButton text={text} />}
-                  {image ? (
+                  {words === undefined ? null : <CopyTextButton text={words} />}
+                  {picture === undefined ? null : (
                     <>
-                      <CopyImageButton url={file.url} />
+                      <CopyImageButton url={picture} />
                       <HeaderButton
                         label={VIEWER_LABEL.ZOOM_OUT}
                         chord={ZOOM_CHORD.OUT}
@@ -607,9 +650,8 @@ export function AttachmentViewer({
                         icon={<ZoomInIcon aria-hidden="true" />}
                       />
                     </>
-                  ) : null}
-                  {action === undefined || !(image || video) ? null : action.address ===
-                    undefined ? (
+                  )}
+                  {action === undefined || !media ? null : action.address === undefined ? (
                     <Button icon={action.icon} onClick={() => action.onPress(file)}>
                       {action.label}
                     </Button>
@@ -629,7 +671,14 @@ export function AttachmentViewer({
                   />
                 </header>
               )}
-              <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
+              <AttachmentBody
+                key={at}
+                file={file}
+                base64={base64}
+                text={text}
+                diagram={diagram}
+                zoom={zoom}
+              />
             </DialogCard>
           </div>
           {walking ? (

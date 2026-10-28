@@ -7,7 +7,7 @@
  * orange instead, deep enough under the white in either appearance, so the
  * mark reads the same on the sidebar's ground and a banner's tint alike.
  * The mark is hidden from a screen reader; whatever wears it says why in
- * words beside it or in its pill, or names it (`TaskAgentsMark`).
+ * words beside it or in its pill.
  */
 
 /** The mark: a disc with a white exclamation, the size of the glyph it stands in for. */

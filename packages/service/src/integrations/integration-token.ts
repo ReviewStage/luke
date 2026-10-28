@@ -30,7 +30,7 @@ import {
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import type { ConversationAdmission } from "../agents/brain-host/conversation.js";
+import type { ConversationAdmission } from "../agents/eve-host/conversation.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { GITHUB_GRANT_REFUSAL, githubSignInGrant } from "./github-integration.js";
 import {

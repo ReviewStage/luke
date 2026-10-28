@@ -117,7 +117,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   /**
-   * The account's hosts as Settings › Agents › Hosts reads and changes
+   * The account's hosts as Settings › Hosts reads and changes
    * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
    * window that minted the token keeps it and shows it once), and one revoked.
    */
@@ -160,8 +160,6 @@ export const AGENT_ACT_KIND = {
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   CODING_AGENTS_SEEN: "codingAgents.seen",
   CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -198,6 +196,13 @@ export const AGENT_INBOX_ACT_KIND = {
    * is none.
    */
   CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  /**
+   * Every inbox item the account reaches, followed while the window holds
+   * the stream open: by the plans and agents with no task they are on,
+   * whole as the stream opens and then those that moved, or why there are
+   * none.
+   */
+  CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW: "codingAgents.accountItemsFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
@@ -280,9 +285,9 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, and a call about the open task. And
+ * GitHub connected or disconnected. And
  * what one task holds, read as its tabs draw it: its
- * earlier work and conversation, a call's messages, its repository's files,
+ * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
  * status and priority.
@@ -438,7 +443,7 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's `luke-host` as Settings › Agents reaches it
+ * This Mac's `luke-host` as Settings › Hosts reaches it
  * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
  * an explicit turn-on, which enrolls the Mac again where Luke removed it or
  * the last turn-on failed. Answered by the host, which runs it.

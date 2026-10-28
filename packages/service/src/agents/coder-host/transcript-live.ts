@@ -11,7 +11,7 @@ import { agentVisibleTo } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
-import { asks, conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
+import { conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
 import { CODING_AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/coding-agent-wire";
 import { TRANSCRIPT_WINDOW } from "@luke/features/transcript-window";
 import {
@@ -213,8 +213,8 @@ function windowPartsOf(target: ConversationTarget, reached: SQL, past: MessageCu
 
 /**
  * The newest `TRANSCRIPT_WINDOW` messages of `target`'s conversation, each
- * with what sent it, where a turn under way took it in, the turn the ask a
- * spoken line followed ran in, and the turn it was written in, each join
+ * with what sent it, where a turn under way took it in, and the turn it
+ * was written in, each join
  * naming one row at most, so a message is one row keyed by its id, with how
  * many parts it holds, which `windowParts` carries one row each; read
  * only while `reached` holds, as the other statements are. Past a cursor,
@@ -245,8 +245,9 @@ export function transcriptWindowLiveStatements(
           agentTaskId: sendingAgent.taskId,
           journalId: takingJournal.id,
           afterStep: messages.takenAfterStep,
-          askTurnId: asks.turnId,
-          askAfterStep: asks.joinedAfterStep,
+          // No line the voice said is folded under a turn any more; a released desktop still decodes the keys.
+          askTurnId: sql<string | null>`null::text`,
+          askAfterStep: sql<number | null>`null::integer`,
           turnStatus: turns.status,
           turnModel: turns.model,
           turnEffort: turns.reasoningEffort,
@@ -279,15 +280,6 @@ export function transcriptWindowLiveStatements(
         isNotNull(messages.takenAfterStep),
         eq(takingJournal.conversationId, messages.conversationId),
         eq(takingJournal.clientId, sql`${messages.turnId}::text`),
-      ),
-    )
-    .leftJoin(
-      asks,
-      and(
-        eq(asks.userId, messages.userId),
-        eq(asks.conversationId, messages.conversationId),
-        eq(asks.clientId, sql`${messages.metadata}->>'delegation_id'`),
-        isNotNull(asks.turnId),
       ),
     )
     .leftJoin(turns, and(eq(turns.id, messages.turnId), eq(turns.userId, messages.userId)))

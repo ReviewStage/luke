@@ -114,7 +114,6 @@ import {
 import { archiveAskedStatus } from "../tasks/archive-settle.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import {
   forwardedImageRefusalWords,
   forwardedImages,
@@ -139,6 +138,7 @@ import {
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { discardedOrLogged } from "./device-discard.js";
+import type { AgentSessions } from "./eve-host/eve-sessions.js";
 import {
   STEWARD_ACT,
   type StewardAct,
@@ -465,7 +465,7 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
   [LOCAL_AGENT_REFUSAL.PREPARING]:
     "Not started: the device this task runs its agents on is still getting ready for local agents, downloading its sandbox. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
-    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to choose Retry under This Mac in Settings › Agents › Machines on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
+    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string
@@ -1345,11 +1345,10 @@ function givenNameOf(agent: CodingAgent): { name?: string } {
   return name === undefined ? {} : { name };
 }
 
-/** The agent's mention under the workspace's step: under its task where it has one, else under the workspace, named as its tab is. */
+/** The agent's mention under the workspace's step, by the agent whichever task it works on, named as its tab is. */
 function agentMention(agent: CodingAgent, workspace: string): string {
-  const task = agent.taskId === null ? undefined : { taskId: agent.taskId };
   return writtenMention(
-    { kind: MENTION_KIND.AGENT, ...task, agentId: agent.id },
+    { kind: MENTION_KIND.AGENT, agentId: agent.id },
     agentName(agent),
     workspace,
   );
@@ -1576,11 +1575,7 @@ const earlierContinuationsOf = (
       (each): EarlierContinuation => ({
         id: each.agentId,
         mention: writtenMention(
-          {
-            kind: MENTION_KIND.AGENT,
-            ...(at.taskId === null ? undefined : { taskId: at.taskId }),
-            agentId: each.agentId,
-          },
+          { kind: MENTION_KIND.AGENT, agentId: each.agentId },
           each.title ?? CONTINUATION_NAME,
           step,
         ),
@@ -2192,6 +2187,7 @@ const stopOf = (
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key: string,
+  by: string,
 ) =>
   Effect.gen(function* () {
     const earlier = yield* hostedStoreOrUnavailable(
@@ -2199,7 +2195,7 @@ const stopOf = (
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
-    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key);
+    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key, by);
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = codingAgentStatusOf(after.turn, {
       createdAt: agent.createdAt,
@@ -2238,7 +2234,9 @@ export function runStopAgent(
           `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`,
         );
       }
-      const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));
+      const stop = yield* Effect.result(
+        stopOf(eve, call.writer, agent, call.clientKey, caller.agent.id),
+      );
       if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure, eve));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
       // the developer's, and is answered as stopped so a call run again reads as it first did.

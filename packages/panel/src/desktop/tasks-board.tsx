@@ -123,7 +123,7 @@ import {
 import { useTasksWaiting } from "./places-waiting.js";
 import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -255,9 +255,12 @@ const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
  * the card's box (`SELECT_BOX_PLACE.CARD_HEAD`) for as long as the box shows:
  * the card under the pointer or reached from the keyboard, the box itself
  * under the pointer, or the box at rest while the board is being chosen from.
+ * It starts where the box does, drawn out as the status chip under it is
+ * and stood in by the box's inset in that chip, so the key, the box, and the
+ * status mark line up on one edge of the card.
  */
 const BOARD_CARD_KEY =
-  "tasks-board-card-key flex group-has-[.luke-card-press:hover]/board-card:invisible group-has-[.luke-card-press:focus-visible]/board-card:invisible group-has-[.luke-select-box:hover]/board-card:invisible group-has-[.luke-select-box[data-shown=true]]/board-card:invisible";
+  "tasks-board-card-key flex ms-[calc(var(--spacing-select-box-inset)-var(--luke-space-4))] group-has-[.luke-card-press:hover]/board-card:invisible group-has-[.luke-card-press:focus-visible]/board-card:invisible group-has-[.luke-select-box:hover]/board-card:invisible group-has-[.luke-select-box[data-shown=true]]/board-card:invisible";
 
 /** A card's foot, standing over its press, which lets the pointer through between its pills. */
 const BOARD_CARD_FOOT =
@@ -346,6 +349,7 @@ function TaskBoardCard({
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
@@ -466,11 +470,7 @@ function TaskBoardCard({
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskAgentsMark
-              agents={task.agents}
-              waiting={waiting}
-              size={TASK_AGENTS_MARK_SIZE.MEDIUM}
-            />
+            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
         <span className="tasks-board-card-more pointer-events-auto flex flex-none">
@@ -887,6 +887,7 @@ export function TasksBoard({
           />
         </div>
       </div>
+      {selection.dialog}
     </CollectionPage>
   );
 }

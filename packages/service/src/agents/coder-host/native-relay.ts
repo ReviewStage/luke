@@ -23,15 +23,15 @@
 
 import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
-import { Effect, Layer, Option, Redacted, Result, Schema, Stream } from "effect";
+import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { HostedEnvironment } from "../../environment.js";
 import { HOSTED_API_ERROR } from "../../http/http.js";
-import { ACCOUNT_ID_PATTERN, BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
-import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
+import { ACCOUNT_ID_PATTERN, EVE_HOST_TURN, type EveHostTurn } from "../eve-host/bounds.js";
+import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -40,14 +40,14 @@ import {
   type EveMessage,
   EveUnreachable,
   RUNTIME_REFUSAL,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { NATIVE_SESSION_PREFIX, type NativeRuntime } from "./native-runtime.js";
 import { NativeAgentSessions, type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 
 /** The path the web function answers a relayed call on. */
 export const NATIVE_RELAY_PATH = "/api/agents/native-sessions";
 
-/** The calls a harness takes by name; `stream` is none, since a runner posts its own events. */
+/** The calls a harness takes by name. */
 export const NATIVE_RELAY_CALL = {
   OPEN: "open",
   SEND: "send",
@@ -74,7 +74,7 @@ const SessionIdSchema = Schema.String.check(Schema.isNonEmpty());
  */
 const RelayedMessageSchema = Schema.Struct({
   conversationId: Schema.String.check(Schema.isNonEmpty()),
-  turn: Schema.Literals(Object.values(BRAIN_HOST_TURN)),
+  turn: Schema.Literals(Object.values(EVE_HOST_TURN)),
   message: Schema.Union([Schema.String, Schema.Array(Schema.Unknown)]),
   timeZone: Schema.optionalKey(Schema.String),
   lineId: Schema.optionalKey(Schema.String),
@@ -129,7 +129,7 @@ export type NativeRelayCall = typeof NativeRelayCallSchema.Type;
 /** A relayed message as the harness is handed it. */
 export function relayedMessage(
   message: (typeof RelayedMessageSchema)["Type"],
-): EveMessage<BrainHostTurn> {
+): EveMessage<EveHostTurn> {
   return {
     ...message,
     // SAFETY: the content the eve app was handed as `UserContent` and posted as JSON, which is what a `data:` URL's file part is whole.
@@ -216,7 +216,7 @@ function relayOver(
   origin: string,
   runtime: NativeRuntime,
   account: string,
-): NativeSessions<BrainHostTurn> {
+): NativeSessions<EveHostTurn> {
   const post = (body: NativeRelayCall) =>
     client
       .execute(
@@ -258,8 +258,6 @@ function relayOver(
         post({ call: NATIVE_RELAY_CALL.RESET, ...named, sessionId }),
         readAnswer(ResetSchema),
       ),
-    // A runner posts its events to Luke itself, so there is no stream of its session to follow.
-    stream: () => Stream.empty,
     // A change the route did not answer with the runner's own word is said as failed; the row already holds it.
     retune: (sessionId, conversationId) =>
       post({ call: NATIVE_RELAY_CALL.RETUNE, ...named, sessionId, conversationId }).pipe(
@@ -271,6 +269,8 @@ function relayOver(
         }),
         Effect.orElseSucceed(() => RUNNER_CHOICE.FAILED),
       ),
+    // Note that only the runner's events route hands waiting lines on, in a web function holding the harnesses itself, so nothing relays it.
+    deliverWaiting: () => Effect.succeed(false),
     // A halt the route did not answer as done is said as failed, so the rewind waiting on it cuts nothing.
     halt: (sessionId, conversationId) =>
       post({ call: NATIVE_RELAY_CALL.HALT, ...named, sessionId, conversationId }).pipe(

@@ -12,9 +12,11 @@ import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountItems,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
+  type CodingAgentInboxScope,
   type CodingAgentListAnswer,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
@@ -32,9 +34,11 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
+import { answeredNow, closedNow } from "@luke/features/inbox-writes";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import type { TasksFileParams } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -42,8 +46,10 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import { AGENT_INBOX_ACT_KIND } from "@luke/host/contract";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
+import { AsyncIteratorClass } from "@orpc/client";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -55,6 +61,7 @@ import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { HeldInboxesProvider } from "../tasks/held-inboxes.js";
 import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
@@ -63,6 +70,7 @@ import {
   type AnyAct,
   FAKE_ANSWER,
   type FakeActAnswer,
+  type FakeActPort,
   fakeActPort,
   fakeActPortCalls,
   fakeActs,
@@ -219,6 +227,12 @@ export const RETRY: InboxItem = answeredBy(
 );
 export const EXPIRY = item("a1b2c3d4-0000-4000-8000-000000000003", "Expire after 7 days?", 4_000);
 
+/** The Billing item chosen, as a press on its row chooses it. */
+export const ON_THRESHOLD = { taskId: BILLING.id, itemId: THRESHOLD.id } as const;
+
+/** The Invites item chosen. */
+export const ON_EXPIRY = { taskId: INVITES.id, itemId: EXPIRY.id } as const;
+
 /** The item given as a notice: its opening message asking nothing. */
 export function noticeOf(asked: InboxItem): InboxItem {
   const [opening, ...rest] = asked.thread ?? [];
@@ -317,6 +331,8 @@ class InboxWorld {
   readMarkRefused = false;
   /** The listed workspace's members, as a read of them answers. */
   members: readonly WorkspaceMember[] = [];
+  /** Every read of a file's lines, in order, each answered with as many numbered lines as it asks for. */
+  fileReads: TasksFileParams[] = [];
 }
 
 export const world = new InboxWorld();
@@ -351,6 +367,31 @@ function answerAgent(agentId: string) {
   if (hold === undefined) return { items };
   hold(() => world.main.push({ kind: INBOX_SCOPE_KIND.AGENT, id: agentId }, { items }));
   return undefined;
+}
+
+/**
+ * Every held item `drawn` changes, and every followed inbox holding one
+ * pushed so, as the host draws a write into every inbox it follows the
+ * moment it is asked, reading none of them again; none where it leaves an
+ * item alone.
+ */
+function drawnByHost(drawn: (item: InboxItem) => InboxItem | undefined): void {
+  const draw = (kind: CodingAgentInboxScope["kind"], held: Map<string, readonly InboxItem[]>) => {
+    for (const [id, items] of held) {
+      if (!items.some((item) => drawn(item) !== undefined)) continue;
+      const next = items.map((item) => drawn(item) ?? item);
+      held.set(id, next);
+      const scope = { kind, id };
+      if (world.main.isFollowed(scope)) world.main.push(scope, { items: next });
+    }
+  };
+  draw(INBOX_SCOPE_KIND.PLAN, world.inboxes);
+  draw(INBOX_SCOPE_KIND.AGENT, world.agentInboxes);
+}
+
+/** Each held item named marked read or unread, as the host draws a mark. */
+function marked(itemIds: ReadonlySet<string>, unread: boolean): void {
+  drawnByHost((item) => (itemIds.has(item.id) ? { ...item, unread } : undefined));
 }
 
 /** Every followed inbox pushed again as it now stands, as main pushes a change. */
@@ -401,6 +442,7 @@ beforeEach(() => {
   world.readMarks = [];
   world.readMarkRefused = false;
   world.members = [];
+  world.fileReads = [];
   world.main = followedInboxes((scope) =>
     scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id),
   );
@@ -463,6 +505,27 @@ beforeEach(() => {
           },
         });
       }
+      if (request.kind === ACT_KIND.TASKS_FILE) {
+        world.fileReads.push(request.payload);
+        const { path, firstLine, lastLine } = request.payload;
+        const lines = Array.from(
+          { length: lastLine - firstLine + 1 },
+          (_, at) => `line ${firstLine + at}`,
+        );
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: {
+            file: {
+              path,
+              repository: "acme/relay",
+              branch: "main",
+              firstLine,
+              lineCount: 40,
+              lines,
+            },
+          },
+        });
+      }
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
@@ -477,6 +540,8 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;
         world.readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
+        // Note that the host draws a mark into every inbox it follows as it is asked, and takes it back where the service refused it.
+        if (!world.readMarkRefused) marked(new Set([itemId]), unread);
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
           value: world.readMarkRefused
@@ -486,6 +551,7 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_ALL) {
         world.readMarks.push(`all:${request.payload.workspaceId ?? "every workspace"}`);
+        marked(new Set(request.payload.itemIds), false);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { marked: 2 } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
@@ -529,13 +595,41 @@ interface Asked {
   newTasks: number;
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 /** Main's word of what waits on the reader on each task: the one open question on each. */
 const MAIN_WAITING: readonly AppInboxTask[] = [
   { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
   { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
 ];
 
+/** The account's feed of every item, as the host streams it: each task's items whole, then nothing more until the window lets it go. */
+const ACCOUNT_FEED: Pick<
+  FakeActPort,
+  typeof AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW
+> = {
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+    let sent = false;
+    const closed = Promise.withResolvers<void>();
+    const next = async (): Promise<IteratorResult<CodingAgentAccountItems, undefined>> => {
+      if (sent) {
+        await closed.promise;
+        return { done: true, value: undefined };
+      }
+      sent = true;
+      const scopes = [...world.inboxes].map(([id, items]) => ({
+        scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+        items,
+      }));
+      return { done: false, value: { whole: true, scopes } };
+    };
+    return Promise.resolve(
+      new AsyncIteratorClass<CodingAgentAccountItems, undefined, void>(next, async () => {
+        closed.resolve();
+      }),
+    );
+  },
+};
+
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded, on nothing chosen or on `chosen`; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 export function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
   {
@@ -549,6 +643,9 @@ export function mount(
     readerKnown = true,
     toasts = false,
     channels = false,
+    chosen: firstChosen,
+    windowRoot = false,
+    accountFeed = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -567,10 +664,20 @@ export function mount(
     toasts?: boolean;
     /** Whether the Inbox is narrowed to #general, chosen as the sidebar's row chooses it. */
     channels?: boolean;
+    /** The item the Inbox opens on, as a row's press chose it before; none where nothing is chosen yet. */
+    chosen?: InboxChoice;
+    /** Whether the Inbox stands under the window's root, holding the window's inboxes, and is drawn only while open, as the shell draws it. */
+    windowRoot?: boolean;
+    /** Whether the account's feed of every item answers, pushing each task's items as the service answers a read of it. */
+    accountFeed?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
-  fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    ...world.main.procedures,
+    ...(accountFeed ? ACCOUNT_FEED : undefined),
+  });
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],
@@ -583,9 +690,7 @@ export function mount(
   function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
     // The drafts are handed to the account signed in, none here, as the panel's root hands them.
     useDraftsOwner(undefined);
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    // Whether the list was asked for, which the window keeps as the Tasks tab does.
-    const [listAsked, setListAsked] = useState(false);
+    const [chosen, setChosen] = useState<InboxChoice | undefined>(firstChosen);
     const [inboxOpen, setOpen] = useState(true);
     world.setInboxOpen = setOpen;
     world.chooseFromOutside = setChosen;
@@ -628,8 +733,7 @@ export function mount(
         onChoose: setChosen,
         onOpenItem: setChosen,
         onOpenChannel: chooseChannel,
-        listed: listAsked,
-        onListed: setListAsked,
+        onClear: () => setChosen(undefined),
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -648,7 +752,10 @@ export function mount(
         onClose: () => undefined,
       },
     });
-    const inbox = createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
+    const inbox =
+      windowRoot && !inboxOpen
+        ? null
+        : createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
@@ -675,7 +782,10 @@ export function mount(
       : createElement(Panelled, { at: room });
   const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   if (channels) chooseChannel(GENERAL.id);
-  act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
+  const rooted = windowRoot
+    ? createElement(HeldInboxesProvider, { account: READER.userId }, page)
+    : page;
+  act(() => world.root?.render(onRegistry(AtomRegistry.make(), rooted)));
   return { page: container, asked };
 }
 
@@ -799,21 +909,10 @@ export function takenCloses(): { itemId: string; revision: number }[] {
       const asked = [...world.inboxes.values()]
         .flat()
         .find((each) => each.id === request.payload.itemId);
-      const shown = asked ?? THRESHOLD;
-      // The close withdraws the ask it leaves open, with no reason, as the service closes it.
-      const thread = (shown.thread ?? []).map((message) =>
-        message.ask?.status === INBOX_ASK_STATUS.OPEN
-          ? { ...message, ask: { ...message.ask, status: INBOX_ASK_STATUS.WITHDRAWN } }
-          : message,
-      );
-      const closed: InboxItem = {
-        ...shown,
-        status: INBOX_STATUS.CLOSED,
-        closedBy: READER,
-        thread,
-        settledAt: 6_000,
-        updatedAt: 6_000,
-      };
+      // The close withdraws the ask it leaves open, with no reason, and reads the item, as the service closes it.
+      const closed = closedNow(asked ?? THRESHOLD, READER, 6_000);
+      // Note that the host lands the item as the service answered it in every inbox it follows before the close answers.
+      drawnByHost((each) => (each.id === closed.id ? closed : undefined));
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: { item: closed, taken: true },
@@ -838,7 +937,11 @@ export async function confirmClose(): Promise<void> {
 
 /** The open item's options, a choice's radios or checkboxes, in order. */
 export function openOptions(pane: HTMLElement): HTMLButtonElement[] {
-  return [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"], [role="checkbox"]')];
+  return [
+    ...pane.querySelectorAll<HTMLButtonElement>(
+      '[data-inbox-options] [role="radio"], [data-inbox-options] [role="checkbox"]',
+    ),
+  ];
 }
 
 /** The labels of the open item's options that stand checked. */
@@ -1107,6 +1210,7 @@ export function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
     agentId: asked.agentId,
     title: asked.title,
     postedAt: asked.postedAt,
+    updatedAt: asked.updatedAt,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -1154,7 +1258,11 @@ export function heldMessages(
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
-      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: answer(request.payload) });
+      const value = answer(request.payload);
+      // Note that the host lands the item as the service answered it in every inbox it follows before the message answers.
+      if (!("failure" in value))
+        drawnByHost((each) => (each.id === value.item.id ? value.item : undefined));
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
     },
   });
   return sent;
@@ -1248,8 +1356,25 @@ export function gatedAnswers(): GatedAnswers {
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
+      const { itemId, clientKey: key, text, answers } = request.payload;
+      const before = [...world.inboxes.values(), ...world.agentInboxes.values()]
+        .flat()
+        .find((each) => each.id === itemId);
+      // Note that the host draws a reply carrying an answer settled the moment it is sent, and a plain one read.
+      drawnByHost((each) =>
+        each.id !== itemId
+          ? undefined
+          : answers === undefined
+            ? { ...each, unread: false }
+            : answeredNow(each, { key, text, answers }, READER, Date.now()),
+      );
       const reply = Promise.withResolvers<FakeActAnswer>();
-      waiting.push((value) => reply.resolve({ status: FAKE_ANSWER.DONE, value }));
+      waiting.push((value) => {
+        // Note that the host takes back what it drew where the service refused it, and lands the item as the service answered it where it took it.
+        const landed = "failure" in value ? before : value.item;
+        drawnByHost((each) => (each.id === itemId ? landed : undefined));
+        reply.resolve({ status: FAKE_ANSWER.DONE, value });
+      });
       return reply.promise;
     },
   });

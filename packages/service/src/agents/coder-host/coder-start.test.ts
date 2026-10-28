@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { askRecord } from "@luke/database/models/asks";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
@@ -14,7 +13,7 @@ import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automat
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
@@ -26,15 +25,15 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "../brain-host/eve-sessions.js";
-import { memoryRelayState, StreamRelay } from "../brain-host/relay.js";
+} from "../eve-host/eve-sessions.js";
+import { memoryRelayState, StreamRelay } from "../eve-host/relay.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -77,7 +76,6 @@ function fakeEve() {
     send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { opened, eve: Effect.succeed(sessions) };
 }
@@ -130,14 +128,13 @@ const openedThroughRelay = (owner: string, conversationId: string, opened: reado
     assert.ok(handed !== undefined && typeof handed.message === "string");
     const relay = new StreamRelay({
       writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
-      asks: { binding: askRecord(), stopTurn: () => Effect.void },
       now: () => Date.UTC(2026, 9, 23),
       report: () => undefined,
     });
     const standing = {
       sessionId: `wrun_${randomUUID()}`,
       target,
-      turn: BRAIN_HOST_TURN.TYPED,
+      turn: EVE_HOST_TURN.TYPED,
       state: memoryRelayState(),
     };
     const turn = { turnId: "turn_0", sequence: 0 };

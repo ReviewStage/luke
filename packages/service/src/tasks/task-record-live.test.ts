@@ -24,11 +24,11 @@ import { taskRecordLiveStatements } from "./task-record-live.js";
  * Synthetic accounts, pages, and words throughout.
  */
 
-const PARTS = ["plan", "pages", "calls", "code"] as const;
+const PARTS = ["plan", "pages", "code"] as const;
 
 type Part = (typeof PARTS)[number];
 
-/** The parts a held read answers: the plan and the pages; no desktop reads the calls or the code again. */
+/** The parts a held read answers: the plan and the pages; no desktop reads the code again. */
 const HELD_PARTS = ["plan", "pages"] as const;
 
 /** A new account, as the store holds one. */
@@ -50,7 +50,6 @@ const liveRecordOf = (reader: string, taskId: string) =>
     return yield* Schema.decodeUnknownEffect(taskRecordLiveRowsSchema)({
       plan: yield* runLive(statements.plan),
       pages: yield* runLive(statements.pages),
-      calls: yield* runLive(statements.calls),
       code: yield* runLive(statements.code),
     });
   });
@@ -72,14 +71,14 @@ function movedParts(before: TaskRecordLiveRows, after: TaskRecordLiveRows): read
   return PARTS.filter((part) => JSON.stringify(before[part]) !== JSON.stringify(after[part]));
 }
 
-/** The parts whose value differs between two held readings: the moves a live delivery says, the calls apart. */
+/** The parts whose value differs between two held readings: the moves a live delivery says, the code apart. */
 function movedHeld(before: HeldRecord, after: HeldRecord): readonly Part[] {
   return HELD_PARTS.filter((part) => JSON.stringify(before[part]) !== JSON.stringify(after[part]));
 }
 
 /** The moves a held reading makes for the live ones expected: the plan's and the pages'. */
 function heldOf(expected: readonly Part[]): readonly Part[] {
-  return expected.filter((part) => part !== "calls" && part !== "code");
+  return expected.filter((part) => part !== "code");
 }
 
 it.layer(getTestDB())("a task's record followed live", (it) => {
@@ -111,7 +110,6 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
         assert.deepEqual(live, {
           plan: [{ taskId: task.id, savedAt: Option.getOrThrow(held.plan).updatedAt }],
           pages: [],
-          calls: [],
           code: [],
         });
 
@@ -149,7 +147,6 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {
           plan: [],
           pages: [],
-          calls: [],
           code: [],
         });
       }),

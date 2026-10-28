@@ -2,22 +2,27 @@
 
 import assert from "node:assert/strict";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { TaskKeyLine, TaskStandingChips } from "./task-standing.js";
+import type { RepositoryChooser } from "./repository-chip.js";
+import { TaskKeyLine, type TaskRepositoryDoor, TaskStandingChips } from "./task-standing.js";
 
 /**
  * task-standing.test.ts -- a task's head names it by its key and says where
  * it stands and how much it matters: a pick from the status chip's menu is
  * handed to the page to send, the chips take no pick without a door to send
- * it through, and a task from a service before keys draws neither.
+ * it through, the repository's chip stands among them where the page hands
+ * its doors, and a task from a service before keys draws neither.
  */
 
 const TASK: Task = {
@@ -46,8 +51,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws the task's key and its chips into the document, with the door a pick is sent through. */
-function drawn(task: Task, onSet: ((standing: TaskStanding) => void) | undefined): HTMLElement {
+/** Draws the task's key and its chips into the document, with the door a pick is sent through, and the repository chip's doors where handed. */
+function drawn(
+  task: Task,
+  onSet: ((standing: TaskStanding) => void) | undefined,
+  repository?: TaskRepositoryDoor,
+): HTMLElement {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -55,11 +64,20 @@ function drawn(task: Task, onSet: ((standing: TaskStanding) => void) | undefined
   act(() =>
     root.render([
       createElement(TaskKeyLine, { key: "key", task, workspaceName: "Acme" }),
-      createElement(TaskStandingChips, { key: "chips", task, onSet }),
+      createElement(TaskStandingChips, { key: "chips", task, onSet, repository }),
     ]),
   );
   return host;
 }
+
+/** A chooser whose read never lands, for a chip that only says. */
+const UNREAD_CHOOSER: RepositoryChooser = {
+  recent: [],
+  read: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+  openGitHub: () => undefined,
+  pictures: false,
+  manages: true,
+};
 
 /** The chip a label names. */
 function chip(host: HTMLElement, label: string): HTMLButtonElement {
@@ -77,19 +95,50 @@ test("names the task by its workspace's prefix and its number, with its status a
   assert.ok(chip(host, "Priority").textContent?.includes("High"));
 });
 
-test("a status picked from the menu is handed to the page, and the one standing is not picked again", () => {
+test("the repository chip stands among the chips where the page hands its doors, reading the repository, or Choose a repository on a task with none, and an ask from elsewhere opens its menu", async () => {
+  const picks: string[] = [];
+  const door: TaskRepositoryDoor = {
+    chooser: UNREAD_CHOOSER,
+    onChoose: (pick) => picks.push(pick),
+  };
+  const named = drawn(TASK, () => undefined, door);
+  await act(async () => undefined);
+  const row = named.querySelector(".plan-task-standing");
+  assert.ok(row?.textContent?.includes("acme/web"), "the chip reads the repository");
+  assert.ok(row?.textContent?.includes("High"), "beside the standing chips");
+  assert.equal(chip(named, "acme/web").getAttribute("aria-expanded"), "false");
+
+  const bare = drawn({ ...TASK, repository: null }, () => undefined, { ...door, openRequest: 1 });
+  await act(async () => undefined);
+  const choose = chip(bare, "Choose a repository");
+  assert.equal(choose.getAttribute("aria-expanded"), "true", "⌘K's ask opens its menu");
+
+  const without = drawn(TASK, () => undefined);
+  assert.equal(without.textContent?.includes("acme/web"), false, "no doors, no chip");
+
+  // A task from a service before statuses draws no standing chip, and still its repository's.
+  const { status: _status, priority: _priority, ...before } = TASK;
+  const legacy = drawn(before, () => undefined, door);
+  await act(async () => undefined);
+  assert.ok(legacy.textContent?.includes("acme/web"), "the chip does not wait on the standing");
+  assert.equal(legacy.querySelector('[aria-label^="Status"]'), null);
+});
+
+test("a status picked from the menu, opened by its chip or by S, is handed to the page, and the one standing is not picked again", () => {
   const sent: TaskStanding[] = [];
   const host = drawn(TASK, (standing) => sent.push(standing));
 
-  const pick = (words: string) => {
-    act(() => chip(host, "Status").click());
+  const pick = (open: () => void, words: string) => {
+    act(open);
     const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
       each.textContent?.includes(words),
     );
     act(() => (row ?? assert.fail(`no ${words} row`)).click());
   };
-  pick("Todo");
-  pick("Done");
+  pick(() => chip(host, "Status").click(), "Todo");
+  pick(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the plan's chips answer S");
+  }, "Done");
 
   assert.deepEqual(sent, [{ status: TASK_STATUS.DONE }]);
 });

@@ -772,7 +772,7 @@ function SummaryCard({
       shadow={CARD_SHADOW.MENU}
       ref={drawn}
       id={id}
-      className="task-summary-card absolute top-0 right-0 z-2 box-border flex max-h-full w-summary origin-top-right animate-card-grow-in flex-col outline-none data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-card-leave data-[leaving=true]:transition-none"
+      className="task-summary-card absolute top-0 right-0 z-menu box-border flex max-h-full w-summary origin-top-right animate-card-grow-in flex-col outline-none data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-card-leave data-[leaving=true]:transition-none"
       role="dialog"
       aria-label="Summary"
       tabIndex={-1}

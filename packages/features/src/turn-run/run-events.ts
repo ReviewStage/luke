@@ -8,7 +8,6 @@ import {
   type WireRecord,
 } from "@luke/wire";
 import type { UIMessage } from "ai";
-import { TURN_SLOW_STEP, type TurnSlowStep } from "../turn-events-wire.js";
 import type { RunModelUsage, RunStatus, RunUsage, TurnFailure } from "./requests.js";
 import { spokenProse } from "./spoken-prose.js";
 import type { TurnTrigger } from "./turn.js";
@@ -67,9 +66,13 @@ export const RUN_EVENT = {
 } as const;
 
 /** The kinds of step that count as slow: a whole transcript read, a write the provider carries, or a task call's look into its repository. */
-export const SLOW_STEP_KIND = TURN_SLOW_STEP;
+export const SLOW_STEP_KIND = {
+  TRANSCRIPT_READ: "transcript_read",
+  PROVIDER_WRITE: "provider_write",
+  REPOSITORY_READ: "repository_read",
+} as const;
 
-type SlowStepKind = TurnSlowStep;
+type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
 
 /** Who or what opened a turn, as the turn's record takes it: attribution, never a permission. */
 export const RUN_TURN_ORIGIN = {

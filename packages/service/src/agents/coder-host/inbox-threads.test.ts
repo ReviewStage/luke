@@ -573,7 +573,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a post's pictures are kept as files of its message, its words drawing each by its address under the item, its task's or its agent's, and served as they were posted",
+    "a post's pictures are kept as files of its message, its words drawing each by its address under the item, under its agent whether it works on a task or none, and served as they were posted",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -600,7 +600,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           {
             itemId: onTask.id,
             attachmentId: ruleFile.attachmentId,
-            holder: `plan/${agent.taskId}`,
+            holder: `agent/${agent.agentId}`,
           },
         ]);
         assert.ok(posting?.text.startsWith("The rule as it stands:\n\n![The branch rule]("));

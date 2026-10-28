@@ -6,6 +6,7 @@ import {
 import {
   CODING_AGENT_KIND,
   type CodingAgentAttachment,
+  type CodingAgentKind,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
@@ -48,9 +49,9 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
-import { OPERATOR_NAME } from "@luke/features/model-label";
+import { agentGivenName, OPERATOR_NAME } from "@luke/features/model-label";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import { TASK_STATUS, type TaskFileRequest, type TaskSummary } from "@luke/features/task-wire";
+import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
@@ -1138,38 +1139,24 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it, or Luke for the member's operator. */
+/** A count of threads with its words, as a channel's card or the Inbox's empty pane says it: "1 thread", "3 threads". */
+export function threadsWords(count: number): string {
+  return `${count} ${count === 1 ? "thread" : "threads"}`;
+}
+
+/** What holds an item: the task its agent works on, or, for an agent with no task, the agent itself. */
 export const INBOX_HOLDER = {
   TASK: "plan",
-  AUTOMATION: "automation",
+  AGENT: "agent",
 } as const;
 
-/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, the automation that started it, and the workspace it belongs to, where the service names it. */
-type InboxAgentLine = Pick<
-  AppInboxTasklessItem,
-  "agentTitle" | "agentModel" | "automationId" | "workspaceId"
->;
-
 /**
- * The task holding an item, or the automation holding an item of an agent
- * with no task, named as its group's header names it, and its agents as
- * main's read names them, by id; none for the agents no automation the
- * reader may read started. The member's operator stands under no
- * automation but a group of its own, Luke (`operator`), which wears his mark.
+ * An agent with no task as the Inbox names it: what its row names it by,
+ * the automation whose run started it, which its group stands under, the
+ * repository it works in, and the workspace whose list holds it, where the
+ * service names it; one with an item waiting, or one a link names whose
+ * items are all settled.
  */
-export type InboxHolder =
-  | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
-  | {
-      readonly kind: typeof INBOX_HOLDER.AUTOMATION;
-      readonly automationId: string | null;
-      readonly name: string;
-      readonly repository: string | null;
-      /** Whether this is the member's operator's group, Luke's, which no automation names. */
-      readonly operator: boolean;
-      readonly agents: ReadonlyMap<string, InboxAgentLine>;
-    };
-
-/** An agent with no plan as the Inbox groups it: what its group and row name it by, and the workspace whose list holds it; one with an item waiting, or one a link names whose items are all settled. */
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
@@ -1182,11 +1169,70 @@ export type TasklessInboxAgent = Pick<
   | "workspaceId"
 >;
 
+/**
+ * An agent with no task as the Inbox names it, from its own row where main
+ * lists none of its items, a link naming one whose items are all settled:
+ * the name it goes by (`agentGivenName`, Luke for the member's operator), else
+ * its title, as main's read names it (`agentGivenNameSql`), and its kind, so
+ * Luke's stands under Luke; the automation that started it, by the name its
+ * run kept; and its repository and workspace where they are known.
+ */
+export function inboxAgentOf(agent: {
+  readonly id: string;
+  readonly kind?: CodingAgentKind | undefined;
+  readonly title: string | null;
+  readonly model: string;
+  readonly automationId?: string | null | undefined;
+  readonly automationName?: string | undefined;
+  readonly repository?: string | null | undefined;
+  readonly workspaceId?: string | undefined;
+}): TasklessInboxAgent {
+  return {
+    agentId: agent.id,
+    ...(agent.kind === undefined ? undefined : { agentKind: agent.kind }),
+    agentTitle: agentGivenName(agent) ?? agent.title,
+    agentModel: agent.model,
+    automationId: agent.automationId ?? null,
+    automationName: agent.automationName ?? null,
+    repository: agent.repository ?? null,
+    ...(agent.workspaceId === undefined ? undefined : { workspaceId: agent.workspaceId }),
+  };
+}
+
+/**
+ * What holds an item: the task its agent works on, or the agent itself
+ * where it works on none. Note that an agent is never grouped as a holder
+ * of its own: the list stands every agent under the group `holderKey`
+ * names, the automation that started it, Luke's for the member's operator,
+ * or one for the agents no automation the reader may read names.
+ */
+export type InboxHolder =
+  | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
+  | { readonly kind: typeof INBOX_HOLDER.AGENT; readonly agent: TasklessInboxAgent };
+
+/** The agent with no task as the holder of its items. */
+export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
+  return { kind: INBOX_HOLDER.AGENT, agent };
+}
+
+/** Whether a holder is the member's operator, Luke, whose items stand in a group of his own. */
+export function operatorHolder(holder: InboxHolder): boolean {
+  return (
+    holder.kind === INBOX_HOLDER.AGENT && holder.agent.agentKind === CODING_AGENT_KIND.OPERATOR
+  );
+}
+
+/** The automation whose group an agent's items stand in; none for a task, the member's operator, and the agents no automation the reader may read names. */
+export function holderAutomationId(holder: InboxHolder): string | null {
+  if (holder.kind === INBOX_HOLDER.TASK || operatorHolder(holder)) return null;
+  return holder.agent.automationId;
+}
+
 /** The key a holder's group is folded and drawn by: the task's id, the automation's, Luke's, or one key for the agents no automation names. */
-export function holderKey(holder: InboxHolder): string {
+function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
-  if (holder.operator) return OPERATOR_KEY;
-  return holder.automationId ?? NO_AUTOMATION_KEY;
+  if (operatorHolder(holder)) return OPERATOR_KEY;
+  return holder.agent.automationId ?? NO_AUTOMATION_KEY;
 }
 
 /** A task as the holder of its items. */
@@ -1199,15 +1245,16 @@ export function taskHolder(task: TaskSummary): InboxHolder {
  * plan, the agent's own, where the service named it; none where it did not,
  * since the Inbox may list an item whose workspace it does not know.
  */
-export function itemWorkspaceId(holder: InboxHolder, agentId: string): string | undefined {
-  return holder.kind === INBOX_HOLDER.TASK
-    ? holder.task.workspaceId
-    : holder.agents.get(agentId)?.workspaceId;
+export function itemWorkspaceId(holder: InboxHolder): string | undefined {
+  return holder.kind === INBOX_HOLDER.TASK ? holder.task.workspaceId : holder.agent.workspaceId;
 }
 
-/** A holder's name as its header and a row's context say it: the task's, or the automation's. */
+/** A holder's name as its group's header and a row's context say it: the task's, Luke's, the automation's, or the name of the agents no automation names. */
 export function holderName(holder: InboxHolder): string {
-  return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
+  if (holder.kind === INBOX_HOLDER.TASK) return holder.task.name;
+  if (operatorHolder(holder)) return OPERATOR_NAME;
+  const { automationId, automationName } = holder.agent;
+  return automationId === null ? NO_AUTOMATION_NAME : (automationName ?? NO_AUTOMATION_NAME);
 }
 
 /** The words options say: each one's label and the trade-off written under it. */
@@ -1293,44 +1340,23 @@ export function listedIn(
 }
 
 /**
- * The groups the items of agents with no task stand in: one per automation
- * that started them, by its name, one for the member's operator, Luke, and
- * one for the agents no automation the reader may read names, each holding every item its agents' reads hold,
- * settled ones too; only the listed workspace's agents, where the service
- * names an agent's workspace, so another workspace's list holds none of
- * them.
+ * Each agent with no task as the holder of its items, once whatever many
+ * of its items main lists, holding every item its read holds, settled ones
+ * too; only the listed workspace's agents, where the service names an
+ * agent's workspace, so another workspace's list holds none of them.
  */
-export function tasklessGroups(
-  waiting: readonly TasklessInboxAgent[],
+export function agentGroups(
+  agents: readonly TasklessInboxAgent[],
   read: ReadonlyMap<string, readonly InboxItem[]>,
   workspaceId: string | undefined,
 ): readonly InboxGroup[] {
-  const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
-  for (const entry of waiting) {
-    if (!listedIn(entry, workspaceId)) continue;
-    const operator = entry.agentKind === CODING_AGENT_KIND.OPERATOR;
-    const key = operator ? OPERATOR_KEY : (entry.automationId ?? NO_AUTOMATION_KEY);
-    const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
-    agents.set(entry.agentId, {
-      agentTitle: entry.agentTitle,
-      agentModel: entry.agentModel,
-      automationId: entry.automationId,
-      ...(entry.workspaceId === undefined ? undefined : { workspaceId: entry.workspaceId }),
-    });
-    const holder: InboxHolder = groups.get(key)?.holder ?? {
-      kind: INBOX_HOLDER.AUTOMATION,
-      automationId: operator ? null : entry.automationId,
-      name: operator ? OPERATOR_NAME : (entry.automationName ?? NO_AUTOMATION_NAME),
-      repository: entry.repository,
-      operator,
-      agents,
-    };
-    groups.set(key, { holder, agents });
+  const holders = new Map<string, InboxHolder>();
+  for (const agent of agents) {
+    if (listedIn(agent, workspaceId) && !holders.has(agent.agentId)) {
+      holders.set(agent.agentId, agentHolder(agent));
+    }
   }
-  return [...groups.values()].map(({ holder, agents }) => ({
-    holder,
-    items: [...agents.keys()].flatMap((agentId) => read.get(agentId) ?? []),
-  }));
+  return [...holders].map(([agentId, holder]) => ({ holder, items: read.get(agentId) ?? [] }));
 }
 
 /**
@@ -1413,7 +1439,7 @@ export interface InboxCounts {
   readonly [INBOX_SHOW.ALL]: number;
 }
 
-/** One holder, a task or an automation, and every item it holds, as the list is handed them. */
+/** One holder, a task or an agent, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
   readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
@@ -1423,6 +1449,20 @@ export interface InboxGroup {
 export interface InboxListed {
   readonly holder: InboxHolder;
   readonly item: InboxItem;
+}
+
+/**
+ * One group of items as a list grouped by task draws it: a task's, or the
+ * agents' with no task that stand under one automation, or under Luke, or
+ * with no automation the reader may read (`holderKey`), headed as its first
+ * holder names it, each item with its own holder.
+ */
+interface InboxHolderGroup {
+  /** What the group is folded by (`holderKey`). */
+  readonly key: string;
+  /** The holder its header names, the first of its holders. */
+  readonly holder: InboxHolder;
+  readonly items: readonly InboxListed[];
 }
 
 /** One person's items, by whoever they wait on (`inboxWaitsOn`); the reader's own where `person` is none. */
@@ -1448,7 +1488,10 @@ export interface InboxStatusGroup {
  * them.
  */
 export type InboxListView = { readonly readerId: string | undefined } & (
-  | { readonly grouping: typeof INBOX_GROUPING.TASK; readonly groups: readonly InboxGroup[] }
+  | {
+      readonly grouping: typeof INBOX_GROUPING.TASK;
+      readonly groups: readonly InboxHolderGroup[];
+    }
   | { readonly grouping: typeof INBOX_GROUPING.NONE; readonly items: readonly InboxListed[] }
   | {
       readonly grouping: typeof INBOX_GROUPING.PERSON;
@@ -1527,48 +1570,14 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
 }
 
 /**
- * Whether a listed item is one the reader is not done with: one that needs
- * them (`needsYou`), or one of theirs (`readersItem`) still unread, such as
- * a settled thread its agent wrote on again. What the first choice and the
- * next item that needs you reach.
+ * Whether a listed item is one the reader is not done with, as the next
+ * item that needs you steps to it: one that needs them (`needsYou`), or one
+ * of theirs (`readersItem`) still unread, such as a settled thread a
+ * teammate wrote on.
  */
 function toDo(listed: InboxListed, readerId: string | undefined): boolean {
   return (
     needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
-  );
-}
-
-/** Whether a thread is an agent's update: its agent wrote on it and none of its messages asks anything, so nothing of it is answered but a nod. */
-function isUpdate(item: InboxItem): boolean {
-  const thread = item.thread ?? [];
-  return (
-    thread.some((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT) &&
-    thread.every((message) => message.ask === undefined)
-  );
-}
-
-/** Whether a holder is a task still under way, neither Done nor Canceled; one from a service before statuses reads as under way. */
-function taskUnderWay(holder: InboxHolder): boolean {
-  if (holder.kind !== INBOX_HOLDER.TASK) return false;
-  const status = holder.task.status;
-  return status !== TASK_STATUS.DONE && status !== TASK_STATUS.CANCELED;
-}
-
-/**
- * Whether For you lists an item: one the reader is not done with (`toDo`),
- * or an update of theirs acknowledged on a task still under way. Note that
- * an acknowledged update stays, because opening it settles it as Got it
- * does (`acknowledgedOnOpen`) and what it says holds until its task is
- * done, while one resolved without answering, which is closed, leaves.
- */
-function forYou(listed: InboxListed, readerId: string | undefined): boolean {
-  if (toDo(listed, readerId)) return true;
-  const { holder, item } = listed;
-  return (
-    item.status === INBOX_STATUS.ANSWERED &&
-    readersItem(item, readerId) &&
-    isUpdate(item) &&
-    taskUnderWay(holder)
   );
 }
 
@@ -1739,12 +1748,12 @@ export function inboxList(
     .map(({ holder, items }) => ({ holder, items: items.filter(shows(holder)).toSorted(order) }))
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
-  if (view.grouping === INBOX_GROUPING.TASK) {
-    return { grouping: INBOX_GROUPING.TASK, groups, readerId };
-  }
   const items = groups
     .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
     .toSorted((a, b) => order(a.item, b.item));
+  if (view.grouping === INBOX_GROUPING.TASK) {
+    return { grouping: INBOX_GROUPING.TASK, groups: holderGroups(items), readerId };
+  }
   if (view.grouping === INBOX_GROUPING.NONE) {
     return { grouping: INBOX_GROUPING.NONE, items, readerId };
   }
@@ -1753,6 +1762,23 @@ export function inboxList(
     return { grouping: INBOX_GROUPING.STATUS, groups, readerId };
   }
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
+}
+
+/**
+ * The items, in the order given, grouped by what holds them (`holderKey`):
+ * each task's alone, and the agents' with no task under their automation,
+ * Luke, or none, the group whose first item stands first, each group's
+ * items in the order given.
+ */
+function holderGroups(items: readonly InboxListed[]): readonly InboxHolderGroup[] {
+  const groups = new Map<string, { key: string; holder: InboxHolder; items: InboxListed[] }>();
+  for (const listed of items) {
+    const key = holderKey(listed.holder);
+    const group = groups.get(key) ?? { key, holder: listed.holder, items: [] };
+    group.items.push(listed);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -1793,11 +1819,17 @@ export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
 }
 
-/** Whether a scope lists the item: To do what For you holds (`forYou`), and All all of them. */
+/**
+ * Whether a scope lists the item: To do what needs the reader (`needsYou`),
+ * the open threads that wait on them, a question or an update not yet
+ * opened, which are what the sidebar's Inbox row counts
+ * (`places-waiting.ts`), and All all of them. Note that a thread of theirs
+ * settled and unread is left to All, because main counts no settled item.
+ */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.TO_DO:
-      return forYou(listed, readerId);
+      return needsYou(listed, readerId);
     case INBOX_SHOW.ALL:
       return true;
   }
@@ -1828,9 +1860,7 @@ export function anyUnread(tasks: readonly InboxGroup[]): boolean {
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  if (view.grouping === INBOX_GROUPING.PERSON) return view.groups.flatMap(({ items }) => items);
-  if (view.grouping === INBOX_GROUPING.STATUS) return view.groups.flatMap(({ items }) => items);
-  return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
+  return view.groups.flatMap(({ items }) => items);
 }
 
 /** Where the chosen item stands among those listed, counted from one, and the items either side of it in the list's order. */
@@ -1853,17 +1883,11 @@ function rowedItems(
   chosen: string | undefined,
 ): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  if (view.grouping === INBOX_GROUPING.PERSON || view.grouping === INBOX_GROUPING.STATUS) {
-    const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
-      view.groups;
-    return keyed.flatMap(({ key, items }) =>
-      folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
-    );
-  }
-  return view.groups.flatMap(({ holder, items }) => {
-    const shut = folded(holderKey(holder));
-    return items.filter((item) => !shut || item.id === chosen).map((item) => ({ holder, item }));
-  });
+  const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
+    view.groups;
+  return keyed.flatMap(({ key, items }) =>
+    folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
+  );
 }
 
 /** The chosen item's place among the rows, in the list's own order, its grouping and filter as drawn and a folded group's other items left out; none where the list does not hold it. */
@@ -1908,12 +1932,6 @@ export function nextNeedingYou(
       ? [...above.reverse(), ...below.reverse()]
       : [...below, ...above];
   return ahead.find((listed) => toDo(listed, view.readerId) && listed.item.id !== chosen);
-}
-
-/** The item that stands chosen where none is: the first listed the reader is not done with (`toDo`), else the first listed. */
-export function firstChoice(view: InboxListView): InboxListed | undefined {
-  const listed = listedItems(view);
-  return listed.find((each) => toDo(each, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

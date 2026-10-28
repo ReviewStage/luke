@@ -32,7 +32,7 @@ const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 function line(overrides: Partial<PlanRevisionLine> = {}): PlanRevisionLine {
   return {
     seq: 3,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: NOW - 2 * HOUR, duringCall: true },
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: NOW - 2 * HOUR, duringCall: false },
     startedAt: NOW - 3 * HOUR,
     changes: 14,
     ...overrides,
