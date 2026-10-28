@@ -19,14 +19,21 @@ const STATE_FILE = "local-agents.json";
 
 /**
  * The state: the device id each account registered under, the launches
- * whose runners this device started and no exit has settled yet, and, on a
- * device whose agents may have run directly on it (`formerlyDirect`), how
- * each agent has run here, in a VM or directly, absent from a state file
- * from before it.
+ * whose runners this device started and the service has not yet taken a
+ * settle of, each with the agent whose VM it ran in, absent from a launch
+ * kept before it, and, on a device whose agents may have run directly on it
+ * (`formerlyDirect`), how each agent has run here, in a VM or directly,
+ * absent from a state file from before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
-  launches: Schema.Array(Schema.Struct({ userId: Schema.String, id: Schema.String })),
+  launches: Schema.Array(
+    Schema.Struct({
+      userId: Schema.String,
+      id: Schema.String,
+      agentId: Schema.optionalKey(Schema.String),
+    }),
+  ),
   modes: Schema.optionalKey(
     Schema.Record(Schema.String, Schema.Literals(Object.values(DEVICE_ISOLATION))),
   ),
