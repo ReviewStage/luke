@@ -338,6 +338,15 @@ export const turns = pgTable(
      * for a Stop the developer pressed, or none.
      */
     cancelRequestKey: text("cancel_request_key"),
+    /**
+     * The coding agent whose `stop_agent`, or whose Start continuing this
+     * turn's agent, made the Stop, written with `cancel_requested_at`, so the
+     * agent's starter is not told of a Stop it made itself
+     * (`starter-notices.ts`). Null for a Stop the developer pressed or Luke
+     * made, and for none. Named by id and held to nothing, so the turn
+     * outlives that agent.
+     */
+    cancelRequestedBy: uuid("cancel_requested_by"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
     /** How many notes a native coding agent's turn has taken on its plan over Luke's MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */

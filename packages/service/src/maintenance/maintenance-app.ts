@@ -29,6 +29,7 @@ import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
 import { sweepOperatorWakes } from "./operator-wake-sweep.js";
 import { sweepSandboxRetention } from "./sandbox-retention-sweep.js";
+import { sweepStarterNotices } from "./starter-notice-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -105,6 +106,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepOperatorWakes: (now) =>
       sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepStarterNotices: (now) =>
+      sweepStarterNotices(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),

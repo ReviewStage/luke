@@ -238,6 +238,8 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,
+  /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or Luke's. */
+  by?: string,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
@@ -274,6 +276,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
         turnId: turn.id,
         at,
         ...(key === undefined || !accepted ? undefined : { key }),
+        ...(by === undefined ? undefined : { by }),
       }),
     ),
   );
