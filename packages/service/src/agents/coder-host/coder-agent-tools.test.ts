@@ -1883,8 +1883,9 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
   assert.equal(eve.sent.length, 0);
 });
 
-test("an agent whose starter no longer sees its task is still named by its own tools as itself, while another agent of that starter names it no longer", async () => {
+test("an agent whose starter no longer sees its task keeps its own tools, names itself as itself, and messages an agent its starter still sees, while another agent of that starter names it no longer", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
   const onBilling = await agentOn(agents.caller.userId, tasks.billing);
   // The task moves onto its owner's own token, which the caller's starter keeps none to read through.
   await database.run(
@@ -1899,6 +1900,8 @@ test("an agent whose starter no longer sees its task is still named by its own t
     [Option.isSome(await named(onBilling.id)), Option.isNone(await named(agents.caller.id))],
     [true, true],
   );
+  const sent = await directMessage(hostOf(true), onBilling, agents.caller, eve.services);
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
 });
 
 test("update_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done with the first record kept, and brings it back with the record cleared", async () => {

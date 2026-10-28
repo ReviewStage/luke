@@ -94,11 +94,7 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
-import {
-  agentWorkspace,
-  taskWorkspace,
-  workspaceRepository,
-} from "../github/workspace-repository.js";
+import { taskWorkspace, workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -1230,9 +1226,19 @@ export function callerTask(caller: AgentCaller): string | null {
   return caller.agent.taskId;
 }
 
-/** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
+/**
+ * The workspace the caller reaches agents in, read on its member's standing
+ * now; nothing where they no longer reach the agent. Note that the caller
+ * is read as it reads itself (`readCodingAgent`), its task's visibility
+ * left out, because an agent acting as itself keeps its tools while its
+ * starter no longer sees its task; every agent and task they act on is
+ * still read on the member's own rule (`workspaceAgent`, a start's reach).
+ */
 export const callerWorkspace = (caller: AgentCaller) =>
-  agentWorkspace(caller.agent.userId, caller.agent);
+  Effect.map(
+    readCodingAgent(caller.agent.userId, caller.agent.id),
+    Option.map((agent) => agent.organizationId),
+  );
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
 /** The provider's own harness the agent runs on; none on eve. */
