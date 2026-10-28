@@ -183,10 +183,7 @@ test("a line typed into the call is one typed row naming the call, and Luke's wo
           to_ms: 800,
         },
       ],
-      [
-        "typed-1",
-        { author: "developer", channel: "typed", voice_session_id: sessionId, from_ms: 900 },
-      ],
+      ["typed-1", { channel: "typed", voice_session_id: sessionId, from_ms: 900 }],
       [
         "reply-1",
         {

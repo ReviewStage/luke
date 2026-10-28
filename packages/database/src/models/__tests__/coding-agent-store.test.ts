@@ -17,7 +17,6 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
-  MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TURN_ORIGIN,
@@ -263,7 +262,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
             clientId: "earlier",
             role: MESSAGE_ROLE.USER,
             parts: [{ type: "text", text: "earlier" }],
-            metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+            metadata: { channel: MESSAGE_CHANNEL.TYPED },
             placedAt: new Date(),
           })
           .returning({ id: messages.id });
@@ -457,7 +456,6 @@ it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) =
           clientId: "typed-line-1",
           text,
           metadata: {
-            author: MESSAGE_AUTHOR.DEVELOPER,
             channel: MESSAGE_CHANNEL.TYPED,
             voice_session_id: randomUUID(),
             from_ms: 900,

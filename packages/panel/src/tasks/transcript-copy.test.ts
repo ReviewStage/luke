@@ -97,7 +97,8 @@ function said(id: string, role: CodingAgentMessage["role"], text: string): Codin
 test("another agent's message is copied under the agent that sent it, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
   const notice: CodingAgentMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
-    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+    metadata: { channel: "agent_message" },
+    sentBy: { name: "Invite emails", agent: true },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
@@ -140,7 +141,8 @@ test("another agent's message in its whole shape is copied as its words alone, w
         agentMessageReplyLine("5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f"),
       ].join("\n\n"),
     ),
-    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+    metadata: { channel: "agent_message" },
+    sentBy: { name: "Invite emails", agent: true },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",

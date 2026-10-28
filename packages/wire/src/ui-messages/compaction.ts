@@ -61,7 +61,7 @@ export function compactionSummaryMessage(
   if (text.length === 0) return undefined;
   const read = readEither(ASSISTANT_MESSAGE_METADATA)(
     unparsedWire({
-      author: MESSAGE_AUTHOR.BRAIN,
+      author: MESSAGE_AUTHOR.MODEL,
       compaction: {
         first_kept_message_id: summary.firstKeptMessageId,
         ...(summary.tokensBefore !== undefined

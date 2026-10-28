@@ -18,7 +18,7 @@ import { failureKind } from "@luke/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel, type ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -186,14 +186,10 @@ function originWords(origin: StoredAutomationOrigin): string {
   return [...subject, origin.prompt.trim()].join("\n").slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
-/** A row of the developer's own words: a user row no other agent's message wrote, and no note the brain wrote down for itself. */
+/** A row of the developer's own words: a user row no other agent's message wrote, and no note the runtime wrote down. */
 function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
-  if (message?.role !== MESSAGE_ROLE.USER) return false;
-  if ("author" in message.metadata && message.metadata.author === MESSAGE_AUTHOR.BRAIN)
-    return false;
-  return !(
-    "channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE
-  );
+  if (message?.role !== MESSAGE_ROLE.USER || "source" in message.metadata) return false;
+  return message.metadata.channel !== MESSAGE_CHANNEL.AGENT_MESSAGE;
 }
 
 /** What the line before an answer is known to be, in the window a title reads. */

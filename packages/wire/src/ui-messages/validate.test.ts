@@ -124,3 +124,34 @@ test("a stored-row read holds a row to the structure and the registry's names, n
     false,
   );
 });
+
+test("a stored-row read takes a row a draining release wrote in the old metadata spelling as the row it is, and the write door refuses it", async () => {
+  const words = [{ type: "text", text: "Rebase before you push." }];
+  const row = (id: string, role: string, metadata: WireRecord) => ({
+    id,
+    role,
+    metadata,
+    parts: words,
+  });
+  const legacy = [
+    row("typed", "user", { author: "developer", channel: "typed" }),
+    row("message", "user", { author: "agent", channel: "agent_message", from: "Invite emails" }),
+    row("note", "user", { author: "brain", source: "hook" }),
+    row("spoken", "user", { author: "voice_model", channel: "voice" }),
+    row("reply", "assistant", { author: "brain" }),
+  ];
+  assert.deepEqual(
+    await runTest(readStoredUIMessages(legacy, TOOLS, UNREGISTERED_TOOL_PART.DROP)),
+    {
+      ok: true,
+      value: [
+        row("typed", "user", { channel: "typed" }),
+        row("message", "user", { channel: "agent_message" }),
+        row("note", "user", { source: "hook" }),
+        row("spoken", "user", { author: "voice_model", channel: "voice" }),
+        row("reply", "assistant", { author: "model" }),
+      ],
+    },
+  );
+  assert.equal((await runTest(readStoredUIMessages(legacy, TOOLS))).ok, false);
+});

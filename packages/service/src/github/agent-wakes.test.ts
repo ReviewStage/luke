@@ -645,7 +645,6 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           sentLineId(deliveryId),
         );
         const review: GitHubLineMetadata = {
-          author: "developer",
           channel: "github",
           event: "review",
           repository: "Acme/Relay",

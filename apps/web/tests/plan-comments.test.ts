@@ -446,7 +446,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         );
         assert.deepEqual(
           lines.map((line) => line.metadata),
-          [{ author: "developer", channel: "comment", thread_id: thread.id }],
+          [{ channel: "comment", thread_id: thread.id }],
         );
         const [after] = threadsIn(
           yield* answer("comments", request(commentsPath(taskId), teammate, {})),

@@ -6525,9 +6525,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(
           [yield* metadataOf(keys.answer), yield* metadataOf(keys.message)],
           [
-            { author: "developer", channel: "thread", event: "answer", item_id: posted.success.id },
+            { channel: "thread", event: "answer", item_id: posted.success.id },
             {
-              author: "developer",
               channel: "thread",
               event: "message",
               item_id: posted.success.id,
@@ -8070,7 +8069,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
               role: MESSAGE_ROLE.ASSISTANT,
               // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
               parts: [text(words)] as never,
-              metadata: { author: MESSAGE_AUTHOR.BRAIN },
+              metadata: { author: MESSAGE_AUTHOR.MODEL },
               placedAt: new Date(),
             })),
           ),
@@ -8222,7 +8221,7 @@ const transcriptRow = (
           metadata:
             role === MESSAGE_ROLE.USER
               ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK)
-              : { author: MESSAGE_AUTHOR.BRAIN },
+              : { author: MESSAGE_AUTHOR.MODEL },
           placedAt: new Date(),
         })
         .returning({ id: messages.id }),
@@ -9601,7 +9600,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             role: MESSAGE_ROLE.ASSISTANT,
             // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
             parts: [text(`Step ${from + at}.`)] as never,
-            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            metadata: { author: MESSAGE_AUTHOR.MODEL },
             placedAt: new Date(),
           }));
           const written = yield* Database.use((db) =>

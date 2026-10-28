@@ -8,7 +8,7 @@ import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "@luke/wire";
+import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Schema } from "effect";
 import { afterAll } from "vitest";
 
@@ -154,7 +154,6 @@ it.effect(
           clientId: "typed-line-1",
           text: "Use the fixture branch.",
           metadata: {
-            author: MESSAGE_AUTHOR.DEVELOPER,
             channel: MESSAGE_CHANNEL.TYPED,
             voice_session_id: randomUUID(),
             from_ms: 900,

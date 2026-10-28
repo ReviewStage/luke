@@ -114,6 +114,7 @@ import {
   ShownPictures,
   useAgentPictureDoor,
 } from "./agent-pictures.js";
+import { AgentPlace } from "./agent-place.js";
 import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
@@ -179,7 +180,6 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { AgentPlace } from "./agent-place.js";
 import { linkChip } from "./mention-chip.js";
 import {
   agentMessagePlace,
@@ -453,7 +453,7 @@ function useLiveDoors(
  * Another coding agent's message, sent with `message_agent`, as its
  * sender's bubble at the column's left: its words as a person reads them,
  * without the lines that are the agent's alone (`agentMessageWords`), then
- * the sender by its own chip, which opens it, or by the name the line keeps
+ * the sender by its own chip, which opens it, or by the name its row kept
  * where the sender is gone, when it arrived, and Copy and Copy link.
  */
 function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNode {
@@ -481,7 +481,7 @@ function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNod
             <SendingAgent actor={sender} agentId={sender.agentId} />
           ) : (
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate>
-              {sent.from}
+              {message.sentBy?.name}
             </Text>
           )
         }

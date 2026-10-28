@@ -10,13 +10,7 @@ import {
   insertTurn,
   openHostedStoreTestDatabase,
 } from "@luke/database/testing";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-} from "@luke/wire";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -176,7 +170,7 @@ async function insertTestMessage(
     clientId: "client-1",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "hello" }],
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    metadata: { channel: MESSAGE_CHANNEL.TYPED },
     ...row,
   });
 }

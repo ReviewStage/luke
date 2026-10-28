@@ -86,7 +86,7 @@ import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-is
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { desc, eq } from "drizzle-orm";
@@ -2498,10 +2498,7 @@ test("message_agent hands another agent of the workspace the words under the sen
     metadata !== undefined && metadata !== null && "channel" in metadata,
     "a line is written",
   );
-  assert.deepEqual(
-    [metadata.author, metadata.channel],
-    [MESSAGE_AUTHOR.AGENT, MESSAGE_CHANNEL.AGENT_MESSAGE],
-  );
+  assert.deepEqual(metadata, { channel: MESSAGE_CHANNEL.AGENT_MESSAGE });
   assert.deepEqual(
     await directMessage(host, agents.caller, agents.caller, eve.services, "call-2"),
     {

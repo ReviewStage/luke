@@ -440,7 +440,6 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
           clientId: row.rowId,
           text: row.text,
           metadata: {
-            author: MESSAGE_AUTHOR.DEVELOPER,
             channel: MESSAGE_CHANNEL.TYPED,
             voice_session_id: voiceSession.value.id,
             from_ms: Math.max(0, Math.round(row.atMs)),

@@ -341,7 +341,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
               role: MESSAGE_ROLE.ASSISTANT,
               // SAFETY: the part is a stored journal's, as the relay writes it.
               parts: [code("call-1", "export const TTL = 7;")] as never,
-              metadata: { author: MESSAGE_AUTHOR.BRAIN },
+              metadata: { author: MESSAGE_AUTHOR.MODEL },
               placedAt: CLOSED_AT,
             }),
           ),
@@ -406,7 +406,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             role: MESSAGE_ROLE.ASSISTANT,
             // SAFETY: the part is a stored journal's, as the relay writes it.
             parts: [answeredShowCode("call-1", "export const TTL = 7;")] as never,
-            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            metadata: { author: MESSAGE_AUTHOR.MODEL },
             placedAt: CLOSED_AT,
           }),
         );

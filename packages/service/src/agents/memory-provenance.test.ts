@@ -113,7 +113,7 @@ const writeTurn = (
       clientId: randomUUID(),
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: "Look over what changed today." }],
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+      metadata: { channel: MESSAGE_CHANNEL.TYPED },
       placedAt: now,
       finishedAt: now,
       ...(opener.sender === undefined
@@ -136,7 +136,7 @@ const writeTurn = (
         input: { url: "https://example.com/" },
         output: "Example Domain",
       })) as never,
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+      metadata: { author: MESSAGE_AUTHOR.MODEL },
       placedAt: now,
     });
   });

@@ -4,7 +4,7 @@ import { listRecentMessages } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { type FileUIPart, isFileUIPart, isTextUIPart, isToolUIPart, type ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
-import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
+import { isDeveloperLine, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 
 /**
  * A conversation's stored messages as the model reads them back: a rotated
@@ -22,7 +22,7 @@ const SPEAKER = {
 function speakerOf(message: StoredUIMessage): string {
   if (message.role === MESSAGE_ROLE.ASSISTANT) return SPEAKER.LUKE;
   if (message.role === MESSAGE_ROLE.USER) {
-    return message.metadata.author === MESSAGE_AUTHOR.DEVELOPER ? SPEAKER.DEVELOPER : SPEAKER.NOTE;
+    return isDeveloperLine(message.metadata) ? SPEAKER.DEVELOPER : SPEAKER.NOTE;
   }
   return SPEAKER.NOTE;
 }

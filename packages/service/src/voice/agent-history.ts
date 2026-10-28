@@ -2,7 +2,7 @@ import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, type Schema } from "effect";
 import { readRecentMessages, storedMessageLine } from "../agents/brain-host/context.js";
-import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../core.js";
+import { isDeveloperLine, MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../core.js";
 import { CALL_BACKEND } from "./call-backend.js";
 
 /**
@@ -38,7 +38,7 @@ export interface AgentCallHistory {
 function spoken(message: StoredUIMessage): boolean {
   if (message.role === MESSAGE_ROLE.SYSTEM) return true;
   return (
-    message.metadata.author === MESSAGE_AUTHOR.VOICE_MODEL ||
+    ("author" in message.metadata && message.metadata.author === MESSAGE_AUTHOR.VOICE_MODEL) ||
     ("voice_session_id" in message.metadata && message.metadata.voice_session_id !== undefined)
   );
 }
@@ -47,10 +47,7 @@ function spoken(message: StoredUIMessage): boolean {
 function agentCallHistoryOf(messages: readonly StoredUIMessage[]): AgentCallHistory | undefined {
   const own = messages.filter((message) => !spoken(message));
   const typed = own
-    .filter(
-      (message) =>
-        message.role === MESSAGE_ROLE.USER && message.metadata.author === MESSAGE_AUTHOR.DEVELOPER,
-    )
+    .filter((message) => message.role === MESSAGE_ROLE.USER && isDeveloperLine(message.metadata))
     .slice(-AGENT_HISTORY.TYPED)
     .map((message) => storedMessageLine(message, AGENT_HISTORY.TYPED_CHARS));
   const last = own.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);

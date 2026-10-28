@@ -115,7 +115,6 @@ const TRANSCRIPT_INPUT = { providerId: "example", providerSessionId: "s-1" };
 const TRANSCRIPT_OUTPUT = { lines: ["user: fixture ask", "assistant: fixture reply"] };
 
 const TYPED_ASK: UserMessageMetadata = {
-  author: MESSAGE_AUTHOR.DEVELOPER,
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
@@ -215,7 +214,7 @@ class Stream {
       message: {
         id,
         role: MESSAGE_ROLE.ASSISTANT,
-        metadata: { author: MESSAGE_AUTHOR.BRAIN },
+        metadata: { author: MESSAGE_AUTHOR.MODEL },
         parts,
       },
     });
@@ -347,7 +346,7 @@ test("a developer turn leaves its ask, its journal closed as the answer told, an
     ],
   );
   assert.deepEqual(rows[0]?.metadata, TYPED_ASK);
-  assert.deepEqual(rows[1]?.metadata, { author: MESSAGE_AUTHOR.BRAIN });
+  assert.deepEqual(rows[1]?.metadata, { author: MESSAGE_AUTHOR.MODEL });
   assert.deepEqual(rows[1]?.parts, REPLY_PARTS);
   assert.deepEqual(await counters(target), { message: 3 });
 

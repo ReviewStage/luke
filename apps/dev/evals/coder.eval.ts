@@ -28,7 +28,6 @@ import {
 } from "@luke/service/testing/coder-scripted-model";
 import {
   EXCESS_KEYS,
-  MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TURN_ORIGIN,
@@ -197,7 +196,6 @@ export default defineEval({
         [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
       );
       assert.deepEqual(rows[0]?.metadata, {
-        author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.TYPED,
       });
       assert.ok(rows[0]?.parts.some((part) => isTextUIPart(part) && part.text === PLAN_SNAPSHOT));

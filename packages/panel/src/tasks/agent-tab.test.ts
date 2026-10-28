@@ -1014,7 +1014,8 @@ const AGENT_MESSAGE: CodingAgentMessage = {
       ].join("\n\n"),
     },
   ],
-  metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+  metadata: { channel: "agent_message" },
+  sentBy: { name: "Invite emails", agent: true },
 };
 
 /** The message drawn in an agent's transcript. */

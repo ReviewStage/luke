@@ -69,7 +69,7 @@ import {
 } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import { bothInOrder, failureKind } from "@luke/runtime/effect";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
+import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -1039,12 +1039,10 @@ function openingOf(
   const metadata: AwaitingLineMetadata =
     taken === undefined
       ? {
-          author: MESSAGE_AUTHOR.DEVELOPER,
           channel: MESSAGE_CHANNEL.START,
           brief: brief.prompt === null ? START_LINE_BRIEF.PLAN : START_LINE_BRIEF.PROMPT,
         }
       : {
-          author: MESSAGE_AUTHOR.DEVELOPER,
           channel: MESSAGE_CHANNEL.START,
           brief: taken.continued ? START_LINE_BRIEF.CONTINUE : START_LINE_BRIEF.FORK,
           source_agent_id: taken.source.id,

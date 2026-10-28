@@ -999,7 +999,7 @@ it.effect(
         clientId: randomUUID(),
         role: MESSAGE_ROLE.USER,
         parts: [{ type: "text", text: typed }],
-        metadata: { author: "developer", channel: "typed" },
+        metadata: { channel: "typed" },
         createdAt: at,
         finishedAt: at,
       });
@@ -1010,7 +1010,7 @@ it.effect(
         clientId: randomUUID(),
         role: MESSAGE_ROLE.ASSISTANT,
         parts: [{ type: "text", text: reply }],
-        metadata: { author: "brain" },
+        metadata: { author: "model" },
         createdAt: at,
         finishedAt: at,
       });
@@ -1056,7 +1056,7 @@ it.effect(
         clientId: randomUUID(),
         role: MESSAGE_ROLE.USER,
         parts: [{ type: "text", text: typed }],
-        metadata: { author: "developer", channel: "typed" },
+        metadata: { channel: "typed" },
         createdAt: at,
         finishedAt: at,
       });
@@ -1172,7 +1172,7 @@ it.effect(
         clientId: randomUUID(),
         role: MESSAGE_ROLE.USER,
         parts: [{ type: "text", text: typed }],
-        metadata: { author: "developer", channel: "typed" },
+        metadata: { channel: "typed" },
         createdAt: at,
         finishedAt: at,
       });
