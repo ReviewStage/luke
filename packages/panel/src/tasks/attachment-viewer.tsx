@@ -114,7 +114,7 @@ const VIEWER_LABEL = {
   NEXT: "Next file",
   ZOOM_OUT: "Zoom out",
   ZOOM_IN: "Zoom in",
-  DOWNLOAD: "Download",
+  DOWNLOAD: "Download file",
   CLOSE: "Close",
 } as const;
 
@@ -247,8 +247,8 @@ function WalkButton({
 /** What a phone's ⋯ copies the file shown as, and what its toast says once it is copied. */
 const COPIED = { TEXT: "Text copied", IMAGE: "Image copied" } as const;
 
-/** What the viewer's ⋯ is named for on a phone: "File actions". */
-const VIEWER_THING = "File";
+/** What the viewer's ⋯ is named for on a phone: "Attachment actions". */
+const VIEWER_THING = "Attachment";
 
 /**
  * The header's buttons but Close as the groups of a phone's ⋯: the walk

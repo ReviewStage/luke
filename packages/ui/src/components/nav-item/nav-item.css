@@ -2,7 +2,8 @@
    here: its inks at rest, under the pointer, open, and unread, which a
    strip's chosen tab is held to (`tabs-frame.test.ts`); its detail's
    ellipsis; and its end, whose count and chord trade places under the
-   pointer and the keyboard, through `:has()` and the pointer's media. The
+   pointer and the keyboard, through `:has()` and the pointer's media; and
+   its actions' ⋯, which comes in over that end the same way. The
    keyboard's ring is the app's reset's, as it is for every control. */
 
 @layer components {
@@ -136,6 +137,39 @@
     .luke-nav-item:focus-visible:not(:disabled)
       > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
       display: inline-flex;
+    }
+  }
+
+  /* A place's ⋯ waits unseen over the row's end at rest, and comes in
+     while the row is hovered, holds the keyboard, or its menu stands,
+     standing where the count and the mark stood, which give way then.
+     Note that an unseen ⋯ takes no press, so a finger, which has no
+     hover, reaches the row's menu by its long press and keeps the count. */
+  .luke-nav-item-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-nav-item-frame:focus-within > .luke-nav-item-actions,
+  .luke-nav-item-actions:has([aria-expanded="true"]) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .luke-nav-item-frame:focus-within .luke-nav-item-rest,
+  .luke-nav-item-frame:has(.luke-nav-item-actions [aria-expanded="true"]) .luke-nav-item-rest {
+    visibility: hidden;
+  }
+
+  @media (hover: hover) {
+    .luke-nav-item-frame:hover > .luke-nav-item-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .luke-nav-item-frame:hover .luke-nav-item-rest {
+      visibility: hidden;
     }
   }
 }

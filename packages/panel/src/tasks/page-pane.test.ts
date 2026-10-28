@@ -10,6 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
@@ -58,15 +59,26 @@ function mount(page: PageLine, read: ReadPageSource = readSource, findActive = t
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  // What the tab hands the strip's one ⋯, as its groups' names.
+  let held: TabActionGroups | undefined;
+  const handed = () => (held ?? []).map((group) => group.map((each) => each.label));
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        createElement(PagePane, {
-          place: { taskId: TASK },
-          page: listed,
-          readSource: read,
-          findActive,
-        }),
+        createElement(
+          HandTabActionsContext.Provider,
+          {
+            value: (actions) => {
+              held = actions;
+            },
+          },
+          createElement(PagePane, {
+            place: { taskId: TASK },
+            page: listed,
+            readSource: read,
+            findActive,
+          }),
+        ),
       ),
     );
   render(page);
@@ -85,7 +97,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource, findActive = t
     await wholeFileDrawn(container);
     return wholeFileLines(container);
   };
-  return { container, frame, press, render, sourceLines };
+  return { container, frame, press, render, sourceLines, handed };
 }
 
 const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version });
@@ -164,8 +176,9 @@ test("the page's Reload hangs a hint in the words it is named by", () => {
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Reload page");
 });
 
-test("over the source, View settings offers the settings its lines follow, and the ⋯ its actions alone", async () => {
-  const { container, press } = mount(FUNNEL);
+test("over the source, View settings offers the settings its lines follow, and the tab's one ⋯ is handed Copy source before Reload page", async () => {
+  const { container, press, handed } = mount(FUNNEL);
+  assert.deepEqual(handed(), [["Reload page"]]);
   assert.equal(container.querySelector('button[aria-label="View options"]'), null);
 
   await press("View source");
@@ -189,11 +202,12 @@ test("over the source, View settings offers the settings its lines follow, and t
   );
   await press("View options");
 
-  await press("Source actions");
-  assert.deepEqual(
-    [...document.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent),
-    ["Copy source"],
+  assert.equal(
+    container.querySelector('button[aria-label="Source actions"]'),
+    null,
+    "the bar draws no ⋯ of its own beside the strip's",
   );
+  assert.deepEqual(handed(), [["Copy source"], ["Reload page"]]);
 });
 
 test("the source stays shown while the versions are stepped, each version's own", async () => {
