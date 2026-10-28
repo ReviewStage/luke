@@ -13,6 +13,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxStartParams,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
@@ -20,7 +21,7 @@ import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -91,7 +92,7 @@ import {
 } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
@@ -348,7 +349,30 @@ test("a task's group header hangs the task's card, as the automation's does its 
   assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
 });
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+const LUKE_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
+const DOMAIN: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000d", "Name a domain?", 1_200),
+  agentId: LUKE_AGENT,
+};
+
+/** An item of the reader's operator, Luke, as main lists it: no task, no automation, and no repository. */
+function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
+  return {
+    id: asked.id,
+    agentId: asked.agentId,
+    agentKind: CODING_AGENT_KIND.OPERATOR,
+    title: asked.title,
+    postedAt: asked.postedAt,
+    agentTitle: "Luke",
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: null,
+    automationName: null,
+    repository: null,
+    ...(asked.channelId === undefined ? undefined : { channelId: asked.channelId }),
+  };
+}
+
+test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
   handState({});
   world.listedWorkspace = {
     id: "workspace-acme",
@@ -360,10 +384,12 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   world.agentInboxes = new Map([
     [SWEEP_AGENT, [QUARANTINE]],
     [STRAY_AGENT, [BUMP]],
+    [LUKE_AGENT, [DOMAIN]],
   ]);
   const { page, asked } = mount([
     { ...waitingTaskless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
     { ...waitingTaskless(BUMP), automationId: null, automationName: null },
+    lukeTaskless(DOMAIN),
   ]);
   await settle();
 
@@ -431,6 +457,16 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     stray?.querySelector(".lucide-zap"),
     "it wears the automation glyph, as its group does",
   );
+
+  const luke = headerNamed(page, "Luke");
+  assert.ok(luke.querySelector(".luke-face"), "Luke's group wears his face");
+  assert.ok(luke.querySelector(".lucide-zap") === null, "and no automation glyph");
+  act(() => rowNamed(page, "Name a domain?").click());
+  await settle();
+  // Note that the title joins the path only once the heading scrolls away, so his own crumb stands alone.
+  const path = [...page.querySelectorAll<HTMLElement>('nav[aria-label="Path"] li')];
+  assert.equal(path.length, 1, "his path names him once, under no group");
+  assert.ok(path[0]?.querySelector(".luke-face"), "his crumb wears his face");
 });
 
 test("an item's card names the automation that holds it by a chip that hangs the automation's card, read as it is hung where the Inbox has read no automations", async () => {
@@ -1422,8 +1458,13 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
     name: "launch",
     project: true,
   };
-  answerChannels({ channels: () => [project, { ...GENERAL, waiting: 2 }, APP_CHANNEL] });
-  const { page } = mount([], { withSidebar: true });
+  answerChannels({ channels: () => [project, GENERAL, APP_CHANNEL] });
+  // Note that a row counts the questions main lists in its channel, as the Inbox's row counts them.
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
+    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: GENERAL.id })] },
+  ];
+  const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
   assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
@@ -1593,5 +1634,64 @@ test("an item opened whose agent's inbox could not be read says so in the pane, 
     itemPane(page).getAttribute("aria-label"),
     THRESHOLD.title,
     "the item is read again",
+  );
+});
+
+/** The count a sidebar row wears, by the row's name; none where it wears none. */
+function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
+  const row =
+    [...page.querySelectorAll<HTMLElement>(".luke-nav-item")].find(
+      (each) => each.querySelector(".luke-nav-item-name")?.textContent === name,
+    ) ?? assert.fail(`the sidebar draws the row ${name}`);
+  const count = row.textContent?.match(/\d+/u)?.[0];
+  return count === undefined ? undefined : Number(count);
+}
+
+test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.CHANNELS_LIST
+        ? // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
+          Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { channels: [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })) },
+          } as FakeActAnswer)
+        : previous(request),
+  });
+  world.agentInboxes = new Map([[LUKE_AGENT, [DOMAIN]]]);
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
+    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: APP_CHANNEL.id })] },
+  ];
+  const archived = "c0ffee00-0000-4000-8000-000000000009";
+  const { page } = mount(
+    [
+      { ...lukeTaskless({ ...DOMAIN, channelId: APP_CHANNEL.id }), workspaceId: ACME.id },
+      {
+        ...lukeTaskless({ ...BUMP, agentId: LUKE_AGENT, channelId: archived }),
+        workspaceId: ACME.id,
+      },
+      // Note that another workspace's question is set in #general's place, so it would show on that row were it counted.
+      {
+        ...lukeTaskless({
+          ...item("a1b2c3d4-0000-4000-8000-00000000000e", "Rotate the beta key?", 1_100),
+          agentId: LUKE_AGENT,
+          channelId: GENERAL.id,
+        }),
+        workspaceId: "workspace-beta",
+      },
+    ],
+    { withSidebar: true, waiting },
+  );
+  await settle();
+  assert.equal(sidebarRowCount(page, "Inbox"), 4, "both tasks' questions and Luke's two");
+  assert.deepEqual(
+    [sidebarRowCount(page, "general"), sidebarRowCount(page, "app")],
+    [1, 2],
+    "the channels count three of them, Luke's in #app among them, the archived channel's on no row",
   );
 });

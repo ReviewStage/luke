@@ -3,7 +3,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentAttachment,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -44,6 +48,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
@@ -1133,7 +1138,7 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
+/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it, or Luke for the member's operator. */
 export const INBOX_HOLDER = {
   TASK: "plan",
   AUTOMATION: "automation",
@@ -1149,7 +1154,8 @@ type InboxAgentLine = Pick<
  * The task holding an item, or the automation holding an item of an agent
  * with no task, named as its group's header names it, and its agents as
  * main's read names them, by id; none for the agents no automation the
- * reader may read started.
+ * reader may read started. The member's operator stands under no
+ * automation but a group of its own, Luke (`operator`), which wears his mark.
  */
 export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
@@ -1157,7 +1163,9 @@ export type InboxHolder =
       readonly kind: typeof INBOX_HOLDER.AUTOMATION;
       readonly automationId: string | null;
       readonly name: string;
-      readonly repository: string;
+      readonly repository: string | null;
+      /** Whether this is the member's operator's group, Luke's, which no automation names. */
+      readonly operator: boolean;
       readonly agents: ReadonlyMap<string, InboxAgentLine>;
     };
 
@@ -1165,6 +1173,7 @@ export type InboxHolder =
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
+  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"
@@ -1173,9 +1182,10 @@ export type TasklessInboxAgent = Pick<
   | "workspaceId"
 >;
 
-/** The key a holder's group is folded and drawn by: the task's id, the automation's, or one key for the agents no automation names. */
+/** The key a holder's group is folded and drawn by: the task's id, the automation's, Luke's, or one key for the agents no automation names. */
 export function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
+  if (holder.operator) return OPERATOR_KEY;
   return holder.automationId ?? NO_AUTOMATION_KEY;
 }
 
@@ -1262,6 +1272,9 @@ const NO_AUTOMATION_KEY = "no-automation";
 /** What the group of agents no automation the reader may read started is called. */
 const NO_AUTOMATION_NAME = "Other agents";
 
+/** What the member's operator's group, Luke's, is keyed by. */
+const OPERATOR_KEY = "operator";
+
 /**
  * Whether a waiting item of an agent with no task is listed in the workspace
  * given: one of that workspace's agents', or one whose workspace the service
@@ -1281,8 +1294,8 @@ export function listedIn(
 
 /**
  * The groups the items of agents with no task stand in: one per automation
- * that started them, by its name, and one for the agents no automation the
- * reader may read names, each holding every item its agents' reads hold,
+ * that started them, by its name, one for the member's operator, Luke, and
+ * one for the agents no automation the reader may read names, each holding every item its agents' reads hold,
  * settled ones too; only the listed workspace's agents, where the service
  * names an agent's workspace, so another workspace's list holds none of
  * them.
@@ -1295,7 +1308,8 @@ export function tasklessGroups(
   const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
   for (const entry of waiting) {
     if (!listedIn(entry, workspaceId)) continue;
-    const key = entry.automationId ?? NO_AUTOMATION_KEY;
+    const operator = entry.agentKind === CODING_AGENT_KIND.OPERATOR;
+    const key = operator ? OPERATOR_KEY : (entry.automationId ?? NO_AUTOMATION_KEY);
     const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
     agents.set(entry.agentId, {
       agentTitle: entry.agentTitle,
@@ -1305,9 +1319,10 @@ export function tasklessGroups(
     });
     const holder: InboxHolder = groups.get(key)?.holder ?? {
       kind: INBOX_HOLDER.AUTOMATION,
-      automationId: entry.automationId,
-      name: entry.automationName ?? NO_AUTOMATION_NAME,
+      automationId: operator ? null : entry.automationId,
+      name: operator ? OPERATOR_NAME : (entry.automationName ?? NO_AUTOMATION_NAME),
       repository: entry.repository,
+      operator,
       agents,
     };
     groups.set(key, { holder, agents });

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -1083,7 +1084,7 @@ function waitingTaskless(
   };
 }
 
-test("the items of agents with no plan stand under the automation that started them, the unnamed ones together, and only the listed workspace's", () => {
+test("the items of agents with no plan stand under the automation that started them, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
   // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
@@ -1095,6 +1096,12 @@ test("the items of agents with no plan stand under the automation that started t
     waitingTaskless("agent-3", { automationId: null, automationName: null }),
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
+    waitingTaskless("agent-6", {
+      agentKind: CODING_AGENT_KIND.OPERATOR,
+      automationId: null,
+      automationName: null,
+      repository: null,
+    }),
   ];
   const read = new Map([
     ["agent-1", [item({ id: "one", agentId: "agent-1" })]],
@@ -1107,6 +1114,7 @@ test("the items of agents with no plan stand under the automation that started t
     ],
     ["agent-3", [item({ id: "three", agentId: "agent-3" })]],
     ["agent-4", [item({ id: "four", agentId: "agent-4" })]],
+    ["agent-6", [item({ id: "six", agentId: "agent-6" })]],
   ]);
 
   assert.deepEqual(
@@ -1118,6 +1126,7 @@ test("the items of agents with no plan stand under the automation that started t
       ["Nightly flake sweep", ["one", "two", "settled"]],
       ["Other agents", ["three"]],
       ["Old", []],
+      ["Luke", ["six"]],
     ],
   );
 });

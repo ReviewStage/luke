@@ -13,7 +13,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { accountInboxAnswerSchema } from "../account-inbox-wire.js";
+import { ACCOUNT_INBOX_REPOSITORYLESS, accountInboxAnswerSchema } from "../account-inbox-wire.js";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../coding-agent-wire.js";
 import {
   INBOX_BOUNDS,
@@ -80,6 +80,9 @@ export const inboxContract = {
       EffectSchema.Struct({
         after: EffectSchema.optionalKey(inboxCursorSchema),
         archived: EffectSchema.optionalKey(EffectSchema.String),
+        [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: EffectSchema.optionalKey(
+          EffectSchema.Literal(ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
+        ),
       }),
     )
     .output(EffectSchema.flip(accountInboxAnswerSchema)),

@@ -680,7 +680,7 @@ function HolderHeader({
     );
   }
   if (holder.automationId === null) {
-    return <GroupHeader glyph={<GLYPH.AUTOMATION />} label={holder.name} {...shared} />;
+    return <GroupHeader glyph={<HolderGlyph holder={holder} />} label={holder.name} {...shared} />;
   }
   const actor =
     known === undefined
