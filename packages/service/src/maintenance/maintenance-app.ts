@@ -32,6 +32,7 @@ import {
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
 } from "../voice/orphan-sweep.js";
+import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
@@ -108,6 +109,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepAbandonedTurns: (now) =>
       Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
+      ),
+    sweepDeviceLeases: (now) =>
+      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
+        sweepDeviceLeases(writer, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>

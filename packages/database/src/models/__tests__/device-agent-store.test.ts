@@ -26,12 +26,14 @@ import {
   deviceAgentLinesWaiting,
   deviceAgentRequestAnswer,
   deviceAgentRequestsWaiting,
+  lapsedDeviceAgentLaunches,
   queueDeviceAgentLine,
   queueDeviceAgentRequest,
   settleDeviceAgentLine,
+  settleLapsedDeviceAgentLine,
   withdrawExpiredDeviceAgentRows,
 } from "../device-agent-store.js";
-import { registerDevice } from "../device-store.js";
+import { beatDevice, registerDevice } from "../device-store.js";
 
 /**
  * The work queued for a local agent's Mac, over a real dialect: a line is
@@ -41,7 +43,9 @@ import { registerDevice } from "../device-store.js";
  * runner's exit; a request is claimed once and answered once, its answer
  * read back as the Mac gave it; nothing is queued for, claimed by, or read
  * by another account; a discard line goes only to a Mac that registered it
- * takes one; and the expiry withdraws old work but a runner still at work.
+ * takes one; the expiry withdraws old work but a runner still at work; and
+ * a device whose lease lapsed has its open launches read, bounded, and
+ * settled once, a waiting one never handed out after.
  * Synthetic accounts, agents, and Macs throughout.
  */
 
@@ -402,5 +406,79 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         "the running launch line is still there to settle",
       );
     }),
+  );
+
+  it.effect(
+    "a lapsed device's open launches are read bounded and settled once, claimed or waiting, while a device that beat since, or settled its own, keeps it",
+    () =>
+      Effect.gen(function* () {
+        const away = yield* openAccount();
+        const back = yield* openAccount();
+        const claimed = Option.getOrThrow(
+          yield* queueDeviceAgentLine(away.userId, launch(away.agentId)),
+        );
+        yield* claimDeviceAgentLine(away.userId, away.deviceId, claimed.id);
+        const waiting = Option.getOrThrow(
+          yield* queueDeviceAgentLine(away.userId, launch(away.agentId)),
+        );
+        const kept = Option.getOrThrow(
+          yield* queueDeviceAgentLine(back.userId, launch(back.agentId)),
+        );
+        const settledByDevice = yield* openAccount();
+        const exited = Option.getOrThrow(
+          yield* queueDeviceAgentLine(settledByDevice.userId, launch(settledByDevice.agentId)),
+        );
+        yield* claimDeviceAgentLine(settledByDevice.userId, settledByDevice.deviceId, exited.id);
+        yield* TestClock.adjust("10 minutes");
+        yield* beatDevice(back.userId, back.deviceId);
+        yield* settleDeviceAgentLine(
+          settledByDevice.userId,
+          settledByDevice.deviceId,
+          exited.id,
+          0,
+        );
+        const seenBefore = new Date((yield* Clock.currentTimeMillis) - 5 * 60_000);
+        const ours = new Set([away.userId, back.userId, settledByDevice.userId]);
+
+        const read = yield* lapsedDeviceAgentLaunches(seenBefore, 10_000);
+        const bounded = yield* lapsedDeviceAgentLaunches(seenBefore, 1);
+        const settled = yield* settleLapsedDeviceAgentLine(away.userId, waiting.id, seenBefore);
+        const again = yield* settleLapsedDeviceAgentLine(away.userId, waiting.id, seenBefore);
+        const beaten = yield* settleLapsedDeviceAgentLine(back.userId, kept.id, seenBefore);
+        const theirs = yield* settleLapsedDeviceAgentLine(
+          settledByDevice.userId,
+          exited.id,
+          seenBefore,
+        );
+
+        assert.deepEqual(
+          read
+            .filter((each) => ours.has(each.userId))
+            .map(({ id, deviceName }) => [id, deviceName]),
+          [
+            [claimed.id, "Studio"],
+            [waiting.id, "Studio"],
+          ],
+          "only the lapsed device's open launches, oldest first, with its name",
+        );
+        assert.equal(bounded.length, 1);
+        assert.deepEqual(settled, Option.some({ agentId: away.agentId }));
+        assert.ok(Option.isNone(again), "a line settled once is not settled again");
+        assert.deepEqual(
+          (yield* deviceAgentLinesWaiting(away.userId, away.deviceId)).map((line) => line.id),
+          [],
+          "a waiting launch taken from its device is no longer listed",
+        );
+        assert.ok(
+          Option.isNone(yield* claimDeviceAgentLine(away.userId, away.deviceId, waiting.id)),
+        );
+        assert.equal(yield* storedSecrets(waiting.id), null);
+        assert.ok(Option.isNone(beaten), "a device that beat since keeps its launch");
+        assert.ok(Option.isNone(theirs), "a launch its device settled is not touched");
+        assert.deepEqual(
+          yield* deviceAgentLineSettlement(settledByDevice.userId, exited.id),
+          Option.some({ exitCode: 0 }),
+        );
+      }),
   );
 });

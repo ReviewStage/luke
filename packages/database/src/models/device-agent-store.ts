@@ -556,6 +556,78 @@ const deleteExpiredLines = SqlSchema.void({
     ),
 });
 
+/** A launch line whose device's lease lapsed, with the device's name for the words its turn ends with. */
+const LapsedLaunchSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  agentId: Schema.String,
+  deviceName: Schema.String,
+});
+
+export type DeviceAgentLapsedLaunch = typeof LapsedLaunchSchema.Type;
+
+/** A launch line still open, claimed or not, whose device last beat before the instant given. */
+function lapsedLaunch(seenBefore: Date) {
+  return and(
+    eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+    isNull(deviceAgentLine.settledAt),
+    eq(device.id, deviceAgentLine.deviceId),
+    lt(device.lastSeenAt, seenBefore),
+  );
+}
+
+const findLapsedLaunches = SqlSchema.findAll({
+  Request: Schema.Struct({ seenBefore: Schema.Date, limit: Schema.Int }),
+  Result: LapsedLaunchSchema,
+  execute: ({ seenBefore, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: deviceAgentLine.id,
+          userId: deviceAgentLine.userId,
+          agentId: deviceAgentLine.agentId,
+          deviceName: device.name,
+        })
+        .from(deviceAgentLine)
+        .innerJoin(device, eq(device.id, deviceAgentLine.deviceId))
+        .where(lapsedLaunch(seenBefore))
+        .orderBy(asc(deviceAgentLine.seq))
+        .limit(limit),
+    ),
+});
+
+const writeLapsedSettled = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    id: Schema.String,
+    seenBefore: Schema.Date,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ agentId: Schema.String }),
+  execute: ({ userId, id, seenBefore, now }) =>
+    Database.use((db) =>
+      db
+        .update(deviceAgentLine)
+        .set({
+          settledAt: now,
+          exitCode: null,
+          // Note that a line still waiting is marked claimed and its secrets cleared too, because
+          // a device that comes back must never take a launch whose run was already taken from it.
+          claimedAt: sql`coalesce(${deviceAgentLine.claimedAt}, ${now}::timestamptz)`,
+          sealedSecrets: null,
+        })
+        .from(device)
+        .where(
+          and(
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            lapsedLaunch(seenBefore),
+          ),
+        )
+        .returning({ agentId: deviceAgentLine.agentId }),
+    ),
+});
+
 const deleteExpiredRequests = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, before: Schema.Date }),
   execute: ({ userId, before }) =>
@@ -683,6 +755,38 @@ export function deviceAgentLineSettlement(
   id: string,
 ): DeviceAgentEffect<Option.Option<{ readonly exitCode: number | null }>> {
   return findLineSettled({ userId, id });
+}
+
+/**
+ * The launch lines still open, claimed or not, of every account's devices
+ * that last beat before `seenBefore`, oldest first, at most `limit`: the runs
+ * whose device's lease lapsed (`DEVICE_LEASE`). Read with no account in hand,
+ * because the maintenance sweep reads every account's.
+ */
+export function lapsedDeviceAgentLaunches(
+  seenBefore: Date,
+  limit: number,
+): DeviceAgentEffect<readonly DeviceAgentLapsedLaunch[]> {
+  return findLapsedLaunches({ seenBefore, limit });
+}
+
+/**
+ * Settles the account's launch line as its runner gone, with no exit code,
+ * while it is still open and its device still last beat before
+ * `seenBefore`, answering the line's agent; none where the device settled it
+ * first, or beat since. A line its device never claimed is marked claimed and
+ * its secrets cleared in the same statement, so no device takes it after.
+ */
+export function settleLapsedDeviceAgentLine(
+  userId: string,
+  id: string,
+  seenBefore: Date,
+): DeviceAgentEffect<Option.Option<{ readonly agentId: string }>> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(writeLapsedSettled({ userId, id, seenBefore, now }), (rows) =>
+      Option.fromNullishOr(rows[0]),
+    ),
+  );
 }
 
 /**

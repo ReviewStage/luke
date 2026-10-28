@@ -12,7 +12,7 @@ import {
   claimCodingAgentRunnerLease,
   releaseCodingAgentRunnerLease,
 } from "@luke/database/models/coding-agent-runner-lease";
-import { Clock, Data, Duration, Effect } from "effect";
+import { Clock, Data, Duration, Effect, Option } from "effect";
 import { CODER } from "./bounds.js";
 
 /** Another call held the agent's runner lease for as long as a call waits on it. */
@@ -48,23 +48,38 @@ const claimRunnerLease = (
     }
   });
 
+/** The lease let go, where the holder still holds it; a release that fails leaves it to lapse at its `HOLD`. */
+const released = (agentId: string, holder: string) =>
+  releaseCodingAgentRunnerLease(agentId, holder).pipe(
+    Effect.catch((failure) => Effect.logWarning(`a runner lease was not let go: ${failure._tag}`)),
+  );
+
 /**
  * The body run holding the agent's runner lease, let go as it ends however
- * it ends, an interruption included. A release that fails leaves the lease
- * to lapse at its `HOLD`.
+ * it ends, an interruption included.
  */
 export const holdingRunner = <A, E, R>(agentId: string, body: Effect.Effect<A, E, R>) =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const holder = yield* claimRunnerLease(agentId, restore);
-      return yield* restore(body).pipe(
-        Effect.ensuring(
-          releaseCodingAgentRunnerLease(agentId, holder).pipe(
-            Effect.catch((failure) =>
-              Effect.logWarning(`a runner lease was not let go: ${failure._tag}`),
-            ),
-          ),
-        ),
-      );
+      return yield* restore(body).pipe(Effect.ensuring(released(agentId, holder)));
+    }),
+  );
+
+/**
+ * As `holdingRunner`, but only where no other call holds the lease now:
+ * the body's result, or none at once where one does, so a sweep passes the
+ * agent by until its next run rather than waiting behind a call.
+ */
+export const holdingRunnerIfFree = <A, E, R>(agentId: string, body: Effect.Effect<A, E, R>) =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const holder = randomUUID();
+      const now = yield* Clock.currentTimeMillis;
+      const until = now + Duration.toMillis(CODER.RUNNER_LEASE.HOLD);
+      if (!(yield* claimCodingAgentRunnerLease(agentId, holder, new Date(now), new Date(until)))) {
+        return Option.none<A>();
+      }
+      return Option.some(yield* restore(body).pipe(Effect.ensuring(released(agentId, holder))));
     }),
   );

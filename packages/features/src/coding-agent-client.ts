@@ -235,7 +235,7 @@ const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, and an agent on its starter's own GitHub token the caller did not start. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, an agent on its starter's own GitHub token the caller did not start, and a device away, refused as a Start on it is. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -253,6 +253,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
