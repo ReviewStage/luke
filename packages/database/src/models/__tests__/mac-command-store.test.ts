@@ -482,7 +482,6 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
             const agent = yield* openAgent(starter, workspace, "Keep the desk.");
             const aimed = Option.getOrThrow(
               yield* createAutomation(starter, {
-                taskId: null,
                 organizationId: workspace,
                 repositories: [],
                 name: "Triage",
