@@ -17,7 +17,8 @@
  * taken in the read's place. Either lands with the drop of what was drawn,
  * so nothing flickers back between the two. A drag's writes go to the
  * service one after another, and after every drag's asked before it, since
- * each was drawn over the ones before.
+ * each was drawn over the ones before; one refused takes the drag back
+ * onto what the service kept of the rest.
  *
  * Note that a write's wait settles once the follow has handed on the answer
  * carrying its transaction (`live-follow.ts`), whose reader is woken before
@@ -228,22 +229,31 @@ export function sidebarCollections(
             drawRows(entries.collection, next.entries);
             drawRows(agentEntries.collection, next.agentEntries);
           };
+          // Note that a write the service refused does not stop the ones after it, since each
+          // stands alone on the service, and what the service kept is confirmed before the drag
+          // is taken back, so taking back what it drew lands on the service's word.
           const work = Effect.gen(function* () {
             if (before !== undefined) yield* Deferred.await(before);
             let last: TaskSectionsWritten | undefined;
             let txid: string | undefined;
+            let refused = false;
             for (const write of writes) {
               const answered = yield* written(write);
-              if (answered === undefined) return yield* new Unwritten();
-              last = answered;
-              txid = answered.txid ?? txid;
+              if (answered === undefined) refused = true;
+              else {
+                last = answered;
+                txid = answered.txid ?? txid;
+              }
             }
-            yield* confirmed(txid, () => {
-              if (last === undefined) return;
-              sections.answer(last.sections);
-              entries.answer(last.entries);
-              agentEntries.answer(last.agentEntries);
-            });
+            if (last !== undefined) {
+              const kept = last;
+              yield* confirmed(txid, () => {
+                sections.answer(kept.sections);
+                entries.answer(kept.entries);
+                agentEntries.answer(kept.agentEntries);
+              });
+            }
+            if (refused) return yield* new Unwritten();
           });
           return yield* kept(draw, work).pipe(
             Effect.ensuring(Deferred.succeed(settled, undefined)),

@@ -201,6 +201,8 @@ interface FakeService extends TasksClient {
   sections: TaskSections | undefined;
   /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
+  /** The kind of section change the service refuses, where a test names one. */
+  sectionRefused: TaskSectionWrite["kind"] | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -511,6 +513,7 @@ function fakeService(tasks: Task[]): FakeService {
     pinAnswered: Effect.void,
     sections: undefined,
     sectionWrites: [],
+    sectionRefused: undefined,
     get memberships() {
       return memberships;
     },
@@ -798,7 +801,7 @@ function fakeService(tasks: Task[]): FakeService {
     writeTaskSection: (write) =>
       Effect.sync(() => {
         service.sectionWrites.push(write);
-        return service.sections;
+        return write.kind === service.sectionRefused ? undefined : service.sections;
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -1764,6 +1767,38 @@ it.effect(
         last()?.repositoryPins?.map((pin) => pin.repository),
         ["acme/web", "acme/relay"],
       );
+    }),
+);
+
+it.effect(
+  "a drag's change the service refused takes back only what it drew, so the changes the service kept before it stay drawn",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      // The service keeps the section, then refuses to put the task in it.
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
+      service.sectionRefused = TASK_SECTION_WRITE.PLACE;
+      const writes = [
+        {
+          kind: TASK_SECTION_WRITE.CREATE,
+          id: SECTION_ID,
+          workspaceId: PERSONAL.id,
+          title: "Launch",
+        },
+        { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID },
+      ];
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes }), {
+        changed: false,
+      });
+      assert.deepEqual(last()?.taskSections, service.sections);
     }),
 );
 
