@@ -151,7 +151,6 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
@@ -278,8 +277,6 @@ export interface AutomationWrites {
   remove(automationId: string): Promise<AutomationDeletedView>;
   /** Mints a webhook's secret again, answering it once for this page to show. */
   newWebhookSecret(automationId: string): Promise<AutomationView>;
-  /** Reads the list again, as a Run now settling moves an automation's newest run. */
-  reload(): void;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -390,15 +387,11 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /**
  * An automation's on/off switch, the list row's and the editor's alike. It
- * flips at once, from a local value, and a write the service refuses puts it
- * back and says why in a FAILED toast, as a settings switch does; it never
- * rests for a write.
- *
- * Note that its writes go one at a time, because the service reads and writes
- * each request on its own, so two in flight could commit in either order and
- * leave the opposite of the last press. A press made while one is out waits for
- * it, only the newest waiting press is sent, and one that would only repeat
- * what the burst just sent is not.
+ * reads the automation as the host draws it, which a press turns at once and
+ * a write the service refuses turns back (`@luke/host`'s
+ * `automation-collections.ts`), and says why in a FAILED toast, as a settings
+ * switch does; it never rests for a write. Writes to one automation go to the
+ * service in the order pressed, which the host keeps.
  */
 export function AutomationSwitch({
   automation,
@@ -408,43 +401,19 @@ export function AutomationSwitch({
   write: (enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   const toast = useToast();
-  const tail = useRef<Promise<unknown>>(Promise.resolve());
-  const newest = useRef(0);
-  const sent = useRef<boolean | undefined>(undefined);
-  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
-    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
-    sent.current = enabled;
-    const settle = () => {
-      if (press === newest.current) sent.current = undefined;
-    };
-    return write(enabled).then(
-      (answer): ActionResult => {
-        const reason = toggleRefusal(answer, enabled);
-        if (reason !== undefined) sent.current = undefined;
-        settle();
-        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
-      },
-      (error: unknown) => {
-        sent.current = undefined;
-        throw error;
-      },
-    );
+  const turn = (enabled: boolean) => {
+    write(enabled).then((answer) => {
+      const reason = toggleRefusal(answer, enabled);
+      if (reason !== undefined) {
+        toast({ words: reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      }
+    });
   };
-  const { value, run } = useOptimisticSettingWrite(
-    automation.enabled,
-    (enabled) => {
-      const press = ++newest.current;
-      const answered = tail.current.then(() => send(enabled, press));
-      tail.current = answered.catch(() => undefined);
-      return answered;
-    },
-    (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
-  );
   return (
     <Switch
-      checked={value}
-      label={value ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
-      onChange={run}
+      checked={automation.enabled}
+      label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={turn}
       {...NO_CONTEXT_MENU}
     />
   );
@@ -2621,8 +2590,6 @@ export function AutomationEditor({
     setRefusal(undefined);
     runs.runNow().then((answer) => {
       setRunning(false);
-      // The automation's newest run moved, so the list it stands in is read again too.
-      writes.reload();
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
   };
