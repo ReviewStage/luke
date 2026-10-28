@@ -64,6 +64,7 @@ interface Recorded {
   retention: number[];
   wakeups: number[];
   operatorWakes: number[];
+  starterNotices: number[];
   withdrawnLines: number[];
   automated: number[];
   pictures: number[];
@@ -85,6 +86,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     retention: [],
     wakeups: [],
     operatorWakes: [],
+    starterNotices: [],
     withdrawnLines: [],
     automated: [],
     pictures: [],
@@ -151,6 +153,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.operatorWakes.push(now);
         return { woken: 1, failed: 0 };
       }),
+    sweepStarterNotices: (now) =>
+      Effect.sync(() => {
+        recorded.starterNotices.push(now);
+        return { told: 1, failed: 0 };
+      }),
     purgeWithdrawnLines: (now) =>
       Effect.sync(() => {
         recorded.withdrawnLines.push(now);
@@ -212,6 +219,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      starterNotices: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
@@ -244,6 +252,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      starterNotices: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
@@ -263,6 +272,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      starterNotices: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
@@ -287,6 +297,7 @@ it.effect(
       assert.deepEqual(answer.body.sandboxRetention, RETAINED);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.operatorWakes, { woken: 1, failed: 0 });
+      assert.deepEqual(answer.body.starterNotices, { told: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
@@ -306,6 +317,7 @@ it.effect(
         retention: [instant],
         wakeups: [instant],
         operatorWakes: [instant],
+        starterNotices: [instant],
         withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
