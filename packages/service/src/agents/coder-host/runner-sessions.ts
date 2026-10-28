@@ -1017,12 +1017,10 @@ export const runnerSessions = <
             { concurrency: "unbounded" },
           );
           const lines = [...ahead.lines, opened.line];
-          // Note that a write to stdin is that runner's liveness check: Vercel refuses stdin to a
-          // command that exited (`command_not_found_or_exited`, a 404), or whose sandbox is
-          // stopping under it, which relaunches below, because reading the exit first waits out
-          // `EXIT_WAIT` on a runner that runs. A runner that reads its lines is queued them only
-          // where its exit read none, and one that ends before it takes them hands them to the
-          // launch its END starts (`deliverWaiting`).
+          // Note that a runner that reads its lines, as a sandbox's does, is queued them only where
+          // its exit read none, and one that ends before it takes them hands them to the launch its
+          // END starts (`deliverWaiting`). A write to a Mac's runner is its own liveness check: one
+          // whose launch line its Mac settled answers `NOT_FOUND_STATUS`, which relaunches below.
           const wrote =
             uploaded &&
             (reads
