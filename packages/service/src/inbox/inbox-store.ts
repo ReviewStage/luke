@@ -1175,7 +1175,7 @@ const TasklessRowSchema = Schema.Struct({
   waitsOn: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationName: Schema.NullOr(Schema.String),
-  repository: Schema.String,
+  repository: Schema.NullOr(Schema.String),
   workspaceId: Schema.NullOr(Schema.String),
   title: Schema.String,
   revision: Schema.Number,
@@ -1221,8 +1221,8 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        // Note that the repository stands where a task would, so an agent with neither has no place here yet.
-        .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)))
+        // Note that an operator works in no repository, and its asks are listed and counted as any agent's are, as its channel counts them.
+        .where(tasklessWaiting(userId))
         .orderBy(...LATEST_FIRST),
     ),
 });
@@ -1390,8 +1390,7 @@ export function accountInboxLiveStatements(
       automation,
       and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
     )
-    // An agent with neither a task nor a repository has no place here yet, as in the read above.
-    .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)));
+    .where(tasklessWaiting(userId));
   const plans = queryBuilder
     .select({
       ...liveSelection({ planId: inboxItem.taskId }),

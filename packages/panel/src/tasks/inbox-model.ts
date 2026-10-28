@@ -1156,7 +1156,7 @@ export type InboxHolder =
       readonly kind: typeof INBOX_HOLDER.AUTOMATION;
       readonly automationId: string | null;
       readonly name: string;
-      readonly repository: string;
+      readonly repository: string | null;
       readonly agents: ReadonlyMap<string, InboxAgentLine>;
     };
 

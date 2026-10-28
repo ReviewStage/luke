@@ -224,7 +224,8 @@ export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   agentModel: string;
   automationId: string | null;
   automationName: string | null;
-  repository: string;
+  /** The repository the agent works in; null for a member's operator, which works in none. */
+  repository: string | null;
   /** The workspace the agent belongs to, whose Inbox lists the item; absent from a service before it. */
   workspaceId?: string;
   /** The account that started the agent, whom the item waits on; absent where the service does not say, when it is the reader's own. */

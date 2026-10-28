@@ -122,7 +122,8 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   waitsOn: EffectSchema.optionalKey(EffectSchema.String),
   automationId: EffectSchema.NullOr(wireUuidSchema),
   automationName: EffectSchema.NullOr(EffectSchema.String),
-  repository: EffectSchema.String,
+  /** The repository the agent works in; null for a member's operator, which works in none. */
+  repository: EffectSchema.NullOr(EffectSchema.String),
   /** The workspace the agent belongs to, whose list its items stand in; absent from a service before it. */
   workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   title: EffectSchema.String,

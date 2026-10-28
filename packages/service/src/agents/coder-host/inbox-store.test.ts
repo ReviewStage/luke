@@ -1581,7 +1581,7 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
 
 it.layer(getTestDB())("the inbox store's operator, private to its member", (it) => {
   it.effect(
-    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, while its member reads and answers them",
+    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, while its member reads them, in its Inbox's held and live reads too, and answers them",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -1624,6 +1624,16 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
         );
 
         assert.ok((yield* stampIds(owner)).includes(posted.id));
+        // Note that an operator works in no repository, and its ask still waits in its member's Inbox, as its channel counts it.
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
+        assert.deepEqual(
+          held.planless?.map((entry) => [entry.id, entry.repository]),
+          [[posted.id, null]],
+        );
+        assert.deepEqual(
+          { ...(yield* liveAnswerOf(owner, held.readAt)), cursor: held.cursor },
+          held,
+        );
         const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
         assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
         assert.ok(Option.isSome(yield* answerDone(owner, posted)));
