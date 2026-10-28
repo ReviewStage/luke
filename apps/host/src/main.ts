@@ -139,7 +139,7 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
       reportToStderr(
-        "Luke host: this box is not enrolled. Run the install command from Settings › Agents › Hosts, with its --token.",
+        "Luke host: this box is not enrolled. Run the install command from Settings › Agents › Machines, with its --token.",
       );
       yield* Effect.sleep(UNENROLLED_REST);
       return false;
@@ -203,11 +203,11 @@ const enroll = (runtime: HostRuntime, token: string, name: string, origin: strin
         );
         return ENROLL_EXIT.ENROLLED;
       case HOST_ENROLL_OUTCOME.STILL_ENROLLED:
-        process.stdout.write(`Kept this box's enrollment as ${name}: it is still enrolled\n`);
+        process.stdout.write(`Kept this box's enrollment as ${name}\n`);
         return ENROLL_EXIT.ENROLLED;
       case HOST_ENROLL_OUTCOME.REFUSED:
         process.stderr.write(
-          "Luke refused the install token: it is unknown, revoked, or past its 24 hours. Copy a fresh command from Settings › Agents › Hosts › Add hosts.\n",
+          "Luke refused the install token: it is unknown, revoked, or past its 24 hours. Copy a fresh command from Settings › Agents › Machines › Add Linux servers.\n",
         );
         return ENROLL_EXIT.REFUSED;
       case HOST_ENROLL_OUTCOME.UPGRADE_NEEDED:
