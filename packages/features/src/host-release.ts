@@ -1,10 +1,8 @@
-import type { DeviceArch } from "./device-agent-wire.js";
-
 /**
  * host-release.ts -- the host daemon's release the install script serves: its version and each tarball's SHA-256, and where CI publishes them.
  *
- * CI builds one tarball per architecture a host runs on and publishes them
- * to a GitHub release of their own, tagged `host-v<version>`
+ * CI builds one tarball per platform and architecture a host runs on and
+ * publishes them to a GitHub release of their own, tagged `host-v<version>`
  * (`.github/workflows/release-host.yml`, `apps/host/scripts/package.ts`),
  * never marked the repository's latest, since the desktop's download link
  * and its updater read that one. The web app serves the install script with
@@ -18,10 +16,27 @@ import type { DeviceArch } from "./device-agent-wire.js";
 /** The repository whose releases carry the host's tarballs. */
 const RELEASE_REPOSITORY = "ReviewStage/luke";
 
-/** A published release of the host daemon: its version, and each architecture's tarball by its SHA-256 in hex. */
+/** Each platform and architecture the host is released for, as its tarball's name spells it. */
+export const HOST_TARGET = {
+  LINUX_X64: "linux-x64",
+  LINUX_ARM64: "linux-arm64",
+  DARWIN_ARM64: "darwin-arm64",
+} as const;
+
+export type HostTarget = (typeof HOST_TARGET)[keyof typeof HOST_TARGET];
+
+/**
+ * A published release of the host daemon: its version, and each target's
+ * tarball by its SHA-256 in hex. A Mac's is optional, since the releases
+ * before the first Mac package (`host-v0.1.0`) carry none.
+ */
 export interface HostRelease {
   readonly VERSION: string;
-  readonly SHA256: Readonly<Record<DeviceArch, string>>;
+  readonly SHA256: {
+    readonly [HOST_TARGET.LINUX_X64]: string;
+    readonly [HOST_TARGET.LINUX_ARM64]: string;
+    readonly [HOST_TARGET.DARWIN_ARM64]?: string;
+  };
 }
 
 /**
@@ -31,8 +46,8 @@ export interface HostRelease {
 export const HOST_RELEASE: HostRelease | undefined = {
   VERSION: "0.1.0",
   SHA256: {
-    x64: "ec50beda036fc04757c40eb83de2cea09b357713e957cf90629e9f8e52cd2ce3",
-    arm64: "796e6c5a12338f290cc10504ec954f020ec85d46279f6c058481795387b7baa2",
+    [HOST_TARGET.LINUX_X64]: "ec50beda036fc04757c40eb83de2cea09b357713e957cf90629e9f8e52cd2ce3",
+    [HOST_TARGET.LINUX_ARM64]: "796e6c5a12338f290cc10504ec954f020ec85d46279f6c058481795387b7baa2",
   },
 };
 
@@ -41,12 +56,12 @@ export function hostReleaseTag(version: string): string {
   return `host-v${version}`;
 }
 
-/** One architecture's tarball, by its file name, whose one top folder is `luke-host`. */
-export function hostTarballName(version: string, arch: DeviceArch): string {
-  return `luke-host-${version}-linux-${arch}.tar.gz`;
+/** One target's tarball, by its file name, whose one top folder is `luke-host`. */
+export function hostTarballName(version: string, target: HostTarget): string {
+  return `luke-host-${version}-${target}.tar.gz`;
 }
 
-/** Where the release keeps one architecture's tarball. */
-export function hostTarballUrl(version: string, arch: DeviceArch): string {
-  return `https://github.com/${RELEASE_REPOSITORY}/releases/download/${hostReleaseTag(version)}/${hostTarballName(version, arch)}`;
+/** Where the release keeps one target's tarball. */
+export function hostTarballUrl(version: string, target: HostTarget): string {
+  return `https://github.com/${RELEASE_REPOSITORY}/releases/download/${hostReleaseTag(version)}/${hostTarballName(version, target)}`;
 }
