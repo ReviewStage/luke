@@ -253,6 +253,8 @@ function fakeService() {
   let startTxid: string | undefined;
   // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
+  /** The item as the agent changed it first, which a close is answered not taken with; none takes every close. */
+  let changedFirst: InboxItem | undefined;
   /** The transaction the service says wrote a sent message's row; none says none was written. */
   let sentTxid: string | undefined;
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
@@ -614,6 +616,7 @@ function fakeService() {
     closeInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(`close:${itemId}:${request.revision}:${request.clientKey}`);
+        if (changedFirst !== undefined) return { item: changedFirst, taken: false };
         return {
           item: { ...ITEM, status: INBOX_STATUS.CLOSED, closedBy: { userId: "u1", name: "Dana" } },
           taken: true,
@@ -678,6 +681,10 @@ function fakeService() {
     /** The transaction the service says each inbox write committed in from now on; none says it changed nothing. */
     commitIn: (txid: string | undefined) => {
       committedIn = txid === undefined ? {} : { txid };
+    },
+    /** The item as the agent changed it before any close from now on, which the service answers each close not taken with. */
+    changeFirst: (item: InboxItem) => {
+      changedFirst = item;
     },
     /** Whether the service answers the account inbox's live read, or that the session signed out; none answers unanswered. */
     sealAccount: (next: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined) => {
@@ -797,6 +804,7 @@ function subject(
       sealAccount: service.sealAccount,
       sealItems: service.sealItems,
       commitIn: service.commitIn,
+      changeFirst: service.changeFirst,
       live: service.live,
       /** Every answer of the followed account inbox the host told, in order. */
       accountInboxes: () =>
@@ -1139,7 +1147,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, {
+        workspaceId: WORKSPACE_ID,
+        itemIds: [],
+      }),
       { marked: 2 },
     );
 
@@ -2480,6 +2491,95 @@ it.effect(
       assert.deepEqual(
         asked.filter((each) => each.startsWith("account-items-live:")),
         ["account-items-live:user-dana", "account-items-live:user-sam"],
+      );
+    }),
+);
+
+/** Whether the last telling of a plan's inbox, and of the account's items, holds the item as `holds` reads it. */
+function bothHold(
+  harness: {
+    readonly told: () => readonly WireValue[];
+    readonly accountItems: () => readonly unknown[];
+  },
+  holds: (item: InboxItem) => boolean,
+): readonly [boolean, boolean] {
+  const firstOf = (items: WireValue | undefined) => {
+    const first = Array.isArray(items) ? items[0] : undefined;
+    // SAFETY: a telling's items are inbox items, as the window is told them.
+    return first === undefined ? false : holds(first as InboxItem);
+  };
+  const plan = harness.told().at(-1);
+  // SAFETY: the account's items are told as wire values, each scope's items sorted in place.
+  const account = harness.accountItems().at(-1) as WireValue | undefined;
+  const scope = isRecord(account) && Array.isArray(account.scopes) ? account.scopes[0] : undefined;
+  return [
+    firstOf(isRecord(plan) && isRecord(plan.inbox) ? plan.inbox.items : undefined),
+    firstOf(isRecord(scope) ? scope.items : undefined),
+  ];
+}
+
+it.effect(
+  "a mark on an item a plan's inbox and the account's items both hold draws in both at once and holds there until each carries its transaction, and a close the agent overtook lands on the service's word in both",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, sealScope, sealItems, live, commitIn, changeFirst } = harness;
+      sealScope(LIVE_ANSWERED);
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* settled;
+      // Each read is woken by a write once, so each hands a wait for the next.
+      live.scope.set({ items: [ITEM_ROW], messages: [], files: [] }, ["9100"]);
+      live.items.set(
+        {
+          stamps: [stampOf(HELD_ITEM, TASK_ID)],
+          items: [{ ...ITEM_ROW, ...HELD_ITEM }],
+          messages: [],
+          files: [],
+        },
+        ["9100"],
+      );
+      yield* toldTimes(harness.told, 1);
+      yield* toldTimes(harness.accountItems, 1);
+      const unread = (item: InboxItem) => item.unread === true;
+
+      commitIn("9200");
+      const marking = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
+      );
+      yield* settled;
+      assert.deepEqual(bothHold(harness, unread), [true, true]);
+
+      // The account's items carry the mark first, and the plan's inbox answers once more from before it.
+      live.items.set({ stamps: [stampOf(HELD_ITEM, TASK_ID, { unread: true })], items: [] }, [
+        "9200",
+      ]);
+      live.scope.set({ items: [ITEM_ROW] });
+      yield* nextPoll;
+      assert.deepEqual(bothHold(harness, unread), [true, true]);
+      assert.equal(marking.pollUnsafe(), undefined);
+
+      live.scope.set({ items: [{ ...ITEM_ROW, unread: true }] }, ["9200"]);
+      yield* nextPoll;
+      assert.deepEqual(yield* Fiber.join(marking), { id: ITEM.id, unread: true, txid: "9200" });
+      assert.deepEqual(bothHold(harness, unread), [true, true]);
+
+      const overtaken = { ...LIVE_ITEM, revision: 3, title: "Push to main instead?" };
+      changeFirst(overtaken);
+      commitIn(undefined);
+      const closing = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+        }),
+      );
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(closing), { item: overtaken, taken: false });
+      assert.deepEqual(
+        bothHold(harness, (item) => item.status === INBOX_STATUS.OPEN && item.revision === 3),
+        [true, true],
       );
     }),
 );

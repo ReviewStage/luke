@@ -11,29 +11,24 @@ import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
-import { type InboxReadMark, useInboxSettler } from "./inbox-settling.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
  * use-inbox-read-marks.ts -- the Inbox's read and unread marks as one control: an item marked read or unread, or every item marked read, its dot flipping at once.
  *
- * A mark goes to the service as an act, and is laid over every read the
- * window draws (`@luke/panel`'s `inbox-settling.ts`, through its
- * `withReadMark`) so the dot flips the moment it is pressed, and stands
- * there until a read holds the item changed since, or a held read that
- * held it as marked holds it otherwise, another window's mark among them,
- * whose word the row then draws. Note that a mark moves nothing main hears
- * of, so a list's read of the item's plan is never read again on its
- * account, and the mark stands over it for as long as that read stands. The acts go one at a time, in the order the marks
- * were made, so a quick read, unread, read reaches the service as the last,
- * Mark all as read in its turn among them. A mark the service did not take
- * is let go, the dot stands as the reads hold it, and a toast says so, unless
- * the caller asks for quiet because it says the refusal itself, as the
- * selection bar does for the items it marked together. Marking every item
- * read marks the items the Inbox lists in the one workspace it lists, as
- * the service marks them, and asks the reads again once it is taken, since
- * the write moves nothing main hears of; an item waiting on the developer
- * keeps waiting, since the dots are all it clears.
+ * A mark goes to the service as an act, which the host draws into every
+ * read the window draws the moment it is asked, and holds there until each
+ * carries it (`@luke/host`'s `inbox-collections.ts`), so the dot flips at
+ * once and never flickers back; the host sends the marks one at a time, in
+ * the order they were asked, so a quick read, unread, read reaches the
+ * service as the last, Mark all as read in its turn among them. A mark the
+ * service did not take is taken back by the host, the dot standing as the
+ * reads hold it, and a toast says so, unless the caller asks for quiet
+ * because it says the refusal itself, as the selection bar does for the
+ * items it marked together. Marking every item read marks the items the
+ * Inbox lists in the one workspace it lists, as the service marks them; an
+ * item waiting on the developer keeps waiting, since the dots are all it
+ * clears.
  *
  * Opening an item marks it read, once each time it is shown
  * (`useReadOnOpen`), so an item the reader marks unread while it is shown
@@ -56,11 +51,6 @@ export interface InboxReadMarks {
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
 
-/** The mark an item takes: what it says of the item as it now stands. */
-function markOf(item: InboxItem, unread: boolean): InboxReadMark {
-  return { unread, updatedAt: item.updatedAt };
-}
-
 /** What one toast says of read marks given to several items: how many the service took, and how many not. */
 export function markedNote(unread: boolean, landed: number, refused: number): string {
   const state = unread ? "unread" : "read";
@@ -72,25 +62,7 @@ export function markedNote(unread: boolean, landed: number, refused: number): st
 /** What a mark the act channel refused hears, as the service not answering. */
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** An item's latest mark still to go: what it says, and the press it was made by. */
-interface Wanted {
-  readonly made: symbol;
-  readonly unread: boolean;
-}
-
-/**
- * The Inbox's read marks, sent through `act`; every item marked read in
- * `workspaceId` where the Inbox lists one. Nothing reads the Inbox again
- * once the service took a mark: the followed inboxes are pushed each item's
- * read state as it moves.
- *
- * A mark stands over every read the window draws (`inbox-settling.ts`)
- * until a read holds the item changed since, or a held read holds a later
- * mark, another window's included, which the row then draws. The marks go to
- * the service one at a time, in the order they were made, an item's later
- * mark standing for any of its own still waiting to go, so a quick read,
- * unread, read reaches it as the last.
- */
+/** The Inbox's read marks, sent through `act`; every item marked read in `workspaceId` where the Inbox lists one. */
 export function useInboxReadMarks({
   act,
   workspaceId,
@@ -98,69 +70,36 @@ export function useInboxReadMarks({
   act: ActHandle["act"];
   workspaceId: string | undefined;
 }): InboxReadMarks {
-  const settler = useInboxSettler();
   const toast = useToast();
   const refused = useCallback(
     (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
     [toast],
   );
-  // The writes, one after another, and each item's latest mark still to go, which its queued write sends.
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const wanted = useRef(new Map<string, Wanted>());
-  const send = useCallback((write: () => Promise<void>) => {
-    queue.current = queue.current.then(write);
-  }, []);
-  // Note that a mark a later one stood for before it went answers as taken, since the write that sent the later one answers its own press.
   const onMark = useCallback(
-    (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> => {
-      const made = settler.mark(new Map([[item.id, markOf(item, unread)]]));
-      wanted.current.set(item.id, { made, unread });
-      const sent = queue.current.then(() => {
-        const latest = wanted.current.get(item.id);
-        if (latest === undefined) return true;
-        wanted.current.delete(item.id);
-        return act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
-          itemId: item.id,
-          unread: latest.unread,
-        })
-          .catch(() => UNANSWERED)
-          .then((answer) => {
-            // Note that a mark is let go only where it still stands as it was made, so a later mark on the same item outlives an earlier one's refusal.
-            if (!("failure" in answer)) {
-              settler.marked(latest.made);
-              return true;
-            }
-            settler.unmark(latest.made);
-            if (saying?.quiet !== true) refused(markedNote(latest.unread, 0, 1));
-            return false;
-          });
-      });
-      queue.current = sent.then(() => undefined);
-      return sent;
-    },
-    [act, settler, refused],
+    (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> =>
+      act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
+        .catch(() => UNANSWERED)
+        .then((answer) => {
+          if (!("failure" in answer)) return true;
+          if (saying?.quiet !== true) refused(markedNote(unread, 0, 1));
+          return false;
+        }),
+    [act, refused],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
-      const marks = new Map(
-        items.filter(isUnread).map((item) => [item.id, markOf(item, false)] as const),
-      );
-      if (marks.size === 0) return;
-      const made = settler.mark(marks);
-      send(() =>
-        act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, workspaceId === undefined ? {} : { workspaceId })
-          .catch(() => UNANSWERED)
-          .then((answer) => {
-            if ("failure" in answer) {
-              settler.unmark(made);
-              refused(markedNote(false, 0, marks.size));
-              return;
-            }
-            settler.marked(made);
-          }),
-      );
+      const itemIds = items.filter(isUnread).map((item) => item.id);
+      if (itemIds.length === 0) return;
+      act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {
+        ...(workspaceId === undefined ? undefined : { workspaceId }),
+        itemIds,
+      })
+        .catch(() => UNANSWERED)
+        .then((answer) => {
+          if ("failure" in answer) refused(markedNote(false, 0, itemIds.length));
+        });
     },
-    [act, workspaceId, send, settler, refused],
+    [act, workspaceId, refused],
   );
   return useMemo(() => ({ onMark, onMarkAll }), [onMark, onMarkAll]);
 }
