@@ -206,7 +206,10 @@ export const AGENT_MESSAGE_FROM_CHARS = 128;
 const AGENT_MESSAGE_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.AGENT),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.AGENT_MESSAGE),
-  from: trimmedText.check(EffectSchema.isMaxLength(AGENT_MESSAGE_FROM_CHARS)),
+  // Optional because a row reworked to name its sender elsewhere (`sentBy`) no longer carries it.
+  from: EffectSchema.optional(
+    trimmedText.check(EffectSchema.isMaxLength(AGENT_MESSAGE_FROM_CHARS)),
+  ),
 });
 
 export type AgentMessageMetadata = EffectSchema.Schema.Type<typeof AGENT_MESSAGE_METADATA>;
