@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -11,6 +11,7 @@ import {
   GROUP_SURFACE,
   GroupHeader,
   IconButton,
+  InlineEdit,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
   List,
@@ -39,17 +40,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
+import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { ArchivedAgents, SUMMARY_GLYPH, useAgentArchive } from "./agent-archive.js";
+import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
+import { ArchivedAgents, SUMMARY_GLYPH } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry, ROW_COUNT } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
 import { type CountNoun, foldedCount, sidebarFold } from "./sidebar-fold.js";
@@ -508,21 +511,35 @@ function SummaryRow({
   entry,
   onPick,
   menu,
+  editor,
+  description,
+  rowRef,
 }: {
   entry: SummaryEntry;
   onPick: () => void;
   menu?: ListRowMenu | undefined;
+  /** The field the row's name is edited in, in its title's place while a Rename is open. */
+  editor?: ReactNode;
+  /** What stands under the title, in the row's own detail's place: a refused rename's note. */
+  description?: ReactNode;
+  rowRef?: ((element: HTMLElement | null) => void) | undefined;
 }) {
+  const editing = editor !== undefined;
   return (
     <RowHintOptions card={entry.card} cardBeside>
       <ListRow
+        ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
-        title={entry.row.label}
-        description={entry.row.detail}
-        meta={entry.endMark}
-        hint={entry.card === undefined ? undefined : { Hint: RowHint, label: entry.row.label }}
-        onPress={onPick}
-        menu={menu}
+        title={editing ? editor : entry.row.label}
+        description={description ?? entry.row.detail}
+        meta={editing ? null : entry.endMark}
+        hint={
+          entry.card === undefined || editing
+            ? undefined
+            : { Hint: RowHint, label: entry.row.label }
+        }
+        onPress={editing ? undefined : onPick}
+        menu={editing ? undefined : menu}
       />
     </RowHintOptions>
   );
@@ -531,7 +548,13 @@ function SummaryRow({
 /** What an agent's row is, naming its ⋯ and menu "Agent actions". */
 const AGENT_THING = "Agent";
 
-/** An agent's row, whose ⋯, right-click and menu key offer Copy link and Archive, asking first while the agent still works. */
+/**
+ * An agent's row, whose ⋯, right-click and menu key offer the agent's one
+ * menu over the doors a row has (`agent-actions.tsx`): Copy link, Rename,
+ * which turns the row into its name's field as the sidebar's rows do, Archive,
+ * asking first while a teammate's agent still works, and Permanently
+ * delete, asked first; Show details among them where the row hangs a card.
+ */
 function AgentSummaryRow({
   entry,
   agent,
@@ -545,20 +568,42 @@ function AgentSummaryRow({
   shown: boolean;
   onPick: () => void;
 }) {
-  const archive = useAgentArchive(agent, agents, shown);
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const row = useRef<HTMLElement | null>(null);
+  const hold = useCallback((element: HTMLElement | null) => {
+    row.current = element;
+  }, []);
+  const actions = useAgentActions(agent, agents, {
+    label: entry.row.label,
+    shown,
+    terminals: { onOpenTerminal: undefined },
+  });
+  const { rename } = actions;
+  const editing = rename?.editing === true;
+  const endedByKey = useRefocusAfterEdit(editing, row);
   return (
     <>
       <SummaryRow
         entry={entry}
         onPick={onPick}
-        menu={rowMenu(
-          AGENT_THING,
-          copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]],
-          shown,
-        )}
+        rowRef={hold}
+        menu={rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), shown)}
+        editor={
+          editing && rename !== undefined ? (
+            <InlineEdit
+              value={rename.asked ?? entry.row.label}
+              label="Agent name"
+              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              editing
+              onEnd={(edit) => {
+                endedByKey(edit.byKey);
+                rename.end(edit.value);
+              }}
+            />
+          ) : undefined
+        }
+        description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
       />
-      {archive.dialog}
+      {actions.dialog}
     </>
   );
 }
