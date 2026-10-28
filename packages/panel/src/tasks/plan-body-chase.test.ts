@@ -52,11 +52,7 @@ function typesIn(by: typeof DEAN): boolean {
     lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by, at, duringCall: false },
   });
   const draw = (shown: Task) =>
-    act(() =>
-      root.render(
-        onRegistry(registry, createElement(PlanBody, { task: shown, live: true, reader })),
-      ),
-    );
+    act(() => root.render(onRegistry(registry, createElement(PlanBody, { task: shown, reader }))));
   draw(task(BEFORE, 1));
   draw(task(AFTER, 2));
   return !(container.textContent ?? "").includes("so removal covers both.");
@@ -102,11 +98,7 @@ test("a caret typing below the document's view scrolls the document's own scroll
     lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
   });
   const draw = (shown: Task) =>
-    act(() =>
-      root.render(
-        onRegistry(registry, createElement(PlanBody, { task: shown, live: true, reader })),
-      ),
-    );
+    act(() => root.render(onRegistry(registry, createElement(PlanBody, { task: shown, reader }))));
   draw(task(BEFORE, 1));
   draw(task(AFTER, 2));
   const scroller =

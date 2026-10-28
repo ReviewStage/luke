@@ -86,7 +86,6 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   registries.push(registry);
   const body = createElement(PlanBody, {
     task: task,
-    live: false,
     onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
     sectionLinks: {
       workspace: "acme",

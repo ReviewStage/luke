@@ -6,16 +6,9 @@ import type { ReadLink } from "@luke/features/link-grammar";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
-import type { OperatorClient } from "@luke/host/client";
-import {
-  type AppStateStore,
-  voiceWindowGaveUp,
-  voiceWindowGone,
-  windowAppState,
-} from "@luke/host/client";
-import { type EventPushName, PUSH, type PushPayload } from "@luke/host/contract";
+import type { AppStateStore, OperatorClient } from "@luke/host/client";
+import { PUSH } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
-import { callStaged } from "@luke/host/fixture-stage";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -30,21 +23,17 @@ import {
   session,
   type WebContents,
 } from "electron";
-import { CallWindow } from "../window/call-window";
-import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
 import { askForNotifications } from "../window/notice-doors";
 import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
 import { followResponsiveness } from "../window/renderer-health";
-import { VoiceWindow } from "../window/voice-window";
 import { windowMaterialFor } from "../window/window-material";
 import { grantWindowPermissions } from "../window/window-permissions";
 import { windowPushes } from "../window/window-pushes";
 import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
-import type { NativeNode } from "./native-node";
 import { reportUnresponsivePanel } from "./telemetry-service";
 
 /** How long a display change is let settle before the panels are laid out over it. */
@@ -54,7 +43,6 @@ export interface WindowServiceDependencies {
   config: DesktopConfig;
   /** What the windows are told from, and where what this service holds of it is written. */
   state: AppStateStore;
-  native: NativeNode;
   operator: OperatorClient;
   /** Every operator effect this service reads, run on the launch's own runtime. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
@@ -69,9 +57,6 @@ export interface WindowServiceDependencies {
 
 export interface WindowService extends DesktopService {
   readonly panels: PanelManager;
-  readonly voiceWindow: VoiceWindow;
-  /** The floating call window, shown while a call stands and no Luke window has the keyboard. */
-  readonly callWindow: CallWindow;
   /**
    * One `app:state` per window, each the document as that window is handed
    * it (`appStateFor`). The one place the document becomes a push, so what a
@@ -87,22 +72,16 @@ export interface WindowService extends DesktopService {
    */
   applyAppearance: () => Effect.Effect<void>;
   /**
-   * The document as one window is handed it: what that window is handed of
-   * it, and what it answers for and the document cannot, whether it stands
-   * in full screen. Decided here by which window asked.
+   * The document as one window is handed it: the document, and what the
+   * window answers for and the document cannot, whether it stands in full
+   * screen.
    */
   appStateFor: (sender: WebContents) => AppStateSnapshot;
-  /** Hands a payload to the voice window alone, the one peer of the host's live session. */
-  sendToVoice: <Name extends EventPushName>(push: Name, payload: PushPayload<Name>) => void;
   /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
   panelReady: () => void;
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
-  /**
-   * The panel window coming forward or going behind, for as long as the
-   * subscription stands. The hidden voice window is never the key window, so
-   * only the panels are reported.
-   */
+  /** The panel window coming forward or going behind, for as long as the subscription stands. */
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
   /**
    * The opaque name one window's writes travel to the host under. It names
@@ -117,13 +96,12 @@ export interface WindowService extends DesktopService {
 
 /**
  * Everything this process draws or claims from the machine on the windows'
- * behalf: the panel, the hidden voice window, the call window, the Dock, the login
- * item, the media permissions, the scheme a plan's pages are drawn from, and
+ * behalf: the panel, the Dock, the login item, the media permissions, the scheme a plan's pages are drawn from, and
  * the display and power changes the panel answers.
  * It is the one concern that opens a window, and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
-  const { config, state, native, operator, run, launchStanding } = dependencies;
+  const { config, state, operator, run, launchStanding } = dependencies;
   const { runMode } = config;
 
   const reporters = new WeakMap<WebContents, string>();
@@ -137,22 +115,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const preloadPath = path.join(config.resourceDirectory, "preload.js");
   const rendererHtmlPath = path.join(config.resourceDirectory, "renderer", "index.html");
+  // A file this build wrote into the resource directory, and the whole of
+  // what any window here may navigate to or speak from.
   const rendererUrl = pathToFileURL(rendererHtmlPath).href;
-  // The hidden voice window loads its own entry from a document of its own,
-  // which mounts the voice host alone. Both documents are files
-  // this build wrote into the resource directory, and the pair is the whole
-  // of what any window here may navigate to or speak from.
-  const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
-  const voiceUrl = pathToFileURL(voiceHtmlPath).href;
-  // The call window's document, on the same terms: its own entry, no host.
-  const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
-  const callUrl = pathToFileURL(callHtmlPath).href;
 
   const panels = new PanelManager({
     runMode,
     material: windowMaterialFor(process.getSystemVersion()),
     instance: config.instance,
-    mediaDuck: native.mediaDuck,
     preloadPath,
     rendererHtmlPath,
     rendererUrl,
@@ -171,40 +141,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     onRendererGone: (reason) => config.report(`Panel renderer gone: ${reason}`),
   });
-  /** The hidden window that holds the live conversation. */
-  const voiceWindow = new VoiceWindow({
-    runMode,
-    preloadPath,
-    rendererHtmlPath: voiceHtmlPath,
-    rendererUrl: voiceUrl,
-    onGone: (reason) => {
-      config.report(`Voice window replaced: ${reason}`);
-      // The window that held the exchange is gone, so what every panel draws
-      // in its place is an idle voice; the document says so by holding no
-      // view at all, and keeps the avatar, which the host and the panel say.
-      state.update({ voice: voiceWindowGone(state.snapshot().voice), callTranscript: undefined });
-      panels.setVoiceExchange(false);
-    },
-    onGaveUp: (reason) => {
-      config.report(`Voice window abandoned: ${reason}`);
-      // Nothing stands the window back up this run, so every panel says voice
-      // is unavailable where it offers a call, rather than a press reaching
-      // a window that is not there.
-      state.update({ voice: voiceWindowGaveUp(state.snapshot().voice), callTranscript: undefined });
-      panels.setVoiceExchange(false);
-    },
-  });
-  // A call profile's fixture run stands on its staged call, which a voice window would report over.
-  const stagedCall = callStaged(config.launch);
-  const voiceWindowWanted = (runMode.takesFocus || runMode.sendsNetwork) && !stagedCall;
-  const callWindow = new CallWindow({
-    runMode,
-    preloadPath,
-    rendererHtmlPath: callHtmlPath,
-    rendererUrl: callUrl,
-    placementPath: path.join(config.stateRoot, "call-window.json"),
-  });
-  const callPresence = new CallWindowPresence(callWindow);
   /** What stops a development build's renderer errors reaching the terminal; nothing until the start begins it. */
   let stopRendererErrors = (): void => undefined;
 
@@ -224,50 +160,17 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         steerZoom(stored?.zoom).pipe(withPanelWindows),
       );
     });
-  function raiseVoiceWindow(): void {
-    if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
-  }
-
-  /** The one place a payload crosses to a window: its push stream. */
-  function sendTo<Name extends EventPushName>(
-    sender: WebContents,
-    push: Name,
-    payload: PushPayload<Name>,
-  ): boolean {
-    return windowPushes.push(sender, push, payload);
-  }
-
-  /** Which window `sender` is, as far as what it is handed of the document goes. */
-  function roleOf(sender: WebContents): { voice: boolean; call: boolean } {
-    return { voice: voiceWindow.owns(sender), call: callWindow.owns(sender) };
-  }
-
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    const { voice, call } = roleOf(sender);
-    if (voice || call) return { fullScreen: false };
     return { fullScreen: panels.fullScreen(sender) };
   }
 
   /** The document as `sender` is handed it, read and pushed alike. */
   function appStateFor(sender: WebContents): AppStateSnapshot {
-    return windowAppState(state.snapshot(), roleOf(sender), windowFactsFor(sender));
+    return { ...state.snapshot(), window: windowFactsFor(sender) };
   }
 
   function publishAppState(): void {
-    const send = (sender: WebContents) => windowPushes.pushState(sender, appStateFor(sender));
-    for (const sender of panels.senders()) send(sender);
-    const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents);
-    const call = callWindow.current();
-    if (call) send(call.webContents);
-    // The call window follows the document it draws, so it stands, goes, and
-    // grows for the avatar on the same version every window is told.
-    callPresence.voiceChanged(state.snapshot().voice);
-  }
-
-  function sendToVoice<Name extends EventPushName>(push: Name, payload: PushPayload<Name>): void {
-    const voice = voiceWindow.current();
-    if (voice) sendTo(voice.webContents, push, payload);
+    for (const sender of panels.senders()) windowPushes.pushState(sender, appStateFor(sender));
   }
 
   function showSettings(): void {
@@ -288,21 +191,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       app.removeListener("browser-window-blur", blurred);
     };
   }
-
-  // Which panel has the keyboard, for the call window: while one does, that
-  // panel draws the call itself, as its call bar or its own call card. Note
-  // that a staged call is told of no panel, because its profile shoots the
-  // floating window beside the panel that has the keyboard.
-  const panelFocused = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents) && !stagedCall) {
-      callPresence.panelFocused(window.webContents);
-    }
-  };
-  const panelBlurred = (_event: Electron.Event, window: BrowserWindow) => {
-    if (panels.owns(window.webContents) && !stagedCall) {
-      callPresence.panelBlurred(window.webContents);
-    }
-  };
 
   /**
    * Every wait this service schedules — the settling a display change waits
@@ -329,10 +217,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function configurePermissions(): void {
-    grantWindowPermissions(
-      session.defaultSession,
-      (webContents) => panels.owns(webContents) || voiceWindow.owns(webContents),
-    );
+    grantWindowPermissions(session.defaultSession, (webContents) => panels.owns(webContents));
   }
 
   function handleDisplayChange(): void {
@@ -372,19 +257,16 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   return {
     name: "windows",
     panels,
-    voiceWindow,
-    callWindow,
     publishAppState,
     applyAppearance,
     appStateFor,
-    sendToVoice,
     panelReady: () => config.appLinks.ready(openAppLink),
     showSettings,
     onPanelFocusChanged,
     reporterOf,
     trustedSender: (event) => {
       const url = event.senderFrame?.url ?? event.sender.getURL();
-      return url === rendererUrl || url === voiceUrl || url === callUrl;
+      return url === rendererUrl;
     },
     applyLoginItem,
     start: async () => {
@@ -398,11 +280,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // every window is already drawn in the appearance it will keep.
       await run(applyThemePreference(settings?.stored.theme).pipe(withNativeTheme));
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
-      if (runMode.observesProviders) {
-        native.setMediaDuckEnabled(
-          settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
-        );
-      }
       // macOS is asked now, while the developer is here to answer, rather
       // than as the first agent ends behind the window. Note that it is
       // asked whatever the setting says, because asking posts nothing and
@@ -419,16 +296,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // that a capture run is offered none either, because its windows are
       // opened without them (`hardenedWebPreferences`).
       if (!config.packaged) stopRendererErrors = reportRendererErrors(config.report);
-      if (runMode.takesFocus) {
-        config.showMenuBar({
-          developerTools: {
-            onOpenVoiceWindow: () =>
-              voiceWindow.current()?.webContents.openDevTools({ mode: "detach" }),
-            onOpenCallWindow: () =>
-              callWindow.current()?.webContents.openDevTools({ mode: "detach" }),
-          },
-        });
-      }
+      if (runMode.takesFocus) config.showMenuBar({ developerTools: true });
       // The menu's New Task brings the window back where it was closed,
       // since no window's keymap stands to answer ⌘N then.
       config.showMenuBar({
@@ -441,7 +309,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         },
       });
       panels.reconcile();
-      raiseVoiceWindow();
       configurePermissions();
 
       // A packaged Luke asks macOS for its own scheme; a live development run gives back a claim stock Electron holds, which would open a bare Electron.
@@ -450,8 +317,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       if (linkClaim === APP_LINK_CLAIM.RELEASE) app.removeAsDefaultProtocolClient(APP_LINK_SCHEME);
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
-      app.on("browser-window-focus", panelFocused);
-      app.on("browser-window-blur", panelBlurred);
       screen.on("display-added", handleDisplayChange);
       screen.on("display-removed", handleDisplayChange);
       screen.on("display-metrics-changed", handleDisplayChange);
@@ -464,8 +329,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       stopRendererErrors();
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
-      app.removeListener("browser-window-focus", panelFocused);
-      app.removeListener("browser-window-blur", panelBlurred);
       screen.removeListener("display-added", handleDisplayChange);
       screen.removeListener("display-removed", handleDisplayChange);
       screen.removeListener("display-metrics-changed", handleDisplayChange);
@@ -477,8 +340,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       if (session.defaultSession.protocol.isProtocolHandled(PAGE_SCHEME)) {
         session.defaultSession.protocol.unhandle(PAGE_SCHEME);
       }
-      voiceWindow.closeForGood();
-      callWindow.closeForGood();
     },
   };
 }

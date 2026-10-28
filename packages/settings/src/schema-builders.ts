@@ -170,14 +170,6 @@ export function choiceSetting<
     token: (value: Value) => string;
     /** How a value is worded on the control, when that differs from `token`. */
     optionLabel?: (value: Value) => string;
-    /** The address of the picture a value is shown with, for a choice whose values have faces, which is then chosen from them. */
-    optionPicture?: (value: Value) => string | undefined;
-    /** The path of the clip a value is heard in, under the panel's asset base, for a choice whose values are sounds. */
-    optionSample?: (value: Value) => string | undefined;
-    /** The heading a value stands under, for a choice drawn in groups; values sharing one stand together in `values`' order. */
-    optionGroup?: (value: Value) => string | undefined;
-    /** A short word of what a value is, at the end of its row where the control draws one. */
-    optionTag?: (value: Value) => string | undefined;
     default: Default;
     /** The word for no choice at all, required where the default is nothing. */
     absent?: string;
@@ -216,20 +208,7 @@ export function choiceSetting<
     value: (stored) => tokenOf(stored),
     search: spec.search,
     options: (): readonly SettingOption[] =>
-      spec.values.map((value) => {
-        const picture = spec.optionPicture?.(value);
-        const sample = spec.optionSample?.(value);
-        const group = spec.optionGroup?.(value);
-        const tag = spec.optionTag?.(value);
-        return {
-          value: spec.token(value),
-          label: optionLabel(value),
-          ...(picture === undefined ? undefined : { picture }),
-          ...(sample === undefined ? undefined : { sample }),
-          ...(group === undefined ? undefined : { group }),
-          ...(tag === undefined ? undefined : { tag }),
-        };
-      }),
+      spec.values.map((value) => ({ value: spec.token(value), label: optionLabel(value) })),
     stored: (token) => byToken.get(token),
   };
   return {

@@ -22,6 +22,7 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import type { SentryTriggerEvent, TriggerProvider } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
@@ -33,6 +34,7 @@ import {
   exists,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lte,
   notExists,
@@ -490,15 +492,16 @@ const writeAutomation = SqlSchema.findAll({
     ),
 });
 
+/** Re-aims the member's automations aimed at any of their archived operators in the workspace, however each was archived, at the one standing. */
 const reaimAutomations = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    fromAgentId: Schema.String,
+    workspaceId: Schema.String,
     toAgentId: Schema.String,
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ userId, fromAgentId, toAgentId, now }) =>
+  execute: ({ userId, workspaceId, toAgentId, now }) =>
     Database.use((db) =>
       db
         .update(automation)
@@ -507,7 +510,20 @@ const reaimAutomations = SqlSchema.findAll({
           and(
             eq(automation.userId, userId),
             eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
-            eq(automation.targetAgentId, fromAgentId),
+            inArray(
+              automation.targetAgentId,
+              queryBuilder
+                .select({ id: codingAgent.id })
+                .from(codingAgent)
+                .where(
+                  and(
+                    eq(codingAgent.userId, userId),
+                    eq(codingAgent.organizationId, workspaceId),
+                    eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
+                    isNotNull(codingAgent.archivedAt),
+                  ),
+                ),
+            ),
           ),
         )
         .returning({ id: automation.id }),
@@ -1259,21 +1275,25 @@ export function createAutomationCommitted(
   });
 }
 
-/** What aiming a member's operator its heartbeat takes: the operator, the one it replaced where a Reset retired one, and the heartbeat to make where none is aimed at it. */
+/** What aiming a member's operator its heartbeat takes: the operator, the workspace it stands in, and the heartbeat to make where none is aimed at it. */
 export interface OperatorHeartbeat {
   readonly operatorId: string;
-  readonly retiredId: string | undefined;
+  readonly workspaceId: string;
   readonly heartbeat: NewAutomation;
 }
 
 /**
- * The member's automations aimed at the operator a Reset retired re-aimed
- * at the fresh one, and the heartbeat made where none is then aimed at it,
- * in one transaction: answers the automations aimed at the operator after,
- * by id, or nothing where the heartbeat's place is one the account does not
- * reach. Note that its caller runs it only for the ensure that made the
- * operator, which one ensure alone is, so a heartbeat the member deleted
- * is never made again by a repeat ensure.
+ * The member's automations aimed at any of their archived operators in the
+ * workspace re-aimed at the one standing, and the heartbeat made where none
+ * is then aimed at it, in one transaction: answers the automations aimed at
+ * the operator after, by id, or nothing where the heartbeat's place is one
+ * the account does not reach. Note that it re-aims by member and workspace
+ * rather than by the operator a Reset retired, because an operator archived
+ * by hand, by the archive or `update_agent`, is replaced by the next ensure
+ * with no Reset to name it, and its heartbeat would otherwise stay aimed at
+ * it beside a second. Note too that its caller runs it only for the ensure
+ * that made the operator, which one ensure alone is, so a heartbeat the
+ * member deleted is never made again by a repeat ensure.
  */
 export function aimOperatorHeartbeat(
   userId: string,
@@ -1283,14 +1303,12 @@ export function aimOperatorHeartbeat(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
-        if (aimed.retiredId !== undefined) {
-          yield* reaimAutomations({
-            userId,
-            fromAgentId: aimed.retiredId,
-            toAgentId: aimed.operatorId,
-            now,
-          });
-        }
+        yield* reaimAutomations({
+          userId,
+          workspaceId: aimed.workspaceId,
+          toAgentId: aimed.operatorId,
+          now,
+        });
         const standing = yield* findAimedAt({ userId, agentId: aimed.operatorId });
         if (standing.length > 0) return Option.some(standing.map((row) => row.id));
         const made = yield* createAutomationCommitted(userId, {

@@ -118,6 +118,7 @@ function MemoryRow({
     <div className="memory-row">
       <MenuRow
         thing="Memory"
+        alone
         actions={actions}
         row={{
           // Note that a memory is written in Markdown (`pnpm db:generate` in backticks), so it is drawn as the notes are.

@@ -1,4 +1,4 @@
-import { toolPartType } from "@luke/features/brain";
+import { toolPartType } from "@luke/features/turn-run";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -43,6 +43,7 @@ import {
   conversations,
   messages,
   type StoredTurnUsage,
+  standingLine,
   turnlessUserLine,
   turns,
 } from "../schemas/storage.js";
@@ -189,11 +190,14 @@ function pageLimit(cursor: { readonly limit?: number }): number {
  * reached: the conversation the row belongs to, stamped by no Clear, so a
  * cleared conversation is read by nothing. It is spelled once per table
  * rather than once over a column handed in, because the column the join
- * holds to is what makes each one the join it is.
+ * holds to is what makes each one the join it is. A message's join also
+ * leaves out a line its hand-over withdrew, which the agent never heard
+ * unless a turn takes it, and which no read shows until one does.
  */
 const MESSAGE_CONVERSATION_STANDS = and(
   eq(conversations.id, messages.conversationId),
   isNull(conversations.deletedAt),
+  standingLine(messages),
 );
 
 const TURN_CONVERSATION_STANDS = and(
@@ -1002,6 +1006,7 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
         eq(messages.conversationId, conversationId),
         eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
         turnlessUserLine(messages),
+        isNull(messages.withdrawnAt),
         lineOfTheAgents(),
         noReceiptOfLine(),
       ),
@@ -1021,7 +1026,8 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
  * on a call into the agent: the voice answers many spoken ones itself, and
  * one it hands on, as every typed one is, opens its spoken turn through the
  * asks (`asks.ts`), whose turn row is what reads the agent as running, so no
- * line of a call waits on a turn here.
+ * line of a call waits on a turn here. Nor is a line its hand-over withdrew,
+ * which the session did not take.
  */
 const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
@@ -1041,6 +1047,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             inArray(messages.conversationId, [...conversationIds]),
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             turnlessUserLine(messages),
+            isNull(messages.withdrawnAt),
             lineOfTheAgents(),
             noReceiptOfLine(),
           ),
@@ -1068,6 +1075,8 @@ const findSentLine = SqlSchema.findOneOption({
             eq(messages.conversationId, key.conversationId),
             eq(messages.userId, key.userId),
             eq(messages.clientId, key.clientId),
+            // A line its hand-over withdrew was not sent, and a send repeated under its key sends it afresh.
+            standingLine(messages),
             // A line its dispatch claim still hands over is not sent yet: the hand-over may withdraw it.
             sql`not (${conversations.dispatchLine} is not distinct from ${messages.id} and ${conversations.dispatchClaimedAt} > ${key.claimExpiredBefore})`,
           ),

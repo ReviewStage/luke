@@ -34,23 +34,11 @@ export const HOSTED_SERVICE_PATH = {
   /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
   ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
-   * The Markdown the account's new tasks start from: read it (GET), or keep
-   * one verbatim or go back to the default (PUT).
-   * `plan-document-template.ts` declares both bodies.
-   */
-  ACCOUNT_PLAN_TEMPLATE: "/api/account/plan-template",
-  /**
    * The memories Luke's agents kept in a workspace the account is a member
    * of, named in the query: read them (GET), or forget one by its id (DELETE).
    * `memory-wire.ts` declares both.
    */
   ACCOUNT_MEMORIES: "/api/account/memories",
-  /**
-   * The template's history: a page of its revisions, newest first, or with a
-   * `before` query the page before that revision (GET).
-   * `plan-document-template.ts` declares the answer.
-   */
-  ACCOUNT_PLAN_TEMPLATE_REVISIONS: "/api/account/plan-template/revisions",
   /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
@@ -278,14 +266,6 @@ export const HOSTED_SERVICE_PATH = {
    * to draw.
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
-  /**
-   * The issues of a repository a workspace's installation reaches, as New
-   * task's picker reads them (GET): named as `GITHUB_REPOSITORY_ISSUE` names
-   * one, with the words searched for or the number of the one asked; the
-   * answer is `github-repositories-wire.ts`'s, or why the installation
-   * reads none.
-   */
-  GITHUB_REPOSITORY_ISSUES: "/api/github/repositories/issues",
   /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to

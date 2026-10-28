@@ -21,9 +21,7 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
 import type {
   AdminAttentionAccount,
   AdminAttentionProblem,
@@ -56,7 +54,7 @@ import { Duration, Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
-import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS } from "../core.js";
+import { DAY_MS, TURN_FAILURE, TURN_STATUS } from "../core.js";
 import { isAdminRole } from "./admin-access.js";
 import { dayStart, lastNDayKeys } from "./admin-metrics.js";
 import {
@@ -233,26 +231,6 @@ const findTurnlessAgents = SqlSchema.findAll({
             keptByScope(request.scope),
           ),
         ),
-    ),
-});
-
-const CALL_DAY = utcDayOf(voiceSessions.closedAt);
-
-const findCallOutcomes = SqlSchema.findAll({
-  Request: WindowScopeSchema,
-  Result: Schema.Struct({
-    day: Schema.String,
-    closeReason: Schema.NullOr(Schema.String),
-    value: AggregateColumnSchema,
-  }),
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ day: CALL_DAY, closeReason: voiceSessions.closeReason, value: count() })
-        .from(voiceSessions)
-        .innerJoin(user, eq(user.id, voiceSessions.userId))
-        .where(and(gte(voiceSessions.closedAt, request.windowStart), keptByScope(request.scope)))
-        .groupBy(CALL_DAY, voiceSessions.closeReason),
     ),
 });
 
@@ -454,7 +432,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
   const abandonedTurns = new Map<string, number>();
   for (const row of outcomes) {
     const failed = row.status === TURN_STATUS.FAILED ? row.value : 0;
-    if (row.failure === BRAIN_REQUEST_FAILURE.ABANDONED) {
+    if (row.failure === TURN_FAILURE.ABANDONED) {
       bump(abandonedTurns, row.day, 0, (counted) => counted + row.value);
     }
     const work = turnWorkOf(row.kind, row.parentKind);
@@ -494,20 +472,6 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
   }
 
   return { lukeTurns, agentRuns, abandonedTurns, agentFailures };
-});
-
-const readCallSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityCalls")(function* (
-  request: WindowScope,
-) {
-  const calls = new Map<string, AdminFailureCount>();
-  for (const row of yield* findCallOutcomes(request)) {
-    const dropped = row.closeReason === VOICE_CLOSE_REASON.CONNECTION_LOST ? row.value : 0;
-    bump(calls, row.day, NO_FAILURES, (counted) => ({
-      failed: counted.failed + dropped,
-      total: counted.total + row.value,
-    }));
-  }
-  return calls;
 });
 
 const readAutomationSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityAutomations")(function* (
@@ -651,7 +615,6 @@ function emptySource(
       lukeTurns: new Map(),
       agentRuns: new Map(),
       abandonedTurns: new Map(),
-      calls: new Map(),
       automationRuns: new Map(),
     },
     agentFailures: new Map(),
@@ -687,10 +650,9 @@ export function readAdminReliabilitySource(input: {
       scope: input.scope,
     };
 
-    const [turnSeries, calls, automations, attention] = yield* Effect.all(
+    const [turnSeries, automations, attention] = yield* Effect.all(
       [
         readTurnSeries(request, input.now),
-        readCallSeries(request),
         readAutomationSeries(request),
         readAttention(input.scope, input.now),
       ],
@@ -702,7 +664,6 @@ export function readAdminReliabilitySource(input: {
         lukeTurns: turnSeries.lukeTurns,
         agentRuns: turnSeries.agentRuns,
         abandonedTurns: turnSeries.abandonedTurns,
-        calls,
         automationRuns: automations.automationRuns,
       },
       agentFailures: turnSeries.agentFailures,

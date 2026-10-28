@@ -92,12 +92,7 @@ export type CardSubject =
       readonly models: readonly CatalogModel[] | undefined;
     }
   | { readonly kind: typeof TAB_KIND.MAC_TERMINAL }
-  | {
-      readonly kind: typeof TAB_KIND.FILE;
-      readonly path: string;
-      /** What the agents said of the file, or where it is read. */
-      readonly note: string | undefined;
-    }
+  | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | {
       readonly kind: typeof TAB_KIND.PAGE;
       /** What the page stands on, its plan or its agent on no task. */
@@ -166,8 +161,6 @@ function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }
       );
     case SIDE_PANEL_TAB.INBOX:
       return subject.inbox === undefined ? null : <InboxCard inbox={subject.inbox} />;
-    case SIDE_PANEL_TAB.BOARD:
-    case SIDE_PANEL_TAB.CODE:
     case SIDE_PANEL_TAB.COMMENTS:
       return null;
   }
@@ -230,7 +223,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         />
       );
     case TAB_KIND.FILE:
-      return <FileCard path={subject.path} note={subject.note} />;
+      return <FileCard path={subject.path} />;
     case TAB_KIND.PAGE:
       return subject.page !== undefined ? (
         <PageCard place={subject.place} page={subject.page} />

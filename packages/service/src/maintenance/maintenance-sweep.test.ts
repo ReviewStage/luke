@@ -59,6 +59,7 @@ interface Recorded {
   purged: number[];
   purgedCalls: number[];
   abandoned: number[];
+  deviceLeases: number[];
   voiced: number[];
   sandboxed: number[];
   terminals: number[];
@@ -67,6 +68,7 @@ interface Recorded {
   retention: number[];
   wakeups: number[];
   operatorWakes: number[];
+  withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -79,6 +81,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     purged: [],
     purgedCalls: [],
     abandoned: [],
+    deviceLeases: [],
     voiced: [],
     sandboxed: [],
     terminals: [],
@@ -87,6 +90,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     retention: [],
     wakeups: [],
     operatorWakes: [],
+    withdrawnLines: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -111,6 +115,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.abandoned.push(now);
         return 1;
+      }),
+    sweepDeviceLeases: (now) =>
+      Effect.sync(() => {
+        recorded.deviceLeases.push(now);
+        return { lapsed: 1, busy: 0, failed: 0 };
       }),
     sweepVoice: (now) =>
       Effect.sync(() => {
@@ -151,6 +160,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.operatorWakes.push(now);
         return { woken: 1, failed: 0 };
+      }),
+    purgeWithdrawnLines: (now) =>
+      Effect.sync(() => {
+        recorded.withdrawnLines.push(now);
+        return 2;
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -200,6 +214,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       purged: [],
       purgedCalls: [],
       abandoned: [],
+      deviceLeases: [],
       voiced: [],
       sandboxed: [],
       terminals: [],
@@ -208,6 +223,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -231,6 +247,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purged: [],
       purgedCalls: [],
       abandoned: [],
+      deviceLeases: [],
       voiced: [],
       sandboxed: [],
       terminals: [],
@@ -239,6 +256,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -249,6 +267,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purged: [],
       purgedCalls: [],
       abandoned: [],
+      deviceLeases: [],
       voiced: [],
       sandboxed: [],
       terminals: [],
@@ -257,6 +276,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -291,6 +311,7 @@ it.effect(
         purged: [instant],
         purgedCalls: [instant],
         abandoned: [instant],
+        deviceLeases: [instant],
         voiced: [instant],
         sandboxed: [instant],
         terminals: [instant],
@@ -299,6 +320,7 @@ it.effect(
         retention: [instant],
         wakeups: [instant],
         operatorWakes: [instant],
+        withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],

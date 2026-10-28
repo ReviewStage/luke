@@ -1,21 +1,10 @@
 import {
-  isProductExchangeKind,
   isProductSurfaceEventName,
   type ProductEventPropertiesFor,
-  type ProductExchangeKind,
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@luke/features/analytics";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
-import { liveExchangeActive } from "@luke/live";
-import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
-import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
-import {
-  isVoiceCallTranscriptChange,
-  isVoiceView,
-  type VoiceCallTranscriptChange,
-  type VoiceView,
-} from "@luke/voice/voice-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
@@ -87,31 +76,6 @@ export const BRIDGE = {
     result: result<AppStateSnapshot>(isAppStateSnapshot),
   }),
   /**
-   * The voice window's whole snapshot of the live conversation, reported on
-   * every edge of its own and on none of anything else's: the main process
-   * writes it into the document that same window reads, so a report the view
-   * did not move would be answered by a delivery asking for another. From
-   * there every panel draws it, a panel that opens later bootstraps from it,
-   * and the exchange level the media duck follows is derived from it. The
-   * count of exchanges rides beside it: a kind travels only on the edge that
-   * opened an exchange, named by the one window that knows who opened it, so
-   * a turn walking from connecting to responding is counted once. What
-   * moved in the standing call's transcript rides beside them too, never the
-   * whole of it, which grows for the call's length: main splices it into the
-   * document's `callTranscript`.
-   */
-  reportVoiceView: entry({
-    kind: "send",
-    channel: "app:report-voice-view",
-    args: args<[VoiceView, ProductExchangeKind | undefined, VoiceCallTranscriptChange | undefined]>(
-      (v) =>
-        v.length === 3 &&
-        isVoiceView(v[0]) &&
-        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))) &&
-        (v[2] === undefined || isVoiceCallTranscriptChange(v[2])),
-    ),
-  }),
-  /**
    * One tapped live event for the development trace. Fire-and-forget on
    * purpose: the tap must cost the conversation nothing, and the main process
    * simply drops it when no traced run is on — which is every packaged run,
@@ -122,30 +86,6 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:record-agent-trace",
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
-  }),
-  /**
-   * One message of Luke's voice feed for his avatar, from the voice window
-   * alone, which main relays to the panel while the avatar is starting
-   * or live. A send rather than an act: it is 25 messages a second, and
-   * nothing reads an answer.
-   */
-  feedAvatar: entry({
-    kind: "send",
-    channel: "app:feed-avatar",
-    args: args<[AvatarFeed]>((v) => v.length === 1 && avatarFeedFromWire(v[0]) !== undefined),
-  }),
-  /**
-   * One signal of the call window's view of Luke's avatar: the call window's
-   * offer and close, which main relays to the panel, or the panel's answer,
-   * which main relays to the call window. A send rather than an act: it is
-   * a relay between two windows, and nothing reads an answer.
-   */
-  signalAvatarView: entry({
-    kind: "send",
-    channel: "app:signal-avatar-view",
-    args: args<[AvatarViewSignal]>(
-      (v) => v.length === 1 && avatarViewSignalFromWire(v[0]) !== undefined,
-    ),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({

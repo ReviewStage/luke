@@ -162,7 +162,7 @@ async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise
     sidePanel: {
       ...base.sidePanel,
       open: true,
-      tab: shown.tab ?? SIDE_PANEL_TAB.CODE,
+      tab: shown.tab ?? SIDE_PANEL_TAB.COMMENTS,
       changes: [{ changes: DONE.id }],
       terminals: [{ terminal: WORKING.id }],
       pages: [{ page: FUNNEL.id }],

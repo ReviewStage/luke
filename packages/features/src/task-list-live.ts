@@ -4,6 +4,7 @@ import {
   lineAwaitsTurn,
   type StatusTurn,
   statusClockEdge,
+  turnStoppable,
 } from "./coding-agent-status.js";
 import {
   CODING_AGENT_ARCHIVER,
@@ -23,7 +24,6 @@ import {
 import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
-import { type TaskIssueTag, taskIssueTagSchema } from "./task-issue-wire.js";
 import {
   PLAN_ACTOR,
   TASK_AGENTS_BOUNDS,
@@ -42,13 +42,14 @@ import {
 /**
  * task-list-live.ts -- the plan list followed over Neon Realtime: the sealed statements the service answers, the rows they deliver, and the list as the held read answers it, built from them at an instant.
  *
- * The plan list is three statements: the plans the account reaches, each with
- * its reader's own pin and its owner's name, the issues those plans link,
- * which each plan names as its tags, oldest linked first, and every agent of those plans
+ * The plan list is two statements: the plans the account reaches, each with
+ * its reader's own pin and its owner's name, and every agent of those plans
  * and every agent with no plan in the account's workspaces, archived ones
  * among them, each with its newest turn, whether a line of the developer's
  * awaits its turn, what it last published, and the names of the members it
- * names. Everything the held read derives from them is derived here, at
+ * names. A third, the issues those plans linked (`issues`), answers no rows
+ * now that a plan links none, and stands because a released desktop
+ * requires it. Everything the held read derives from them is derived here, at
  * the instant the reader reads at, since an agent's status turns on the
  * clock (`coding-agent-status.ts`): `taskListGraceEdge` is the next instant
  * the clock alone moves the list, which the reader builds it again at.
@@ -56,12 +57,13 @@ import {
  * orders it.
  */
 
-/** The plan list sealed for following: the address, and its three statements. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
+/** The plan list sealed for following: the address, and its statements. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
 export const taskListLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
     plans: sealedLiveQuerySchema,
     agents: sealedLiveQuerySchema,
+    /** The issues plans linked: no rows, for a released desktop that follows it. */
     issues: sealedLiveQuerySchema,
   }),
 });
@@ -141,6 +143,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   turnId: EffectSchema.NullOr(EffectSchema.String),
   turnStatus: EffectSchema.NullOr(EffectSchema.String),
   cancelRequested: EffectSchema.NullOr(EffectSchema.Boolean),
+  /** When the newest turn's Stop was asked; absent from a statement before it was carried. */
+  cancelRequestedAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   queuedAt: EffectSchema.NullOr(countedNumber),
   startedAt: EffectSchema.NullOr(countedNumber),
   settledAt: EffectSchema.NullOr(countedNumber),
@@ -150,20 +154,10 @@ const agentLiveRowSchema = EffectSchema.Struct({
   quietTurn: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Boolean)),
 });
 
-/** One issue a plan links as its row delivers it: its tag, the plan it is of, and when it was linked. */
-const issueLiveRowSchema = EffectSchema.Struct({
-  ...taskIssueTagSchema.fields,
-  planId: EffectSchema.String,
-  createdAt: countedNumber,
-});
-
-type IssueLiveRow = typeof issueLiveRowSchema.Type;
-
 /** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const taskListLiveRowsSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(taskLiveRowSchema),
   agents: EffectSchema.Array(agentLiveRowSchema),
-  issues: EffectSchema.Array(issueLiveRowSchema),
 });
 
 export type TaskListLiveRows = typeof taskListLiveRowsSchema.Type;
@@ -201,6 +195,7 @@ function turnOf(row: AgentLiveRow): StatusTurn | undefined {
     : {
         status: row.turnStatus,
         cancelRequested: row.cancelRequested === true,
+        cancelRequestedAt: row.cancelRequestedAt ?? undefined,
         queuedAt: row.queuedAt ?? row.createdAt,
         settledAt: row.settledAt,
         sessionEnded: row.turnSessionEnded === true,
@@ -333,7 +328,6 @@ function originOf(row: TaskLiveRow): { readonly origin?: TaskOrigin } {
 function taskSummaryOf(
   row: TaskLiveRow,
   agents: readonly AgentLiveRow[] | undefined,
-  issues: readonly TaskIssueTag[] | undefined,
   now: number,
 ): TaskSummary {
   return {
@@ -363,22 +357,7 @@ function taskSummaryOf(
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
-    ...(issues === undefined ? undefined : { issues }),
   };
-}
-
-/** Each plan's issues as its tags, oldest linked first, as the held read orders them; a plan that links none is absent. */
-function tagsByPlan(rows: readonly IssueLiveRow[]): ReadonlyMap<string, readonly TaskIssueTag[]> {
-  const byPlan = new Map<string, TaskIssueTag[]>();
-  const ordered = rows.toSorted(
-    (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-  );
-  for (const { planId, createdAt: _createdAt, ...tag } of ordered) {
-    const held = byPlan.get(planId);
-    if (held === undefined) byPlan.set(planId, [tag]);
-    else held.push(tag);
-  }
-  return byPlan;
 }
 
 /** Who archived an agent as its banner says it: the member where their account stands, the agent acting for them, and why. */
@@ -405,6 +384,8 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
   );
   const archivedBy = archivedByOf(row);
   const started = runStartedAt(row, now);
+  const status = statusOf(row, now);
+  const stoppable = status !== CODING_AGENT_STATUS.RUNNING || turnStoppable(turnOf(row));
   return {
     id: row.id,
     planId: row.planId,
@@ -416,7 +397,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
     title: row.title,
     ...(row.kind === CODING_AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     createdAt: row.createdAt,
-    status: statusOf(row, now),
+    status,
     ...(row.quietTurn === true ? { quietTurn: true } : undefined),
     turnId: row.turnId,
     brief: row.brief,
@@ -430,6 +411,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),
     ...(started === undefined ? undefined : { runStartedAt: started }),
+    ...(stoppable ? undefined : { stoppable: false }),
   };
 }
 
@@ -517,11 +499,10 @@ export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskLis
     if (agent.planId === null) continue;
     byTask.set(agent.planId, [...(byTask.get(agent.planId) ?? []), agent]);
   }
-  const tags = tagsByPlan(rows.issues);
   return {
     plans: rows.plans
       .toSorted(newestFirst)
-      .map((row) => taskSummaryOf(row, byTask.get(row.id), tags.get(row.id), now)),
+      .map((row) => taskSummaryOf(row, byTask.get(row.id), now)),
     planlessAgents: rows.agents
       .filter((agent) => agent.planId === null)
       .toSorted(newestFirst)

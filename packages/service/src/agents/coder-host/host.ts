@@ -18,7 +18,7 @@ import { listRecentMessages, type StoredMessageRecord } from "@luke/database/mod
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -1009,7 +1009,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (agent.taskId !== null && endsTurn(event)) {
           yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
         }
-        if (agent.title !== null || !asksTitle(event)) return;
+        // An operator goes by Luke and is never titled, so no title model is asked for one.
+        if (
+          agent.title !== null ||
+          agent.kind === CODING_AGENT_KIND.OPERATOR ||
+          !asksTitle(event)
+        ) {
+          return;
+        }
         // Note that the title is awaited here rather than forked, because eve's step, and the
         // function instance under it, end when the hook returns and take a detached call with them.
         // No model, as for an account that saved no API key, titles the agent from its opening's first words.

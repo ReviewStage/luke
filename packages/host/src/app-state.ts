@@ -3,11 +3,10 @@ import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import type { MicrophoneRoute, MicrophoneStatus } from "@luke/settings/microphone";
+import type { NotificationsStatus } from "@luke/settings/settings-controls";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
-import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
-import type { AvatarState } from "@luke/voice/avatar";
-import type { NotificationsStatus } from "@luke/voice/settings-controls";
 import {
   callTranscriptChangeBetween,
   isVoiceCallTranscriptChange,
@@ -24,24 +23,16 @@ import type { MacCommandAsk } from "./mac-command-ask.js";
 export type { MacCommandAsk } from "./mac-command-ask.js";
 
 /**
- * The launch profiles a window answers to. A capture run stages a
- * conversation it has no voice window for: Luke speaking, that with the
- * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the panel's Tasks tab over a synthetic task, or over its synthetic coding
- * agent and that agent's tabs; or a synthetic account signed in, on a page
- * of Settings, on Admin, on Automations, or with its Inbox and its own page
- * filled. Any other word — the default
- * included — stages nothing.
+ * The launch profiles a window answers to. A fixture run stages the panel's
+ * Tasks tab over a synthetic task, or over its synthetic coding agent and
+ * that agent's tabs; or a synthetic account signed in, on a page of
+ * Settings, on Admin, on Automations, or with its Inbox and its own page
+ * filled. Any other word — the default included — stages nothing.
  */
 export const RUN_PROFILE = {
   IDLE: "idle",
-  SPEAKING: "speaking",
-  MUTED: "muted",
-  DUPLEX: "duplex",
   /** The panel's Tasks tab, opened at launch over a synthetic task. */
   TASKS: "tasks",
-  /** The same task, opened at launch on the whiteboard Luke drew for it. */
-  TASKS_BOARD: "tasks-board",
   /** The same task mid-call, opened at launch on the transcript of what was said on its calls. */
   TASKS_TRANSCRIPT: "tasks-transcript",
   /** The same task mid-call, opened at launch on the work its agent did on its calls. */
@@ -81,10 +72,6 @@ export const RUN_PROFILE = {
   AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
   /** The same agent beside a page it showed, open in a tab of its own. */
   AGENT_PAGE: "agent-page",
-  /** The same agent mid-call, its video off, the floating call window standing over the panel. */
-  AGENT_CALL: "agent-call",
-  /** The same call with Luke's video on, its tile up in the floating call window and the agent's tab. */
-  AGENT_CALL_VIDEO: "agent-call-video",
   /** A synthetic account signed in, Settings opened at launch on its Account page. */
   SETTINGS_ACCOUNT: "settings-account",
   /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
@@ -133,7 +120,6 @@ interface AppRunFacts {
 export interface AppAudioSlice {
   microphoneStatus: MicrophoneStatus;
   microphoneRoute?: MicrophoneRoute;
-  outputAudio?: OutputAudioState;
 }
 
 interface AppVoiceSlice {
@@ -141,8 +127,7 @@ interface AppVoiceSlice {
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
    * Absent until that window has reported once, and in a fixture or capture
-   * run, which raises no voice window, but where a call profile stages one
-   * (`fixture-stage.ts`).
+   * run, which raises no voice window.
    *
    * The loudness beside it is deliberately not here. It is a reading taken
    * twenty times a second that expires in fifty milliseconds, so nothing
@@ -150,12 +135,6 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
-  /**
-   * Luke's avatar on the call, as the panel reports it: what puts the video
-   * tile in the tab of the agent the call is into and what the tile draws. Main's rather than
-   * the voice window's, so a replaced voice window leaves it standing.
-   */
-  avatar: AvatarState;
   /**
    * Set once the voice window has been given up on for this run, after it
    * failed to load again and again: no call can run until Luke is reopened,

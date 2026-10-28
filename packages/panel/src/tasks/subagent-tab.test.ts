@@ -79,7 +79,6 @@ async function workerTab(
     agents: codingAgentsControl({ agents }),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const control = codingAgentsControl({

@@ -15,10 +15,10 @@ import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/mod
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
@@ -199,10 +199,10 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
     yield* writer.consume(target, {
       conversationId: sessionKey(conversationId),
       turnId,
-      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      kind: RUN_EVENT.TURN_STARTED,
       sequence: 1,
-      origin: BRAIN_TURN_ORIGIN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
+      origin: RUN_TURN_ORIGIN.TYPED,
+      trigger: TURN_TRIGGER.ASK,
       at: yield* Clock.currentTimeMillis,
     });
     return conversationId;
@@ -266,7 +266,7 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const host = yield* enrolledHost(owner);
         const otherHost = yield* enrolledHost(other);
 
-        const ownBeat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const ownBeat = yield* answerOf(hostBeat(host.secret, host.deviceId));
         const otherDeviceBeat = yield* statusOf(hostBeat(host.secret, otherHost.deviceId));
         const followedByOther = yield* statusOf(
           request(otherHost.secret, PATH.LINES, {
@@ -280,7 +280,11 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
-        assert.equal(ownBeat, HOSTED_HTTP_STATUS.OK);
+        // Note that a beat answers the launches the service holds the device to, none for a host with no agent.
+        assert.deepEqual(ownBeat, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { done: true, openLaunches: [] },
+        });
         assert.deepEqual(
           [otherDeviceBeat, followedByOther],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.NOT_FOUND],

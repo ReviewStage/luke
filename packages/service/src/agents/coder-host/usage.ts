@@ -1,6 +1,6 @@
 import type { TurnUsageRow } from "@luke/database/models/coding-agent-store";
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
-import type { BrainRunUsage } from "../../core.js";
+import type { RunUsage } from "../../core.js";
 import {
   type OfferedModel,
   standardModelIdOf,
@@ -28,7 +28,7 @@ import {
 const USD_DECIMALS = 6;
 
 /** Counts as they are priced: at the model named, or at none. */
-type UsageShare = BrainRunUsage & { readonly model?: string };
+type UsageShare = RunUsage & { readonly model?: string };
 
 /** The turn's counts by model: the breakdown its row keeps, or the whole at the row's model, which is nothing to price where the row names none; a fast version's at its base model where a fast step was refused. */
 function sharesOf(row: TurnUsageRow): readonly UsageShare[] {

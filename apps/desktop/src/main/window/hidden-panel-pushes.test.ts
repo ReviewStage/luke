@@ -1,5 +1,6 @@
 /** hidden-panel-pushes.test.ts -- what a panel no one can see is pushed, as its window hides and shows. */
-import type { AvatarGrant } from "@luke/features/avatar-grant";
+
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { RunMode } from "@luke/host";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { initialAppState } from "@luke/host/client";
@@ -9,10 +10,13 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { PanelManager } from "./panel-manager";
 import { windowPushes } from "./window-pushes";
 
+/** A Luke link to a task, as the system hands one to the app. */
+const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
+
 /**
  * What a panel no one can see is pushed: no document while it is hidden, the
- * newest one the moment it shows, every document as before while it is in
- * view, and every one while it runs the avatar's session.
+ * newest one the moment it shows, and every document as before while it is
+ * in view.
  */
 
 const { windows, FakeBrowserWindow } = await vi.hoisted(async () => {
@@ -59,12 +63,6 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-const GRANT: AvatarGrant = {
-  serverUrl: "wss://avatar.test",
-  participantToken: "token",
-  agentIdentity: "agent",
-};
-
 const stops: AbortController[] = [];
 
 /** The document at `version`, whose coding agents' unseen dots move with it, so every version moves a slice. */
@@ -81,7 +79,6 @@ function documentAt(version: number): AppStateSnapshot {
 function shownPanel() {
   const panels = new PanelManager({
     runMode: RUN_MODE,
-    mediaDuck: { setExchangeActive: () => undefined },
     preloadPath: "preload.js",
     rendererHtmlPath: "index.html",
     rendererUrl: "file:///index.html",
@@ -136,8 +133,8 @@ test("three documents pushed while the panel is hidden are one delivery, the thi
   await pending.read;
   expect(pending.heard()).toBe(3);
   // Nothing else was held for it: the next read is the event pushed after.
-  windowPushes.push(page, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
-  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_AGENT);
+  windowPushes.push(page, PUSH.SHOW_LINK, LINK);
+  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_LINK);
 });
 
 test("a minimized panel is held until it is restored", async () => {
@@ -165,22 +162,8 @@ test("an event reaches a hidden panel, behind the document held before it", asyn
   const { window, stream, page } = shownPanel();
   window?.emit("hide");
   windowPushes.pushState(page, documentAt(1));
-  windowPushes.push(page, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
+  windowPushes.push(page, PUSH.SHOW_LINK, LINK);
 
   expect((await nextHeard(stream)).heard()).toBe(1);
-  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_AGENT);
-});
-
-test("a hidden panel running the avatar's session is told every document until the grant is withdrawn", async () => {
-  const { panels, window, stream, page } = shownPanel();
-  panels.showAvatarSession(GRANT);
-  window?.emit("hide");
-  windowPushes.pushState(page, documentAt(1));
-  expect((await nextHeard(stream)).heard()).toBe(1);
-  windowPushes.pushState(page, documentAt(2));
-  expect((await nextHeard(stream)).heard()).toBe(2);
-
-  panels.showAvatarSession(undefined);
-  windowPushes.pushState(page, documentAt(3));
-  expect((await nextHeard(stream)).heard()).toBeUndefined();
+  expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_LINK);
 });

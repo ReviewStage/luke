@@ -91,17 +91,17 @@ import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
   sessionKey,
   TOOL_CALL_SETTLEMENT,
+  TURN_FAILURE,
   TURN_ORIGIN,
   TURN_STATUS,
+  TURN_TRIGGER,
   type WireRecord,
 } from "../../core.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
@@ -465,18 +465,18 @@ async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
       });
       if (!ended) return;
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 2,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: NOW,
       });
@@ -492,9 +492,9 @@ async function cancelledTurnEnds(agent: StartedAgent, turnId: string): Promise<v
     writer.consume(target, {
       conversationId: sessionKey(target.conversationId),
       turnId,
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      kind: RUN_EVENT.TURN_ENDED,
       sequence: 2,
-      status: BRAIN_REQUEST_STATUS.CANCELLED,
+      status: RUN_STATUS.CANCELLED,
       responseIds: [],
       at: NOW,
     }),
@@ -511,23 +511,23 @@ async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuild
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
         sequence: 2,
         message: answer.finish(randomUUID()),
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 3,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: NOW,
       });
@@ -2180,10 +2180,10 @@ test("archive_agent refuses an agent whose turn a Stop was asked of but which st
       yield* writer.consume(target, {
         conversationId: sessionKey(target.conversationId),
         turnId,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
       });
       yield* writer.requestTurnCancel(target, { turnId, at: new Date(NOW) });
@@ -2301,7 +2301,7 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
     BRAIN_HOST_TURN.TYPED,
   ]);
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
-  const settled = [turnId, TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
+  const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
 
   const again = await directMessage(host, agents.caller, agents.teammates, eve.services, "call-2");
@@ -2332,18 +2332,18 @@ async function failedTurnOn(agent: StartedAgent): Promise<void> {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_1" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW + 1,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 2,
-        status: BRAIN_REQUEST_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.MODEL,
+        status: RUN_STATUS.FAILED,
+        failure: TURN_FAILURE.MODEL,
         responseIds: [],
         at: NOW + 2,
       });
@@ -2686,9 +2686,9 @@ test("stop_agent answers a turn eve says ended before its cancel as not stopped 
       {
         conversationId: sessionKey(agents.teammates.conversationId),
         turnId,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 2,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: NOW,
       },
@@ -3589,7 +3589,7 @@ test("an operator stops, renames, archives, and continues its member's own agent
   assert.equal(taskByCoder.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(taskByCoder));
 });
 
-test("list_open_asks lists every ask waiting on the operator's member across their own agents, and nothing a teammate's agent asked; it is offered to an operator alone, and a coder's call is refused", async () => {
+test("list_open_asks lists every ask waiting on the operator's member, a teammate's agent's addressed to them included, and none their own agent addressed to a teammate; it is offered to an operator alone, and a coder's call is refused", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const member = agents.caller.userId;
@@ -3606,7 +3606,13 @@ test("list_open_asks lists every ask waiting on the operator's member across the
       prompt: "Sweep expired invites.",
     },
   });
-  const ask = (agent: StartedAgent, taskId: string, key: string, title: string) =>
+  const ask = (
+    agent: StartedAgent,
+    taskId: string,
+    key: string,
+    title: string,
+    addresseeId?: string,
+  ) =>
     database.run(
       postInboxThread(
         { userId: agent.userId, taskId, agentId: agent.id },
@@ -3615,12 +3621,21 @@ test("list_open_asks lists every ask waiting on the operator's member across the
           title,
           body: "Two regions are free.",
           ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] },
+          addresseeId,
         },
       ),
     );
   await ask(agents.caller, tasks.invitations, "deploy-region", "Where should the preview deploy?");
   await ask(second, tasks.invitations, "token-expiry", "How long should invites last?");
   await ask(agents.teammates, tasks.billing, "billing-plan", "Which plan do we bill?");
+  await ask(agents.teammates, tasks.billing, "billing-owner", "Who owns billing?", member);
+  await ask(
+    agents.caller,
+    tasks.invitations,
+    "invite-copy",
+    "Which copy do invites use?",
+    agents.teammates.userId,
+  );
   // A notice asks nothing, and is read with its words.
   await database.run(
     postInboxThread(
@@ -3635,7 +3650,12 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
   const asks = Array.isArray(listed.asks) ? listed.asks : [];
   const byKey = new Map(asks.flatMap((each) => (isRecord(each) ? [[each.key, each]] : [])));
-  assert.deepEqual([...byKey.keys()].sort(), ["deploy-region", "preview-live", "token-expiry"]);
+  assert.deepEqual([...byKey.keys()].sort(), [
+    "billing-owner",
+    "deploy-region",
+    "preview-live",
+    "token-expiry",
+  ]);
   const notice = byKey.get("preview-live");
   assert.ok(isRecord(notice));
   assert.deepEqual([notice.ask, notice.words], [null, "It deployed to iad1."]);

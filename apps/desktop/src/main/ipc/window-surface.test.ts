@@ -4,7 +4,7 @@ import type { FeedbackSubmission } from "@luke/features/feedback";
 import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
 import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
-import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/voice/audio";
+import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/settings/microphone";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { windowSurfaceProcedures } from "./window-surface";
@@ -55,7 +55,7 @@ function fixture() {
   // SAFETY: the procedures read a sender by identity alone; one inert object is one window.
   const panelContents = {} as WebContents;
   // SAFETY: as above, a second window.
-  const voiceContents = {} as WebContents;
+  const otherContents = {} as WebContents;
   const heard: string[] = [];
   const events: unknown[] = [];
   const port = testActPort(
@@ -103,25 +103,18 @@ function fixture() {
   const panel: ActSender<WebContents> = {
     sender: panelContents,
     panel: true,
-    voice: false,
-    call: false,
   };
-  const voice: ActSender<WebContents> = {
-    sender: voiceContents,
-    panel: false,
-    voice: true,
-    call: false,
-  };
-  return { port, panel, voice, heard, events };
+  const other: ActSender<WebContents> = { sender: otherContents, panel: false };
+  return { port, panel, other, heard, events };
 }
 
 it("the microphone is asked for and counted, and its route is probed afresh, from any window", async () => {
-  const { port, voice, heard, events } = fixture();
+  const { port, other, heard, events } = fixture();
 
-  assert.deepEqual(await port.call(voice, KIND.MICROPHONE_REQUEST), {
+  assert.deepEqual(await port.call(other, KIND.MICROPHONE_REQUEST), {
     answer: MICROPHONE_STATUS.GRANTED,
   });
-  assert.deepEqual(await port.call(voice, KIND.MICROPHONE_ROUTE), { answer: ROUTE });
+  assert.deepEqual(await port.call(other, KIND.MICROPHONE_ROUTE), { answer: ROUTE });
   assert.deepEqual(heard, ["probe"]);
   assert.deepEqual(events, [
     { name: "voice:permission", properties: { permission_result: "granted" } },
@@ -129,29 +122,29 @@ it("the microphone is asked for and counted, and its route is probed afresh, fro
 });
 
 it("the panel is focused and a file saved from a panel, and refused from any other window", async () => {
-  const { port, panel, voice, heard } = fixture();
+  const { port, panel, other, heard } = fixture();
   const file = { name: "notes.md", text: "# Notes" };
 
   assert.deepEqual(await port.call(panel, KIND.WINDOW_FOCUS_PANEL), { answer: undefined });
   assert.deepEqual(await port.call(panel, KIND.WINDOW_SAVE_FILE, file), { answer: true });
-  assert.deepEqual(await port.call(voice, KIND.WINDOW_FOCUS_PANEL), {
+  assert.deepEqual(await port.call(other, KIND.WINDOW_FOCUS_PANEL), {
     refused: "Could not focus the panel on this system.",
   });
-  assert.deepEqual(await port.call(voice, KIND.WINDOW_SAVE_FILE, file), {
+  assert.deepEqual(await port.call(other, KIND.WINDOW_SAVE_FILE, file), {
     refused: "Could not save that file on this system.",
   });
   assert.deepEqual(heard, [`focus:${DISPLAY}`, "save:panel:notes.md:# Notes"]);
 });
 
 it("a still is taken of the panel that asks, none of an empty part, and refused from any other window", async () => {
-  const { port, panel, voice, heard } = fixture();
+  const { port, panel, other, heard } = fixture();
   const part = { x: 240, y: 0, width: 800, height: 600 };
 
   assert.deepEqual(await port.call(panel, KIND.WINDOW_CAPTURE, part), { answer: STILL });
   assert.deepEqual(await port.call(panel, KIND.WINDOW_CAPTURE, { ...part, width: 0 }), {
     answer: null,
   });
-  assert.deepEqual(await port.call(voice, KIND.WINDOW_CAPTURE, part), {
+  assert.deepEqual(await port.call(other, KIND.WINDOW_CAPTURE, part), {
     refused: "Could not take a still of the window.",
   });
   assert.deepEqual(await port.call(panel, KIND.WINDOW_CAPTURE, { ...part, x: -1 }), {
@@ -161,7 +154,7 @@ it("a still is taken of the panel that asks, none of an empty part, and refused 
 });
 
 it("a panel's unsaved work is kept as it tells it, and refused from any other window", async () => {
-  const { port, panel, voice, heard } = fixture();
+  const { port, panel, other, heard } = fixture();
 
   assert.deepEqual(await port.call(panel, KIND.WINDOW_UNSAVED_WORK, { holding: true }), {
     answer: undefined,
@@ -169,7 +162,7 @@ it("a panel's unsaved work is kept as it tells it, and refused from any other wi
   assert.deepEqual(await port.call(panel, KIND.WINDOW_UNSAVED_WORK, { holding: false }), {
     answer: undefined,
   });
-  assert.deepEqual(await port.call(voice, KIND.WINDOW_UNSAVED_WORK, { holding: true }), {
+  assert.deepEqual(await port.call(other, KIND.WINDOW_UNSAVED_WORK, { holding: true }), {
     refused: "Could not tell this system about unsaved work.",
   });
   assert.deepEqual(heard, ["unsaved:panel:true", "unsaved:panel:false"]);

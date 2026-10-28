@@ -20,8 +20,8 @@ import { fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
  * kept as the cause and logged, never read by a person.
  */
 
-const PANEL: ActSender = { sender: Symbol("window"), panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
+const PANEL: ActSender = { sender: Symbol("window"), panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const ports: TestActPort<unknown>[] = [];
 
@@ -34,7 +34,7 @@ afterEach(() => {
 function openActPort(actor: ActSender): void {
   const noKeys = () => Effect.succeed({ keys: [] });
   const noToken = () => Effect.succeed({ token: null });
-  const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  const unanswered = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   const port = testActPort(
     accountAskProcedures({
       host: {
@@ -47,14 +47,9 @@ function openActPort(actor: ActSender): void {
         githubTokenRead: noToken,
         githubTokenSave: noToken,
         githubTokenRemove: noToken,
-        memoriesRead: notTemplated,
-        memoryForget: notTemplated,
-        planTemplateRead: notTemplated,
-        planTemplateWrite: notTemplated,
-        planTemplateRevisions: notTemplated,
-        planTemplateRevision: notTemplated,
-        planTemplateRestore: notTemplated,
-        dictationTranscribe: notTemplated,
+        memoriesRead: unanswered,
+        memoryForget: unanswered,
+        dictationTranscribe: unanswered,
       },
     }),
   );
@@ -63,7 +58,7 @@ function openActPort(actor: ActSender): void {
 }
 
 it("a kind the port refuses rejects the caller with the sentence its row draws", async () => {
-  openActPort(VOICE);
+  openActPort(OTHER_WINDOW);
 
   await assert.rejects(
     askAct(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),

@@ -59,7 +59,7 @@ export function webServicesWith(
 
 /**
  * The doors to a native agent's machine, for Luke's MCP server's tools that
- * read a file the agent names or run `show_code` in its checkout: their calls run on this runtime, a
+ * read a file the agent names: their calls run on this runtime, a
  * sandbox's under the function's own OIDC token, as every other call of
  * Luke's to Vercel Sandbox is made, and a local agent's as requests its Mac answers.
  */

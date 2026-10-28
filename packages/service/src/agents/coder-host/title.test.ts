@@ -13,10 +13,11 @@ import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { Clock, Effect, Option } from "effect";
-import { BRAIN_TURN_TRIGGER, userMetadataOf } from "../../core.js";
+import { TURN_TRIGGER, userMetadataOf } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleNativeAgent } from "../native-events/native-title.js";
@@ -73,6 +74,25 @@ function scriptedTitleModel(title: string) {
   return { model, asked };
 }
 
+/** The agent's session opened on `prompt`, as eve records it. */
+const openedOn = (owner: string, agent: CodingAgent, prompt: string) =>
+  Effect.gen(function* () {
+    const placedAt = new Date(yield* Clock.currentTimeMillis);
+    yield* Database.use((db) =>
+      db.insert(messages).values({
+        userId: owner,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: prompt }],
+        metadata: userMetadataOf(TURN_TRIGGER.ASK),
+        placedAt,
+      }),
+    );
+    return agent;
+  });
+
 /** An agent started on the task with `prompt`, its session opened on the prompt as eve records it. */
 const startOnTask = (owner: string, taskId: string, prompt: string) =>
   Effect.gen(function* () {
@@ -87,20 +107,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
         repository: "acme/relay",
       }),
     );
-    const placedAt = new Date(yield* Clock.currentTimeMillis);
-    yield* Database.use((db) =>
-      db.insert(messages).values({
-        userId: owner,
-        conversationId: started.agent.conversationId,
-        seq: 1,
-        clientId: randomUUID(),
-        role: MESSAGE_ROLE.USER,
-        parts: [{ type: "text", text: prompt }],
-        metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK),
-        placedAt,
-      }),
-    );
-    return started.agent;
+    return yield* openedOn(owner, started.agent, prompt);
   });
 
 /** The agent titled by a model answering `title`. */
@@ -120,7 +127,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId, planning: false });
+      const task = yield* createTask(owner, { organizationId });
       const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
 
@@ -137,7 +144,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId, planning: false });
+      const task = yield* createTask(owner, { organizationId });
       const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
 
@@ -166,7 +173,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId, planning: false });
+      const task = yield* createTask(owner, { organizationId });
       const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       yield* renameCodingAgent(owner, agent.id, "My invitations agent");
 
@@ -178,6 +185,38 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
   );
 });
 
+it.layer(getTestDB())("an operator's title", (it) => {
+  it.effect("an operator is never titled, so no read that takes the plain title names it", () =>
+    Effect.gen(function* () {
+      const owner = yield* openGithubUser();
+      const organizationId = yield* openWorkspace(owner);
+      const started = Option.getOrThrow(
+        yield* createCodingAgent(owner, {
+          taskId: null,
+          organizationId,
+          planSnapshot: null,
+          prompt: null,
+          kind: CODING_AGENT_KIND.OPERATOR,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: null,
+        }),
+      );
+      const operator = yield* openedOn(
+        owner,
+        started.agent,
+        "Read my open work and say what stands.",
+      );
+
+      yield* titledAs(owner, operator, "Review open work");
+
+      const read = Option.getOrThrow(yield* readCodingAgent(owner, operator.id));
+      assert.equal(read.title, null);
+    }),
+  );
+});
+
 it.layer(getTestDB())("an agent's title", (it) => {
   it.effect(
     "an account that saved no API key is titled with no model, from the first words of its opening's first line, its Markdown marks and links' addresses left out, opening on a capital and the rest as written, and its task named with it",
@@ -185,7 +224,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const organizationId = yield* openWorkspace(owner);
-        const task = yield* createTask(owner, { organizationId, planning: false });
+        const task = yield* createTask(owner, { organizationId });
         const prompted = yield* startOnTask(
           owner,
           task.id,
@@ -225,7 +264,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const organizationId = yield* openWorkspace(owner);
-        const task = yield* createTask(owner, { organizationId, planning: false });
+        const task = yield* createTask(owner, { organizationId });
         const agent = yield* startOnTask(
           owner,
           task.id,
@@ -340,7 +379,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
             clientId: randomUUID(),
             role: MESSAGE_ROLE.USER,
             parts: [{ type: "text", text: handed }],
-            metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK),
+            metadata: userMetadataOf(TURN_TRIGGER.ASK),
             placedAt: new Date(),
           }),
         );

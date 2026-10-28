@@ -179,7 +179,7 @@ test("a day with no calls says so in place of the table, with no note under it",
 
   expect(page.querySelector("table")).toBeNull();
   expect(page.textContent).toContain("No hosted-tier calls recorded on this day.");
-  expect(page.textContent).not.toContain("Voice and attention count");
+  expect(page.textContent).not.toContain("Calls count the hosted-tier calls");
 });
 
 test("a plain press on an account or its row opens it; a modified press is the browser's", async () => {

@@ -22,12 +22,8 @@ import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
 
 /** Every tool Luke authors or declares for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
-  // The brain's own, which its hosted resolver declares.
-  QUEUE_QUESTION: "queue_question",
-  WITHDRAW_QUESTION: "withdraw_question",
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
-  END_CALL: "end_call",
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",
   READ_AGENT: "read_agent",
@@ -132,9 +128,10 @@ export const CONNECTION_TOOL = {
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
  * four about the workspace's own issues, gone with them, the inbox's
  * post and read, since named for the channels a thread is posted to,
- * the four of the workspace's Chat, removed with it, and the brain's lines of
+ * the four of the workspace's Chat, removed with it, the brain's lines of
  * code put on the developer's screen and its two whiteboard tools, removed
- * with the Code and Board tabs.
+ * with the Code and Board tabs, and a voice call's question queue and
+ * hang-up, removed with GPT Live.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -168,6 +165,10 @@ export const RETIRED_TOOL = {
   SHOW_CODE: "show_code",
   DRAW_ON_BOARD: "draw_on_board",
   LOOK_AT_BOARD: "look_at_board",
+  // A voice call's own tools, removed with GPT Live.
+  QUEUE_QUESTION: "queue_question",
+  WITHDRAW_QUESTION: "withdraw_question",
+  END_CALL: "end_call",
 } as const;
 
 /**

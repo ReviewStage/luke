@@ -14,7 +14,6 @@ import { BLOCK_MENU_EXAMPLE } from "./examples/block-menu";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
-import { CALL_CONTROLS_EXAMPLE } from "./examples/call-controls";
 import { CARD_PRESSES_EXAMPLE } from "./examples/card-presses";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -94,7 +93,6 @@ import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { READABLE_CONTROLS_EXAMPLE } from "./examples/readable-controls";
 import { RECT_FLOAT_EXAMPLE } from "./examples/rect-float";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
-import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
@@ -171,7 +169,6 @@ export const EXAMPLES: readonly Example[] = [
   READABLE_CONTROLS_EXAMPLE,
   CALENDAR_EXAMPLE,
   LENGTH_COUNTERS_EXAMPLE,
-  CALL_CONTROLS_EXAMPLE,
   CARDS_EXAMPLE,
   SOCIAL_SIGN_IN_EXAMPLE,
   CARD_PRESSES_EXAMPLE,
@@ -271,7 +268,6 @@ export const EXAMPLES: readonly Example[] = [
   LOADING_INDICATORS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
-  RESIZE_CORNERS_EXAMPLE,
   SLIDER_EXAMPLE,
   VIDEO_PLAYER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,

@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
+import { purgeWithdrawnLines, sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
 import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
@@ -32,6 +32,7 @@ import {
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
 } from "../voice/orphan-sweep.js";
+import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
@@ -109,6 +110,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
       ),
+    sweepDeviceLeases: (now) =>
+      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
+        sweepDeviceLeases(writer, { now }),
+      ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
@@ -128,6 +133,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepOperatorWakes: (now) =>
       sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>

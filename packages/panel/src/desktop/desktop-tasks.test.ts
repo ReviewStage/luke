@@ -42,7 +42,12 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
+import {
+  type FixedSidePanelTab,
+  PULL_REQUEST_VIEW,
+  SIDE_PANEL_TAB,
+  type SidePanelTab,
+} from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -116,9 +121,9 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
+test("a task with no agent tab draws a new agent's draft and no pane of start buttons", () => {
   const DRAFT_ID = "draft-1";
-  const drawn = (calls: TasksControl["calls"]) => {
+  const drawn = () => {
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
       createElement(DesktopTasks, {
@@ -133,7 +138,6 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
             tabs: [{ draft: DRAFT_ID }],
             tab: { draft: DRAFT_ID },
           },
-          calls,
           agents: codingAgentsControl({
             agentIds: [],
             draft: {
@@ -143,31 +147,19 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
               choice: undefined,
               disabledServers: [],
             },
-            startCall: () => Promise.resolve({ agentId: "agent-1" }),
           }),
         }),
       }),
     );
     return page;
   };
-  const voiced = drawn({ onPress: () => undefined });
-  assert.ok(
-    voiced.querySelector(".desktop-agent .agent-composer"),
-    "the draft's composer is drawn",
-  );
-  assert.equal(voiced.querySelector(".desktop-no-agent"), null);
-  assert.equal(
-    [...voiced.querySelectorAll("button")].some((each) =>
-      /voice chat/u.test(each.textContent ?? ""),
-    ),
-    false,
-  );
-  assert.ok(voiced.querySelector(".agent-call-button button"), "and Call in it");
-  assert.equal(drawn(undefined).querySelector(".agent-call-button"), null, "the web's offers none");
+  const page = drawn();
+  assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
+  assert.equal(page.querySelector(".desktop-no-agent"), null);
 });
 
-/** The Code tab as the task's page draws it over the code the task holds, and whether its code read did not land, as markup. */
-function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): HTMLElement {
+/** The task's page with the side panel open on `tab`, as markup. */
+function panelTab(tab: FixedSidePanelTab): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -176,9 +168,7 @@ function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): H
         page: TASKS_PAGE.DOCUMENT,
         activeTaskId: TASK.id,
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
-        shownCode,
-        codeFailed,
+        sidePanel: { ...tasksControl().sidePanel, open: true, tab },
       }),
     }),
   );
@@ -187,23 +177,8 @@ function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): H
   return page;
 }
 
-test("the Code tab waits while the task's code is unread, and says there is none only once it is read as none", () => {
-  const tab = (page: HTMLElement) => {
-    const panel = page.querySelector("aside[aria-label='Panel'] [role=tabpanel]:not([hidden])");
-    assert.ok(panel, "the panel shows its tab");
-    return panel;
-  };
-  const unread = tab(codeTab(undefined));
-  assert.ok(unread.querySelector("[role=status]"), "the tab says it is waiting");
-  assert.doesNotMatch(unread.textContent ?? "", /No code yet\./u);
-
-  const none = tab(codeTab([]));
-  assert.match(none.textContent ?? "", /No code yet\./u);
-  assert.equal(none.querySelector("[role=status]"), null);
-});
-
 test("the panel's tab panel is labelled by its chosen tab, which controls it", () => {
-  const side = codeTab([]).querySelector("aside[aria-label='Panel']");
+  const side = panelTab(SIDE_PANEL_TAB.COMMENTS).querySelector("aside[aria-label='Panel']");
   const panel = side?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])");
   const chosen = side?.querySelector<HTMLElement>("[role=tab][aria-selected=true]");
   assert.ok(panel && chosen, "the panel shows its chosen tab");
@@ -211,49 +186,6 @@ test("the panel's tab panel is labelled by its chosen tab, which controls it", (
   assert.equal(chosen.getAttribute("aria-controls"), panel.id);
   const others = side?.querySelectorAll("[role=tab][aria-selected=false][aria-controls]");
   assert.equal(others?.length, 0, "a tab with no panel standing names none");
-});
-
-test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
-  let retries = 0;
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  act(() =>
-    root.render(
-      createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
-        looks: NO_LOOKS,
-        tasks: tasksControl({
-          page: TASKS_PAGE.DOCUMENT,
-          activeTaskId: TASK.id,
-          region: { kind: DOCUMENT_REGION.READY, task: TASK },
-          sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
-          shownCode: undefined,
-          codeFailed: true,
-          onRetryCode: () => {
-            retries += 1;
-          },
-        }),
-      }),
-    ),
-  );
-  const tab = container.querySelector("aside[aria-label='Panel'] [role=tabpanel]:not([hidden])");
-  assert.match(tab?.textContent ?? "", /The code could not be read\./u);
-  assert.equal(tab?.querySelector("[role=status]"), null, "the tab no longer waits");
-  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
-    (each) => each.textContent === "Retry",
-  );
-  act(() => retry?.click());
-  assert.equal(retries, 1);
-  act(() => root.unmount());
-  container.remove();
-
-  // Code already held stays drawn through a read that did not land.
-  const held = codeTab([], true).querySelector(
-    "aside[aria-label='Panel'] [role=tabpanel]:not([hidden])",
-  );
-  assert.match(held?.textContent ?? "", /No code yet\./u);
-  assert.doesNotMatch(held?.textContent ?? "", /could not be read/u);
 });
 
 test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
@@ -1118,7 +1050,7 @@ test("the plan stays drawn, hidden, while another tab of the side panel is shown
   const document = page.container.querySelector(".desktop-document");
   assert.ok(document, "the plan is drawn on its tab");
 
-  page.draw(SIDE_PANEL_TAB.CODE);
+  page.draw(SIDE_PANEL_TAB.COMMENTS);
   assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
   assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), true);
 
@@ -1146,8 +1078,8 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   act(() => relayout());
   const row = [
     ...page.container.querySelectorAll<HTMLButtonElement>(".task-summary li button"),
-  ].find((each) => each.getAttribute("aria-label") === "Code");
-  assert.ok(row, "the summary offers the Code tab");
+  ].find((each) => each.getAttribute("aria-label") === "Comments");
+  assert.ok(row, "the summary offers the Comments tab");
   act(() => row.click());
   act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
 

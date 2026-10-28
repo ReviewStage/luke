@@ -50,7 +50,6 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
-import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import {
@@ -115,7 +114,7 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, runCallTool } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf } from "./tool-set.js";
 import {
   CURSOR_START,
   titleMayLand,
@@ -418,7 +417,7 @@ function codingTurn(
   ];
 }
 
-/** One spoken ask's turn as eve emits it on an agent's session: the ask received, a question queued for the voice, and a sentence of answer. */
+/** One spoken ask's turn as eve emits it on an agent's session: the ask received, a read of the task, and a sentence of answer. */
 function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): MessageStreamEvent[] {
   const sequence = 0;
   return [
@@ -438,11 +437,8 @@ function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): Messa
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: CODER_TOOL.QUEUE_QUESTION,
-            input: {
-              question: "Should a withdrawn invite say who withdrew it?",
-              recommendation: "No: just say it is no longer valid.",
-            },
+            toolName: CODER_TOOL.READ_TASK,
+            input: {},
           },
         ],
       },
@@ -457,7 +453,7 @@ function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): Messa
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: CODER_TOOL.QUEUE_QUESTION,
+          toolName: CODER_TOOL.READ_TASK,
           output: { status: ACTION_RESULT_STATUS.ACCEPTED },
         },
       },
@@ -2387,7 +2383,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const called = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, typed.handed);
           for (const told of [
             "## This turn is spoken",
-            `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+            `\`${CODER_TOOL.DELEGATE}\``,
             "## Talking the plan through",
           ]) {
             assert.ok(called.text?.includes(told), told);
@@ -2412,29 +2408,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.ok(resumed.text?.includes("## This turn is spoken"), resumed.text ?? "");
           const typedAfter = yield* turnOf(BRAIN_HOST_TURN.TYPED, compacted);
           assert.ok(typedAfter.text?.startsWith("This turn is typed"), typedAfter.text ?? "");
-        }),
-    );
-
-    it.effect(
-      "the call's own tools run on a spoken turn and are refused on a typed or unheard one, so every kind is offered the same tools",
-      () =>
-        Effect.sync(() => {
-          const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
-          for (const tool of [
-            CODER_TOOL.QUEUE_QUESTION,
-            CODER_TOOL.WITHDRAW_QUESTION,
-            CODER_TOOL.END_CALL,
-          ] as const) {
-            assert.deepEqual(
-              runCallTool(BRAIN_HOST_TURN.SPOKEN, tool, () => accepted),
-              accepted,
-            );
-            for (const turn of [BRAIN_HOST_TURN.TYPED, BRAIN_HOST_TURN.UNHEARD]) {
-              const refused = runCallTool(turn, tool, () => accepted);
-              assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-              assert.match(String(refused.reason), /This turn is not spoken/u);
-            }
-          }
         }),
     );
 
@@ -2507,7 +2480,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           // Luke's notes before the agent's first turn: that turn opens on the plan as its first message.
           yield* TestClock.adjust("1 minute");
-          yield* saveNotes(binding, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
+          yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
           assert.equal(yield* typedAt("turn_0"), undefined);
           // The first turn runs, started at the relay's clock, after Luke's notes.
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
@@ -2523,7 +2496,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // The agent's own notes after its turn started: it wrote them, so there is nothing new to read.
           yield* TestClock.adjust("10 minutes");
           assert.equal(
-            yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")]),
+            yield* agentNotes([added("Approach", "- Invites expire after 7 days.")]),
             ACTION_RESULT_STATUS.ACCEPTED,
           );
           assert.equal(yield* typedAt("turn_1"), undefined);
@@ -2532,11 +2505,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
           yield* TestClock.adjust("1 minute");
           yield* saveNotes(binding, [
-            added(PLAN_HEADING.APPROACH, "- A withdrawn invite never grants access."),
+            added("Approach", "- A withdrawn invite never grants access."),
           ]);
           yield* TestClock.adjust("1 minute");
           assert.equal(
-            yield* agentNotes([added(PLAN_HEADING.APPROACH, "- Resending renews the link.")]),
+            yield* agentNotes([added("Approach", "- Resending renews the link.")]),
             ACTION_RESULT_STATUS.ACCEPTED,
           );
           const changed = (yield* typedAt("turn_1")) ?? "";
@@ -2604,7 +2577,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const answer = page.messages[1];
           assert.ok(
             answer?.parts.some(
-              (part) => isToolUIPart(part) && part.type === `tool-${CODER_TOOL.QUEUE_QUESTION}`,
+              (part) => isToolUIPart(part) && part.type === `tool-${CODER_TOOL.READ_TASK}`,
             ),
           );
         }),

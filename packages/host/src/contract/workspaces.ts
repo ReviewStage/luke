@@ -1,13 +1,9 @@
-import {
-  githubRepositoryIssuesAnswerSchema,
-  workspaceTokenRepositorySchema,
-} from "@luke/features/github-repositories-wire";
+import { workspaceTokenRepositorySchema } from "@luke/features/github-repositories-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { workspaceSentryAnswerSchema } from "@luke/features/sentry-install-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
-  tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
@@ -119,11 +115,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
     .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]: actProcedure(
-    "Could not read that repository's issues on this system.",
-  )
-    .input(exactInput(tasksGitHubIssuesParamsSchema))
-    .output(EffectSchema.flip(githubRepositoryIssuesAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
     "Could not read that workspace's members on this system.",
   )

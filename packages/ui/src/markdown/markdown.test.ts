@@ -10,7 +10,8 @@ import { MARKDOWN_LOOK, Markdown, type MarkdownProps, markdownStep } from "./mar
 /**
  * markdown.test.ts -- the one renderer as a place meets it: a note draws its
  * headings as paragraphs, its pictures as their words, and raw HTML as text;
- * a document draws real headings and no root of its own; a step a place
+ * a document draws real headings and no root of its own; a line draws its
+ * inline Markdown and its blocks' words as one run with no root; a step a place
  * hands in draws with the values it was handed, however many places hand
  * the same step; a note follows a new address rewriter; a task box a
  * reader may tick is named by its item, asks with its item's place, and
@@ -70,6 +71,17 @@ test("a note draws its headings as paragraphs at their level, its pictures as th
 test("a document draws real headings and no root of its own", () => {
   const html = markup({ look: MARKDOWN_LOOK.DOCUMENT, words: "## What we collect\n\nWords." });
   assert.equal(html, "<h2>What we collect</h2>\n<p>Words.</p>");
+});
+
+test("a line draws its inline Markdown, and its blocks' words as one run, with no root or block of its own", () => {
+  const html = markup({
+    look: MARKDOWN_LOOK.INLINE,
+    words: "Open **Domains**\n\n- add `a.example`\n- [ ] wait\n\n```\nverify\n```",
+  });
+  assert.equal(
+    html,
+    "Open <strong>Domains</strong>\n\nadd <code>a.example</code>\n wait\n\n<code>verify\n</code>",
+  );
 });
 
 test("one step handed by two places draws with each place's own value", () => {

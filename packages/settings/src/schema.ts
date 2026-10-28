@@ -1,12 +1,5 @@
 import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
-import {
-  DEFAULT_VIDEO_AVATAR,
-  isVideoAvatar,
-  VIDEO_AVATAR_LIST,
-  VIDEO_AVATAR_NAME,
-  videoAvatarCover,
-} from "@luke/features/video-avatar";
-import { isLiveVoice, LIVE_DEFAULTS } from "@luke/live";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -25,7 +18,6 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "./diff-view.js";
-import { EXPERIMENT, experimentOn } from "./experiments.js";
 import {
   isMacCommandMode,
   MAC_COMMAND_MODE,
@@ -41,13 +33,6 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
-import {
-  OFFERED_VOICE_LIST,
-  voiceGroup,
-  voiceOptionLabel,
-  voiceSamplePath,
-  voiceTag,
-} from "./voice-choice.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
@@ -114,25 +99,16 @@ function macCommandModeGuard(value: UnparsedWireValue) {
   return optional(value, isMacCommandMode);
 }
 
-/** Voice available and the microphone granted: the whole of what a control needs. */
-const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
+/** A key the host still reads whose row is gone: it is stored and described, and drawn nowhere. */
+const neverDrawn = (): boolean => false;
 
-/** The voice controls drawn on a platform that routes the microphone itself. */
+/** A platform that asks for the microphone and routes it itself, as dictation listens on it. */
 const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
-  view.voiceControlsDrawn && view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
-
-/** Signed in with Video calls on: an avatar is a choice only while calls can show one. */
-const videoCallsDrawn = (view: SettingsVisibility): boolean =>
-  view.accountDrawn && experimentOn(view.settings.experiments, EXPERIMENT.VIDEO_CALLS);
+  view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
 /** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
 const desktopAppDrawn = (view: SettingsVisibility): boolean =>
   view.capabilities.includes(HOST_CAPABILITY.DESKTOP_APP);
-
-/** A host that runs local agents, with the account's Local agents experiment on. */
-const localAgentsDrawn = (view: SettingsVisibility): boolean =>
-  view.capabilities.includes(HOST_CAPABILITY.LOCAL_AGENTS) &&
-  experimentOn(view.settings.experiments, EXPERIMENT.LOCAL_AGENTS);
 
 /** Signed in: a choice the account carries is drawn only while there is an account to carry it. */
 const accountDrawn = (view: SettingsVisibility): boolean => view.accountDrawn;
@@ -191,10 +167,6 @@ export const APP_SETTING_SCHEMA = {
     field: "macCommands",
     id: APP_SETTING_ID.MAC_COMMANDS,
     label: "Let agents run commands on this Mac",
-    detail:
-      "Luke and coding agents run shell commands here from your home folder, and what each " +
-      "prints goes to the model and is kept with the conversation. Ask every time shows you " +
-      "each command before it runs.",
     values: MAC_COMMAND_MODE_LIST,
     token: (mode) => mode,
     optionLabel: (mode) => MAC_COMMAND_MODE_LABEL[mode],
@@ -206,73 +178,21 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   /*
-   * Whether this Mac runs the account's local agents (`@luke/host`'s
-   * `compose-local-agents.ts`): off by default, and drawn only while the
-   * Local agents experiment is on, since the host follows nothing without
-   * it. Read on every beat, so switching it off stops the runners at once.
-   * Note that it stands on Agents, where a task's Runs on is about, though
-   * this Mac keeps it; the field and its id are unmoved from This Mac, so a
-   * choice already made is kept.
+   * The voice a call spoke with. Its row is gone with calling, and the host
+   * still reads the key until the voice capability goes.
    */
-  localAgents: toggleSetting({
-    field: "localAgents",
-    id: APP_SETTING_ID.LOCAL_AGENTS,
-    label: "Run agents on this Mac",
-    detail:
-      "Coding agents on tasks that run on this Mac run here, each in a Linux VM of its own that sees " +
-      "only its folder under ~/.luke, signed in through Luke. Their transcript and the files their " +
-      "tools read still reach Luke.",
-    default: false,
-    page: SETTINGS_PAGE.CODING_AGENTS,
-    order: 1,
-    visible: localAgentsDrawn,
-    // Nothing to run per write: the host reads the setting on every beat of its follow.
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-  }),
   voice: choiceSetting({
     field: "voice",
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
-    detail: "Choosing one ends the conversation in progress.",
-    values: OFFERED_VOICE_LIST,
+    values: LIVE_VOICE_LIST,
     token: (voice) => voice,
-    optionLabel: voiceOptionLabel,
-    optionSample: voiceSamplePath,
-    optionGroup: voiceGroup,
-    optionTag: voiceTag,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    page: SETTINGS_PAGE.THIS_MAC,
     order: 30,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.VOICE,
-    visible: voiceControlDrawn,
-  }),
-  /*
-   * Who Luke appears as on video: one of Keyframe's stock avatars. A stored
-   * `default`, the deployment's own persona an earlier build offered, is no
-   * longer listed and reads as the default. Kept on this Mac, beside the Video calls switch
-   * it belongs to, and read as each avatar starts, so a change shows the next
-   * time video does rather than ending the call in progress.
-   */
-  videoAvatar: choiceSetting({
-    field: "videoAvatar",
-    id: APP_SETTING_ID.VIDEO_AVATAR,
-    label: "Avatar",
-    detail: "Who Luke appears as on video. A new choice shows the next time video starts.",
-    values: VIDEO_AVATAR_LIST,
-    token: (avatar) => avatar,
-    optionLabel: (avatar) => VIDEO_AVATAR_NAME[avatar],
-    // Each stock avatar's face, loaded from Keyframe as the row draws it, and chosen from.
-    optionPicture: videoAvatarCover,
-    guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
-    default: DEFAULT_VIDEO_AVATAR,
-    page: SETTINGS_PAGE.EXPERIMENTAL,
-    section: SETTING_SECTION.VIDEO_CALLS,
-    order: 40,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: videoCallsDrawn,
+    visible: neverDrawn,
   }),
   /*
    * Where a Luke link opened in a browser goes: it stays on the web, or the
@@ -320,17 +240,20 @@ export const APP_SETTING_SCHEMA = {
     visible: accountDrawn,
     sideEffect: SETTING_SIDE_EFFECT.USAGE_DATA,
   }),
+  /*
+   * Whether a call quieted other apps' media. Its row and the desktop's media
+   * duck are gone with calling; the key stays until the stored settings stop
+   * carrying it.
+   */
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",
     id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
     label: "Quiet Music and Spotify",
     default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    page: SETTINGS_PAGE.THIS_MAC,
     order: 90,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
-    visible: voiceControlDrawn,
+    visible: neverDrawn,
   }),
   preferBuiltInMicrophone: toggleSetting({
     field: "preferBuiltInMicrophone",
@@ -340,10 +263,11 @@ export const APP_SETTING_SCHEMA = {
       "When the input is a Bluetooth headset, so the headset keeps its full sound quality. " +
       "With the lid shut, Luke uses the headset's microphone anyway.",
     default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    // Note that it stands on This Mac, under no page's reset, as Open Luke at
+    // login does; the field and its id are unmoved, so a choice already made is kept.
+    page: SETTINGS_PAGE.THIS_MAC,
+    section: SETTING_SECTION.MICROPHONE,
     order: 110,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: microphoneRouteDrawn,
   }),

@@ -252,7 +252,7 @@ test("rows show no media until Media previews is checked in the view's menu, the
   assert.equal(mediaOf(page, "Expire after 7 days?"), null, "an item carrying none shows none");
   assert.equal(
     rowNamed(page, "Alert at 80%?").querySelector(".luke-list-row-description")?.textContent,
-    "Retry 3 times over an hour ★ / Retry once",
+    "Retry 3 times over an hour (recommended) / Retry once",
     "the preview's words stand over the media",
   );
 
@@ -844,12 +844,12 @@ test("grouped by person or by nothing, each row names its task on a line of its 
     {
       chip: "Billing usage alerts",
       firstLine: null,
-      preview: "Retry 3 times over an hour ★ / Retry once",
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
     },
     {
       chip: "Invites",
       firstLine: null,
-      preview: "Retry 3 times over an hour ★ / Retry once",
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
     },
   ]);
 
@@ -1315,7 +1315,7 @@ test("an item's row reads as two lines, its title and time over the last word in
   await settle();
   assert.deepEqual(rowLines(page, "Alert at 80%?"), [
     true,
-    "Retry 3 times over an hour ★ / Retry once",
+    "Retry 3 times over an hour (recommended) / Retry once",
   ]);
   assert.deepEqual(rowLines(page, "How is a failed email retried?"), [
     true,
@@ -2006,7 +2006,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
     [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
       (each) => each.getAttribute("aria-label"),
     );
-  assert.deepEqual(buttons(), ["New thread", "View options"]);
+  assert.deepEqual(buttons(), ["View options"]);
   const input = page.querySelector<HTMLInputElement>(
     '.inbox-tasks input[aria-label="Search inbox"]',
   );
@@ -2017,7 +2017,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   assert.deepEqual(listed(page), ["# Billing usage alerts", "How is a failed email retried?"]);
   assert.equal(paneTitle(page), "Alert at 80%?", "the pane keeps the item open");
   assert.equal(headTitle(page), title, "the name stands while the search is used");
-  assert.deepEqual(buttons(), ["New thread", "View options"], "and so do the buttons");
+  assert.deepEqual(buttons(), ["View options"], "and so do the buttons");
 
   searchList(page, "zzz");
   assert.deepEqual(listed(page), []);

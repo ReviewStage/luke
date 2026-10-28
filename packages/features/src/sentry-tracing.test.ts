@@ -14,7 +14,7 @@ test("a renderer's report to main is never traced", () => {
 
 test("every other request is traced", () => {
   assert.equal(sentryTracesRequest("https://luke-avatar.livekit.cloud/rtc/v1/validate"), true);
-  assert.equal(sentryTracesRequest("/fonts/excalidraw.woff2"), true);
+  assert.equal(sentryTracesRequest("/marks/codex-16.png"), true);
 });
 
 test("a request that only names the scheme elsewhere is still traced", () => {

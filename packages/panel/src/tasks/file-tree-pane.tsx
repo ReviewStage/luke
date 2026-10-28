@@ -6,7 +6,6 @@ import {
   FAILURE_NOTE_LOOK,
   FailureNote,
   Fill,
-  IconButton,
   NOTE_LINE_LOOK,
   NoteLine,
   OVER_PANE_WIDTH,
@@ -16,10 +15,8 @@ import {
   type ResizeEdgeHandle,
   SearchField,
   SpinnerRegion,
-  Tooltip,
 } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import {
@@ -47,9 +44,8 @@ import { entriesOf } from "./folder-listings.js";
  * shown. Over the tree stand a search field, which narrows the rows to the
  * paths holding what is typed, over the whole repository listed in one read
  * the first time the field is used, or over the folders listed so far where
- * that read did not land or was cut short, as the empty field then says; and a filter, which shows only the files
- * Luke showed on the task; ⌘F anywhere in the pane takes the caret to the
- * field. The tree draws rows alone, so where it stands is said here, in its
+ * that read did not land or was cut short, as the empty field then says; ⌘F
+ * anywhere in the pane takes the caret to the field. The tree draws rows alone, so where it stands is said here, in its
  * place or under it (`FileTreeStage`), which a crumb's tree says the same
  * way. Every name here is the repository's, so the pane is left out of the
  * screen recording (`ph-no-capture`).
@@ -65,7 +61,7 @@ import { entriesOf } from "./folder-listings.js";
  * (`agent-changes-tab.tsx`), over its pull request's files alone: the tree
  * shows only them, every folder open, each row marked with what became of
  * its file, the search narrowing those rows, held by the tab, which narrows
- * its list of diffs by the same words, and no filter beside it.
+ * its list of diffs by the same words.
  */
 
 /**
@@ -189,9 +185,7 @@ function TreeSearch({
 interface FileTreeBodyProps {
   /** The File tab's file, revealed in the tree. */
   file: string;
-  /** The files of the repository Luke showed on the task, which the filter narrows the tree to; none draws no filter. */
-  shown?: readonly string[] | undefined;
-  /** The only files the tree shows, every folder open, in the filter's place: a change set's. */
+  /** The only files the tree shows, every folder open: a change set's. */
   only?: readonly string[] | undefined;
   /** What became of each file of a change set, lettered on its row, with whatever else its mark carries drawn at the row's end. */
   marks?: readonly FileMark[] | undefined;
@@ -209,7 +203,6 @@ interface FileTreeBodyProps {
 /** The tree itself, its search over it: what stands in the pane's box wherever the pane stands. */
 function FileTreeBody({
   file,
-  shown,
   only,
   marks,
   search,
@@ -235,16 +228,13 @@ function FileTreeBody({
   const [ownQuery, setOwnQuery] = useState("");
   const query = search?.query ?? ownQuery;
   const setQuery = search?.onQuery ?? setOwnQuery;
-  const [onlyShown, setOnlyShown] = useState(false);
   const [scope, setScope] = useState<SearchScope>(SEARCH_SCOPE.UNREAD);
   const [standing, setStanding] = useState<TreeStanding>(TREE_READING);
   const everything = useRef<readonly FolderEntry[] | undefined>(undefined);
-  const narrowed =
-    only ?? (onlyShown && shown !== undefined && shown.length > 0 ? shown : undefined);
   // Note that the tree is handed doors that read the latest props, so it is
   // mounted once however often the pane is drawn.
-  const latest = useRef({ listFolder, onOpen, onViewed, file, query, narrowed, marks });
-  latest.current = { listFolder, onOpen, onViewed, file, query, narrowed, marks };
+  const latest = useRef({ listFolder, onOpen, onViewed, file, query, only, marks });
+  latest.current = { listFolder, onOpen, onViewed, file, query, only, marks };
 
   useEffect(() => {
     const element = host.current;
@@ -258,7 +248,7 @@ function FileTreeBody({
     handle.current = mounted;
     if (everything.current !== undefined) mounted.within(everything.current);
     mounted.search(latest.current.query);
-    mounted.only(latest.current.narrowed);
+    mounted.only(latest.current.only);
     mounted.mark(latest.current.marks ?? []);
     revealed.current = latest.current.file;
     mounted.reveal(latest.current.file, { focus: false });
@@ -302,13 +292,12 @@ function FileTreeBody({
     handle.current?.search(query);
   }, [query]);
   useEffect(() => {
-    handle.current?.only(narrowed);
-  }, [narrowed]);
+    handle.current?.only(only);
+  }, [only]);
   useEffect(() => {
     handle.current?.mark(marks ?? []);
   }, [marks]);
 
-  const filterLabel = onlyShown ? "Show all files" : "Show only files Luke showed";
   return (
     <Fill
       className="ph-no-capture"
@@ -332,18 +321,6 @@ function FileTreeBody({
             onQuery={setQuery}
           />
         </Fill>
-        {shown === undefined ? null : (
-          <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
-            <IconButton
-              icon={<ListFilterIcon aria-hidden="true" />}
-              label="Only files Luke showed"
-              pressed={onlyShown}
-              disabled={shown.length === 0}
-              focusableWhenDisabled
-              onClick={() => setOnlyShown((on) => !on)}
-            />
-          </Tooltip>
-        )}
       </search>
       <FileTreeStage
         module={module}

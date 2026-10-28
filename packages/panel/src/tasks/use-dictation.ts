@@ -3,8 +3,8 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -13,14 +13,14 @@ import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { appSettingsNow, appStateNow, capabilityNow } from "../use-app-state.js";
-import { openPreferredMicrophone } from "../voice/microphone-choice.js";
 import { base64Of } from "./attached-files.js";
+import { openPreferredMicrophone } from "./microphone-choice.js";
 
 /**
  * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Luke's service, and the words put at the caret.
  *
- * The press opens the microphone the voice window would (the Mac's own
- * over a Bluetooth headset's, `../voice/microphone-choice.ts`), after
+ * The press opens the preferred microphone (the Mac's own over a
+ * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
  * WebM at the wire's bitrate, measured by an analyser the strip draws.
  * Finishing hands the clip to main in one act, and main to Luke's service,

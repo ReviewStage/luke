@@ -214,8 +214,6 @@ export const VOICE_FAILURE = {
   NATIVE_AGENT: "native-agent",
   /** The hosted service's ceiling is reached. */
   VOICE_UNAVAILABLE: "voice-unavailable",
-  /** The hidden window that holds every call kept failing to load and was given up on for the rest of the run. */
-  VOICE_WINDOW_LOST: "voice-window-lost",
 } as const;
 
 export type VoiceFailure = (typeof VOICE_FAILURE)[keyof typeof VOICE_FAILURE];
@@ -273,9 +271,6 @@ export const VOICE_FAILURE_WORDS = {
   },
   [VOICE_FAILURE.VOICE_UNAVAILABLE]: {
     words: "Voice is temporarily unavailable.",
-  },
-  [VOICE_FAILURE.VOICE_WINDOW_LOST]: {
-    words: "Voice stopped working and could not restart. Quit and reopen Luke to call again.",
   },
 } as const satisfies Record<VoiceFailure, VoiceFailureWords>;
 

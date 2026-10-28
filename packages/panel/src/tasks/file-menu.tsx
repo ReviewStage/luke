@@ -1,10 +1,10 @@
 import { DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
 import { FolderTreeIcon, GLYPH } from "@luke/ui/icons";
-import { fileName } from "@luke/voice/code-pane-model";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { fileName } from "./file-ref-model.js";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
 
 /**

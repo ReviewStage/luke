@@ -139,7 +139,7 @@ export function resultPageWord(page: SettingsView): string {
  * What an empty search says, the words module's miss line and then what to try,
  * because a miss that only says it missed leaves the reader nothing to do.
  */
-const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Voice, or fewer words.`;
+const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Appearance, or fewer words.`;
 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
@@ -238,24 +238,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
-    // The Voice page's permission row, drawn once there is a voice to reach and a microphone to ask for.
-    input.settings.voiceAvailable && input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
+    // This Mac's microphone permission row, drawn wherever there is a microphone to ask for.
+    input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
       ? {
           id: SETTINGS_SEARCH_ROW.MICROPHONE,
           label: "Microphone",
-          page: SETTINGS_VIEW.VOICE,
-          haystack: ["Microphone", "permission access allow privacy system settings"],
-        }
-      : undefined,
-    // The account's plan template, which is the account's on the service: drawn once an account is signed in.
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.PLAN_TEMPLATE,
-          label: "Plan template",
-          page: SETTINGS_VIEW.PLAN_TEMPLATE,
+          page: SETTINGS_VIEW.THIS_MAC,
           haystack: [
-            "Plan template",
-            "new task plan starter document markdown sections headings default",
+            "Microphone",
+            "permission access allow privacy system settings dictation dictate",
           ],
         }
       : undefined,
@@ -324,7 +315,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: [
             "Codex",
-            "openai api key byok own key gpt chatgpt plan subscription billing provider credential voice call dictation dictate",
+            "openai api key byok own key gpt chatgpt plan subscription billing provider credential dictation dictate",
           ],
         }
       : undefined,

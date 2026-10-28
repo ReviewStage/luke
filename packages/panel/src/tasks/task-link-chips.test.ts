@@ -10,18 +10,16 @@ import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-m
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { FileNoteAnnotation } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions.js";
 import { HISTORY_READ } from "./use-plan-history.js";
 import { VersionView } from "./version-view.js";
 
 /**
- * task-link-chips.test.ts -- a link in the plan's words, or in Luke's
- * notes, is drawn as the chip of what it names whoever wrote it, as a
- * transcript draws one: the task read on its page, a version's diff, and a
- * File tab's note. A link that names nothing stays a link, and code stays
- * code.
+ * task-link-chips.test.ts -- a link in the plan's words is drawn as the
+ * chip of what it names whoever wrote it, as a transcript draws one: the
+ * task read on its page and a version's diff. A link that names nothing
+ * stays a link, and code stays code.
  * Synthetic task and repository.
  */
 
@@ -109,7 +107,6 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       sectionLinks: {
         workspace: "acme",
         onOpen: () => undefined,
@@ -147,22 +144,6 @@ test("a version's diff draws a mention written in as its chip, still marked as w
       (chip) => chip.closest("ins.markdown-inserted") !== null,
     ),
     [true, true, true],
-  );
-});
-
-test("Luke's note on a File tab's lines draws its links as a transcript does", () => {
-  const note = { callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS };
-  const annotation = createElement(FileNoteAnnotation, {
-    note,
-    notes: { notes: [note], folded: [], onFold: () => undefined, taskId: undefined },
-    minimized: undefined,
-  });
-  const container = drawn(createElement(TaskMentions, { value: PAGE, children: annotation }));
-
-  assert.deepEqual(chips(container), THREE_CHIPS_ON_PAGE);
-  assert.deepEqual(
-    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
-    ["the docs"],
   );
 });
 

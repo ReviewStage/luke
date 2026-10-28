@@ -57,13 +57,8 @@ import { skillWord } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
-import {
-  callEndedLine,
-  callOfLine,
-  callPlaces,
-  type TranscriptCallRow,
-} from "@luke/voice/transcript-model";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import { callEndedLine, callPlaces, type TranscriptCallRow } from "@luke/voice/transcript-model";
+import { callOfLine, type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
@@ -100,12 +95,6 @@ import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import {
-  AgentCallControls,
-  type AgentCallDoors,
-  AgentCallFoot,
-  useAgentOnCall,
-} from "./agent-call.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -154,6 +143,7 @@ import {
   macOwnerOf,
   messageWords,
   nativeSubagent,
+  offersStop,
   placedMessages,
   planPayerOf,
   providerOf,
@@ -272,7 +262,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
- * the board, an agent, code shown, the plan, or the Inbox, the one
+ * an agent, code shown, the plan, or the Inbox, the one
  * button that opens that tab (`toolTarget`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
@@ -1510,10 +1500,14 @@ export function AgentMessage({
           align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
           sender={named}
           at={sentAt}
+          // Note that a line of no words, files alone, still offers its Copy link, though it has nothing to copy or edit.
           actions={
-            shown === "" ? null : (
-              <CopyMessageAction words={shown} messageId={message.id} rewind={REWIND_ACTION.EDIT} />
-            )
+            <CopyMessageAction
+              words={shown}
+              copyable={shown !== ""}
+              messageId={message.id}
+              rewind={shown === "" ? undefined : REWIND_ACTION.EDIT}
+            />
           }
         />
       </Message>
@@ -2547,7 +2541,6 @@ function AgentTabView({
   continuedNote,
   continuable = false,
   calls,
-  call: offeredCall,
   bringIn,
   holding = false,
 }: {
@@ -2558,8 +2551,6 @@ function AgentTabView({
   bringIn?: RefObject<MessageBringer | undefined> | undefined;
   /** The calls into the agent, which its transcript places among its rows (`useAgentCalls`). */
   calls: readonly TranscriptCallRow[];
-  /** What the tab takes calls through; none where the platform has no voice. */
-  call?: AgentCallDoors | undefined;
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
   replay?: ReplayPlace | undefined;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
@@ -2609,8 +2600,6 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
-  const call = offeredCall;
-  const onCall = useAgentOnCall(agent.id) && call !== undefined;
   // Note that the messages a rewind drops are hidden at once, until the transcript reads back without them.
   const { cut } = composer;
   const kept = useMemo(
@@ -2640,7 +2629,7 @@ function AgentTabView({
       sameEntries(a.revertTakes, b.revertTakes) &&
       sameEntries(a.editTakes, b.editTakes),
   );
-  const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
+  const editorNow = { agentId: agent.id, doors, keywords, skills };
   const editorProps = useRef(editorNow);
   editorProps.current = editorNow;
   const editor = useCallback(() => editorProps.current, []);
@@ -2817,13 +2806,12 @@ function AgentTabView({
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <AgentTabFoot>
-        {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
-            stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+            stop={offersStop(agent) ? onStop : undefined}
             archivedBy={
               agent.archivedAt === undefined || agent.archivedBy === undefined
                 ? undefined
@@ -2836,6 +2824,7 @@ function AgentTabView({
           <AgentComposer
             agentId={agent.id}
             status={agent.status}
+            stoppable={offersStop(agent)}
             composer={composer}
             model={model}
             models={models}
@@ -2855,17 +2844,6 @@ function AgentTabView({
             skills={skills}
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
-            call={
-              call === undefined ? undefined : (
-                <AgentCallControls
-                  agentId={agent.id}
-                  doors={call}
-                  startedAt={calls.find((each) => each.live)?.startedAt}
-                />
-              )
-            }
-            // Note that a call holds the microphone, so its own mute stands where Dictate would.
-            dictates={!onCall}
           />
         )}
       </AgentTabFoot>
@@ -2884,8 +2862,6 @@ function AgentTabView({
 interface AgentTabDoors {
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: CodingAgentOrigin | undefined;
-  /** What the tab takes calls through; none where the platform has no voice. */
-  call?: AgentCallDoors | undefined;
   control: CodingAgentsControl;
   /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
@@ -3037,7 +3013,6 @@ function AgentTabBody({
   onOpenTarget,
   cards,
   run,
-  call,
 }: Omit<AgentTabDoors, "onHeld"> & {
   agent: CodingAgentSummary;
   transcript: AgentTranscriptControl;
@@ -3155,7 +3130,6 @@ function AgentTabBody({
       <AgentTabView
         agent={agent}
         calls={calls}
-        call={call}
         bringIn={bringIn}
         holding={holding}
         models={control.models}
@@ -3216,11 +3190,7 @@ function AgentTabBody({
             <ContinuedComposerNote
               agent={agent}
               doors={continuedDoors}
-              stop={
-                agent.status === CODING_AGENT_STATUS.RUNNING
-                  ? () => control.onStop(agent.id)
-                  : undefined
-              }
+              stop={offersStop(agent) ? () => control.onStop(agent.id) : undefined}
               control={control}
               shown={shown}
             />

@@ -78,7 +78,7 @@ import {
 } from "../agents/brain-host/eve-sessions.js";
 import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
 import { requestUserId } from "../auth/bearer.js";
-import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import { TURN_FAILURE } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -837,7 +837,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             conversationId: agent.conversationId,
             origin: TURN_ORIGIN.TYPED,
             status: TURN_STATUS.FAILED,
-            failure: BRAIN_REQUEST_FAILURE.MODEL,
+            failure: TURN_FAILURE.MODEL,
             failureDetail: `checkout: ${CODER_REFUSAL.NOT_REACHABLE}`,
           }),
         );
@@ -863,7 +863,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
               db.insert(messages).values({
                 userId: owner,
                 conversationId: each.conversationId,
-                seq: 1,
+                // After the run's own prompt, which its Start wrote first.
+                seq: 2,
                 clientId: randomUUID(),
                 role: MESSAGE_ROLE.USER,
                 parts: [{ type: "text", text: "Are you there?" }],
@@ -876,7 +877,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const ended = yield* turnThenLine(
           "Session ended",
           TURN_STATUS.FAILED,
-          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          TURN_FAILURE.SESSION_ENDED,
         );
         const awaiting = yield* turnThenLine("Line awaits", TURN_STATUS.SETTLED, null);
 
@@ -916,7 +917,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
           runs.map((each) => `${each.agent?.status}:${each.agent?.failureReason ?? ""}`).toSorted(),
           [
             `${CODING_AGENT_STATUS.FAILED}:${CODING_AGENT_FAILURE.GITHUB}`,
-            `${CODING_AGENT_STATUS.STARTING}:`,
+            // A run with no turn yet reads running, its prompt awaiting the turn eve opens on it.
+            `${CODING_AGENT_STATUS.RUNNING}:`,
           ],
         );
         // A line after a session that ended for good awaits nothing; one after a settled turn awaits it.
@@ -973,7 +975,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             conversationId: agent.conversationId,
             origin: TURN_ORIGIN.TYPED,
             status: TURN_STATUS.FAILED,
-            failure: BRAIN_REQUEST_FAILURE.ABANDONED,
+            failure: TURN_FAILURE.ABANDONED,
           }),
         );
 
@@ -1032,7 +1034,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         assert.equal(first.run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
-        assert.equal(first.run.agent?.status, CODING_AGENT_STATUS.STARTING);
+        // The run's prompt, which its Start wrote, awaits the first turn eve opens on it.
+        assert.equal(first.run.agent?.status, CODING_AGENT_STATUS.RUNNING);
         assert.deepEqual(again.run, first.run, "the same key answers the run it made");
         assert.equal(opened.length, 1, "and starts nothing again");
         assert.deepEqual(

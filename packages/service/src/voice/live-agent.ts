@@ -3,6 +3,7 @@ import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import type { HostedStore } from "@luke/database/models/hosted-store";
 import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { TASK_ACTIVITY_ACTION_MAX_CHARS } from "@luke/features/tasks-view";
 import {
   LIVE_AGENT_CANCEL,
@@ -63,7 +64,6 @@ import {
   type TurnEventKind,
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import type { CallBackend } from "./call-backend.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
@@ -178,7 +178,6 @@ const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.SLOW_STEP]: LIVE_AGENT_RUN_EVENT.SLOW_STEP,
   [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_AGENT_RUN_EVENT.QUESTION_QUEUED,
   [TURN_EVENT_KIND.QUESTION_WITHDRAWN]: LIVE_AGENT_RUN_EVENT.QUESTION_WITHDRAWN,
-  [TURN_EVENT_KIND.CODE_SHOWN]: LIVE_AGENT_RUN_EVENT.CODE_SHOWN,
   [TURN_EVENT_KIND.CALL_ENDING]: LIVE_AGENT_RUN_EVENT.CALL_ENDING,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED,
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE,
@@ -191,12 +190,8 @@ const RUN_END_OF_TURN_END = {
   [TURN_END.FAILED]: LIVE_AGENT_RUN_END.FAILED,
 } as const satisfies Record<TurnEnd, LiveAgentRunEnd>;
 
-/**
- * The stream's event as the service hears it, under the ask's id rather than
- * the turn's; code is told with its call, its turn, and `shownAt`, when the
- * turn began, as the task's work reads them back.
- */
-function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveAgentRunEvent {
+/** The stream's event as the service hears it, under the ask's id rather than the turn's. */
+function runEventOf(event: TurnEvent, runId: string): LiveAgentRunEvent {
   switch (event.kind) {
     case TURN_EVENT_KIND.SLOW_STEP:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, step: event.step };
@@ -209,15 +204,6 @@ function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveAgent
       };
     case TURN_EVENT_KIND.QUESTION_WITHDRAWN:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, question: event.question };
-    case TURN_EVENT_KIND.CODE_SHOWN:
-      return {
-        kind: RUN_EVENT_OF_TURN_EVENT[event.kind],
-        runId,
-        callId: event.callId,
-        turnId: event.turnId,
-        shownAt,
-        code: event.code,
-      };
     case TURN_EVENT_KIND.CALL_ENDING:
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };
@@ -382,10 +368,10 @@ function delegatedOf(journal: StoredUIMessage | undefined): boolean {
     .some((part) => DELEGATION_TOOLS.has(storedToolName(part)));
 }
 
-/** The calls about the task's questions rather than its work. */
+/** The calls about the task's questions rather than its work, which a turn journaled while they were offered still names. */
 const QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
-  QUEUE_QUESTION_TOOL.name,
-  WITHDRAW_QUESTION_TOOL.name,
+  RETIRED_TOOL.QUEUE_QUESTION,
+  RETIRED_TOOL.WITHDRAW_QUESTION,
 ]);
 
 /**
@@ -706,12 +692,9 @@ export const hostedLiveAgent = /* @__PURE__ */ Effect.fn("web/hostedLiveAgent")(
       endFailed(askId);
       return FOLLOW_LOOK.ENDED;
     }
-    const record = journal.value[0];
-    const message = record?.message;
+    const message = journal.value[0]?.message;
     // What the voice hears of the turn: the steps after the ask joined it, or the whole turn.
     const heard = journalAfterStep(message, joined);
-    // Note that the time a call's code is told under is its journal's, which is what the task's work reads back.
-    const shownAt = (record?.createdAt ?? turn.startedAt ?? turn.queuedAt).getTime();
     told.delegated ||= delegatedOf(heard);
     const events = projectTurnEvents(turn, message, joined);
     const turnTold = yield* tellerOf(askId, part, events);
@@ -736,7 +719,7 @@ export const hostedLiveAgent = /* @__PURE__ */ Effect.fn("web/hostedLiveAgent")(
       });
     }
     if (!telling) {
-      if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId, shownAt)]);
+      if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId)]);
       return ended ? FOLLOW_LOOK.ENDED : yield* standingLook(told, since);
     }
     const fresh = events.filter((event) => event.seq > turnTold.seq);
@@ -753,7 +736,7 @@ export const hostedLiveAgent = /* @__PURE__ */ Effect.fn("web/hostedLiveAgent")(
     yield* tell(
       askId,
       { seq: stored, ended },
-      toTell.map((event) => runEventOf(event, askId, shownAt)),
+      toTell.map((event) => runEventOf(event, askId)),
     );
     return ended ? FOLLOW_LOOK.ENDED : yield* standingLook(told, since);
   });

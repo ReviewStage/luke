@@ -4,7 +4,6 @@ import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
 import { actPort, appBridge } from "@luke/panel/app-bridge";
 import { appPlatform } from "@luke/panel/app-platform";
-import { shellBundles } from "@luke/panel/shell-bundles";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp } from "../src/app/web-root";
 import { fakeService } from "./support/fake-service";
@@ -37,7 +36,7 @@ function popstateListeners(): Set<EventListenerOrEventListenerObject> {
   return held;
 }
 
-test("closing the app takes down the bridge, act port, platform, and bundles the tab installed for the panel, and its history stops following the browser", async () => {
+test("closing the app takes down the bridge, act port, and platform the tab installed for the panel, and its history stops following the browser", async () => {
   const listening = popstateListeners();
   const root = document.createElement("div");
   document.body.append(root);
@@ -52,5 +51,4 @@ test("closing the app takes down the bridge, act port, platform, and bundles the
   assert.throws(() => actPort(), /No act port is installed/u);
   assert.deepEqual([...listening], [], "nothing is left following the browser");
   assert.throws(() => appPlatform(), /No app platform is installed/u);
-  assert.throws(() => shellBundles(), /No shell bundles are installed/u);
 });

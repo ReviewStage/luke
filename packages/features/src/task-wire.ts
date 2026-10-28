@@ -1,3 +1,4 @@
+import { WireValueSchema } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   CHECK_SUMMARY,
@@ -13,16 +14,9 @@ import {
 } from "./coding-agent-wire.js";
 import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { linearIssueIdSchema } from "./linear-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
-import {
-  sameIssueChoice,
-  type TaskIssueChoice,
-  taskIssueChoiceSchema,
-  taskIssueTagSchema,
-} from "./task-issue-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
@@ -75,8 +69,6 @@ export const TASK_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
   /** The most characters a task's brief may spell: as many as a coding agent's prompt (`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
-  /** The most external issues one task may link (`task-issue-wire.ts`); a link past it is refused, and nothing is written. */
-  MAX_ISSUES: 10,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */
@@ -166,27 +158,6 @@ const planAssumptionSchema = EffectSchema.Struct({
   text: trimmedText(TASK_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
-/**
- * The default template's sections, in its order, by the names the fixed
- * template once kept them under: what its guidance and the prompts are keyed
- * by (`plan-template.ts`).
- */
-export const PLAN_FIELD = {
-  CONTEXT: "context",
-  GOAL: "goal",
-  APPROACH: "approach",
-  INTERFACES: "interfaces",
-  ALTERNATIVES: "alternatives",
-  HARD_PARTS: "hardParts",
-  NOT_DOING: "notDoing",
-  PLAN_OF_ATTACK: "planOfAttack",
-  TESTING: "testing",
-  OPEN_QUESTIONS: "openQuestions",
-  ASSUMPTIONS: "assumptions",
-} as const;
-
-export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
-
 /** The one saved document of a task, replaced whole by every save. */
 const planDocumentSchema = EffectSchema.Struct({
   /** The plan's whole text, as written. */
@@ -244,31 +215,12 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
   return request.agent === undefined || request.planning !== true;
 }
 
-/** Whether a start names its issues one way and each once: never `linearIssueId` beside `issues`, and no issue twice among them. */
-function issuesNamedOnce(request: {
-  linearIssueId?: string;
-  issues?: readonly TaskIssueChoice[];
-}): boolean {
-  const issues = request.issues ?? [];
-  if (request.linearIssueId !== undefined && issues.length > 0) return false;
-  return issues.every((issue, index) =>
-    issues.slice(index + 1).every((later) => !sameIssueChoice(issue, later)),
-  );
-}
-
 /**
  * Starting a plan (POST): its name where one is given, the repository it is
  * about where one is chosen, the workspace it starts in where one is named,
- * the account's first workspace where none is, and the Linear issue it
- * starts from where one was picked, which the service reads through the
- * workspace's own Linear connection (`linear-wire.ts`), or the issues it
- * links from the start, Linear's and GitHub's, up to `TASK_BOUNDS.MAX_ISSUES`,
- * each named once and each with its relation (`task-issue-wire.ts`), a
- * GitHub issue only of the repository the task is about, which the service
- * reads itself, refusing the start where it reads none; the document starts
- * as the untouched template, or empty where `planning` is false: a task
- * started without its planning phase, whose window opens no call on it
- * either. A name left out, or nothing but whitespace, starts the plan as
+ * and the account's first workspace where none is; the document starts
+ * empty, and `planning` false is a task started without its planning phase,
+ * whose window opens no call on it. A name left out, or nothing but whitespace, starts the plan as
  * `UNTITLED_PLAN_NAME` until it is renamed. An `agent` starts a coding
  * agent on the task in the same request, as the agent's own Start would
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
@@ -283,6 +235,8 @@ function issuesNamedOnce(request: {
  * unless `assigneeId` names a member of its workspace. Its agents run in the
  * cloud unless `runsOn` names one of the starter's devices, kept on the task
  * before the agent the start asks for starts, so that agent runs there too.
+ * A released desktop may still send `linearIssueId` or `issues`, from when a
+ * task could link issues, which are accepted and ignored.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -290,12 +244,8 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   ),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
-  linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
-  issues: EffectSchema.optionalKey(
-    EffectSchema.Array(taskIssueChoiceSchema).check(
-      EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES),
-    ),
-  ),
+  linearIssueId: EffectSchema.optionalKey(WireValueSchema),
+  issues: EffectSchema.optionalKey(WireValueSchema),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
   runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
@@ -305,7 +255,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(issuesNamedOnce));
+}).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
@@ -644,18 +594,13 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
 
 /**
- * One row of the task list: everything but the document, what its coding
- * agents are doing, which only the list answers, and only for a task with
- * an agent, and the issues it links, oldest linked first, which only the
- * list answers too, and only for a task that links one.
+ * One row of the task list: everything but the document, and what its
+ * coding agents are doing, which only the list answers, and only for a task
+ * with an agent.
  */
 export const taskSummarySchema = EffectSchema.Struct({
   ...taskSummaryFields,
   agents: EffectSchema.optionalKey(taskAgentsSummarySchema),
-  /** Absent for a task that links no issue, and from a service before the list named them. */
-  issues: EffectSchema.optionalKey(
-    EffectSchema.Array(taskIssueTagSchema).check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES)),
-  ),
 });
 
 export type TaskSummary = typeof taskSummarySchema.Type;
@@ -839,7 +784,7 @@ export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreat
  * of an earlier revision, which one it brought back and that revision's
  * latest save.
  */
-export const planRevisionLineSchema = EffectSchema.Struct({
+const planRevisionLineSchema = EffectSchema.Struct({
   seq: planRevisionSeqSchema,
   lastEdit: planLastEditSchema,
   /** The coding agent that wrote it; absent for any other writer, once the agent's row is gone, and from a service before it. */
@@ -916,8 +861,7 @@ function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boo
 
 /**
  * A place in the task's repository: a file, named relative to the checkout
- * root, and the lines pointed at, or the file whole with none. Luke names one
- * through the brain's `show_code`.
+ * root, and the lines pointed at, or the file whole with none.
  */
 export const codeRefSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
@@ -930,71 +874,6 @@ export const codeRefSchema = EffectSchema.Struct({
 
 export type CodeRef = typeof codeRefSchema.Type;
 
-export const SHOWN_CODE_BOUNDS = {
-  /** The most lines one showing carries: the lines pointed at, with the file around them. */
-  WINDOW_LINES: 200,
-  /** The most characters of one line that travel; a longer line is cut there. */
-  MAX_LINE_CHARS: 400,
-  /** The most characters of the note Luke writes beside the lines: a sentence or two. */
-  NOTE_CHARS: 280,
-} as const;
-
-/** What Luke says the lines are for, in a sentence or two of his own words, for the developer reading them. */
-export const codeNoteSchema = EffectSchema.String.check(
-  EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.NOTE_CHARS),
-);
-
-/**
- * Code on screen during a task call, with its lines: the place named,
- * the repository the service read it from, the window of the file it
- * holds around the lines pointed at, and Luke's note on why he showed it,
- * which code shown before notes were asked for does not carry. The service reads the lines from the
- * brain session's checkout of the repository as `show_code` runs, and
- * they travel in the call's own journal and on the `task.code` frame; the Mac
- * reads nothing of its own.
- */
-export const shownCodeSchema = EffectSchema.Struct({
-  ref: codeRefSchema,
-  /** The repository the lines were read from, `owner/name`. */
-  repository: githubRepositoryFullNameSchema,
-  /** The commit the checkout stood at when the lines were read; absent on code shown before it was recorded. */
-  commit: EffectSchema.optionalKey(commitShaSchema),
-  /** The file's line the first carried line is. */
-  firstLine: codeLineSchema,
-  /** How many lines the whole file has. */
-  lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
-  lines: EffectSchema.Array(
-    EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
-  ).check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.WINDOW_LINES)),
-  note: EffectSchema.optionalKey(codeNoteSchema),
-});
-
-export type ShownCode = typeof shownCodeSchema.Type;
-
-/** One window of a file: its first and last line, both counted from one. */
-export interface CodeWindow {
-  readonly first: number;
-  readonly last: number;
-}
-
-/**
- * The window of a file of `lineCount` lines the screen holds for `ref`: the
- * lines pointed at centred where the file allows, and the file's head for a
- * reference with none.
- */
-export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
-  const { WINDOW_LINES } = SHOWN_CODE_BOUNDS;
-  const latest = Math.max(1, lineCount - WINDOW_LINES + 1);
-  if (ref.startLine === undefined || ref.endLine === undefined) {
-    return { first: 1, last: Math.min(lineCount, WINDOW_LINES) };
-  }
-  const pointed = ref.endLine - ref.startLine + 1;
-  const margin = Math.max(0, Math.floor((WINDOW_LINES - pointed) / 2));
-  const first = Math.min(Math.max(1, ref.startLine - margin), latest);
-  return { first, last: Math.min(lineCount, first + WINDOW_LINES - 1) };
-}
-
 /** A file kept secret, refused wherever it sits in the repository: a `.env` file, or one whose name starts with `.env`. */
 const SECRET_FILE = /(^|\/)\.env[^/]*$/u;
 
@@ -1003,9 +882,11 @@ export function isSecretFile(path: string): boolean {
   return SECRET_FILE.test(path);
 }
 
-const TASK_FILE_BOUNDS = {
+export const TASK_FILE_BOUNDS = {
   /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,
+  /** The most characters of one line that travel; a longer line is cut there. */
+  MAX_LINE_CHARS: 400,
   /** The longest text a raw read carries: the service reads a file of a megabyte at most, and its text, a character to a byte at least, is no longer. */
   MAX_TEXT_CHARS: 1024 * 1024,
 } as const;
@@ -1062,8 +943,8 @@ export type TaskFileRequest = typeof taskFileRequestSchema.Type;
  * default branch, or at the commit the request pinned, read through the
  * Luke GitHub App: the path, the repository and the branch or commit read,
  * the commit the lines were read at where GitHub named one, the line the first carried line is, how
- * many lines the whole file has, and the lines, each cut as `show_code`
- * cuts it. A window past the file's end carries no lines.
+ * many lines the whole file has, and the lines, each cut to the bound. A
+ * window past the file's end carries no lines.
  */
 export const taskFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
@@ -1073,14 +954,14 @@ export const taskFileWindowSchema = EffectSchema.Struct({
   firstLine: codeLineSchema,
   lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
   lines: EffectSchema.Array(
-    EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
+    EffectSchema.String.check(EffectSchema.isMaxLength(TASK_FILE_BOUNDS.MAX_LINE_CHARS)),
   ).check(EffectSchema.isMaxLength(TASK_FILE_BOUNDS.WINDOW_LINES)),
 });
 
 /**
  * Why the File tab's file is not shown, and, where GitHub found nothing at
- * the path, the branch it was read on: the snippet came from the brain
- * session's checkout, which may hold a file that branch does not.
+ * the path, the branch it was read on: a link to the file may have come
+ * from an agent's checkout, which may hold a file that branch does not.
  */
 export const taskFileRefusalSchema = EffectSchema.Struct({
   refusal: EffectSchema.Literals(Object.values(TASK_FILE_REFUSAL)),

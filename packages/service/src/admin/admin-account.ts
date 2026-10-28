@@ -2,8 +2,8 @@
  * admin-account.ts -- what a maintainer supports one account from, folded from its rows.
  *
  * The account page's support sections: when the account was last seen, how
- * much it did over the window (tasks, coding agents and their pull requests,
- * call minutes), its newest agents, its workspaces, its keys and
+ * much it did over the window (tasks, coding agents and their pull
+ * requests), its newest agents, its workspaces, its keys and
  * connections, its coding-agent defaults and experiments, and a timeline of
  * what failed for it recently. Every value is a count, a status, a model or
  * effort, or one of the service's own enumerated words; nothing the account
@@ -20,7 +20,6 @@
 import type { GitHubInstallationStatus } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import type { CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
-import type { VoiceCloseReason } from "@luke/database/voice-vocabulary";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
@@ -60,8 +59,6 @@ export const ADMIN_ACCOUNT_STATUS_READ_LIMIT = 2000;
 /** How many recent failures the timeline lists, and how many each source contributes at most. */
 export const ADMIN_ACCOUNT_FAILURES_LIMIT = 20;
 
-const SECONDS_PER_MINUTE = 60;
-
 /** One coding agent as the queries read it: the fields the page may show, and what its status is read from. */
 export interface AdminAccountAgentSource {
   id: string;
@@ -96,7 +93,6 @@ export interface AdminAccountSource {
     agentsStarted: number;
     pullRequestsOpened: number;
     pullRequestsMerged: number;
-    callSeconds: number;
   };
   /**
    * The window's agents, at most `ADMIN_ACCOUNT_STATUS_READ_LIMIT`, newest
@@ -115,8 +111,6 @@ export interface AdminAccountSource {
     contextWindow: ContextWindow | null;
     experiments: ExperimentChoices;
   } | null;
-  /** The window's newest dropped calls, at most the timeline's bound. */
-  droppedCalls: readonly { at: Date; reason: VoiceCloseReason }[];
   /** The window's newest failed runs of the account's automations, at most the timeline's bound. */
   failedRuns: readonly { at: Date; reason: AutomationRunReason | null }[];
 }
@@ -221,13 +215,6 @@ export function buildAdminAccountSupport(
 
   const failures = [
     ...agentFailures(source, now, windowStart),
-    ...source.droppedCalls.map(
-      (call): AdminAccountFailure => ({
-        kind: ADMIN_FAILURE_KIND.CALL,
-        at: call.at.getTime(),
-        reason: call.reason,
-      }),
-    ),
     ...credentialFailures(source, windowStart),
     ...source.failedRuns.map(
       (run): AdminAccountFailure => ({
@@ -250,7 +237,6 @@ export function buildAdminAccountSupport(
       agentsRead: windowRead.length,
       pullRequestsOpened: source.totals.pullRequestsOpened,
       pullRequestsMerged: source.totals.pullRequestsMerged,
-      callMinutes: Math.round(source.totals.callSeconds / SECONDS_PER_MINUTE),
     },
     recentAgents: source.recentAgents.map((agent) => agentOf(agent, now)),
     workspaces: source.workspaces.map((workspace) => ({

@@ -11,6 +11,7 @@ import {
   migrationStatements,
   RENAME_PLAN_TO_TASK,
   replayable,
+  syncCaptureTakenOff,
   undoneRename,
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
@@ -65,7 +66,8 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         const { userId, taskId, agentId } = yield* openTask;
         const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
 
-        // The database as it stood before the migration, written to as an earlier build wrote it.
+        // The database as it stood before the migration, with no sync capture yet, written to as an earlier build wrote it.
+        for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
         yield* sql.unsafe(`UPDATE "plan" SET name = 'Written before' WHERE id = '${taskId}'`);
         yield* sql.unsafe(

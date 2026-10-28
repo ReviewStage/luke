@@ -5,12 +5,7 @@ import {
   readRevisionContent,
   recordRevision,
 } from "@luke/database/models/plan-revisions";
-import {
-  readStartedText,
-  readTaskForUpdate,
-  type StoredTask,
-  savePlanText,
-} from "@luke/database/models/task-store";
+import { readTaskForUpdate, type StoredTask, savePlanText } from "@luke/database/models/task-store";
 import { changedSections } from "@luke/features/plan-document";
 import { applyDocumentEdit, type PlanEditRequest } from "@luke/features/plan-edit";
 import {
@@ -252,38 +247,35 @@ const NOTETAKER: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER };
 /** The developer, as the writer of every edit the window sends. */
 const DEVELOPER: PlanWriter = { actor: PLAN_ACTOR.DEVELOPER };
 
-/** Notes already read under the template's schema, taken into the plan the service bound, kept as a revision under their writer, the notetaker where none is named. */
+/** Notes already read under the notes' schema, taken into the plan the service bound, kept as a revision under their writer, the notetaker where none is named. */
 export function saveNotes(
   binding: PlanDocumentBinding,
   notes: readonly PlanNote[],
   writer: PlanWriter = NOTETAKER,
 ): Effect.Effect<PlanSaveResult, never, DatabaseServices> {
   const take = (stored: StoredTask, now: number) =>
-    Effect.map(
-      readStartedText(binding.userId, stored.task.createdAt),
-      (started): Result.Result<TextTaken, NotesConflict> => {
-        const noted = applyNotesToText(stored.text, notes, started);
-        if (noted.missed !== undefined) {
-          return Result.fail({
-            status: PLAN_SAVE_STATUS.CONFLICT,
-            current: stored.text,
-            missed: noted.missed,
-          });
-        }
-        // An agent's save is journaled with its notes; one that took none changed nothing to journal.
-        const journaled =
-          writer.actor === PLAN_ACTOR.AGENT && notes.length > 0
-            ? {
-                agentEdits: withAgentEdit(stored.agentEdits, {
-                  agentId: writer.agentId,
-                  at: now,
-                  notes,
-                }),
-              }
-            : undefined;
-        return Result.succeed({ text: noted.text, changes: notes.length, ...journaled });
-      },
-    );
+    Effect.sync((): Result.Result<TextTaken, NotesConflict> => {
+      const noted = applyNotesToText(stored.text, notes);
+      if (noted.missed !== undefined) {
+        return Result.fail({
+          status: PLAN_SAVE_STATUS.CONFLICT,
+          current: stored.text,
+          missed: noted.missed,
+        });
+      }
+      // An agent's save is journaled with its notes; one that took none changed nothing to journal.
+      const journaled =
+        writer.actor === PLAN_ACTOR.AGENT && notes.length > 0
+          ? {
+              agentEdits: withAgentEdit(stored.agentEdits, {
+                agentId: writer.agentId,
+                at: now,
+                notes,
+              }),
+            }
+          : undefined;
+      return Result.succeed({ text: noted.text, changes: notes.length, ...journaled });
+    });
   const saved = Effect.map(savedUnderLock(binding, writer, take), (result): PlanSaveResult => {
     if (result.status !== PLAN_SAVE_STATUS.SAVED) return result;
     const { task } = result;

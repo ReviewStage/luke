@@ -655,7 +655,6 @@ export function mount(
       [],
       [],
       [],
-      [],
       at,
     );
     return createElement(Page, { sidePanel });
@@ -1382,10 +1381,10 @@ export function draftReply(pane: HTMLElement): (string | null)[] {
   return [head, "controls"];
 }
 
-/** The press of the open ask's controls, in the draft reply, whose words are `label`. */
+/** The press of the open ask's controls, in the draft reply, whose own words, a badge beside them aside, are `label`. */
 export function askPress(pane: HTMLElement, label: string): HTMLButtonElement {
   const found = [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
-    (button) => button.textContent === label,
+    (button) => button.querySelector(".luke-button-words")?.textContent === label,
   );
   assert.ok(found, `the ask offers ${label}`);
   return found;

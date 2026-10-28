@@ -273,6 +273,17 @@ export const MAC_PRESENCE = {
   POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
 } as const;
 
+/**
+ * A device's lease on the runs it holds: its beat is the lease, renewed every
+ * `DEVICE_BEAT.EVERY_MS`, and a device quiet for `MS` loses its open runs, as a
+ * self-hosted CI runner does. Twenty beats, so a sleep or a network blip of a
+ * minute or two keeps them, and well past `MAC_PRESENCE.FRESH_MS`, so a device
+ * reads away long before its runs are taken from it.
+ */
+export const DEVICE_LEASE = {
+  MS: 5 * 60 * 1_000,
+} as const;
+
 export const DEVICE_STANDING = {
   ONLINE: "online",
   OFFLINE: "offline",
@@ -834,6 +845,15 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * its turn, whose run has not begun, and from a service older than it.
    */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * False while the agent reads running but a Stop has nothing to stop
+   * (`turnStoppable`): its turn already stopped, with a line written since
+   * awaiting the turn it opens, or a line awaiting its turn beside none
+   * running. Its tab offers Stop only where this is not false, so a press is
+   * never taken and silently dropped. Absent otherwise, and from a service
+   * older than it.
+   */
+  stoppable: EffectSchema.optionalKey(EffectSchema.Literal(false)),
   /**
    * What the agent was handed as its first message, so its tab draws a
    * plan as the plan's card, a task as the developer's own message, and,

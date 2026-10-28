@@ -30,7 +30,6 @@ import {
 import { beatDevice, deviceLayout } from "@luke/database/models/device-store";
 import { openMacLaunchSecrets, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { storeWriter } from "@luke/database/models/writer";
-import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_LAUNCH_REFUSAL,
@@ -39,6 +38,7 @@ import {
   deviceAgentLaunchPayloadSchema,
   deviceAgentLaunchSecretsSchema,
 } from "@luke/features/device-agent-wire";
+import { TURN_FAILURE } from "@luke/features/turn-run";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
@@ -137,16 +137,25 @@ const openedSecrets = (userId: string, agentId: string, sealed: string) =>
   });
 
 /**
- * One line claimed for the account's Mac, with a launch line's secrets
- * opened once; none where it is not that Mac's, another claim took it, or
- * it was withdrawn. A launch line whose secrets do not open is handed over
- * without them, for the Mac to settle as a runner that never started.
+ * One line claimed for the account's Mac under the token it minted for the
+ * line, where it names one, with a launch line's secrets opened once; none
+ * where it is not that Mac's, another claim took it, it was settled, or it
+ * was withdrawn. The same claim asked again under the same token is
+ * answered the line again, and a launch line's secrets as gone, since the
+ * first claim took them. A launch line whose secrets do not open is handed
+ * over without them, for the Mac to settle as a runner that never started.
  */
-export function claimedDeviceAgentLine(userId: string, deviceId: string, id: string) {
+export function claimedDeviceAgentLine(
+  userId: string,
+  deviceId: string,
+  id: string,
+  claimToken?: string,
+) {
   return Effect.gen(function* () {
-    const claimed = yield* claimDeviceAgentLine(userId, deviceId, id);
+    const claimed = yield* claimDeviceAgentLine(userId, deviceId, id, claimToken);
     if (Option.isNone(claimed)) return Option.none();
-    const { sealedSecrets, ...line } = claimed.value;
+    const { sealedSecrets, secretsGone, ...line } = claimed.value;
+    if (secretsGone) return Option.some({ line, secretsGone: true as const });
     if (line.kind !== DEVICE_AGENT_LINE_KIND.LAUNCH || sealedSecrets === null) {
       return Option.some({ line });
     }
@@ -222,7 +231,7 @@ export function settledDeviceAgentLine(
             ),
           ),
           undefined,
-          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          TURN_FAILURE.SESSION_ENDED,
         );
     return true;
   });

@@ -11,7 +11,6 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   getTestDB,
@@ -19,11 +18,6 @@ import {
   openInstallationWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  type VoiceCloseReason,
-} from "@luke/database/voice-vocabulary";
 import {
   ADMIN_ATTENTION_KIND,
   ADMIN_METRICS_SCOPE,
@@ -46,7 +40,7 @@ import { TURN_ORIGIN } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { REPOSITORY_REFUSAL } from "../agents/repository-shell.js";
-import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS, type TurnStatus } from "../core.js";
+import { DAY_MS, TURN_FAILURE, TURN_STATUS, type TurnStatus } from "../core.js";
 import { buildAdminReliability } from "./admin-reliability.js";
 import { readAdminReliabilitySource } from "./admin-reliability-queries.js";
 
@@ -128,18 +122,6 @@ const openAgent = (userId: string, organizationId: string, createdAt: Date) =>
     return conversationId;
   });
 
-const closeCall = (userId: string, closedAt: Date | null, closeReason: VoiceCloseReason | null) =>
-  Database.use((db) =>
-    db.insert(voiceSessions).values({
-      userId,
-      liveSessionId: randomUUID(),
-      delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-      startedAt: at(10),
-      closedAt,
-      closeReason,
-    }),
-  );
-
 const settleRun = (
   automationId: string,
   userId: string,
@@ -187,26 +169,26 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         }
         yield* endTurn(developer, main, TURN_STATUS.CANCELLED, at(16));
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(17, 3), {
-          failure: BRAIN_REQUEST_FAILURE.ABANDONED,
+          failure: TURN_FAILURE.ABANDONED,
         });
         // Still running, and failed before the window opened: neither counts.
         yield* endTurn(developer, main, TURN_STATUS.RUNNING, null);
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(1), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
 
         // A coding agent's runs: four of five failed, to the sandbox, the model, and two Starts that never ran.
         const agent = yield* openAgent(developer, workspace, at(14));
         yield* endTurn(developer, agent, TURN_STATUS.SETTLED, at(15));
         yield* endTurn(developer, agent, TURN_STATUS.FAILED, at(15), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
           failureDetail: `Sandbox: ${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}`,
         });
         yield* endTurn(developer, agent, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
           failureDetail: "the provider answered 500",
         });
         yield* openAgent(developer, workspace, at(15));
@@ -219,14 +201,8 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         // A subagent's turn runs inside its agent's, so it counts toward neither rate.
         const subagent = yield* openConversation(developer, CONVERSATION_KIND.CHILD, agent);
         yield* endTurn(developer, subagent, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
-
-        // Calls: one of three closed calls lost its connection; an open one has not ended.
-        yield* closeCall(developer, at(13), VOICE_CLOSE_REASON.CLOSE_REQUESTED);
-        yield* closeCall(developer, at(13), VOICE_CLOSE_REASON.REMOTE_HANGUP);
-        yield* closeCall(developer, at(14), VOICE_CLOSE_REASON.CONNECTION_LOST);
-        yield* closeCall(developer, null, null);
 
         // Automation runs: one of four settled failed and one was skipped; a queued one has not settled.
         const automationId = yield* Effect.map(
@@ -269,7 +245,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         // The maintainer's own failed turn, which only the explicit ask for every account counts.
         const maintainerMain = yield* openConversation(maintainer, CONVERSATION_KIND.MAIN);
         yield* endTurn(maintainer, maintainerMain, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
 
         const answer = yield* read(ADMIN_METRICS_SCOPE.NON_ADMINS);
@@ -277,7 +253,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
           lukeTurns: { failed: 2, total: 6 },
           agentRuns: { failed: 4, total: 5 },
           abandonedTurns: 1,
-          calls: { failed: 1, total: 3 },
           automationRuns: { failed: 1, skipped: 1, total: 4 },
         });
         assert.deepEqual(
@@ -299,7 +274,6 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
             { reason: AUTOMATION_RUN_REASON.UNAVAILABLE, skipped: 0, failed: 1 },
           ],
         );
-        assert.equal(answer.daily.find((day) => day.day === "2026-10-14")?.calls, 1);
         assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.lukeTurns, null);
         assert.equal(answer.daily.find((day) => day.day === "2026-10-11")?.agentRuns, 1);
         assert.equal(answer.systemHealth.database.reachable, true);

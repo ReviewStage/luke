@@ -140,9 +140,8 @@ export const CODER_DEPLOYMENT_TURNS = {
  * a line typed to the agent joins a call's spoken turn: a call on an agent
  * an hour into a pull request is answered within a step rather than when
  * the hour ends. A turn keeps the words it opened with (`turn-context.ts`),
- * since eve resolves them as the turn starts, and the call's own tools
- * answer by the kind it opened as (`tool-set.ts`'s `runCallTool`), so a
- * spoken line joining a typed turn carries
+ * since eve resolves them as the turn starts, so a spoken line joining a
+ * typed turn carries
  * its own short note instead (`SPOKEN_LINE_NOTE`), and the relay tells
  * each line it receives apart from the turn's kind (`brain-host/relay.ts`).
  * A cancel and a reset are minted as the account's too, which eve's cancel

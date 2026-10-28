@@ -32,15 +32,9 @@ const { CODER, CODER_WORKER } = AGENT_ROLE;
  * without colliding and the agent alone edits: not `run_on_mac`, which runs
  * on the developer's own Mac, not `browser`, which drives the agent's own
  * tabs, and not `show_image`, since a worker never speaks to the developer
- * and answers the agent in words. A coding agent is offered the
- * call's own tools, `queue_question`, `withdraw_question`, and `end_call`, on
- * every turn, so its tools are the same whatever kind of turn it runs, and refused off a call
- * (`../coder-host/tool-set.ts`'s `runCallTool`), since they mean something
- * only while someone is listening.
+ * and answers the agent in words.
  */
 const TOOL_ROLES = {
-  [AGENT_TOOL.QUEUE_QUESTION]: [CODER],
-  [AGENT_TOOL.WITHDRAW_QUESTION]: [CODER],
   [AGENT_TOOL.LOOK_AT_PICTURE]: [CODER],
   [AGENT_TOOL.LIST_AGENTS]: [CODER],
   [AGENT_TOOL.READ_AGENT]: [CODER],
@@ -62,7 +56,6 @@ const TOOL_ROLES = {
   [AGENT_TOOL.LIST_MODELS]: [CODER],
   [AGENT_TOOL.REMEMBER]: [CODER],
   [AGENT_TOOL.RECALL]: [CODER],
-  [AGENT_TOOL.END_CALL]: [CODER],
   [AGENT_TOOL.WEB_SEARCH]: [CODER, CODER_WORKER],
   [AGENT_TOOL.READ_WEB_PAGE]: [CODER, CODER_WORKER],
   [AGENT_TOOL.RUN_ON_MAC]: [CODER],

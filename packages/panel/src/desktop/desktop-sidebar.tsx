@@ -10,6 +10,7 @@ import {
 import type { TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import type { UpdateControl } from "@luke/settings/settings-controls";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArrowLeftIcon,
@@ -120,11 +121,9 @@ import {
   TASK_MARK,
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
-import type { UpdateControl } from "@luke/voice/settings-controls";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
-import { ColumnFoot } from "../call/call-card.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -1874,7 +1873,7 @@ function SidebarColumn({
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows } = tasks;
   const listedAgents = {
-    standing: withoutLuke(tasks.listedAgents.standing, operator),
+    standing: withoutLuke(tasks.listedAgents.standing),
     archived: tasks.listedAgents.archived,
   };
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
@@ -2188,8 +2187,7 @@ function SidebarColumn({
                     <SidebarLuke
                       operator={operator}
                       agent={tasks.listedAgents.standing.find(
-                        (agent) =>
-                          agent.workspaceId === operator.workspaceId && isLuke(agent, operator),
+                        (agent) => agent.workspaceId === operator.workspaceId && isLuke(agent),
                       )}
                       current={lukeId !== undefined && lukeId === agentShown}
                       unread={lukeId !== undefined && context.unseenAgent(lukeId)}
@@ -2349,16 +2347,14 @@ function SidebarColumn({
         </ScrollArea>
       </Fill>
 
-      <ColumnFoot docked={!sidebar.collapsed}>
-        <SidebarFoot
-          account={account}
-          updates={updates}
-          shown={overlay.inSight}
-          settingsOpen={tab === PANEL_TAB.SETTINGS}
-          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
-          onSignOut={onSignOut}
-        />
-      </ColumnFoot>
+      <SidebarFoot
+        account={account}
+        updates={updates}
+        shown={overlay.inSight}
+        settingsOpen={tab === PANEL_TAB.SETTINGS}
+        onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
+        onSignOut={onSignOut}
+      />
       {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}

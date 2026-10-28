@@ -9,6 +9,7 @@ import {
   withdrawPlanCommentAsk,
 } from "@luke/database/models/plan-comments";
 import { readTaskHeader } from "@luke/database/models/task-store";
+import { TOPIC } from "@luke/database/sync/notification";
 import { askedInWords } from "@luke/features/mention-link";
 import {
   PLAN_COMMENT_ACTION,
@@ -33,7 +34,6 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { NO_TOPICS } from "../sync/watch.js";
 import {
   askableAgent,
   type CommentAskSeams,
@@ -47,9 +47,10 @@ import {
  *
  * `GET /api/plans/{id}/comments` reads every thread of the plan, held while
  * nothing moved since the cursor `after` names (`http/held-read.ts`), as the
- * Inbox is read, so a window hears a teammate's or an agent's comment the
- * moment it lands; `POST` starts a thread with its first comment, anchored to
- * words of the plan's text (`@luke/database/models/plan-comments`).
+ * Inbox is read, and woken by Luke Sync on the plan's topic, so a window
+ * hears a teammate's or an agent's comment the moment it lands; `POST`
+ * starts a thread with its first comment, anchored to words of the plan's
+ * text (`@luke/database/models/plan-comments`).
  * `POST /api/plans/{id}/comments/{thread}` is one thing done to a thread,
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,
@@ -66,7 +67,13 @@ export interface PlanCommentsProcedureSeams extends CommentAskSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The plan's threads as they stand, held while its cursor is still the reader's; nothing where the account reaches no such plan. */
+/**
+ * The plan's threads as they stand, held while its cursor is still the
+ * reader's; nothing where the account reaches no such plan. The hold is
+ * woken by a write to the plan's threads or their entries, or to the task,
+ * all on the task's topic, and by a change to what admits the reader to the
+ * task, their membership and GitHub reach, on their own topic.
+ */
 function planCommentsPast(
   userId: string,
   taskId: string,
@@ -75,7 +82,10 @@ function planCommentsPast(
   return heldUntilMoved(
     planCommentStamps(userId, taskId),
     after,
-    NO_TOPICS,
+    [
+      [TOPIC.TASK, taskId],
+      [TOPIC.ACCOUNT, userId],
+    ],
     CODER.MESSAGES_POLL,
     CODER.MESSAGES_HOLD,
   ).pipe(

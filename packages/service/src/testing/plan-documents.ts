@@ -5,12 +5,11 @@ import { eq, sql } from "drizzle-orm";
 /**
  * plan-documents.ts -- a stored plan's text and its revisions, as a test sets them.
  *
- * A plan starts as one document, a copy of its account's template
- * (`docs/TASKS.md`); a test that needs other words writes the text, or a
- * revision of the text, straight onto the rows.
+ * A plan starts as one empty document (`docs/TASKS.md`); a test that needs
+ * words writes the text, or a revision of the text, straight onto the rows.
  */
 
-/** A synthetic document: a template's headings with an answer under each, and the assumptions as a section of the text. */
+/** A synthetic document: a design doc's headings with an answer under each, and the assumptions as a section of the text. */
 export const INVITATIONS_TEXT = [
   "## Context",
   "",

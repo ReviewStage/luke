@@ -1581,7 +1581,7 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
 
 it.layer(getTestDB())("the inbox store's operator, private to its member", (it) => {
   it.effect(
-    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, while its member reads and answers them",
+    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, nor is addressed one, while its member reads, answers, and is addressed them",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -1601,7 +1601,10 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
             repository: null,
           }),
         ).agent;
-        const posted = yield* post({ userId: owner, taskId: null, agentId: operator.id });
+        const operatorAgent = { userId: owner, taskId: null, agentId: operator.id };
+        const posted = yield* post(operatorAgent);
+        const addressed = (key: string, addresseeId: string) =>
+          postInboxThread(operatorAgent, { ...SETTINGS, key, addresseeId });
         const stampIds = (userId: string) =>
           Effect.map(accountWaitingStamps(userId), (stamps) => stamps.map((stamp) => stamp.id));
 
@@ -1622,6 +1625,11 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
           ],
           [true, false, true, true, true],
         );
+        assert.deepEqual(
+          yield* addressed("for-teammate", teammate),
+          Result.fail(INBOX_POST_REFUSAL.NOT_ITS_MEMBER),
+        );
+        assert.ok(Result.isSuccess(yield* addressed("for-owner", owner)));
 
         assert.ok((yield* stampIds(owner)).includes(posted.id));
         const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));

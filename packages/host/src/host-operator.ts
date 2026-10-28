@@ -165,19 +165,10 @@ import {
   type MemoriesReadParams,
   type MemoryForgetParams,
   memoriesAnswerViewSchema,
-  type PlanTemplateAnswerView,
-  type PlanTemplateRevisionAnswerView,
-  type PlanTemplateRevisionParams,
-  type PlanTemplateRevisionsAnswerView,
-  type PlanTemplateRevisionsParams,
-  type PlanTemplateWriteParams,
   type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
-  planTemplateAnswerViewSchema,
-  planTemplateRevisionAnswerViewSchema,
-  planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
@@ -248,7 +239,6 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
-  type TasksBoardSaveParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
@@ -263,19 +253,9 @@ import {
   type TasksFileAnswer,
   type TasksFileParams,
   type TasksGitHubDisconnectAnswer,
-  type TasksGitHubIssuesAnswer,
-  type TasksGitHubIssuesParams,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
-  type TasksIssueLinkAnswer,
-  type TasksIssueLinkParams,
-  type TasksIssueLinksAnswer,
-  type TasksIssueLinksParams,
   type TasksIssueParams,
-  type TasksIssueRelateAnswer,
-  type TasksIssueRelateParams,
-  type TasksIssueUnlinkAnswer,
-  type TasksIssueUnlinkParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
   type TasksMoveAnswer,
@@ -344,13 +324,8 @@ import {
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
-  tasksGitHubIssuesAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
-  tasksIssueLinkAnswerSchema,
-  tasksIssueLinksAnswerSchema,
-  tasksIssueRelateAnswerSchema,
-  tasksIssueUnlinkAnswerSchema,
   tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
@@ -406,7 +381,6 @@ import {
   type VoiceReportLiveTransportParams,
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
-  voiceSetVideoResultSchema,
   voiceStopSpeakingResultSchema,
 } from "@luke/gateway";
 import type { AgentWireTrace } from "@luke/gateway/devtrace";
@@ -526,8 +500,6 @@ export interface HostOperator {
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
   stopSpeaking(): Effect.Effect<boolean>;
-  /** Luke's avatar asked for on the standing call, or taken down as the developer's own; answers whether the service was asked. */
-  setVideo(on: boolean): Effect.Effect<boolean>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
   recordAgentTrace(trace: AgentWireTrace): Effect.Effect<void>;
   recordEvent<Name extends ProductEventName>(
@@ -565,8 +537,6 @@ export interface HostOperator {
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a task's repository, coloured; or why it is not shown. */
   tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
   tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
@@ -576,20 +546,10 @@ export interface HostOperator {
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
   /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
-  /** A repository's issues as New task's picker asks for them; or that its installation grants none, or that the service did not answer. */
-  tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
-  /** The issues a task links, each with where it stands now; or why there are none. */
-  tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
   /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
   tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
-  /** One more issue linked to a task, read from its provider by the service; or why none was. */
-  tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
-  /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
-  tasksIssueRelate(params: TasksIssueRelateParams): Effect.Effect<TasksIssueRelateAnswer>;
-  /** One of a task's links let go; or why it stands. */
-  tasksIssueUnlink(params: TasksIssueUnlinkParams): Effect.Effect<TasksIssueUnlinkAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -921,24 +881,10 @@ export interface HostOperator {
   githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token removed; none then stands. */
   githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
-  /** The account's plan template and whether it wrote it; or why there is none. */
   /** The memories Luke's agents kept in a workspace; or why there are none. */
   memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
   /** One memory forgotten for good; the workspace's memories as they then stand, or why they are unchanged. */
   memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
-  planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
-  /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
-  planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
-  /** A page of the template's history, newest first; or why there is none. */
-  planTemplateRevisions(
-    params: PlanTemplateRevisionsParams,
-  ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
-  /** One revision of the template beside the one before it; or why there is none. */
-  planTemplateRevision(
-    params: PlanTemplateRevisionParams,
-  ): Effect.Effect<PlanTemplateRevisionAnswerView>;
-  /** One revision of the template put back as the template; the template as kept, or why it is unchanged. */
-  planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
     params: DictationTranscribeParams,
@@ -1362,14 +1308,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             )?.stopped ?? false)
           : false,
       ),
-    setVideo: (on) =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on }), (answer) =>
-        answer.ok
-          ? (Result.getOrUndefined(
-              readEither(voiceSetVideoResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-            )?.requested ?? false)
-          : false,
-      ),
     recordAgentTrace: (trace) =>
       fire(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) })),
     recordEvent: (name, properties) =>
@@ -1491,21 +1429,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksIssueAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksGitHubIssues: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_GITHUB_ISSUES, {
-          workspaceId: params.workspaceId,
-          repository: params.repository,
-          ...("query" in params ? { query: params.query } : undefined),
-          ...("number" in params ? { number: params.number } : undefined),
-        }),
-        answerOf(tasksGitHubIssuesAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksIssueLinks: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId: params.taskId }),
-        answerOf(tasksIssueLinksAnswerSchema, TASK_UNANSWERED),
-      ),
     tasksBrowserTabs: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
@@ -1519,31 +1442,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           address: params.address,
         }),
         answerOf(tasksBrowserTabOpenAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksIssueLink: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
-          taskId: params.taskId,
-          issue: params.issue,
-        }),
-        answerOf(tasksIssueLinkAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksIssueRelate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
-          taskId: params.taskId,
-          linkId: params.linkId,
-          relation: params.relation,
-        }),
-        answerOf(tasksIssueRelateAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksIssueUnlink: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, {
-          taskId: params.taskId,
-          linkId: params.linkId,
-        }),
-        answerOf(tasksIssueUnlinkAnswerSchema, TASK_UNANSWERED),
       ),
     tasksRevisions: (params) =>
       Effect.map(
@@ -1884,15 +1782,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_START, request),
         answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksBoardSave: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.TASKS_BOARD_SAVE, {
-          taskId: params.taskId,
-          elements: params.elements,
-          appliedDrawing: params.appliedDrawing,
-          ...(params.image === undefined ? undefined : { image: params.image }),
-        }),
       ),
     codingAgentModels: () =>
       Effect.map(
@@ -2352,34 +2241,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           id: params.id,
         }),
         answerOf(memoriesAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    planTemplateRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_READ),
-        answerOf(planTemplateAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    planTemplateWrite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: params.template }),
-        answerOf(planTemplateAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    planTemplateRevisions: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS,
-          params.before === undefined ? {} : { before: params.before },
-        ),
-        answerOf(planTemplateRevisionsAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    planTemplateRevision: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: params.seq }),
-        answerOf(planTemplateRevisionAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    planTemplateRestore: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: params.seq }),
-        answerOf(planTemplateAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     dictationTranscribe: (params) =>
       Effect.map(

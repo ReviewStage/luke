@@ -1,22 +1,11 @@
 import assert from "node:assert/strict";
-import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
-import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
-import { LIVE_STATUS } from "@luke/live";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
-  agentPromptOf,
-  CALL_LABEL,
-  ISSUE_MATCH_LIMIT,
-  linearIssuesAskOf,
-  MICROPHONE_PRESS,
   markAsked,
   markedView,
-  microphoneButton,
   NO_PENDING_STANDINGS,
-  offeredIssues,
   positionedView,
   renameAsked,
   SETTLED_STATUS,
@@ -27,11 +16,9 @@ import {
   settledStandings,
   settleOffered,
   standingAsked,
-  standingCallStatus,
   standingView,
   standingWithout,
   TASK_MARK,
-  taskNameOfIssue,
   undoStillDue,
   unsettledPinPositions,
   withStanding,
@@ -50,210 +37,10 @@ function _view(patch: Partial<TasksView>): TasksView {
   };
 }
 
-test("an agent's Call button asks for the permission first, then calls the agent, or mutes and unmutes its own call", () => {
-  const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
-  const otherAgent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const own = { taskId: INVITES, agentId };
-  const input = {
-    voiceAvailable: true,
-    microphoneStatus: MICROPHONE_STATUS.GRANTED,
-    agentId,
-    archived: false,
-    listening: false,
-    call: undefined,
-    voiceStatus: LIVE_STATUS.IDLE,
-  };
-  assert.deepEqual(microphoneButton({ ...input, voiceAvailable: false }), {
-    press: MICROPHONE_PRESS.NONE,
-    label: VOICE_KEYLESS_NOTE,
-    muted: false,
-  });
-  assert.equal(
-    microphoneButton({ ...input, microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED }).press,
-    MICROPHONE_PRESS.ASK_ACCESS,
-  );
-  assert.equal(
-    microphoneButton({ ...input, microphoneStatus: MICROPHONE_STATUS.DENIED }).press,
-    MICROPHONE_PRESS.OPEN_SETTINGS,
-  );
-  assert.equal(microphoneButton({ ...input, archived: true }).press, MICROPHONE_PRESS.NONE);
-  assert.deepEqual(microphoneButton(input), {
-    press: MICROPHONE_PRESS.TALK,
-    label: CALL_LABEL,
-    muted: false,
-  });
-  assert.deepEqual(
-    microphoneButton({ ...input, listening: true, call: own, voiceStatus: LIVE_STATUS.LISTENING }),
-    { press: MICROPHONE_PRESS.TALK, label: "Mute microphone", muted: false },
-  );
-  // The agent's own call standing unheard is muted, Luke speaking over it or not.
-  for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
-    assert.deepEqual(microphoneButton({ ...input, call: own, voiceStatus }), {
-      press: MICROPHONE_PRESS.TALK,
-      label: "Unmute microphone",
-      muted: true,
-    });
-  }
-  // A call still connecting, or another agent's muted call, is not this agent muted.
-  assert.equal(
-    microphoneButton({ ...input, call: own, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
-    false,
-  );
-  const other = { taskId: INVITES, agentId: otherAgent };
-  assert.equal(
-    microphoneButton({ ...input, call: other, voiceStatus: LIVE_STATUS.MUTED }).muted,
-    false,
-  );
-  // Another agent's call heard is one the press hangs up, not one it mutes.
-  assert.equal(microphoneButton({ ...input, listening: true, call: other }).label, CALL_LABEL);
-});
-
-test("a voice window given up on for the run says so on the Call button, and how to get voice back, in place of a press", () => {
-  const input = {
-    voiceAvailable: true,
-    microphoneStatus: MICROPHONE_STATUS.GRANTED,
-    agentId: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
-    listening: false,
-    call: undefined,
-    voiceStatus: LIVE_STATUS.IDLE,
-  };
-  assert.deepEqual(microphoneButton({ ...input, voiceLost: true }), {
-    press: MICROPHONE_PRESS.NONE,
-    label: VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST].words,
-    muted: false,
-  });
-  // Signed out still says so first: no window would make a call run then.
-  assert.equal(
-    microphoneButton({ ...input, voiceAvailable: false, voiceLost: true }).label,
-    VOICE_KEYLESS_NOTE,
-  );
-  assert.equal(microphoneButton({ ...input, voiceLost: false }).label, CALL_LABEL);
-});
-
-test("a call that failed still has a word on its bar, where an idle voice has none", () => {
-  assert.equal(
-    standingCallStatus({ voiceStatus: LIVE_STATUS.FAILED }, undefined)?.voiceWord,
-    "Call failed",
-  );
-  assert.equal(standingCallStatus({ voiceStatus: LIVE_STATUS.IDLE }, undefined), undefined);
-});
-
-test("a call's bar says what Luke is doing without naming him, and draws no notetaker whatever an older service sent", () => {
-  const speaking = standingCallStatus({ voiceStatus: LIVE_STATUS.SPEAKING }, undefined);
-  assert.equal(speaking?.voiceWord, "Speaking");
-  const working = standingCallStatus(
-    { voiceStatus: LIVE_STATUS.LISTENING },
-    { planner: { action: "ls src" }, notes: true },
-  );
-  assert.deepEqual(working?.backend, { agent: { action: "ls src" } });
-});
-
-test("an account known to have no OpenAI API key is sent to add one before the microphone is asked for, unknown asks nothing, and its own standing call keeps its mute", () => {
-  const agentId = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
-  const own = { taskId: INVITES, agentId };
-  const input = {
-    voiceAvailable: true,
-    microphoneStatus: MICROPHONE_STATUS.GRANTED,
-    agentId,
-    listening: false,
-    call: undefined,
-    voiceStatus: LIVE_STATUS.IDLE,
-  };
-  const addKey = {
-    press: MICROPHONE_PRESS.ADD_OPENAI_KEY,
-    label: "Add an OpenAI key in settings",
-    muted: false,
-  };
-  assert.deepEqual(microphoneButton({ ...input, openAiKeyMissing: true }), addKey);
-  assert.deepEqual(
-    microphoneButton({
-      ...input,
-      microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED,
-      openAiKeyMissing: true,
-    }),
-    addKey,
-  );
-  // Signed out says so first, since no key of any account's is in reach.
-  assert.equal(
-    microphoneButton({ ...input, voiceAvailable: false, openAiKeyMissing: true }).press,
-    MICROPHONE_PRESS.NONE,
-  );
-  // A key saved, or not known either way, calls.
-  assert.equal(
-    microphoneButton({ ...input, openAiKeyMissing: false }).press,
-    MICROPHONE_PRESS.TALK,
-  );
-  assert.equal(microphoneButton(input).label, CALL_LABEL);
-  assert.deepEqual(
-    microphoneButton({
-      ...input,
-      listening: true,
-      call: own,
-      voiceStatus: LIVE_STATUS.LISTENING,
-      openAiKeyMissing: true,
-    }),
-    { press: MICROPHONE_PRESS.TALK, label: "Mute microphone", muted: false },
-  );
-});
-
 /** A task's row of the list on a repository, last updated at `updatedAt`. */
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
-
-test("a plan started from a Linear issue is named by its title, cut to a name's bound, or by its key where the title is blank", () => {
-  const long = "x".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 20);
-
-  assert.equal(taskNameOfIssue({ identifier: "ENG-1", title: "  Ship it  " }), "Ship it");
-  assert.equal(
-    taskNameOfIssue({ identifier: "ENG-2", title: long }).length,
-    TASK_BOUNDS.MAX_NAME_CHARS,
-  );
-  assert.equal(taskNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
-});
-
-test("an agent New task starts is handed a mention of each issue picked, one to a line, then a blank line and the words; the issues alone with no words, and the words alone with no issue", () => {
-  const issue = {
-    identifier: "ENG-1",
-    title: " Fix [the] refresh ",
-    url: "https://linear.app/acme/issue/ENG-1/fix-the-refresh",
-  };
-
-  assert.equal(
-    agentPromptOf([issue], "  Reproduce it first.\n"),
-    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nReproduce it first.",
-  );
-  assert.equal(
-    agentPromptOf([issue], "   "),
-    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)",
-  );
-  assert.equal(
-    agentPromptOf([], " Make the sidebar keep its folds. "),
-    "Make the sidebar keep its folds.",
-  );
-  assert.equal(
-    agentPromptOf(
-      [{ identifier: "ACME-7", title: "Invites expire", url: "https://tryluke.dev/a(b)/issue/7" }],
-      "",
-    ),
-    "[@ACME-7 Invites expire](https://tryluke.dev/a%28b%29/issue/7)",
-    "one of the workspace's own issues is mentioned by its Luke link, its target kept one target",
-  );
-  assert.equal(
-    agentPromptOf(
-      [
-        {
-          identifier: "acme/relay#7",
-          title: "Invites expire",
-          url: "https://github.com/acme/relay/issues/7",
-        },
-        issue,
-      ],
-      "Both.",
-    ),
-    "[@acme/relay#7 Invites expire](https://github.com/acme/relay/issues/7)\n[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nBoth.",
-  );
-});
 
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {
   const task = {
@@ -303,66 +90,6 @@ test("an unpin given here takes the pin's place with it, so a pin made again sta
   ).tasks[0];
   assert.equal(unpinned?.pinnedAt, undefined);
   assert.equal(unpinned?.pinPosition, undefined);
-});
-
-test("New task offers the Linear issues whose title or key holds every word typed, the key or number typed whole first, then word starts, then Linear's own order", () => {
-  const issues = [
-    { identifier: "ENG-9", title: "Handle 400 errors from Linear" },
-    { identifier: "ENG-12", title: "Restack the deploy queue" },
-    { identifier: "ENG-7", title: "Add support for stacked PRs" },
-    { identifier: "ENG-3", title: "Show the merge queue" },
-    { identifier: "OPS-40", title: "Rotate the deploy key" },
-  ];
-  const keys = (typed: string) => offeredIssues(issues, typed).map((issue) => issue.identifier);
-
-  assert.deepEqual(keys("stack"), ["ENG-7", "ENG-12"]);
-  assert.deepEqual(keys("DEPLOY q"), ["ENG-12"]);
-  assert.deepEqual(keys("40"), ["OPS-40", "ENG-9"]);
-  assert.deepEqual(keys("ops-40"), ["OPS-40"]);
-  assert.deepEqual(keys("refactor billing"), []);
-  assert.deepEqual(keys("   "), []);
-});
-
-test("New task also offers what Linear found for the words, after the listed issues that hold them, each issue once, and a pasted link's issue first", () => {
-  const listed = [
-    { identifier: "ENG-12", title: "Restack the deploy queue" },
-    { identifier: "ENG-3", title: "Show the merge queue" },
-  ];
-  const found = [
-    { identifier: "ENG-301", title: "Old: queue jumps on retry" },
-    { identifier: "ENG-12", title: "Restack the deploy queue" },
-    { identifier: "ENG-88", title: "Retries pile up" },
-  ];
-  const keys = (typed: string, answered: typeof found) =>
-    offeredIssues(listed, typed, answered).map((issue) => issue.identifier);
-
-  assert.deepEqual(keys("queue", found), ["ENG-12", "ENG-3", "ENG-301", "ENG-88"]);
-  assert.deepEqual(keys("queue", []), ["ENG-12", "ENG-3"]);
-  assert.deepEqual(
-    keys("https://linear.app/acme/issue/ENG-88/retries-pile-up", [
-      { identifier: "ENG-88", title: "Retries pile up" },
-    ]),
-    ["ENG-88"],
-  );
-});
-
-test("New task asks Linear for the one issue a key or link names, searches for any other words, and asks nothing for a blank name", () => {
-  assert.deepEqual(linearIssuesAskOf(" eng-42 "), { identifier: "ENG-42" });
-  assert.deepEqual(linearIssuesAskOf("https://linear.app/acme/issue/OPS-7/rotate"), {
-    identifier: "OPS-7",
-  });
-  assert.deepEqual(linearIssuesAskOf("  deploy queue "), { query: "deploy queue" });
-  assert.equal(linearIssuesAskOf("x".repeat(500))?.query?.length, 200);
-  assert.equal(linearIssuesAskOf("   "), undefined);
-});
-
-test("New task offers at most a handful of issues however many match", () => {
-  const issues = Array.from({ length: ISSUE_MATCH_LIMIT + 4 }, (_, index) => ({
-    identifier: `ENG-${index + 1}`,
-    title: `Task ${index + 1}`,
-  }));
-
-  assert.equal(offeredIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
 });
 
 /** A listed task at a status, or with none, as a service before statuses lists it. */

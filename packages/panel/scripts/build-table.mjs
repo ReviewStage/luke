@@ -5,8 +5,6 @@
 // table in a thin plugin of its own bundler's shape, so a redirect added here
 // reaches both builds and neither restates it. Nothing here imports a bundler.
 
-import { readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,81 +56,6 @@ export function redirectOf(specifier, importer) {
   const target = REDIRECTS.get(specifier);
   return target === undefined || importer === target ? undefined : target;
 }
-
-// The whiteboard bundle (`src/whiteboard/`) is Excalidraw, which reaches
-// three things the board never uses through dynamic imports: the Mermaid
-// converter, every interface language but English, and the font subsetter an
-// SVG export embeds its fonts with (1.8 MB of WebAssembly), the board
-// offering no export. Each would be split into chunks the app ships and never
-// loads, so each is answered with an empty module rather than carried; the
-// English strings are Excalidraw's own built-ins. The locales folder also
-// holds the translation-progress table, which Excalidraw imports statically,
-// so it is kept.
-
-/** The imports the trim may leave out, for a bundler that filters before it asks. */
-export const EXCALIDRAW_UNUSED =
-  /^(@excalidraw\/mermaid-to-excalidraw|\.\/locales\/[^/]+\.js|\.\/subset-(shared|worker)\.chunk\.js)$/;
-const EXCALIDRAW_KEPT_LOCALE = /^\.\/locales\/percentages-/;
-// Only Excalidraw's own imports are answered, since the build is the panel's whole.
-const EXCALIDRAW_IMPORTER = /[\\/]@excalidraw[\\/]/;
-
-/** What an import the trim leaves out is answered with. */
-export const EXCALIDRAW_UNUSED_MODULE = "export default {};";
-
-/** Whether an import is one of Excalidraw's the board never uses. */
-export function excalidrawLeftOut(specifier, importer) {
-  return (
-    EXCALIDRAW_UNUSED.test(specifier) &&
-    EXCALIDRAW_IMPORTER.test(importer ?? "") &&
-    !EXCALIDRAW_KEPT_LOCALE.test(specifier)
-  );
-}
-
-// Excalidraw names each font face at two addresses: its copy under the asset
-// path (`src/whiteboard/asset-path.ts`), and the same file on esm.sh after it,
-// for a page that serves none. The panel's policy admits fonts from its own
-// origin alone, and Chromium checks every address of a face against it as the
-// face is made, whether or not the first one serves it, so every face
-// Excalidraw registers (some 230, the Chinese font's slices among them) is
-// refused and reported the moment a board opens, and nothing is gained: the
-// policy never lets the second address load. So the line that adds esm.sh is
-// taken out of Excalidraw's code and each face names its own copy alone. The
-// Chinese font is the one left out of the copies (`panelStaticDirectories`),
-// so its text draws in the next font, as it always has under the policy.
-
-/** Excalidraw's own scripts, for a bundler that filters before it asks. */
-export const EXCALIDRAW_SCRIPT = /[\\/]@excalidraw[\\/]excalidraw[\\/]dist[\\/].+\.js$/;
-// The call that adds the esm.sh address to a face, as both of Excalidraw's
-// builds spell it, which becomes a call that adds nothing. It starts at the
-// literal `.push(` so that no repeated class leads the pattern.
-const FONT_FALLBACK_PUSH = /\.push\(new URL\([\w$]+, ?[\w$]+\.ASSETS_FALLBACK_URL\)\)/g;
-
-/**
- * An Excalidraw script with its fonts' esm.sh address taken out, or undefined
- * where the script names none. A script that names the address in a shape this
- * does not know fails the build, so an upgrade cannot bring the address back unseen.
- */
-export function excalidrawWithoutFontFallback(code) {
-  if (!code.includes("ASSETS_FALLBACK_URL")) return undefined;
-  const without = code.replace(FONT_FALLBACK_PUSH, ".concat()");
-  if (without === code || /\.ASSETS_FALLBACK_URL\b/.test(without)) {
-    throw new Error(
-      "Excalidraw's font fallback is no longer where the panel's build table takes it out (build-table.mjs).",
-    );
-  }
-  return without;
-}
-
-/** The same in esbuild's shape, for the desktop's build and for Vite's prebundling of Excalidraw in development. */
-export const excalidrawFontsLocal = {
-  name: "excalidraw-fonts-local",
-  setup(build) {
-    build.onLoad({ filter: EXCALIDRAW_SCRIPT }, async (args) => {
-      const contents = excalidrawWithoutFontFallback(await readFile(args.path, "utf8"));
-      return contents === undefined ? undefined : { contents, loader: "js" };
-    });
-  },
-};
 
 // The whole of Lucide's icons, which a section's icon picker draws every one
 // of (`src/desktop/section-icon-picker.tsx`), loaded on demand: its
@@ -211,40 +134,12 @@ export function panelDefines(highlightWorkerText) {
 }
 
 /**
- * Excalidraw's own stylesheet, which the whiteboard's (`src/whiteboard/index.css`)
- * imports, as its `production` condition names it: the package names no
- * default, so a resolver asking only for styles finds none.
- */
-export const EXCALIDRAW_STYLESHEET = fileURLToPath(
-  new URL("index.css", import.meta.resolve("@excalidraw/excalidraw")),
-);
-
-// Excalidraw's fonts, served from the shell's asset base so the panel loads
-// nothing from the network. Xiaolai is left out: it is 13 MB of CJK glyphs,
-// and the system's own font draws those characters instead.
-const EXCALIDRAW_FONTS = path.join(
-  path.dirname(fileURLToPath(import.meta.resolve("@excalidraw/excalidraw"))),
-  "fonts",
-);
-const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
-
-/**
  * The folders of static files the panel reaches under its shell's asset base
  * (`src/app-platform.ts`'s `assetBase`), each as the directory it is copied
- * from and the path under that base it is served at: Excalidraw's fonts, the
- * harness marks drawn as images rather than traced
- * (`src/harness-marks.tsx`), and the clip Settings plays for each voice
- * (`tools/voice-samples`), so the bundle carries none of their bytes.
+ * from and the path under that base it is served at: the harness marks
+ * drawn as images rather than traced (`src/harness-marks.tsx`), so the
+ * bundle carries none of their bytes.
  */
 export function panelStaticDirectories() {
-  return [
-    ...readdirSync(EXCALIDRAW_FONTS, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && !EXCALIDRAW_FONTS_LEFT_OUT.has(entry.name))
-      .map((entry) => ({
-        from: path.join(EXCALIDRAW_FONTS, entry.name),
-        to: `fonts/${entry.name}`,
-      })),
-    { from: path.join(panelRoot, "marks"), to: "marks" },
-    { from: path.join(panelRoot, "voices"), to: "voices" },
-  ];
+  return [{ from: path.join(panelRoot, "marks"), to: "marks" }];
 }

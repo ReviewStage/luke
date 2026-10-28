@@ -14,12 +14,14 @@ import {
   type StatusTurn,
   lineAwaitsTurn as sharedLineAwaitsTurn,
   statusClockEdge as sharedStatusClockEdge,
+  turnStoppable,
 } from "@luke/features/coding-agent-status";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_KIND,
   CODING_AGENT_MACHINE,
+  CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentFailure,
@@ -29,7 +31,7 @@ import {
   type CodingAgentSummary,
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
+import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
 
@@ -90,9 +92,10 @@ function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | und
     : {
         status: turn.status,
         cancelRequested: turn.cancelRequestedAt !== null,
+        cancelRequestedAt: turn.cancelRequestedAt?.getTime(),
         queuedAt: turn.queuedAt.getTime(),
         settledAt: turn.settledAt?.getTime() ?? null,
-        sessionEnded: turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        sessionEnded: turn.failure === TURN_FAILURE.SESSION_ENDED,
       };
 }
 
@@ -201,7 +204,7 @@ export function ranDirectlyFolderOf(
   turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): string | undefined {
   if (turn?.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure !== BRAIN_REQUEST_FAILURE.SESSION_ENDED) return undefined;
+  if (turn.failure !== TURN_FAILURE.SESSION_ENDED) return undefined;
   const detail = turn.failureDetail ?? "";
   if (!detail.startsWith(RAN_DIRECTLY_DETAIL)) return undefined;
   const folder = detail.slice(RAN_DIRECTLY_DETAIL.length);
@@ -214,11 +217,11 @@ export function codingAgentFailureOf(
 ): CodingAgentFailure | undefined {
   if (turn === undefined) return CODING_AGENT_FAILURE.NOT_STARTED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
-  if (turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) {
+  if (turn.failure === TURN_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
+  if (turn.failure === TURN_FAILURE.SESSION_ENDED) {
     return CODING_AGENT_FAILURE.SESSION_ENDED;
   }
-  if (turn.failure !== BRAIN_REQUEST_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
+  if (turn.failure !== TURN_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
   const detail = turn.failureDetail ?? "";
   const named = FAILURE_WORDS.find(([, words]) => words.some((word) => detail.includes(word)));
   return named?.[0] ?? CODING_AGENT_FAILURE.MODEL;
@@ -364,7 +367,13 @@ function summaryFields(
     now,
     awaitingLineAt: standing.awaitingLineAt,
   });
-  return started === undefined ? summary : { ...summary, runStartedAt: started };
+  const stoppable =
+    summary.status !== CODING_AGENT_STATUS.RUNNING || turnStoppable(statusTurnOf(standing.turn));
+  return {
+    ...summary,
+    ...(started === undefined ? undefined : { runStartedAt: started }),
+    ...(stoppable ? undefined : { stoppable: false }),
+  };
 }
 
 /**

@@ -1,13 +1,5 @@
 import {
   type AccountToken,
-  AVATAR_UNAVAILABLE_REASON,
-  type AvatarStartedFrame,
-  type AvatarStartFrame,
-  type AvatarStopFrame,
-  type AvatarStopReason,
-  type AvatarUnavailableFrame,
-  avatarStartedFrameFromWire,
-  avatarUnavailableFrameFromWire,
   HOSTED_API_ERROR,
   type HostedApiError,
   type HostedQuota,
@@ -27,15 +19,12 @@ import {
   sessionCreatedFrameFromWire,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
-  taskCodeFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
 import { readerZone } from "@luke/features/date-mention";
-import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
   decodeLivePayload,
   isLiveVoice,
@@ -169,31 +158,8 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * same terms as `reportActivity`.
    */
   onTaskActivity?(listener: (activity: TaskActivityFrame) => void): void;
-  /** Tells the listener each time Luke puts code on screen on a task call, on the same terms as `onTaskActivity`. */
-  onTaskCode?(listener: (code: TaskCodeFrame) => void): void;
   /** Tells the listener Luke is ending a task call once his goodbye has played, on the same terms as `onTaskActivity`. */
   onTaskCallEnding?(listener: (ending: TaskCallEndingFrame) => void): void;
-  /**
-   * Asks the service for Luke's avatar on this session, in its own
-   * vocabulary, under the request id the caller minted for this ask: the
-   * service mints the avatar's session on its own key and answers with
-   * `avatar.started` or `avatar.unavailable` echoing that id. The avatar is
-   * the one the developer chose, which the frame names only where it is not
-   * the default, so a service from before the choice reads the start as it
-   * always did. Optional on the same terms as `reportActivity`.
-   */
-  startAvatar?(requestId: string, avatar: VideoAvatar): void;
-  /** Tells the service the avatar the request put up is down, and why; the session goes on as voice. Optional on the same terms as `reportActivity`. */
-  stopAvatar?(requestId: string, reason: AvatarStopReason): void;
-  /**
-   * Tells the listener the service's grant for the avatar it put up: the
-   * room, the per-call token that joins it, and the avatar's identity. The
-   * token is a credential, so a listener hands it on in process alone.
-   * Optional on the same terms as `onTaskActivity`.
-   */
-  onAvatarStarted?(listener: (started: AvatarStartedFrame) => void): void;
-  /** Tells the listener the service could not put the avatar up, and why, on the same terms as `onTaskActivity`. */
-  onAvatarUnavailable?(listener: (unavailable: AvatarUnavailableFrame) => void): void;
 }
 
 export interface LiveSessionSource {
@@ -930,30 +896,18 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      // The service's own words, a call's activity and code, ride the
+      // The service's own words, a call's activity and its ending, ride the
       // same socket as the session's events and are taken off it here, before
       // the sideband's Live grammar would read them as nothing.
       const activityListeners = new Set<(activity: TaskActivityFrame) => void>();
-      const codeListeners = new Set<(code: TaskCodeFrame) => void>();
       const endingListeners = new Set<(ending: TaskCallEndingFrame) => void>();
-      const startedListeners = new Set<(started: AvatarStartedFrame) => void>();
-      const unavailableListeners = new Set<(unavailable: AvatarUnavailableFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onTaskActivity: (activity) => {
             for (const listener of [...activityListeners]) listener(activity);
           },
-          onTaskCode: (code) => {
-            for (const listener of [...codeListeners]) listener(code);
-          },
           onTaskCallEnding: (ending) => {
             for (const listener of [...endingListeners]) listener(ending);
-          },
-          onAvatarStarted: (started) => {
-            for (const listener of [...startedListeners]) listener(started);
-          },
-          onAvatarUnavailable: (unavailable) => {
-            for (const listener of [...unavailableListeners]) listener(unavailable);
           },
         }),
       );
@@ -999,83 +953,33 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onTaskActivity: (listener) => {
           activityListeners.add(listener);
         },
-        onTaskCode: (listener) => {
-          codeListeners.add(listener);
-        },
         onTaskCallEnding: (listener) => {
           endingListeners.add(listener);
-        },
-        // The avatar's asks ride the same socket, held through a gap like any
-        // send, since the session they are about outlives the gap.
-        startAvatar: (requestId, avatar) => {
-          const frame: AvatarStartFrame = {
-            type: VOICE_SERVICE_FRAME.AVATAR_START,
-            requestId,
-            avatar,
-          };
-          socket.send(JSON.stringify(frame));
-        },
-        stopAvatar: (requestId, reason) => {
-          const frame: AvatarStopFrame = {
-            type: VOICE_SERVICE_FRAME.AVATAR_STOP,
-            requestId,
-            reason,
-          };
-          socket.send(JSON.stringify(frame));
-        },
-        onAvatarStarted: (listener) => {
-          startedListeners.add(listener);
-        },
-        onAvatarUnavailable: (listener) => {
-          unavailableListeners.add(listener);
         },
       };
     });
   }
 }
 
-/** The prefixes the service's own frame types begin with, which no Live event's type begins with. */
-const SERVICE_FRAME_PREFIXES = ["plan.", "avatar."] as const;
+/** The prefix the service's own frame types begin with, which no Live event's type begins with. */
+const SERVICE_FRAME_PREFIX = "plan.";
 
 /** A frame whose type is one of the service's own, read for its type alone so it can be routed to that type's schema. */
 const isServiceFrame = Schema.is(
   Schema.Struct({
     type: Schema.Literals([
       VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-      VOICE_SERVICE_FRAME.TASK_CODE,
       VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
-      VOICE_SERVICE_FRAME.AVATAR_STARTED,
-      VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
     ]),
   }),
 );
 
-/** An avatar answer read for the request it names alone, whatever else in it its own schema refuses. */
-const namesAvatarRequest = Schema.is(Schema.Struct({ requestId: Schema.String }));
-
 /**
- * What an avatar answer its schema refuses is told as: the avatar its
- * request asked for did not come up, rather than a start left waiting. An
- * answer naming no request answers no start the host could tell it apart
- * from, so it is told as nothing.
- */
-function unreadableAvatarAnswer(value: UnparsedWireValue): AvatarUnavailableFrame | undefined {
-  if (!namesAvatarRequest(value)) return undefined;
-  return {
-    type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
-    requestId: value.requestId,
-    reason: AVATAR_UNAVAILABLE_REASON.ERROR,
-  };
-}
-
-/**
- * The socket with the service's own frames, `plan.activity`,
- * `plan.code`, `plan.call_ending`, `avatar.started`, and
- * `avatar.unavailable`, taken off its arrivals and told to their listeners,
- * so the sideband over it reads only what the session said. A frame is
- * routed by the type it decodes to and then checked by that type's own
- * schema. An avatar answer the schema refuses is still taken off, since an
- * `avatar.started` may carry a token, and is told as the avatar unavailable. The substring test ahead of the decode only keeps a transcript
+ * The socket with the service's own frames, `plan.activity` and
+ * `plan.call_ending`, taken off its arrivals and told to
+ * their listeners, so the sideband over it reads only what the session said.
+ * A frame is routed by the type it decodes to and then checked by that
+ * type's own schema. The substring test ahead of the decode only keeps a transcript
  * delta from being decoded twice; note that it never picks the frame's kind,
  * because a frame's own text, a command a turn ran or a line it read, can
  * name another kind's type, and a frame read as the wrong kind would be
@@ -1085,29 +989,14 @@ function withoutServiceFrames(
   socket: LiveSocket,
   listeners: {
     readonly onTaskActivity: (activity: TaskActivityFrame) => void;
-    readonly onTaskCode: (code: TaskCodeFrame) => void;
     readonly onTaskCallEnding: (ending: TaskCallEndingFrame) => void;
-    readonly onAvatarStarted: (started: AvatarStartedFrame) => void;
-    readonly onAvatarUnavailable: (unavailable: AvatarUnavailableFrame) => void;
   },
 ): LiveSocket {
   const routes = {
     [VOICE_SERVICE_FRAME.TASK_ACTIVITY]: (value: UnparsedWireValue) =>
       told(taskActivityFrameFromWire(value), listeners.onTaskActivity),
-    [VOICE_SERVICE_FRAME.TASK_CODE]: (value: UnparsedWireValue) =>
-      told(taskCodeFrameFromWire(value), listeners.onTaskCode),
     [VOICE_SERVICE_FRAME.TASK_CALL_ENDING]: (value: UnparsedWireValue) =>
       told(taskCallEndingFrameFromWire(value), listeners.onTaskCallEnding),
-    [VOICE_SERVICE_FRAME.AVATAR_STARTED]: (value: UnparsedWireValue) =>
-      told(avatarStartedFrameFromWire(value), listeners.onAvatarStarted) ||
-      told(unreadableAvatarAnswer(value), listeners.onAvatarUnavailable) ||
-      // Note that a grant nothing could read is still taken off, because it may carry a token.
-      true,
-    [VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE]: (value: UnparsedWireValue) =>
-      told(
-        avatarUnavailableFrameFromWire(value) ?? unreadableAvatarAnswer(value),
-        listeners.onAvatarUnavailable,
-      ),
   };
   return {
     send: (data) => socket.send(data),
@@ -1115,7 +1004,7 @@ function withoutServiceFrames(
     close: () => socket.close(),
     arrivals: Stream.filter(socket.arrivals, (arrival) => {
       if ("close" in arrival) return true;
-      if (!SERVICE_FRAME_PREFIXES.some((prefix) => arrival.frame.includes(prefix))) return true;
+      if (!arrival.frame.includes(SERVICE_FRAME_PREFIX)) return true;
       const value = decodeLivePayload(arrival.frame);
       if (!isServiceFrame(value)) return true;
       return !routes[value.type](value);

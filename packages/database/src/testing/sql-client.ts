@@ -122,7 +122,7 @@ export async function openMigratedPglite(): Promise<PGlite> {
 }
 
 /** A listener on the test's own PGlite, which `@effect/sql-pglite` listens on in process. */
-const syncListenerOverPglite: Layer.Layer<SyncListener, never, PgliteClient.PgliteClient> =
+export const syncListenerOverPglite: Layer.Layer<SyncListener, never, PgliteClient.PgliteClient> =
   Layer.effect(
     SyncListener,
     Effect.map(PgliteClient.PgliteClient, (client) => ({

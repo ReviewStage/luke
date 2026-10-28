@@ -18,8 +18,6 @@ export const ACTIVITY_FEATURE = {
   AGENTS_STARTED: "agentsStarted",
   /** A plan revision written by the developer, or by Luke's notetaker on their call. */
   PLAN_REVISIONS: "planRevisions",
-  /** A voice call held (`voice_sessions.started_at`). */
-  CALLS_HELD: "callsHeld",
   /** An inbox item the developer answered (`inbox_item.settled_at`, answered). */
   INBOX_ANSWERED: "inboxAnswered",
   /** An automation that fired and was not held back by a guard (`automation_run.fired_at`). */
@@ -48,7 +46,6 @@ export const FUNNEL_STEP = {
   SIGNED_UP: "signedUp",
   GITHUB_CONNECTED: "githubConnected",
   CREATED_TASK: "createdTask",
-  HELD_CALL: "heldCall",
   STARTED_AGENT: "startedAgent",
   OPENED_PR: "openedPr",
   MERGED_PR: "mergedPr",
@@ -68,7 +65,6 @@ export const REACH_FEATURE = {
   CODING_AGENTS: "codingAgents",
   /** Answered an inbox item. */
   INBOX: "inbox",
-  VOICE_CALLS: "voiceCalls",
   /** Has an integration connected, their own or their workspace's; a state, not a use. */
   INTEGRATIONS: "integrations",
   /** Owns an automation that fired and was not held back. */
@@ -79,7 +75,7 @@ export type ReachFeature = (typeof REACH_FEATURE)[keyof typeof REACH_FEATURE];
 
 /** What the retention grid counts an account as retained by. */
 export const RETENTION_BASIS = {
-  /** A task created, a plan revision written as the developer, an agent started, or a call held. */
+  /** A task created, a plan revision written as the developer, or an agent started. */
   MEANINGFUL: "meaningful",
   /** Any metered hosted-tier call, the grid's basis before the Overview was rebuilt. */
   HOSTED_CALL: "hostedCall",

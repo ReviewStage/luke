@@ -8,44 +8,31 @@
 
 import type { AdminTrend } from "./admin-answer-wire.js";
 
-/** Where a dollar went: the two kinds of model turns, and the three kinds of metered seconds. */
+/** Where a dollar went: the two kinds of model turns, and dictation's metered seconds. */
 export const COST_SOURCE = {
   /** A coding agent's turns and its workers'. */
   CODING_AGENTS: "coding-agents",
   /** Luke's own turns: every other conversation kind, the brain and its workers. */
   LUKE: "luke",
-  VOICE: "voice",
   DICTATION: "dictation",
-  AVATAR: "avatar",
 } as const;
 
 export type CostSource = (typeof COST_SOURCE)[keyof typeof COST_SOURCE];
 
 export type TokenCostSource = typeof COST_SOURCE.CODING_AGENTS | typeof COST_SOURCE.LUKE;
 
-export type SecondsCostSource =
-  | typeof COST_SOURCE.VOICE
-  | typeof COST_SOURCE.DICTATION
-  | typeof COST_SOURCE.AVATAR;
+export type SecondsCostSource = typeof COST_SOURCE.DICTATION;
 
 /**
- * The list price of each metered second, per minute as each provider
+ * The list price of each metered second, per minute as the provider
  * publishes it, read on 2026-10-19. No table or module of the repository
- * held these before, and none of the three is in AI Gateway's catalog.
+ * held it before, and it is not in AI Gateway's catalog.
  *
- * - Voice: OpenAI's `gpt-live-1`, "$0.05 per minute, billed per second",
- *   https://developers.openai.com/api/docs/models/gpt-live-1
  * - Dictation: OpenAI's `gpt-transcribe`, $0.0045 per minute of audio,
  *   https://developers.openai.com/api/docs/models/gpt-transcribe
- * - Avatar: Keyframe's extra minutes, "from $0.06 / min", on any paid plan,
- *   https://keyframelabs.com/pricing. Note that this prices every avatar
- *   minute at the overage rate, because a plan's included minutes and its
- *   monthly fee are a contract term the database does not hold.
  */
 export const SECONDS_LIST_PRICE = {
-  [COST_SOURCE.VOICE]: { model: "gpt-live-1", usdPerMinute: 0.05 },
   [COST_SOURCE.DICTATION]: { model: "gpt-transcribe", usdPerMinute: 0.0045 },
-  [COST_SOURCE.AVATAR]: { model: "Keyframe avatar", usdPerMinute: 0.06 },
 } as const;
 
 export const SECONDS_PER_MINUTE = 60;
@@ -75,9 +62,7 @@ export interface AdminCostDay {
   day: string;
   [COST_SOURCE.CODING_AGENTS]: number;
   [COST_SOURCE.LUKE]: number;
-  [COST_SOURCE.VOICE]: number;
   [COST_SOURCE.DICTATION]: number;
-  [COST_SOURCE.AVATAR]: number;
 }
 
 export interface AdminCostModel {
@@ -110,13 +95,6 @@ export interface AdminCost {
   perMergedPullRequest: {
     mergedPullRequests: number;
     spendUsd: number | null;
-  };
-  voice: {
-    minutes: number;
-    /** The priced minutes' dollars. */
-    spendUsd: number;
-    /** Minutes on a Live model the list prices do not name, in no dollar figure. */
-    unpricedMinutes: number;
   };
   daily: AdminCostDay[];
   byModel: AdminCostModel[];

@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { LINK_OPEN } from "@luke/features/link-open";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { appSettingsView } from "@luke/settings/wire";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -53,7 +53,6 @@ function settingsOn(account: AccountSnapshot): SettingsPanelProps {
     onViewChange: ignore,
     microphone: {
       status: MICROPHONE_STATUS.GRANTED,
-      voiceAvailable: true,
       onRequest: ignore,
       onOpenSettings: ignore,
     },

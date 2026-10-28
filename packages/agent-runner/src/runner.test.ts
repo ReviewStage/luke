@@ -10,7 +10,18 @@ import { join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Queue,
+  Stream,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { claudeCodeLive } from "./claude-code.js";
@@ -132,9 +143,10 @@ function launch(
   proc: string = UNREAD_PROC,
   chain: readonly string[] = [],
   uid?: number,
+  answering = true,
 ) {
   return Effect.gen(function* () {
-    const cli = yield* fakeClaudeCode(steps, chain);
+    const cli = yield* fakeClaudeCode(steps, chain, answering);
     const stdin = yield* Queue.unbounded<string, Cause.Done>();
     const writeText = (text: string) => Queue.offer(stdin, text);
     const write = (line: RunnerConfig | InputLine) => writeText(JSON.stringify(line));
@@ -259,6 +271,39 @@ it.effect(
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.STOPPED,
       });
+    }),
+);
+
+it.effect(
+  "takes Luke's later lines past a model change the CLI never answers, and ends on a Stop it never answers",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], STOPPED_COMMAND);
+      const { cli, prompted, write, run } = yield* launch(
+        STOPPED_TURN,
+        luke,
+        ENV,
+        UNREAD_PROC,
+        [],
+        undefined,
+        false,
+      );
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+      yield* Queue.take(prompted);
+      yield* write({ type: INPUT_LINE.MODEL, model: "claude-opus", effort: EFFORT.LOW });
+      yield* write({
+        type: INPUT_LINE.MESSAGE,
+        content: [{ type: "text", text: "And then stop." }],
+      });
+      yield* write({ type: INPUT_LINE.STOP });
+
+      assert.deepEqual(yield* settled(run), Exit.succeed(RUNNER_END.STOPPED));
+      assert.deepEqual(cli.models, ["claude-opus"]);
+      assert.equal(cli.prompts.length, 2);
+      assert.equal(cli.interrupts, 1);
+      assert.equal(cli.closed, true);
     }),
 );
 
@@ -630,6 +675,108 @@ it.effect("posts each event once and in order through posts Luke failed or never
       luke.applied.map((_, index) => FIRST_SEQUENCE + index),
     );
     assert.equal(luke.applied.length, 5);
+  }),
+);
+
+/** A fake Luke that answers nothing, as a network that is down does, until `isUp` says it is back. */
+function downUntil(luke: ReturnType<typeof fakeLuke>, isUp: () => boolean): typeof luke {
+  return {
+    ...luke,
+    layer: fakeHttpClientLayer((url, init) => {
+      if (!isUp()) return Promise.reject(new Error("network is down"));
+      return luke.respond(url, init);
+    }),
+  };
+}
+
+it.effect(
+  "posts every event in order once Luke is back from an outage far longer than ten minutes",
+  () =>
+    Effect.gen(function* () {
+      let up = false;
+      const luke = fakeLuke();
+      const { write, run } = yield* launch(
+        SHORT_TURN,
+        downUntil(luke, () => up),
+      );
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+
+      for (let second = 0; second < 30 * 60; second += 1) yield* TestClock.adjust("1 second");
+      assert.equal(run.pollUnsafe(), undefined, "the launch holds its run through the outage");
+      assert.equal(luke.applied.length, 0);
+      up = true;
+
+      const exit = yield* settled(run);
+      assert.ok(Exit.isSuccess(exit));
+      assert.equal(exit.value, RUNNER_END.TURN_ENDED);
+      assert.deepEqual(kinds(luke.applied), [
+        "system/init",
+        "assistant",
+        "result/success",
+        RUNNER_EVENT.END,
+      ]);
+      assert.deepEqual(
+        luke.applied.map(({ sequence }) => sequence),
+        luke.applied.map((_, index) => FIRST_SEQUENCE + index),
+      );
+    }),
+);
+
+it.effect("lets a post Luke never answers go after its bound, and posts it again", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    let hung = 0;
+    // The first post is held open, answering nothing until the runner lets it go.
+    const stalling: typeof luke = {
+      ...luke,
+      layer: fakeHttpClientLayer((url, init) => {
+        if (hung === 0) {
+          hung += 1;
+          return new Promise<Response>((_, reject) =>
+            init.signal?.addEventListener("abort", () => reject(new Error("let go"))),
+          );
+        }
+        return luke.respond(url, init);
+      }),
+    };
+    const { write, run } = yield* launch(SHORT_TURN, stalling);
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+
+    for (let step = 0; step < 500 && hung === 0; step += 1) yield* Effect.yieldNow;
+    assert.equal(hung, 1);
+    yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS - 1));
+    assert.equal(luke.applied.length, 0, "the held post is not let go early");
+    const exit = yield* settled(run);
+    assert.ok(Exit.isSuccess(exit));
+    assert.equal(hung, 1);
+    assert.deepEqual(kinds(luke.applied), [
+      "system/init",
+      "assistant",
+      "result/success",
+      RUNNER_EVENT.END,
+    ]);
+  }),
+);
+
+it.effect("ends a stopped launch within one post's bound while Luke is still unreachable", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const { cli, write, run } = yield* launch(
+      SHORT_TURN,
+      downUntil(luke, () => false),
+    );
+    yield* write(CONFIG);
+    yield* write({ type: INPUT_LINE.STOP });
+
+    const started = yield* Clock.currentTimeMillis;
+    const exit = yield* settled(run);
+    const waited = (yield* Clock.currentTimeMillis) - started;
+    assert.ok(Exit.isSuccess(exit));
+    assert.equal(exit.value, RUNNER_END.STOPPED);
+    assert.ok(waited <= RUNNER_HEARTBEAT.TIMEOUT_MS + 1_000, `waited ${waited} ms`);
+    assert.equal(cli.closed, true);
   }),
 );
 

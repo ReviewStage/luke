@@ -16,8 +16,8 @@ export const ACCOUNT_ACT_KIND = {
 } as const;
 
 /**
- * The account's own asks from Settings and a dictating box: its provider keys,
- * its plan template and that template's history, and a dictated clip's words.
+ * The account's own asks from Settings and a dictating box: its provider keys
+ * and a dictated clip's words.
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
@@ -50,18 +50,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_READ: "githubToken.read",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
    * the workspace Settings shows, shared by its members, read as the page
@@ -227,18 +215,6 @@ export const AGENT_INBOX_ACT_KIND = {
 } as const;
 
 /**
- * Luke's avatar as the windows reach it: the panel's word on it, starting,
- * live on its first frame, or ended and why, taken from the panel alone; and
- * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
- * for on the standing call or taken down, taken from the panel and the
- * floating call window, which draw the tile, alone.
- */
-export const AVATAR_ACT_KIND = {
-  AVATAR_REPORT: "avatar.report",
-  VOICE_SET_VIDEO: "voice.setVideo",
-} as const;
-
-/**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
  * read as its workspace keeps them, and generated for its head on Luke's own
  * model key when the developer presses Generate, the generation answered
@@ -304,8 +280,8 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, a call about the open task, and its
- * whiteboard saved. And what one task holds, read as its tabs draw it: its
+ * GitHub connected or disconnected, and a call about the open task. And
+ * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, a call's messages, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
@@ -345,10 +321,6 @@ export const TASKS_ACT_KIND = {
   ADMIN_FAVORITE: "admin.favorite",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
-  TASKS_TALK: "tasks.talk",
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
@@ -489,27 +461,6 @@ export const UPDATE_ACT_KIND = {
 } as const;
 
 /**
- * The voice window's runtime: a command to it from a panel or the call
- * window; the call card's way back, Luke's window brought forward on the
- * call's own agent; the voice window as a GPT Live peer, its SDP offer handed
- * to the host, which creates the one session and answers the SDP, the
- * hang-up it asks the host to decide, and the two reports the host reads its
- * transport and its idle from, none carrying a credential; Escape's stop;
- * the voice diagnostics; and the microphone's privacy settings opened.
- */
-export const VOICE_RUNTIME_ACT_KIND = {
-  VOICE_COMMAND: "voice.command",
-  CALL_SHOW_AGENT: "call.showAgent",
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
-  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
-} as const;
-
-/**
  * The account's workspaces: one made under a name, answered as made, which
  * the account owns; one renamed by its owners and admins, answered under
  * its new name; one's photo set as a `data:` URL or removed with null by
@@ -541,7 +492,6 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
-  WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
@@ -568,8 +518,9 @@ export const WORKSPACE_ACT_KIND = {
 
 /**
  * What a window asks of the system it is drawn on: the microphone asked for
- * and its route read afresh, the notification settings opened, a new mail to the people who make Luke, the panel
- * focused, words copied, a file saved, and feedback sent.
+ * and its route read afresh, the microphone's and the notifications' settings
+ * opened, a new mail to the people who make Luke, the panel focused, words
+ * copied, a file saved, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
   MICROPHONE_REQUEST: "microphone.request",
@@ -580,6 +531,7 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * presses.
    */
   MICROPHONE_ROUTE: "microphone.route",
+  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
@@ -602,19 +554,6 @@ export const WINDOW_SURFACE_ACT_KIND = {
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
-/**
- * A task's linked issues, GitHub's and Linear's, as its page asks for them:
- * read with where each stands now, one linked, one's keyword changed, and
- * one let go. Each answers the service's answer whole, or why there is none,
- * which the page says.
- */
-export const TASK_ISSUE_ACT_KIND = {
-  TASK_ISSUES_READ: "taskIssues.read",
-  TASK_ISSUES_LINK: "taskIssues.link",
-  TASK_ISSUES_RELATE: "taskIssues.relate",
-  TASK_ISSUES_UNLINK: "taskIssues.unlink",
-} as const;
-
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
@@ -622,7 +561,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHANNEL_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
@@ -632,11 +570,9 @@ export const PORT_ACT_KIND = {
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
-  ...TASK_ISSUE_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,
-  ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
 } as const;
@@ -649,12 +585,10 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  * the host's procedures answer every other.
  */
 export const PLATFORM_PORT_ACT_KIND = {
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
-  ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
 } as const;
 

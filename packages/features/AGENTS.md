@@ -52,20 +52,17 @@ code, so **no internal route and no shared secret exist between two deployments.
 
 ## A turn's events are a projection
 
-**The five run seams and nothing wider — a slow step began, a brain turn
-queued a question, every action settled, one sentence of the reply, the turn
-ended. No tool part, no reasoning, no message.** A queued question is read off
-its `queue_question` call's input, because that call exists only to hand the
-voice its words; the one other call whose words are told is `show_code`, whose
-lines travel on the `plan.code` frame rather than as an event. The kinds are the brain's own run-stream words (`brain/run-events.ts`),
-spelled apart from them because the two were separate packages until the brain
-joined this one; a test in the service holds every event kind a member of the
+**The four run seams and nothing wider — a slow step began, every action
+settled, one sentence of the reply, the turn ended. No tool part, no
+reasoning, no message.** The kinds are the turn run stream's own words (`turn-run/run-events.ts`),
+spelled apart from them because the two were separate packages until the run
+stream joined this one; a test in the service holds every event kind a member of the
 run stream's set. The slow step's set is one value, `TURN_SLOW_STEP`, which the
-brain names `SLOW_STEP_KIND`.
+run stream names `SLOW_STEP_KIND`.
 
 Each event is numbered from one inside its turn, so a reader that took some hears
 the rest exactly once. The service stores no event of this kind; the voice's live
-brain projects them in process from the turn row and its journal.
+agent projects them in process from the turn row and its journal.
 
 ## The allowlist is the privacy boundary for `/api/events`
 

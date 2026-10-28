@@ -13,7 +13,6 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind } from "@luke/host/contract";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Option, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -180,8 +179,6 @@ async function mountPage(): Promise<{
       run: { fixtureMode: false, profile: RUN_PROFILE.IDLE },
       signedIn: true,
       account: "dean@acme.dev",
-      voiceAvailable: true,
-      microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: true,
       unseenAgents: [],
       inboxWaiting: [],

@@ -1,4 +1,5 @@
 import type {
+  DeviceAgentBeat,
   DeviceAgentClaimedLine,
   DeviceAgentDevice,
   HostedDeviceAgentClient,
@@ -28,6 +29,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import {
+  Clock,
   Config,
   Deferred,
   Duration,
@@ -39,6 +41,7 @@ import {
   Option,
   Path,
   Queue,
+  Random,
   Ref,
   Result,
   Schedule,
@@ -56,7 +59,6 @@ import {
   Environment,
   LocalAgentPlatform,
   type LocalAgentSandbox,
-  type LocalAgentSandboxCommand,
   Reporter,
 } from "./effect/seams.js";
 import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
@@ -71,7 +73,7 @@ import {
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as the Local agents experiment and This Mac's Run agents on this Mac are both on (a host's are always).
+ * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: the Local agents experiment on a Mac; always on a host).
  *
  * The service writes a local agent's work as rows under this device's id
  * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
@@ -80,12 +82,12 @@ import type { RunMode } from "./run-mode.js";
  * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
  * app start among them, the device first has what its VMs run on
  * (`LocalAgentSandbox.ready`: a Mac's pinned smolvm, fetched and checked,
- * and the image pulled once), once per opening, so a device offline is not
- * asked again every turn. A first fetch or pull takes minutes, so while it
- * runs the device registers as preparing (`DEVICE_SETUP`) and beats, and the
- * menus list it as getting ready, which takes no agent; one that failed
- * registers why and beats until the gate shuts, so it is listed as not set
- * up rather than not at all. Once it has them it registers with its home folder, the VM's
+ * and the image pulled once). A first fetch or pull takes minutes, so while
+ * it runs the device registers as preparing (`DEVICE_SETUP`) and beats, and
+ * the menus list it as getting ready, which takes no agent; one that failed
+ * registers why and beats, so it is listed as not set up rather than not at
+ * all, and is tried again after `SETUP_RETRY`'s wait, doubling from try to
+ * try, for as long as the gate stands. Once it has them it registers with its home folder, the VM's
  * own Claude Code and Codex, and no harness signed in by itself, since no
  * login of the device's reaches a VM, so every launch carries the sign-in
  * saved in Luke; then it beats every `BEAT_EVERY` while it follows. It
@@ -95,8 +97,13 @@ import type { RunMode } from "./run-mode.js";
  * Lines are claimed in the order the service lists them, its id order, and
  * handed to the agent they name, whose worker takes them one at a time, so
  * an agent's lines are delivered strictly in order while agents go on side
- * by side. A launch makes the agent's own repository under its folder
- * (`deviceAgentLayout`) where it has none, through the platform's script,
+ * by side. Each claim carries a token minted for its line and kept until
+ * the claim is answered, so a claim whose answer was lost is asked again as
+ * the same claim, before the next read, and the line is delivered once; a
+ * launch whose claim was asked again had its secrets taken by the answer
+ * lost, so it is settled as a runner gone. A launch makes the agent's own
+ * repository under its folder (`deviceAgentLayout`) where it has none,
+ * through the platform's script,
  * has the agent's VM made and started, sets in the repository, inside the
  * VM, who the agent's commits are by where the line says, as a cloud
  * checkout sets it (`@luke/features/checkout-identity`), and starts the
@@ -119,12 +126,14 @@ import type { RunMode } from "./run-mode.js";
  * before a discard removes the agent's folder. The runner runs on the VM's
  * own Node, Claude Code and Codex, which the device registers. For an agent
  * working in a repository, the device asks the service for an installation
- * token before the repository is made, and again every
- * `GITHUB_TOKEN_REFRESH` while its runner runs, since such a token lasts an
- * hour and a turn can last a day, and hands it to the sandbox, which keeps
+ * token before the repository is made, and again once the last is
+ * `GITHUB_TOKEN_REFRESH` old by the wall clock, read every minute, while its
+ * runner runs, since such a token lasts an hour and a turn can last a day,
+ * and a sleeping machine stretches a long wait but not the hour; it hands
+ * it to the sandbox, which keeps
  * it outside every folder the VM mounts, so the agent only ever sees a
- * placeholder. A tool's command runs in the VM rather than on the device,
- * since the worktree is the agent's to rig.
+ * placeholder. The check of its folder for unsaved work runs in the VM
+ * rather than on the device, since the worktree is the agent's to rig.
  *
  * Agents on This Mac ran directly on it before every agent ran in a VM
  * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
@@ -136,20 +145,44 @@ import type { RunMode } from "./run-mode.js";
  * on the Mac, since it has no VM to check it in.
  *
  * Every launch this device claimed is kept in the host's state by its
- * line's id, no secret beside it, until its runner's exit settles it. A
- * launch still kept as the gate opens had its runner end with the app, or
- * with the gate, so it is settled with no exit code, which the service reads
- * as a runner gone: the agent's turn in flight is settled lost, and its next
+ * line's id and its agent's, no secret beside it, until the service takes
+ * its settle. A launch still kept as the gate opens had its runner end with
+ * the app, or with the gate, so its agent's VM is stopped where it still
+ * runs and it is settled with no exit code, which the service reads as a
+ * runner gone: the agent's turn in flight is settled lost, and its next
  * message relaunches the runner on the harness's session.
  *
+ * The service's list of the device's open launches is what the device
+ * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
+ * to it. A kept launch whose runner ended is settled again on every beat
+ * until the service takes it, or no longer lists it; a runner whose launch
+ * the answer does not name, after a Stop, a settle, or a lapse of the
+ * device's lease, is stopped as a stop line stops it; and a launch it names
+ * that the device runs nothing for, and is not starting, is settled as a
+ * runner gone. Only what stood before the beat was sent is judged against
+ * its answer, and a launch claimed or starting is never settled, since the
+ * answer may have been read before its claim. A service from before the
+ * list names none, and the device only settles what it kept.
+ *
  * Requests are each answered on a fiber of their own, inside the agent's
- * folder alone (`local-agent-requests.ts`). Turning the switch or the
- * experiment off, signing out, or a run that sends nothing shuts the gate:
+ * folder alone (`local-agent-requests.ts`). Turning the experiment off,
+ * signing out, or a run that sends nothing shuts the gate:
  * the reads end, and every runner is stopped, as the quit stops them.
  */
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
 const IDLE = Duration.seconds(5);
+/**
+ * How long a device whose setup failed waits before it tries again: the
+ * first wait, doubled after each failed try up to the last, and each
+ * stretched or shrunk by up to `JITTER`, so devices that failed together
+ * do not all try again together.
+ */
+const SETUP_RETRY = {
+  FIRST: Duration.seconds(30),
+  LAST: Duration.minutes(15),
+  JITTER: 0.2,
+} as const;
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
 const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
@@ -158,16 +191,18 @@ const UNSAVED_CHECK = Duration.seconds(30);
 const UNSAVED_UNKNOWN = "its worktree could not be checked for work not saved elsewhere";
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
-/** How many times a runner's exit is settled again where the service did not take it, `REREAD` apart. */
-const SETTLE_RETRIES = 30;
+/** How many beats in a row a kept launch the service no longer lists must have its settle refused before it is let go of as a line long gone; one only hidden by a stop queued after it is taken well before. */
+const GONE_AFTER_REFUSALS = 4;
+/** How many more times a kept launch's VM that a restart could not stop is stopped again, a beat apart, before its launch is settled regardless, since a VM already gone refuses every stop. */
+const VM_STOP_TRIES = 4;
 /** How a claim the service did not answer is asked again, well inside its own claim window. */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's group has to end after SIGTERM before it is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
-/** How soon a GitHub token the service did not hand is asked for again, well inside the hour the last one lasts. */
-const GITHUB_TOKEN_RETRY = Duration.minutes(1);
+/** How often an agent's GitHub token's age is read off the wall clock, and so how soon one the service did not hand is asked for again, well inside the hour the last one lasts. */
+const GITHUB_TOKEN_CHECK = Duration.minutes(1);
 
 const VARIABLE = {
   HOME: "HOME",
@@ -233,6 +268,12 @@ export interface LocalAgentsDependencies {
   /** Whether the account's Local agents experiment and Settings › This Mac's switch are both on, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
+}
+
+/** How a launch ended, which its settle carries until the service takes it: its runner's exit code where it exited with one, and why it never started where the device says. */
+interface LaunchEnding {
+  readonly exitCode?: number | undefined;
+  readonly refusal?: DeviceLaunchRefusal | undefined;
 }
 
 /** A runner this Mac started: the launch line it settles, its stdin, and the process it is. */
@@ -320,8 +361,14 @@ export function composeLocalAgents(
             ),
           );
 
-    const keepLaunch = (userId: string, id: string) =>
-      updateState((current) => ({ ...current, launches: [...current.launches, { userId, id }] }));
+    /** The kept launches whose VM a restart could not stop, by line id, with how many more times a beat stops it again before they are settled regardless. */
+    const unstopped = new Map<string, number>();
+
+    const keepLaunch = (userId: string, id: string, agentId: string) =>
+      updateState((current) => ({
+        ...current,
+        launches: [...current.launches, { userId, id, agentId }],
+      }));
 
     /**
      * How the agent has run on this device: as kept, or, for one launched
@@ -351,10 +398,13 @@ export function composeLocalAgents(
       }));
 
     const forgetLaunch = (id: string) =>
-      updateState((current) => ({
-        ...current,
-        launches: current.launches.filter((launch) => launch.id !== id),
-      }));
+      Effect.gen(function* () {
+        if (!(yield* Ref.get(state)).launches.some((launch) => launch.id === id)) return;
+        yield* updateState((current) => ({
+          ...current,
+          launches: current.launches.filter((launch) => launch.id !== id),
+        }));
+      });
 
     // -- the gate --------------------------------------------------------------
 
@@ -368,13 +418,22 @@ export function composeLocalAgents(
         on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
     );
 
-    /** The beats, for as long as the gate stands and the account signed in is the one `userId` names; it returns once either changes. */
-    const presence = (userId: string, deviceId: string) =>
+    /**
+     * The beats, each `beaten` (a beat alone, or a follow's beat and what it
+     * converges to its answer), for as long as the gate stands and the
+     * account signed in is the one `userId` names; it returns once either
+     * changes.
+     */
+    const presence = (
+      userId: string,
+      deviceId: string,
+      beaten: Effect.Effect<unknown> = asked(client.beat(deviceId, NOT_SIGNED_IN)),
+    ) =>
       Effect.gen(function* () {
         let sinceBeat = Duration.toMillis(BEAT_EVERY);
         while ((yield* gateOpen) && dependencies.accountId() === userId) {
           if (sinceBeat >= Duration.toMillis(BEAT_EVERY)) {
-            yield* asked(client.beat(deviceId, NOT_SIGNED_IN));
+            yield* beaten;
             sinceBeat = 0;
           }
           yield* Effect.sleep(IDLE);
@@ -384,21 +443,26 @@ export function composeLocalAgents(
 
     // -- what the VMs run on ------------------------------------------------------
 
-    /** Whether the device had what its VMs run on as it last asked, and whether it asked since the gate last opened. */
-    const readied = yield* Ref.make(false);
-    const readyTried = yield* Ref.make(false);
-    /** Whether the service took the register saying the device's setup failed, so it may go on beating. */
-    const failureListed = yield* Ref.make(false);
+    /** How long a device waits after its `failed`th failed setup in a row before it tries again (`SETUP_RETRY`). */
+    const setupRetryAfter = (failed: number) =>
+      Effect.map(Random.nextBetween(1 - SETUP_RETRY.JITTER, 1 + SETUP_RETRY.JITTER), (stretch) =>
+        Duration.millis(
+          Math.min(
+            Duration.toMillis(SETUP_RETRY.FIRST) * 2 ** (failed - 1),
+            Duration.toMillis(SETUP_RETRY.LAST),
+          ) * stretch,
+        ),
+      );
 
     /**
      * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
-     * asked again each time the gate opens once it had it, and otherwise once
-     * per opening, and once per app start, since the app's first opening is
-     * one; one that failed waits for the next, so a device offline is not
-     * asked again every turn. As a fetch or pull begins (the sandbox's
-     * `preparing`) the device registers as preparing and beats, so the
-     * menus list it as getting ready rather than not at all; one that failed
-     * registers why and beats for as long as the opening stands, so it is
+     * asked each time the gate opens, and after a try that failed asked
+     * again once `setupRetryAfter` has passed, one try at a time, for as
+     * long as the gate stands and the account is the one `userId` names; it
+     * answers false only once either changes. As a fetch or pull begins (the
+     * sandbox's `preparing`) the device registers as preparing and beats, so
+     * the menus list it as getting ready rather than not at all; a try that
+     * failed registers why and beats while it waits for the next, so it is
      * listed as not set up rather than away. `registered` registers the
      * device with where its setup stands, a register the service may refuse
      * from a build before the field; then the device beats nothing until it
@@ -413,32 +477,31 @@ export function composeLocalAgents(
       ) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
     ) =>
       Effect.gen(function* () {
-        if (!(yield* Ref.get(readied)) && (yield* Ref.getAndSet(readyTried, true))) {
-          if (yield* Ref.get(failureListed)) yield* presence(userId, deviceId);
-          return false;
+        for (let failed = 1; ; failed += 1) {
+          const ready = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const scope = yield* Effect.scope;
+              // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
+              const preparing = Effect.gen(function* () {
+                if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
+                  yield* Effect.forkIn(presence(userId, deviceId), scope);
+                }
+              });
+              return yield* Effect.result(platform.sandbox.ready(preparing));
+            }),
+          );
+          if (Result.isSuccess(ready)) return true;
+          report("the local agents' smolvm or sandbox image could not be had");
+          const listed = yield* asked(
+            registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
+          );
+          // Note that the device stays listed with why while it waits, beating only where the service took that, and the wait ends early as the gate shuts.
+          const waited = yield* Effect.race(
+            Effect.as(presence(userId, deviceId, listed ? undefined : Effect.void), false),
+            Effect.as(Effect.sleep(yield* setupRetryAfter(failed)), true),
+          );
+          if (!waited) return false;
         }
-        const ready = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const scope = yield* Effect.scope;
-            // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
-            const preparing = Effect.gen(function* () {
-              if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
-                yield* Effect.forkIn(presence(userId, deviceId), scope);
-              }
-            });
-            return yield* Effect.result(platform.sandbox.ready(preparing));
-          }),
-        );
-        yield* Ref.set(readied, Result.isSuccess(ready));
-        if (Result.isSuccess(ready)) return true;
-        report("the local agents' smolvm or sandbox image could not be had");
-        // Note that the device stays listed with why, beating until the gate shuts, which lets the next opening try again.
-        const listed = yield* asked(
-          registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
-        );
-        yield* Ref.set(failureListed, listed);
-        if (listed) yield* presence(userId, deviceId);
-        return false;
       });
 
     // -- the developer's own environment ---------------------------------------------
@@ -492,6 +555,14 @@ export function composeLocalAgents(
         const runners = new Map<string, Runner>();
         const vmHolds = new Map<string, number>();
         const vmLocks = new Map<string, Semaphore.Semaphore>();
+        /** The launch lines claimed and handed to their agents whose runners are not yet running or settled unstarted, which no beat settles. */
+        const starting = new Set<string>();
+        /** How each launch whose settle the service has not taken yet ended, by its line's id. */
+        const endings = new Map<string, LaunchEnding>();
+        /** Held by each claim and by a beat's settle of a launch the device never kept, so neither runs while the other is unanswered. */
+        const claiming = yield* Semaphore.make(1);
+        /** The runners a beat stops, since the service no longer holds the device to their launches. */
+        const stopping = yield* FiberSet.make();
 
         /** The lock over the agent's VM's start and stop, one per agent, so one agent's slow start holds up no other's. */
         const vmLockOf = (agentId: string) => {
@@ -504,9 +575,9 @@ export function composeLocalAgents(
 
         /**
          * The agent's VM started by `start` and held for as long as the scope
-         * it is run in stands, by its runner or by one of its tools' commands
+         * it is run in stands, by its runner or by a check of its folder
          * between turns; whether it stands. The last hold let go of stops the
-         * VM, so a command between turns never leaves it running, and never
+         * VM, so a check between turns never leaves it running, and never
          * stops it under a runner. A VM a discard deleted is held by nothing.
          */
         const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
@@ -540,6 +611,26 @@ export function composeLocalAgents(
 
         const settle = (id: string, exitCode?: number, refusal?: DeviceLaunchRefusal) =>
           asked(client.settleLine(deviceId, id, exitCode, refusal));
+
+        /**
+         * A kept launch settled with how it ended, asked once; let go of
+         * where the service took it, and otherwise left kept, which every
+         * beat settles again (`reconciledBeat`).
+         */
+        const settledLaunch = (id: string, ending: LaunchEnding) =>
+          Effect.gen(function* () {
+            endings.set(id, ending);
+            if (!(yield* settle(id, ending.exitCode, ending.refusal))) return;
+            endings.delete(id);
+            yield* forgetLaunch(id);
+          });
+
+        /** A launch whose runner never started, kept and settled as not started, naming why where the device says. */
+        const notStarted = (agentId: string, id: string, refusal?: DeviceLaunchRefusal) =>
+          Effect.andThen(
+            keepLaunch(userId, id, agentId),
+            settledLaunch(id, { exitCode: NOT_STARTED, refusal }),
+          );
 
         /** The agent's own repository made where it has none, reading the agent's GitHub token where it has one through the sandbox's helper, never the token itself: a folder for an agent with no repository. */
         const madeWorktree = (
@@ -637,14 +728,28 @@ export function composeLocalAgents(
             ),
           );
 
-        /** The agent's GitHub token renewed every `GITHUB_TOKEN_REFRESH`, or a minute after one that was not had, for as long as it runs. */
+        /**
+         * The agent's GitHub token renewed once the last one had is
+         * `GITHUB_TOKEN_REFRESH` old, or a minute after one that was not had,
+         * for as long as it runs. Note that its age is read off the wall
+         * clock every `GITHUB_TOKEN_CHECK`, never waited out in one sleep,
+         * because a machine asleep stretches a wait but not the token's hour.
+         */
         const renewingGithub = (
           agentId: string,
           had: boolean,
         ): Effect.Effect<never, never, FileSystem.FileSystem> =>
-          Effect.flatMap(Effect.sleep(had ? GITHUB_TOKEN_REFRESH : GITHUB_TOKEN_RETRY), () =>
-            Effect.flatMap(gaveGithubToken(agentId), (again) => renewingGithub(agentId, again)),
-          );
+          Effect.gen(function* () {
+            let hadAt = had ? yield* Clock.currentTimeMillis : undefined;
+            for (;;) {
+              yield* Effect.sleep(GITHUB_TOKEN_CHECK);
+              const now = yield* Clock.currentTimeMillis;
+              if (hadAt !== undefined && now - hadAt < Duration.toMillis(GITHUB_TOKEN_REFRESH)) {
+                continue;
+              }
+              if (yield* gaveGithubToken(agentId)) hadAt = now;
+            }
+          });
 
         /** The runner started for a launch line, its first lines written, and its exit settling the line; the line settled as not started where it cannot be. */
         const launched = (
@@ -662,7 +767,7 @@ export function composeLocalAgents(
               secrets === undefined ||
               payload.value.checkoutPath !== layout.checkoutPath
             ) {
-              return yield* settle(line.id, NOT_STARTED);
+              return yield* notStarted(agentId, line.id);
             }
             const sandbox = platform.sandbox;
             const withRepository = payload.value.repository !== null;
@@ -672,7 +777,7 @@ export function composeLocalAgents(
               report(
                 "a local agent that ran directly on this Mac was not started, since every agent here runs in a VM now",
               );
-              return yield* settle(line.id, NOT_STARTED, DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
+              return yield* notStarted(agentId, line.id, DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
             }
             if (platform.formerlyDirect && Option.isNone(ran)) {
               yield* keepMode(agentId, DEVICE_ISOLATION.SANDBOX);
@@ -685,7 +790,7 @@ export function composeLocalAgents(
               payload.value.startBranch,
               withRepository ? sandbox.deviceGit(agentId) : undefined,
             );
-            if (!made) return yield* settle(line.id, NOT_STARTED);
+            if (!made) return yield* notStarted(agentId, line.id);
             const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
@@ -707,14 +812,14 @@ export function composeLocalAgents(
             if (Option.isSome(refused)) {
               yield* Scope.close(runnerScope, Exit.void);
               report(`a local agent's VM could not be started: ${refused.value}`);
-              return yield* settle(line.id, NOT_STARTED);
+              return yield* notStarted(agentId, line.id);
             }
             const identity = payload.value.identity;
             if (withRepository && identity !== undefined) {
               if (!(yield* identitySet(agentId, layout, identity))) {
                 yield* Scope.close(runnerScope, Exit.void);
                 report("a local agent's commit identity could not be set in its VM");
-                return yield* settle(line.id, NOT_STARTED);
+                return yield* notStarted(agentId, line.id);
               }
             }
             const stdin = yield* Queue.unbounded<string>();
@@ -743,7 +848,7 @@ export function composeLocalAgents(
             }).pipe(Scope.provide(runnerScope), Effect.option);
             if (Option.isNone(started)) {
               yield* Scope.close(runnerScope, Exit.void);
-              return yield* settle(line.id, NOT_STARTED);
+              return yield* notStarted(agentId, line.id);
             }
             const handle = started.value;
             // Note that this runs first as the scope closes, so the runner hears a signal before its command is killed.
@@ -753,25 +858,18 @@ export function composeLocalAgents(
             );
             if (withRepository)
               yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
-            yield* keepLaunch(userId, line.id);
+            yield* keepLaunch(userId, line.id, agentId);
             yield* Queue.offer(stdin, secrets.stdin);
-            // Note that the launch is forgotten only once the service took its settle, asked again
-            // a while where it did not, so one an outage left unsettled is settled as the gate next opens.
+            // Note that the launch is forgotten only once the service took its settle, which every
+            // beat asks again where it did not, so one an outage left unsettled is settled once it ends.
             const exited = yield* Effect.gen(function* () {
               const code = yield* Effect.option(handle.exitCode);
+              const ending = { exitCode: Option.getOrUndefined(Option.map(code, Number)) };
+              // Note that how it ended is kept before the runner is let go of, so a beat that settles it first carries its exit code.
+              endings.set(line.id, ending);
               runners.delete(agentId);
               yield* Scope.close(runnerScope, Exit.void);
-              const settled = yield* Option.match(code, {
-                onNone: () => settle(line.id),
-                onSome: (exitCode) => settle(line.id, Number(exitCode)),
-              }).pipe(
-                Effect.repeat({
-                  schedule: Schedule.spaced(REREAD),
-                  times: SETTLE_RETRIES,
-                  until: (taken) => taken,
-                }),
-              );
-              if (settled) yield* forgetLaunch(line.id);
+              yield* settledLaunch(line.id, ending);
             }).pipe(Effect.forkIn(agentScope));
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });
           });
@@ -831,17 +929,24 @@ export function composeLocalAgents(
           }).pipe(Effect.orElseSucceed(() => Option.some(UNSAVED_UNKNOWN)));
 
         /**
-         * The agent's runner, where one runs, stopped and its exit waited for,
-         * so its line is settled first. It is signalled in its VM first,
-         * since killing its command would end it with no signal at all.
+         * The runner given stopped and its exit waited for, so its line is
+         * settled first. It is signalled in its VM first, since killing its
+         * command would end it with no signal at all; its VM stops once it
+         * has ended.
          */
+        const ended = (agentId: string, runner: Runner) =>
+          Effect.gen(function* () {
+            yield* endedInVm(platform.sandbox, agentId, runner.handle);
+            yield* Effect.ignore(runner.handle.kill({ forceKillAfter: KILL_GRACE }));
+            yield* Fiber.await(runner.exited);
+          });
+
+        /** The agent's runner, where one runs, stopped and its exit waited for (`ended`). */
         const stopped = (agentId: string) =>
           Effect.gen(function* () {
             const runner = runners.get(agentId);
             if (runner === undefined) return;
-            yield* endedInVm(platform.sandbox, agentId, runner.handle);
-            yield* Effect.ignore(runner.handle.kill({ forceKillAfter: KILL_GRACE }));
-            yield* Fiber.await(runner.exited);
+            yield* ended(agentId, runner);
           });
 
         /**
@@ -941,8 +1046,13 @@ export function composeLocalAgents(
             switch (line.kind) {
               case DEVICE_AGENT_LINE_KIND.LAUNCH:
                 // Note that a launch replaces the runner it finds, which is ended and its line settled first.
-                yield* stopped(agentId);
-                return yield* launched(agentId, line, claimed.secrets, agentScope);
+                // It is starting until its runner runs or it is settled unstarted, so no beat settles it meanwhile.
+                return yield* Effect.gen(function* () {
+                  yield* stopped(agentId);
+                  // Note that a launch whose claim was asked again lost its secrets with the first answer, so it is settled as a runner gone, which ends its turn in words.
+                  if (claimed.secretsGone === true) return yield* settle(line.id);
+                  return yield* launched(agentId, line, claimed.secrets, agentScope);
+                }).pipe(Effect.ensuring(Effect.sync(() => starting.delete(line.id))));
               case DEVICE_AGENT_LINE_KIND.MESSAGE:
               case DEVICE_AGENT_LINE_KIND.RETUNE: {
                 const text = decodeStdin(line.payload);
@@ -965,6 +1075,13 @@ export function composeLocalAgents(
             yield* settle(line.id);
           });
 
+        /** A claimed line handed to its agent's worker, a launch marked starting first, so no beat settles it before its runner runs. */
+        const handedOver = (claimed: DeviceAgentClaimedLine) =>
+          Effect.gen(function* () {
+            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) starting.add(claimed.line.id);
+            yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
+          });
+
         /** The agent's mailbox, its worker started the first time a line of its arrives. */
         const mailboxOf = (agentId: string) =>
           Effect.gen(function* () {
@@ -985,39 +1102,66 @@ export function composeLocalAgents(
             return mailbox;
           });
 
-        /** One line claimed by its id, asked again a few times where unanswered; refused, or nothing where never answered. */
+        /**
+         * The token each line's claim carries, by the line's id, minted at its
+         * first claim and kept until a claim of it is answered, so the claim
+         * asked again after its answer was lost is the same claim, which the
+         * service answers again rather than refusing as taken.
+         */
+        const claimTokens = new Map<string, string>();
+
+        /** One line claimed by its id under its token, asked again a few times where unanswered; refused, or nothing where never answered. */
         const claimedLine = (id: string) =>
-          asked(client.claimLine(deviceId, id)).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced(CLAIM_RETRY.every),
-              times: CLAIM_RETRY.times,
-              until: (answer) => answer !== undefined,
-            }),
+          Effect.gen(function* () {
+            const token = claimTokens.get(id) ?? kernel.createId();
+            claimTokens.set(id, token);
+            const answer = yield* asked(client.claimLine(deviceId, id, token)).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(CLAIM_RETRY.every),
+                times: CLAIM_RETRY.times,
+                until: (answered) => answered !== undefined,
+              }),
+            );
+            if (answer !== undefined) claimTokens.delete(id);
+            return answer;
+          });
+
+        /**
+         * One line claimed and, where granted, handed to its agent's mailbox;
+         * whether the claim was answered. Note that the claim and its
+         * hand-over are uninterruptible, because a line the service granted
+         * is this Mac's alone to deliver, and its token is let go of in the
+         * same step, so no line is handed over twice. Both hold `claiming`,
+         * so a beat never settles a launch whose claim is unanswered.
+         */
+        const lineTaken = (id: string) =>
+          Effect.uninterruptible(
+            claiming.withPermit(
+              Effect.gen(function* () {
+                const answer = yield* claimedLine(id);
+                if (answer === undefined) return false;
+                if ("line" in answer) yield* handedOver(answer);
+                return true;
+              }),
+            ),
           );
 
         /**
          * The lines read and claimed in the service's order, each handed to
          * its agent's mailbox. A claim never answered ends the batch there,
-         * so a later line of the same agent is never delivered before it; the
-         * next read lists it again. Note that each claim and its hand-over are
-         * uninterruptible, because a line the service granted is this Mac's
-         * alone to deliver.
+         * so a later line of the same agent is never delivered before it, and
+         * is asked again under its token before the next read, since the
+         * service lists no line once claimed and the claim may have landed.
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
+            for (const id of [...claimTokens.keys()]) {
+              if (!(yield* lineTaken(id))) return yield* Effect.sleep(REREAD);
+            }
             const lines = yield* asked(client.lines(deviceId));
             if (lines === undefined) return yield* Effect.sleep(REREAD);
             for (const line of lines) {
-              const taken = yield* Effect.uninterruptible(
-                Effect.gen(function* () {
-                  const answer = yield* claimedLine(line.id);
-                  if (answer === undefined) return false;
-                  if (!("line" in answer)) return true;
-                  yield* Queue.offer(yield* mailboxOf(answer.line.agentId), answer);
-                  return true;
-                }),
-              );
-              if (!taken) return;
+              if (!(yield* lineTaken(line.id))) return;
             }
           }),
         );
@@ -1034,21 +1178,13 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
-            const env = { ...shellVariables, TMPDIR: layout.temp };
-            // Note that an agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
-            const sandbox = platform.sandbox;
-            const inVm = {
-              woken: vmHeld(claimed.agentId, sandbox.woken(claimed.agentId)),
-              exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
-                sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
-            };
-            const answer = yield* answeredLocalAgentRequest(layout, claimed, env, inVm).pipe(
+            const answer = yield* answeredLocalAgentRequest(layout, claimed).pipe(
               Effect.provideContext(services),
             );
             yield* asked(client.answerRequest(deviceId, claimed.id, answer));
           });
 
-        /** The requests read, each answered on its own fiber, so a slow command holds up neither the reads nor the others. */
+        /** The requests read, each answered on its own fiber, so a slow read holds up neither the reads nor the others. */
         const requestsFollowed = Effect.forever(
           Effect.gen(function* () {
             const requests = yield* asked(client.requests(deviceId));
@@ -1057,9 +1193,123 @@ export function composeLocalAgents(
           }),
         );
 
+        /** The launch lines of the runners running now. */
+        const runningLaunches = () => new Set([...runners.values()].map((runner) => runner.lineId));
+
+        /**
+         * Every kept launch of the account's whose runner ended, settled
+         * again with how it ended; let go of where the service took it, or
+         * where its answer (`open`) no longer holds the device to it, since a
+         * line long settled may be gone and refuse every settle.
+         */
+        /** The beats in a row each kept launch the service no longer listed had its settle refused on, by line id. */
+        const refusedUnlisted = new Map<string, number>();
+
+        /**
+         * The VM of a kept launch a restart could not stop, stopped again
+         * unless its agent runs or holds it now, which stops it in turn;
+         * whether its launch may be settled: once it stopped, or once
+         * `VM_STOP_TRIES` more stops failed, which is said.
+         */
+        const vmLetGo = (id: string, agentId: string) =>
+          vmLockOf(agentId).withPermit(
+            Effect.gen(function* () {
+              const triesLeft = unstopped.get(id) ?? 0;
+              const held = runners.has(agentId) || vmHolds.has(agentId);
+              if (!held && triesLeft > 0 && !(yield* platform.sandbox.stopped(agentId))) {
+                unstopped.set(id, triesLeft - 1);
+                return false;
+              }
+              if (!held && triesLeft === 0) {
+                report(
+                  "a local agent's VM left running could not be stopped, so its launch was settled regardless",
+                );
+              }
+              unstopped.delete(id);
+              return true;
+            }),
+          );
+
+        /**
+         * Every kept launch of the account's whose runner ended, settled
+         * again with how it ended, a VM a restart could not stop stopped
+         * first; let go of where the service took it, or where its answer
+         * (`open`) no longer listed it and its settle was refused on
+         * `GONE_AFTER_REFUSALS` beats in a row, since a line long settled
+         * may be gone and refuse every settle, while one only hidden by a
+         * stop queued after it is taken well before.
+         */
+        const pendingSettled = (open: ReadonlySet<string> | undefined) =>
+          Effect.gen(function* () {
+            const running = runningLaunches();
+            const pending = (yield* Ref.get(state)).launches.filter(
+              (launch) =>
+                launch.userId === userId && !running.has(launch.id) && !starting.has(launch.id),
+            );
+            for (const launch of pending) {
+              if (unstopped.has(launch.id) && launch.agentId !== undefined) {
+                if (!(yield* vmLetGo(launch.id, launch.agentId))) continue;
+              }
+              const ending = endings.get(launch.id);
+              if (!(yield* settle(launch.id, ending?.exitCode, ending?.refusal))) {
+                const unlisted = open !== undefined && !open.has(launch.id);
+                const refusals = unlisted ? (refusedUnlisted.get(launch.id) ?? 0) + 1 : 0;
+                refusedUnlisted.set(launch.id, refusals);
+                if (refusals < GONE_AFTER_REFUSALS) continue;
+              }
+              refusedUnlisted.delete(launch.id);
+              endings.delete(launch.id);
+              yield* forgetLaunch(launch.id);
+            }
+          });
+
+        /**
+         * A beat, and the device converged to the launches its answer holds
+         * it to: every kept launch whose runner ended settled again; every
+         * runner that ran as the beat was sent whose launch the answer does
+         * not name stopped, as a stop line stops it; and every launch the
+         * answer names that the device neither ran, started, nor kept as the
+         * beat was sent, and still does not, settled as a runner gone. Note
+         * that what the device runs is read before the beat is sent, because
+         * the answer is read after it: a launch claimed later is never judged
+         * against an answer that could not have named it. An answer naming no
+         * launches, from a service before the list, converges nothing but
+         * the kept launches' settles.
+         */
+        const reconciledBeat = Effect.gen(function* () {
+          const ran = new Map(runners);
+          const knew = new Set([
+            ...starting,
+            ...runningLaunches(),
+            ...(yield* Ref.get(state)).launches.map((launch) => launch.id),
+          ]);
+          const beat: DeviceAgentBeat | undefined = yield* asked(
+            client.beat(deviceId, NOT_SIGNED_IN),
+          );
+          const open = beat?.openLaunches === undefined ? undefined : new Set(beat.openLaunches);
+          yield* pendingSettled(open);
+          if (open === undefined) return;
+          for (const [agentId, runner] of ran) {
+            if (open.has(runner.lineId) || runners.get(agentId) !== runner) continue;
+            report("a local agent's runner was stopped, since the service no longer holds it here");
+            yield* FiberSet.run(stopping, ended(agentId, runner));
+          }
+          const kept = new Set((yield* Ref.get(state)).launches.map((launch) => launch.id));
+          const unknown = [...open].filter((id) => !knew.has(id) && !kept.has(id));
+          if (unknown.length === 0) return;
+          // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
+          yield* claiming.withPermit(
+            Effect.forEach(
+              unknown,
+              (id) => (starting.has(id) || runningLaunches().has(id) ? Effect.void : settle(id)),
+              { discard: true },
+            ),
+          );
+        });
+
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
-        yield* presence(userId, deviceId);
+        yield* presence(userId, deviceId, Effect.provideContext(reconciledBeat, services));
       });
 
     /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
@@ -1099,7 +1349,8 @@ export function composeLocalAgents(
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
      * machine's lease taken, the device registered, every launch it kept
-     * from a runner that ended with the app or the gate settled as gone, and
+     * from a runner that ended with the app or the gate settled as gone, its
+     * VM stopped first, and
      * the account's agents followed until the gate shuts or the account
      * changes, when the follow's scope closes, every runner it started is
      * stopped with its group, and the lease is given back.
@@ -1107,8 +1358,6 @@ export function composeLocalAgents(
     const turn = Effect.gen(function* () {
       const userId = dependencies.accountId();
       if (!(yield* gateOpen) || userId === undefined || Option.isNone(home)) {
-        // A gate shut lets the next opening ask again for what the VMs run on, where it was not had.
-        yield* Ref.set(readyTried, false);
         return yield* Effect.sleep(IDLE);
       }
       yield* Effect.scoped(openTurn(userId, home.value));
@@ -1119,6 +1368,13 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         const lost = yield* leased;
         if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
+        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or stops a VM once another holds the machine, and the follow ends with every runner it started.
+        yield* Effect.race(underLease(userId, folder), lost.value);
+      });
+
+    /** What an open gate's turn does once it holds the machine's lease: the device readied and registered, the launches it kept settled, and its agents followed. */
+    const underLease = (userId: string, folder: string) =>
+      Effect.gen(function* () {
         const deviceId = yield* deviceOf(userId);
         const { tools } = platform.sandbox;
         const registered = (setup: DeviceSetupRegister) =>
@@ -1142,13 +1398,14 @@ export function composeLocalAgents(
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
+          // Note that a runner that ended with the app may have left its VM running, so its launch is settled only once its VM stopped, which a beat tries again (`vmLetGo`).
+          if (launch.agentId !== undefined && !(yield* platform.sandbox.stopped(launch.agentId))) {
+            unstopped.set(launch.id, VM_STOP_TRIES);
+            continue;
+          }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
-        // Note that a lease lost to another follower ends the follow, every runner it started with it.
-        yield* Effect.race(
-          Effect.scoped(follow(userId, deviceId, folder, shellVariables)),
-          lost.value,
-        );
+        yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
       });
 
     const lifetime = Effect.gen(function* () {

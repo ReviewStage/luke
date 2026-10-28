@@ -38,20 +38,37 @@ const BATCH_MAX = 256;
 
 /**
  * How long the sender waits after a post Luke did not take: the first wait,
- * doubling on each failure, up to the longest; and how many times it tries
- * again before it gives up, which at the longest wait is about ten minutes.
+ * doubling on each failure, up to the longest, each spread by jitter so the
+ * launches an outage cut off together do not all post again in step. There is
+ * no count after which it gives up: a launch that holds its run posts for as
+ * long as it runs, and only Luke refusing it (a status that never changes by
+ * waiting) or the device stopping it ends it.
  */
 const POST_RETRY = {
   FIRST: Duration.millis(250),
-  LONGEST: Duration.seconds(10),
-  TIMES: 64,
+  LONGEST: Duration.seconds(30),
 } as const;
 
 const POST_BACKOFF = Schedule.exponential(POST_RETRY.FIRST).pipe(
+  Schedule.jittered,
   Schedule.modifyDelay(({ duration }) =>
     Effect.succeed(Duration.min(duration, POST_RETRY.LONGEST)),
   ),
 );
+
+/**
+ * How long one post waits on Luke's answer before it is let go as a failure
+ * to retry: the heartbeat's own bound, so a connection a sleep or a network
+ * change left half open cannot hold the sender for good.
+ */
+const POST_TIMEOUT = Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS);
+
+/**
+ * How long `drain` waits for the last events after the launch was stopped
+ * before it lets them go: one post's own bound, so a Stop ends the runner
+ * promptly through an outage rather than after it.
+ */
+const STOP_DRAIN = POST_TIMEOUT;
 
 /** The statuses that say Luke may take the same batch later: its own failure, a timeout, or a limit. */
 const TRANSIENT_STATUS = new Set([408, 429]);
@@ -74,9 +91,11 @@ interface SinkOptions {
 export interface EventSink {
   /** Numbers a message and queues it for Luke. */
   readonly emit: (message: RunnerMessage) => Effect.Effect<void>;
-  /** Takes no more messages and waits until every queued one is posted, or the sender gave up. */
+  /** Takes no more messages and waits until every queued one is posted, or Luke refused them for good. */
   readonly drain: Effect.Effect<void, EventsUndelivered>;
-  /** Settles only if the sender gives up, with why: Luke will not hear anything more from this launch. */
+  /** `drain` for a launch Luke stopped: waits at most one post's bound for the last events, then lets them go. */
+  readonly drainStopped: Effect.Effect<void, EventsUndelivered>;
+  /** Settles only if Luke refuses a post for good, with why: Luke will not hear anything more from this launch. */
   readonly undelivered: Effect.Effect<EventsUndelivered>;
   /** Adds a secret the launch came to hold, such as a refreshed token, to those no batch from now on carries. */
   readonly withhold: (secret: Redacted.Redacted) => Effect.Effect<void>;
@@ -132,6 +151,7 @@ function postOnce(
     HttpClientRequest.bodyText(batchText(batch, options.secrets), "application/json"),
   );
   return client.execute(request).pipe(
+    Effect.timeout(POST_TIMEOUT),
     // Note that the error is not kept as the cause, because the request it
     // carries holds the bearer in its headers.
     Effect.mapError(() => new EventsUndelivered({ transient: true, detail: "Luke unreachable" })),
@@ -154,7 +174,6 @@ const postBatch = Effect.fn("agent-runner/postBatch")(function* (
   return yield* postOnce(client, options, batch).pipe(
     Effect.retry({
       schedule: POST_BACKOFF,
-      times: POST_RETRY.TIMES,
       while: (error) => error.transient,
     }),
   );
@@ -162,7 +181,7 @@ const postBatch = Effect.fn("agent-runner/postBatch")(function* (
 
 /**
  * The sink for one launch, numbering from `firstSequence`. Its sender runs in
- * the caller's scope; a post that fails for good stops it, and `drain`
+ * the caller's scope; a post Luke refuses for good stops it, and `drain`
  * reports that failure.
  */
 export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
@@ -180,14 +199,12 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
-  // Note that a heartbeat Luke did not take, or did not answer within its bound, is let go, since the next follows within the interval.
+  // Note that a heartbeat Luke did not take, or did not answer within the post's bound, is let go, since the next follows within the interval.
   // Note that `Effect.schedule` waits one interval before the first beat, as the schedule's first step sleeps.
   const heartbeat = yield* Effect.forkScoped(
     Effect.schedule(
       Effect.ignore(
-        Effect.suspend(() => postOnce(client, { ...options, secrets }, { events: [] })).pipe(
-          Effect.timeout(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS)),
-        ),
+        Effect.suspend(() => postOnce(client, { ...options, secrets }, { events: [] })),
       ),
       Schedule.spaced(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS)),
     ),
@@ -204,6 +221,8 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     Effect.andThen(Queue.end(queue)),
     Effect.andThen(Fiber.join(sender)),
   );
+  // Note that the sender is not joined to its end here, because the scope interrupts it as the launch ends.
+  const drainStopped = drain.pipe(Effect.timeoutOption(STOP_DRAIN), Effect.asVoid);
   const undelivered = Fiber.join(sender).pipe(
     Effect.flip,
     Effect.catch(() => Effect.never),
@@ -212,5 +231,5 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     Effect.sync(() => {
       secrets = [...secrets, secret];
     });
-  return { emit, drain, undelivered, withhold } satisfies EventSink;
+  return { emit, drain, drainStopped, undelivered, withhold } satisfies EventSink;
 });

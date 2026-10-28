@@ -33,13 +33,9 @@ afterEach(() => {
 /** The page's settings as they stand: the theme moved off its default, so the page offers its reset. */
 const settings = settingsView({ theme: THEME.DARK });
 
-/** Which rows a platform offering `capabilities` draws for `shown`, with every voice control and the account standing. */
-function rowsOn(
-  shown: typeof settings,
-  capabilities: readonly HostCapability[],
-  voiceControlsDrawn = true,
-) {
-  return { settings: shown, voiceControlsDrawn, accountDrawn: true, capabilities };
+/** Which rows a platform offering `capabilities` draws for `shown`, with the account standing. */
+function rowsOn(shown: typeof settings, capabilities: readonly HostCapability[]) {
+  return { settings: shown, accountDrawn: true, capabilities };
 }
 
 const writes: SettingsWrites = {
@@ -99,24 +95,6 @@ test("a zoom changed in a browser, which draws no Zoom row, offers no reset on A
       writes,
       rowsOn(zoomed, DESKTOP_CAPABILITIES),
     ),
-    undefined,
-  );
-});
-
-test("media ducking turned off while the Voice page holds only its way in offers no reset there; once its controls are drawn it does", () => {
-  const unducked = settingsView({ duckOtherMedia: false });
-
-  assert.equal(
-    pageResetControl(
-      SETTINGS_VIEW.VOICE,
-      unducked,
-      writes,
-      rowsOn(unducked, DESKTOP_CAPABILITIES, false),
-    ),
-    undefined,
-  );
-  assert.notEqual(
-    pageResetControl(SETTINGS_VIEW.VOICE, unducked, writes, rowsOn(unducked, DESKTOP_CAPABILITIES)),
     undefined,
   );
 });

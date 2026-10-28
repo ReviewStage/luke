@@ -1,6 +1,6 @@
 import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
-import { LinkIcon } from "lucide-react";
 import { createContext, useContext } from "react";
+import { commandAction, PANEL_COMMAND } from "./command-items.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import type { MenuAction } from "./desktop/action-menu.js";
 
@@ -25,17 +25,18 @@ export function useLinkWorkspace(): string | undefined {
   return useContext(LinkWorkspaceContext);
 }
 
-/** Copy link, copying a place's link under `workspace` through `copy`, the window's menu copy (`useCopyToast`). */
-function copyLinkItem(
+/**
+ * Copy link, copying `link`, a Luke link, through `copy`, the window's menu
+ * copy (`useCopyToast`): the one item every Copy link in a menu draws. Note
+ * that a GitHub address is no Luke link and is offered as Copy GitHub link
+ * (`PANEL_COMMAND.COPY_GITHUB_LINK`), and a link's own right-click keeps its
+ * browser's Copy link (`link-menu.tsx`).
+ */
+export function copyLinkItem(
   copy: (words: string, label: string) => void,
-  place: LinkPlace,
-  workspace: string,
+  link: string,
 ): MenuAction {
-  return {
-    label: LINK_COPY.LABEL,
-    icon: <LinkIcon aria-hidden="true" />,
-    onSelect: () => copy(linkOf(place, workspace), LINK_COPY.COPIED),
-  };
+  return commandAction(PANEL_COMMAND.COPY_LINK, () => copy(link, LINK_COPY.COPIED), false);
 }
 
 /** The copy of a place's link under the workspace the surface hands down, saying Link copied; none where it hands down none. */
@@ -51,7 +52,8 @@ export function useCopyLink(): ((place: LinkPlace) => void) | undefined {
 export function useCopyLinkItem(): (place: LinkPlace) => MenuAction | undefined {
   const workspace = useContext(LinkWorkspaceContext);
   const copy = useCopyToast();
-  return (place) => (workspace === undefined ? undefined : copyLinkItem(copy, place, workspace));
+  return (place) =>
+    workspace === undefined ? undefined : copyLinkItem(copy, linkOf(place, workspace));
 }
 
 /** The place an agent is linked by: under its task where it has one, else its own. */

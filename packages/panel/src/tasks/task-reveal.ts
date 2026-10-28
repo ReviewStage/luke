@@ -124,8 +124,6 @@ export interface UnitView {
   /** Absent while the unit is drawn whole with no caret in it. */
   readonly edit: MarkdownEdit | undefined;
   readonly writing: boolean;
-  /** Whether the caret stands still waiting, which blinks where a working caret holds solid. */
-  readonly resting: boolean;
   readonly fresh: boolean;
 }
 
@@ -533,7 +531,6 @@ function actView(unit: ChaseUnit, act: Act, progress: number): UnitView {
     id: unit.id,
     heading: unit.key.heading,
     writing: true,
-    resting: false,
     fresh: false,
   };
   switch (act.kind) {
@@ -558,11 +555,9 @@ function actView(unit: ChaseUnit, act: Act, progress: number): UnitView {
 /**
  * What each unit draws now. The unit an act is partway through draws it;
  * otherwise the caret stands where it last moved, solid while there is still
- * work and, with nothing behind and the plan still `live`, being written on a
- * call, blinking where it waits, the way an editor's cursor waits where the
- * last word went in. Off the call with nothing behind, no caret is drawn.
+ * work. With nothing behind, no caret is drawn.
  */
-export function chaseView(state: ChaseState, live: boolean): readonly UnitView[] {
+export function chaseView(state: ChaseState): readonly UnitView[] {
   const behind = chaseBehind(state);
   const { act, caret } = state;
   const drawsAct = act !== undefined && act.kind !== ACT.TRAVEL;
@@ -574,11 +569,10 @@ export function chaseView(state: ChaseState, live: boolean): readonly UnitView[]
       words: unit.shown,
       edit: undefined,
       writing: false,
-      resting: false,
       fresh: unit.fresh,
     };
-    if (caret?.unit !== index || drawsAct || (!behind && !live)) return still;
+    if (caret?.unit !== index || drawsAct || !behind) return still;
     const edit = { caret: Math.min(caret.at, unit.shown.length) };
-    return { ...still, edit, writing: behind, resting: !behind };
+    return { ...still, edit, writing: true };
   });
 }

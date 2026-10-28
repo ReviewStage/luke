@@ -10,7 +10,6 @@ import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { agentName } from "@luke/features/model-label";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
@@ -60,7 +59,6 @@ import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
-import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -68,15 +66,7 @@ import { type Device, devicesNamed } from "./device-store.js";
 import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
-import { readTemplateAt } from "./plan-template-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import {
-  linkTaskIssue,
-  listTaskIssues,
-  listTaskIssueTags,
-  type NewTaskIssueLink,
-  type TaskIssueLink,
-} from "./task-issue-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -170,8 +160,6 @@ export interface StoredTask {
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly PlanSectionWriter[];
-  /** The external issues the task links, oldest linked first (`task-issue-store.ts`); none for a task that links none. */
-  readonly issueLinks: readonly TaskIssueLink[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
   /** Where the task's agents run, as its row holds it, which a Start on it resolves its machine from. */
@@ -197,12 +185,9 @@ export const TASK_RUNS_IN_CLOUD: TaskRunsOnWrite = {
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
- * the repository it is about where one is chosen, the external issues it
- * links from the start, as the service read them, where any were picked. A plan started
- * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
- * renamed. A plan started with `planning` false skips its planning phase and
- * starts empty rather than as the template. A brief is the developer's own
- * words about the task, kept as written; a blank one is none.
+ * and the repository it is about where one is chosen. A plan started with no
+ * name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is renamed. A brief is the developer's own words about the task, kept as
+ * written; a blank one is none.
  */
 export interface NewTask {
   readonly organizationId: string;
@@ -210,8 +195,6 @@ export interface NewTask {
   readonly repository?: string | null;
   /** How the repository was reached as it was named; the App's where none is named. */
   readonly githubAccess?: GitHubAccess;
-  readonly issueLinks?: readonly NewTaskIssueLink[];
-  readonly planning?: boolean;
   readonly brief?: string;
   /** Where the task stands as it starts; to do where none is named. */
   readonly status?: TaskStatus;
@@ -505,11 +488,6 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
   };
 }
 
-/** The text the row's plan started as (`readStartedText`). */
-function startedText(row: TaskRow): TaskStoreEffect<string> {
-  return readStartedText(row.userId, row.createdAt.getTime());
-}
-
 /**
  * The row's plan, as the window and the model read it for `userId`, the
  * reader, whose own pin it carries: its text as the
@@ -518,26 +496,20 @@ function startedText(row: TaskRow): TaskStoreEffect<string> {
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
- * carrying over does. Its issue links are `issueLinks`, which a read that
- * answers the plan alone hands as none. The reads but the agents' labels,
- * which wait on the section writers, run together outside a transaction.
+ * carrying over does. The reads but the agents' labels, which wait on the
+ * section writers, run together outside a transaction.
  */
-function storedTaskOf(
-  userId: string,
-  row: TaskRow,
-  issueLinks: TaskStoreEffect<readonly TaskIssueLink[]> = listTaskIssues(userId, row.id),
-): TaskStoreEffect<StoredTask> {
+function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
     const devices = yield* devicesOf([row]);
     const read = yield* Effect.all(
       {
         pin: findPin({ userId, taskId: row.id }),
         names: readAccountNames(namedAccountsOf([row], devices)),
-        written: Effect.flatMap(readSectionWriters(row.id, startedText(row)), (sectionWriters) =>
+        written: Effect.flatMap(readSectionWriters(row.id), (sectionWriters) =>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
         lastRevision: readLastEdit(row.id),
-        issueLinks,
       },
       { concurrency: yield* readConcurrency },
     );
@@ -564,16 +536,15 @@ function storedTaskOf(
       agentEdits,
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
-      issueLinks: read.issueLinks,
       brief: row.brief ?? undefined,
       runsOn: { machine: row.machine, deviceId: row.deviceId },
     };
   });
 }
 
-/** The row's plan alone, as the reader reads it, for the reads and writes that answer one: its issue links are not read. */
+/** The row's plan alone, as the reader reads it, for the reads and writes that answer one. */
 function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
-  return Effect.map(storedTaskOf(userId, row, Effect.succeed([])), (stored) => stored.task);
+  return Effect.map(storedTaskOf(userId, row), (stored) => stored.task);
 }
 
 /** The accounts a line of the list names: each row's owner, its assignee where it has one, and the owner of the device it runs on. */
@@ -992,35 +963,15 @@ const nameUntitled = SqlSchema.findOneOption({
 });
 
 /**
- * The text an account's plan started as at `createdAt`, epoch milliseconds:
- * a copy of the account's template as it stood then, as its history reads,
- * or the template it holds now where it has no history. A note reads it to
- * tell a section still holding only its template's guidance.
- */
-export function readStartedText(userId: string, createdAt: number): TaskStoreEffect<string> {
-  return Effect.gen(function* () {
-    const held = yield* readTemplateAt(userId, new Date(createdAt));
-    const template = Option.isSome(held) ? held.value : yield* readPlanTemplate(userId);
-    return template ?? DEFAULT_PLAN_TEMPLATE;
-  });
-}
-
-/**
  * Starts a task under the account, in the workspace it was handed, as one
- * document, a copy of the account's own template or the default where it
- * keeps none, or empty where it skips its planning phase, with the
- * repository it was handed, and the issues it was handed linked to it in
- * the same transaction; it stands first in the list. A plan handed no
- * name, or a blank one, starts as
- * `UNTITLED_PLAN_NAME`. Note that the template is copied, not referred to,
- * because an edit of the template must leave every plan started from it as
- * it stands.
+ * empty document, with the repository it was handed; it stands first in
+ * the list. A plan handed no name, or a blank one, starts as
+ * `UNTITLED_PLAN_NAME`.
  */
-/** A started task's row as it is inserted: its name, or Untitled, its plan's text, the template where it plans, and its brief, or none for a blank one. */
+/** A started task's row as it is inserted: its name, or Untitled, its plan's empty text, and its brief, or none for a blank one. */
 const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
     const brief = started.brief?.trim() ?? "";
     return {
@@ -1032,7 +983,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       machine: (started.runsOn ?? TASK_RUNS_IN_CLOUD).machine,
       deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
-      document: template ?? DEFAULT_PLAN_TEMPLATE,
+      document: "",
       brief: brief.length > 0 ? brief : null,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
@@ -1062,9 +1013,8 @@ export interface TaskCommitted<A> {
 }
 
 /**
- * Starts a task as `insertOf` writes it, with the issues it was handed
- * linked in the same transaction; an assignee who is no member of its
- * workspace refuses it with `TaskAssigneeNotMember`, nothing written.
+ * Starts a task as `insertOf` writes it; an assignee who is no member of
+ * its workspace refuses it with `TaskAssigneeNotMember`, nothing written.
  */
 export function createTask(
   userId: string,
@@ -1094,21 +1044,7 @@ export function createTaskCommitted(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        for (const link of started.issueLinks ?? []) {
-          yield* linkTaskIssue(userId, row.id, link).pipe(
-            // A new task's links are its starter's few, each named once, so a refusal is the caller breaking its contract.
-            Effect.catchTags({
-              TaskIssuesFull: Effect.die,
-              TaskIssueLinked: Effect.die,
-            }),
-          );
-        }
-        // A task that links no issue reads none back.
-        const links = started.issueLinks === undefined || started.issueLinks.length === 0;
-        const stored = yield* links
-          ? storedTaskOf(userId, row, Effect.succeed([]))
-          : storedTaskOf(userId, row);
-        return { task: stored, txid };
+        return { task: yield* storedTaskOf(userId, row), txid };
       }),
     ),
   );
@@ -1116,25 +1052,24 @@ export function createTaskCommitted(
 
 /**
  * Starts a task under the id its maker chose, as an agent's call makes one
- * under an id drawn from its own key, its plan's text the one given in the
- * template's place, where no task stands under that id yet; nothing where one
- * does, so the call run again, even at once, makes one task between them.
+ * under an id drawn from its own key, its plan's text the one given, where
+ * no task stands under that id yet; nothing where one does, so the call run
+ * again, even at once, makes one task between them.
  */
 export function createTaskOnce(
   userId: string,
-  started: Omit<NewTask, "issueLinks"> & { readonly id: string; readonly text: string },
+  started: NewTask & { readonly id: string; readonly text: string },
 ): Effect.Effect<Option.Option<Task>, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
   return Effect.gen(function* () {
     yield* assigneeAdmitted(started.assigneeId, started.organizationId);
-    const values = yield* insertOf(userId, { ...started, planning: false });
+    const values = yield* insertOf(userId, started);
     const row = yield* insertTaskOnce({ ...values, document: started.text });
     return yield* Effect.transposeOption(Option.map(row, (made) => taskOf(userId, made)));
   });
 }
 
 /**
- * Every task of every workspace the account is a member of, newest started first, without their documents,
- * each with the issues it links, read for the whole list at once.
+ * Every task of every workspace the account is a member of, newest started first, without their documents.
  * Nothing but starting a task moves the order: opening, reading, saving,
  * pinning, and settling one leave every row where it stood, and the order a
  * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
@@ -1144,20 +1079,14 @@ export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[
     const rows = yield* findTasks({ userId });
     const devices = yield* devicesOf(rows);
     const names = yield* readAccountNames(namedAccountsOf(rows, devices));
-    const tags = yield* listTaskIssueTags(
-      userId,
-      rows.map((row) => row.id),
-    );
-    return rows.map((row) => {
-      const summary = summaryOf(
+    return rows.map((row) =>
+      summaryOf(
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
         names,
         devices,
-      );
-      const issues = tags.get(row.id);
-      return issues === undefined ? summary : { ...summary, issues };
-    });
+      ),
+    );
   });
 }
 
@@ -1177,8 +1106,8 @@ export function readTask(
 
 /**
  * The task as `readTask` answers it to the window, without the rest the
- * service holds beside it, so its issue links are never read: what opening
- * a plan and answering one after a write need. Nothing for a task of a
+ * service holds beside it: what opening a plan and answering one after a
+ * write need. Nothing for a task of a
  * workspace the account is not in.
  */
 export function readTaskPlan(userId: string, taskId: string): TaskStoreEffect<Option.Option<Task>> {
@@ -1216,7 +1145,7 @@ export interface TaskHeader {
 
 /**
  * A task the account reaches, as `readTask` would answer it, in one
- * statement and without its plan, its history, or its issues: what a read
+ * statement and without its plan or its history: what a read
  * that only refuses a task, finds its workspace or its repository, or names
  * it needs. Nothing where the account reaches none.
  */

@@ -40,7 +40,6 @@ const FIRST: Workspace = {
 function workspaceFound(query: string, workspace: Workspace): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
-    voiceControlsDrawn: false,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
     workspace,
@@ -99,7 +98,6 @@ test("Integrations finds the Workspace page's group as Workspace connections, un
     searchSettings(
       settingsSearchEntries({
         settings: settingsView(),
-        voiceControlsDrawn: true,
         accountDrawn: true,
         capabilities: DESKTOP_CAPABILITIES,
         workspace: TEAM,
@@ -123,7 +121,6 @@ test("Integrations finds the Workspace page's group as Workspace connections, un
 test("searching GitHub while signed in finds Integrations' GitHub row and Profile's, and a personal access token finds Profile's alone", () => {
   const entries = settingsSearchEntries({
     settings: settingsView(),
-    voiceControlsDrawn: true,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
   });
@@ -147,14 +144,13 @@ test("searching GitHub while signed in finds Integrations' GitHub row and Profil
   );
 });
 
-test("the OpenAI key a call or dictation runs on is found by those words, on Codex's row in Agents, where it is kept", () => {
+test("the OpenAI key dictation runs on is found by that word, on Codex's row in Agents, where it is kept", () => {
   const entries = settingsSearchEntries({
-    settings: settingsView({ voiceAvailable: true }),
-    voiceControlsDrawn: true,
+    settings: settingsView(),
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
   });
-  for (const query of ["voice key", "call key", "dictation key"]) {
+  for (const query of ["dictation key", "dictate key"]) {
     const agents = (searchSettings(entries, query)?.groups ?? []).find(
       (group) => group.page === SETTINGS_VIEW.CODING_AGENTS,
     );
@@ -170,7 +166,6 @@ test("the OpenAI key a call or dictation runs on is found by those words, on Cod
 function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
-    voiceControlsDrawn: false,
     accountDrawn,
     capabilities: DESKTOP_CAPABILITIES,
   };
@@ -185,9 +180,6 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Browser tab", "cloud browsers"]) {
     assert.deepEqual(experimentalFound(query, true), ["Browser tab"], query);
   }
-  for (const query of ["Video calls", "Keyframe"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
-  }
   for (const query of ["threads by topic", "a stream your agents post to"]) {
     assert.deepEqual(experimentalFound(query, true), ["Channels"], query);
   }
@@ -200,33 +192,16 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Local agents", "Channels", "Memory", "Luke, your operator", "Browser tab", "Video calls"],
+      ["Local agents", "Channels", "Memory", "Luke, your operator", "Browser tab"],
       query,
     );
   }
   assert.deepEqual(experimentalFound("Browser tab", false), []);
 });
 
-test("Video calls is one switch, on the Experimental page, and not among the Voice page's controls", () => {
-  const found = searchSettings(
-    settingsSearchEntries({
-      settings: settingsView(),
-      voiceControlsDrawn: true,
-      accountDrawn: true,
-      capabilities: DESKTOP_CAPABILITIES,
-    }),
-    "Video calls",
-  );
-  assert.deepEqual(
-    (found?.groups ?? []).map((group) => group.page),
-    [SETTINGS_VIEW.EXPERIMENTAL],
-  );
-});
-
 test("no two rows the search can land on wear the same id", () => {
   const ids = settingsSearchEntries({
     settings: settingsView(),
-    voiceControlsDrawn: true,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
     workspace: TEAM,
@@ -240,7 +215,6 @@ test("no two rows the search can land on wear the same id", () => {
 test("a writing chord is found by its name and by the Markdown typed for it, on the Keyboard shortcuts page", () => {
   const entries = settingsSearchEntries({
     settings: settingsView(),
-    voiceControlsDrawn: false,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
     workspace: undefined,
@@ -261,7 +235,6 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
       searchSettings(
         settingsSearchEntries({
           settings: settingsView(),
-          voiceControlsDrawn: false,
           accountDrawn: true,
           capabilities: DESKTOP_CAPABILITIES,
           workspace: undefined,
@@ -282,7 +255,6 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
 /** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
 const FULL_INPUT: SettingsSearchInput = {
   settings: settingsView({ voiceAvailable: true }),
-  voiceControlsDrawn: true,
   accountDrawn: true,
   capabilities: DESKTOP_CAPABILITIES,
   workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },

@@ -968,8 +968,7 @@ composer's MCP servers popover draws a row for it. Every token request is
 billed by Connect and rate-limited per team.
 
 **The workspace Linear connector.** A workspace's own Linear grant, which
-the New plan picker lists issues through and a plan started from an issue
-reads it through, is held on a connector of its own, named by
+a link to a Linear issue reads it through, is held on a connector of its own, named by
 `LINEAR_WORKSPACE_CONNECTOR_UID`, set as the others are. The accounts'
 Linear connector (`LINEAR_CONNECTOR_UID`) signs in through Linear's MCP
 server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a
@@ -1353,8 +1352,8 @@ delegation, so no sandbox opens there either.
 
 `src/agents/turn-events.ts`'s `projectTurnEvents` is what the voice's live
 agent hears of a turn while it runs, in process (above). Nothing is stored for
-it: the five events — a slow step began, a turn queued a question,
-every action settled, one sentence of the reply, the turn ended — are a
+it: the four events — a slow step began, every action settled, one
+sentence of the reply, the turn ended — are a
 projection over the turn row and the turn's journal, the assistant message the
 store writer opens under the turn's id and amends as each call is written
 ahead of its run, read again on every poll, and the projection only grows
@@ -1417,18 +1416,6 @@ tolerantly (`experimentChoicesFrom`): a key this deployment does not list
 is passed over rather than refused, because it is an older or newer build's
 experiment, and only a value that is not a record at all is
 `invalid-request`.
-
-The plan template is the group's third path, `/api/account/plan-template`:
-`GET` answers `{ template, custom }`, the account's own Markdown or
-`DEFAULT_PLAN_TEMPLATE` with `custom: false`, and `PUT { template }` keeps a
-string verbatim (untrimmed, empty allowed, at most 20,000 characters) or goes
-back to the default on null (`@luke/features/plan-document-template`). It is
-a path of its own rather than a third part of the snapshot, because the
-desktop syncs the snapshot over its own settings and a long text does not
-belong in that loop. It lives in `account_preference.plan_template`
-(migration 0087), and a write sets that column alone: `updated_at` stays
-the preferences part's own, so a row a template opened answers no snapshot.
-`src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
 
 ### Workspace memory
 
@@ -1947,14 +1934,6 @@ installation, its status, and an account standing for another workspace is
 refused and stays there. `src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
-`GET /api/plans/{id}/code` reads back every code the task's agents showed
-(`src/tasks/task-work-store.ts`'s `readTaskCode`): each answered
-`show_code` call of each agent on the task, oldest first, read from that
-agent's own conversation, picked by its parts in the statement and read
-through `shownCodeOf`, so what the call refused and a secret file are never
-read back. `packages/features/src/tasks-view.ts` declares the answer
-(`taskCodeAnswerSchema`).
-
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
 the task's repository for the Mac's File tab (`src/tasks/task-file.ts`),
 at most 500 lines a window. It reads GitHub's contents API at the head of
@@ -1963,7 +1942,7 @@ lowercase SHA and nothing a branch or a path could spell, as an inbox item's
 code block pins its lines, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check an agent's
 checkout makes. The token is used for the one read and enters no answer, log line,
-or trace. What is shown is decided by the rule `show_code` is held to
+or trace. What is shown is decided by one rule
 (`src/tasks/shown-file.ts`): a secret file is refused before GitHub is
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
@@ -2159,7 +2138,7 @@ The store writer, `packages/database/src/models/writer.ts`, is the one path by w
 with an insert, an update, or a delete over `messages` or `turns`, whether as a
 Drizzle table imported from the schema or in the text of a statement, and the
 modules that name one at all are the writer and the two readers. It
-consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
+consumes the turn run event stream (`RunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
 turn's start where nothing queued it) through running to settled, cancelled,
@@ -2475,8 +2454,7 @@ journal as the steps after them — so the parked bound covers the turn from its
 delegation, and the follow still stops the moment the turn completes, fails, or
 is cancelled, or the socket's scope closes. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step, each question a turn queued, the
-actions settling, and, as the live agent's own and no event of the stream,
+mid-turn is the slow step, the actions settling, and, as the live agent's own and no event of the stream,
 each look's count of the turn's settled calls with the kind of the latest
 (`STEP_SETTLED`), never a call's input or output, which the service words as
 a build-fixed quiet progress note no sooner than `PROGRESS_NOTE_BOUNDS.GAP_MS`
@@ -2490,8 +2468,7 @@ end, so a reply is never said once per folded ask. Each delegation is an
 exchange of its own in the service, a revision of the request: a newer one
 silences the older exchange's reply, slow-step note, and end note, and leaves
 its run to finish rather than cancelling it, because a call
-delegates every answer while the exploration it began still runs; the
-questions a silenced run queues are still handed on. A refusal at the door is
+delegates every answer while the exploration it began still runs. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received

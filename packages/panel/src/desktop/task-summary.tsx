@@ -7,6 +7,9 @@ import {
   Card,
   cn,
   GAP,
+  GROUP_HEADING,
+  GROUP_SURFACE,
+  GroupHeader,
   IconButton,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
@@ -19,15 +22,13 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   Stack,
-  TEXT_VARIANT,
-  Text,
   Tooltip,
   usePressAway,
 } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { shownFiles } from "@luke/voice/code-pane-model";
+import { Schema } from "effect";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -41,7 +42,6 @@ import {
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { newestFileNote } from "../tasks/file-ref.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
@@ -52,6 +52,7 @@ import { rowMenu } from "./action-menu.js";
 import { ArchivedAgents, SUMMARY_GLYPH, useAgentArchive } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry, ROW_COUNT } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
+import { type CountNoun, foldedCount, sidebarFold } from "./sidebar-fold.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
 
@@ -62,16 +63,18 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
  * `agentEntries`), under quiet headings: the task's Inbox, counting what
  * waits on the developer, and the panel's kinds the task has used, its
- * coding agents, each agent's pull request whose Changes tab the panel
- * opens, and the files its agents showed on it. An agent wears where it stands on its glyph,
+ * coding agents, and each agent's pull request whose Changes tab the panel
+ * opens. An agent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
- * beside the row to say it, and a file is drawn in a row the
- * file tree's own: its type's coloured icon, height, and type size. A row
- * opens what it names exactly as its "+" row does: a kind or a
- * file opens the side panel on its tab, and an agent chooses its tab in the
+ * beside the row to say it. A row
+ * opens what it names exactly as its "+" row does: a kind opens the side
+ * panel on its tab, and an agent chooses its tab in the
  * column. An agent's row offers Archive on a right-click, and the
  * agents archived are folded under Archived at the foot of Coding agents
- * (`agent-archive.tsx`).
+ * (`agent-archive.tsx`). Each heading folds its rows away as the
+ * sidebar's groups fold (`GroupHeader`), counting them while folded, and
+ * which headings are folded is one choice for every task's summary, kept
+ * on this Mac.
  *
  * A plan with nothing yet to list draws no summary at all, rail, card, or
  * toolbar button, rather than one saying so; it stands once the plan holds
@@ -82,8 +85,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * where the column has room to keep the document at its measure beside it,
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
- * agent's transcript, and the call bar's row under them, centred again in
- * the room it leaves, with a chevron at its top right, shown while the
+ * agent's transcript, centred again in the room it leaves, with a chevron at its top right, shown while the
  * pointer or the keys are on it, that collapses it from the very spot the
  * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a
@@ -106,7 +108,11 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * kept from when unpinning hid the summary now reads collapsed, the nearest
  * thing to hidden the summary still has.
  */
-const KEPT = { PINNED: keptKey("luke.summary-pinned", keptFlag) } as const;
+const KEPT = {
+  PINNED: keptKey("luke.summary-pinned", keptFlag),
+  /** The headings the reader folded, one choice for every task's summary. */
+  FOLDED: keptKey("luke.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
+} as const;
 
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
@@ -153,9 +159,21 @@ const SECTION_ORDER = [
   TABS_SECTION,
   AGENTS_SECTION,
   ADD_SECTION.PULL_REQUESTS,
-  ADD_SECTION.FILES,
   ADD_SECTION.PAGES,
 ] as const;
+
+type SummaryHeading = (typeof SECTION_ORDER)[number];
+
+/** What a folded heading's count is read as. */
+const SECTION_NOUN = {
+  [TABS_SECTION]: { one: "tab", many: "tabs" },
+  [AGENTS_SECTION]: { one: "agent", many: "agents" },
+  [ADD_SECTION.PULL_REQUESTS]: { one: "pull request", many: "pull requests" },
+  [ADD_SECTION.PAGES]: { one: "page", many: "pages" },
+} as const satisfies Record<SummaryHeading, CountNoun>;
+
+/** No heading folded, as the summary first stands. */
+const NONE_FOLDED: readonly string[] = [];
 
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
@@ -317,14 +335,13 @@ interface SummaryEntry extends AddEntry {
 
 /** A heading and the rows under it. */
 interface SummarySection<Entry extends AddEntry = SummaryEntry> {
-  heading: string;
+  heading: SummaryHeading;
   entries: readonly Entry[];
 }
 
 /**
  * The card each row hangs, the one its tab hangs where it has one: an
- * agent's its tab's card, read from what its tab last held; a file's its
- * path and the agent's note; a pull request's its title, number, and what it
+ * agent's its tab's card, read from what its tab last held; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
  * version; the Inbox's what waits; the plan's the task's card. Each is
  * the card its tab hangs (`tab-card.tsx`), so the row and the tab never
@@ -337,17 +354,14 @@ function withCards(
     tasks: TasksControl;
     inbox: InboxBoardView;
     held: HeldTranscripts;
-    files: readonly string[];
     changes: readonly ChangesOffer[];
-    repository: string | null;
     /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
     onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
-  const { tasks, inbox, held, files, changes, repository, onOpenAgent } = input;
+  const { tasks, inbox, held, changes, onOpenAgent } = input;
   const { agents, mainTabs } = tasks;
   const models = agents.models ?? [];
-  const shown = tasks.shownCode ?? [];
   const card = (entry: AddEntry, subject: CardSubject) => ({
     ...entry,
     card: tabCard(subject) ?? undefined,
@@ -389,11 +403,7 @@ function withCards(
       const place = { taskId };
       return card(entry, { kind: TAB_KIND.PAGE, place, pageId: page.id, name: page.title, page });
     }
-    // Note that a file's row is named by its place in the files listed (`panelEntries`).
-    const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
-    if (path === undefined) return entry;
-    const note = newestFileNote(shown, path, { repository, commit: undefined });
-    return card(entry, { kind: TAB_KIND.FILE, path, note });
+    return entry;
   });
 }
 
@@ -405,7 +415,6 @@ function withCards(
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
   const { sidePanel, mainTabs, agents } = tasks;
-  const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
@@ -433,14 +442,13 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
       kinds: sidePanel.used.filter(
         (kind) => kind !== SIDE_PANEL_TAB.COMMENTS && kind !== SIDE_PANEL_TAB.INBOX,
       ),
-      files,
       changes,
       pages: tasks.pages ?? [],
       plan: openPlanStanding(tasks),
     }),
     ...agentEntries(mainTabs, agents),
   ];
-  return { rows, files, changes };
+  return { rows, changes };
 }
 
 /** A panel kind's row with how many of its things it counts at its end, as the Inbox's row counts what waits. */
@@ -473,21 +481,11 @@ function summarySections(
   tasks: TasksControl,
   inbox: InboxBoardView,
   held: HeldTranscripts,
-  repository: string | null,
   onOpenAgent: (agentId: string) => void,
   openComments: number | undefined,
 ): SummarySection[] {
-  const { rows, files, changes } = summaryRows(tasks, inbox, openComments);
-  const paths = files.map((ref) => ref.path);
-  const entries = withCards(rows, {
-    tasks,
-    inbox,
-    held,
-    files: paths,
-    changes,
-    repository,
-    onOpenAgent,
-  });
+  const { rows, changes } = summaryRows(tasks, inbox, openComments);
+  const entries = withCards(rows, { tasks, inbox, held, changes, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
 
@@ -502,8 +500,7 @@ export function summaryHolds(
 
 /**
  * A row of the column or the card: its glyph, its label, and what tells it
- * apart, a file's folder, as its "+" row says it, after the label on its
- * line, then a failed agent's mark or the Inbox's count. A row with a card
+ * apart, as its "+" row says it, after the label on its line, then a failed agent's mark or the Inbox's count. A row with a card
  * hangs it on hover beside the row, before its start where the window ends
  * past it, as the sidebar's rows hang theirs.
  */
@@ -566,7 +563,7 @@ function AgentSummaryRow({
   );
 }
 
-/** A row of the rail: its glyph alone, naming itself to a reader and in its hint, a file's hint its whole path, which its "+" row is searched by. */
+/** A row of the rail: its glyph alone, naming itself to a reader and in its hint, which its "+" row is searched by. */
 function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
@@ -581,7 +578,7 @@ function RailRow({ entry }: { entry: AddEntry }) {
   );
 }
 
-/** The summary's headings and rows, as the column and the card list them, an agent's row with its menu and the archived agents' fold under Coding agents; `onPicked` hears a row chosen before it opens. */
+/** The summary's headings and rows, as the column and the card list them, each heading folding its rows as the sidebar's groups fold, an agent's row with its menu and the archived agents' fold under Coding agents; `onPicked` hears a row chosen before it opens. */
 function SummaryList({
   sections,
   agents,
@@ -594,39 +591,53 @@ function SummaryList({
   shown: boolean;
   onPicked?: () => void;
 }): React.JSX.Element {
+  const [folded, , changeFolded] = useKept(KEPT.FOLDED, NONE_FOLDED);
+  const toggle = (heading: SummaryHeading) =>
+    changeFolded((kept) =>
+      kept.includes(heading) ? kept.filter((each) => each !== heading) : [...kept, heading],
+    );
   return (
     <>
-      {sections.map(({ heading, entries }) => (
-        <div key={heading} className="task-summary-section">
-          <Text
-            variant={TEXT_VARIANT.GROUP}
-            className="section-heading m-0 mb-tight-gap px-row-inset"
-          >
-            {heading}
-          </Text>
-          <List label={heading} density={LIST_DENSITY.DENSE}>
-            {entries.map((entry) => {
-              const onPick = () => {
-                onPicked?.();
-                entry.onPick();
-              };
-              return entry.agent === undefined ? (
-                <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
-              ) : (
-                <AgentSummaryRow
-                  key={entry.row.id}
-                  entry={entry}
-                  agent={entry.agent}
-                  agents={agents}
-                  shown={shown}
-                  onPick={onPick}
-                />
-              );
-            })}
-          </List>
-          {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
-        </div>
-      ))}
+      {sections.map(({ heading, entries }) => {
+        const isFolded = folded.includes(heading);
+        return (
+          <div key={heading} className="task-summary-section">
+            <GroupHeader
+              heading={GROUP_HEADING.NONE}
+              surface={GROUP_SURFACE.NARROW}
+              label={heading}
+              fold={sidebarFold(isFolded, () => toggle(heading))}
+              count={
+                entries.length === 0
+                  ? undefined
+                  : foldedCount(isFolded, entries.length, SECTION_NOUN[heading])
+              }
+            >
+              <List label={heading} density={LIST_DENSITY.DENSE}>
+                {entries.map((entry) => {
+                  const onPick = () => {
+                    onPicked?.();
+                    entry.onPick();
+                  };
+                  return entry.agent === undefined ? (
+                    <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
+                  ) : (
+                    <AgentSummaryRow
+                      key={entry.row.id}
+                      entry={entry}
+                      agent={entry.agent}
+                      agents={agents}
+                      shown={shown}
+                      onPick={onPick}
+                    />
+                  );
+                })}
+              </List>
+              {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
+            </GroupHeader>
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -821,7 +832,6 @@ export function TaskSummary({
   cardId,
   inbox,
   held,
-  repository,
   onOpenAgent,
 }: {
   tasks: TasksControl;
@@ -831,8 +841,6 @@ export function TaskSummary({
   inbox: InboxBoardView;
   /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
-  /** The task's repository, whose showings alone a file row's card reads its note from. */
-  repository: string | null;
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
@@ -841,7 +849,6 @@ export function TaskSummary({
     tasks,
     inbox,
     held,
-    repository,
     onOpenAgent,
     comments?.threads.filter(openThread).length,
   );

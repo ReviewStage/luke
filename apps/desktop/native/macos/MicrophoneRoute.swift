@@ -178,7 +178,7 @@ private struct MicrophoneRouteCommand {
         buffer += String(decoding: data, as: UTF8.self)
         var lines = buffer.components(separatedBy: "\n")
         // Whatever follows the last newline is the start of a line still
-        // arriving, exactly as the media duck's reader holds it.
+        // arriving, held until the rest of it comes.
         buffer = lines.removeLast()
         for line in lines
         where line.trimmingCharacters(in: .whitespaces) == MICROPHONE_ROUTE_COMMAND {

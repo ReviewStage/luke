@@ -198,17 +198,17 @@ import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
   AssistantMessageBuilder,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
   sessionKey,
   TURN_ORIGIN,
+  TURN_TRIGGER,
   userMessage,
   userMetadataOf,
 } from "../core.js";
@@ -1598,8 +1598,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         assert.deepEqual(
           listed.agents.map((agent) => [agent.id, agent.status]),
+          // The first has no turn yet, but its Start's line awaits the one eve opens on it.
           [
-            [first.id, CODING_AGENT_STATUS.STARTING],
+            [first.id, CODING_AGENT_STATUS.RUNNING],
             [second.id, CODING_AGENT_STATUS.RUNNING],
           ],
         );
@@ -1661,10 +1662,16 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const target = { userId: owner, conversationId: stored.value.conversationId };
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const turnId = randomUUID();
-        // Before any turn the agent is starting: an empty read is held rather than spinning, and
-        // lets go at the hold with the status the page was read at.
+        // Before any turn the Start's line awaits it: a read past the line is held rather than
+        // spinning, and lets go at the hold with the status the page was read at.
+        const opening = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
+        );
+        assert.equal(opening.messages.length, 1);
         const starting = yield* Effect.forkChild(
-          ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
+          ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: opening.cursor })),
         );
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
         assert.equal(starting.pollUnsafe(), undefined);
@@ -1675,29 +1682,23 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* drivenWhileStarting(starting),
         );
         assert.deepEqual(empty.messages, []);
-        assert.equal(empty.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(empty.status, CODING_AGENT_STATUS.RUNNING);
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
           eveTurnId: "turn_0",
         });
         yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
-
-        yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 2,
-          message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
-        });
+        // eve's receipt takes the Start's line into the turn, as the relay does.
+        yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
 
         const page = readAnswer(
           codingAgentMessagesAnswerSchema,
@@ -1746,7 +1747,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           input: { agentId: agent.id },
           output: { agent: { id: agent.id, title: "Builder" }, tail: "x".repeat(10_000) },
         };
-        const journal = yield* transcriptRow(stored, 1, MESSAGE_ROLE.ASSISTANT, [
+        const journal = yield* transcriptRow(stored, 2, MESSAGE_ROLE.ASSISTANT, [
           text("Building."),
           command,
           thinking,
@@ -1757,7 +1758,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           request(AGENT_MESSAGES, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
         );
         assert.ok(JSON.stringify(answered.body).length < 20_000);
-        const [cutJournal] = readAnswer(
+        // The Start's line stands ahead of the journal.
+        const [, cutJournal] = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           answered,
@@ -1782,7 +1784,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { text: _text, ...withoutText } = thinking;
         assert.deepEqual(cutJournal?.parts, [text("Building."), withoutOutput, withoutText, read]);
         // A reader that asks no cut, as a released desktop, is answered the part whole.
-        const [wholeJournal] = readAnswer(
+        const [, wholeJournal] = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
@@ -1790,7 +1792,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(wholeJournal?.parts, [text("Building."), command, thinking, read]);
         assert.equal(wholeJournal?.cutParts, undefined);
         // The read back from the end cuts the same parts where it is asked to.
-        const [newestJournal] = readAnswer(
+        const [, newestJournal] = readAnswer(
           codingAgentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
@@ -4524,28 +4526,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           eveTurnId: "turn_0",
         });
         yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
-        yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 2,
-          message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
-        });
+        // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
+        const taken = yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
+        assert.equal(Result.getOrUndefined(taken)?.length, 1);
         if (!turn.running) {
           yield* writer.consume(target, {
-            kind: BRAIN_RUN_EVENT.TURN_ENDED,
+            kind: RUN_EVENT.TURN_ENDED,
             conversationId: sessionKey(target.conversationId),
             turnId,
-            sequence: 3,
-            status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+            sequence: 2,
+            status: RUN_STATUS.SUCCEEDED,
             responseIds: [],
             at: 0,
           });
@@ -5293,7 +5291,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const stepBegun = (step: number) =>
           writer.consume(target, {
             ...turn,
-            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            kind: RUN_EVENT.STEP_STARTED,
             sequence: step + 2,
             step,
           });
@@ -5307,7 +5305,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         answer.text("Renamed it.");
         yield* writer.consume(target, {
           ...turn,
-          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          kind: RUN_EVENT.MESSAGE_COMPLETED,
           sequence: 6,
           message: answer.finish(randomUUID()),
         });
@@ -5932,6 +5930,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* Database.use((db) =>
           db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other)),
         );
+        // A line from before senders were kept, standing after the Start's own.
+        yield* transcriptRow(target, 2, MESSAGE_ROLE.USER, [text("Sweep the flaky tests.")]);
         yield* sent("Use seven days.");
         // Charles answers a minute later, which the time each line names says.
         yield* TestClock.adjust(Duration.minutes(1));
@@ -5969,8 +5969,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           );
 
         const named = [
-          // The task the relay wrote as the turn received it keeps no sender.
-          [SNAPSHOT, undefined],
+          // The task the Start wrote names its starter.
+          [SNAPSHOT, { userId: owner, name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER }],
+          // A line from before senders were kept names nobody.
+          ["Sweep the flaky tests.", undefined],
           [
             "Use seven days.",
             { userId: owner, name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER },
@@ -6006,10 +6008,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
           .map((message) => message.sentAt);
         assert.ok(sentAts.every((at) => at !== undefined));
-        assert.equal((sentAts[2] ?? 0) - (sentAts[1] ?? 0), Duration.toMillis(Duration.minutes(1)));
+        assert.equal((sentAts[3] ?? 0) - (sentAts[2] ?? 0), Duration.toMillis(Duration.minutes(1)));
 
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
-        assert.deepEqual((yield* sendersAs(owner))[2], [
+        assert.deepEqual((yield* sendersAs(owner))[3], [
           "Not five.",
           { name: "Former member", kind: CODING_AGENT_SENDER.FORMER },
         ]);
@@ -6839,23 +6841,23 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
         sequence: 2,
-        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
+        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(TURN_TRIGGER.ASK)),
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 3,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: 0,
       });
@@ -8011,14 +8013,23 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        // Nothing stands yet and the agent is starting, which the held read would hold on; this answers at once.
-        const own = readAnswer(
+        const opening = readAnswer(
           transcriptNowAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0", wait: "none" })),
         );
+        assert.equal(opening.messages.length, 1);
+        // Nothing stands past the Start's line, which awaits the turn eve opens on it, so the held read
+        // would hold on it; this answers at once.
+        const own = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_MESSAGES, owner, { id: agent.id, after: opening.cursor, wait: "none" }),
+          ),
+        );
         assert.deepEqual(own.messages, []);
-        assert.equal(own.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(own.status, CODING_AGENT_STATUS.RUNNING);
         assert.equal(own.holds, true);
 
         const worker = readAnswer(
@@ -8064,7 +8075,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
             said.map((words, at) => ({
               userId: stored.userId,
               conversationId: stored.conversationId,
-              seq: at + 1,
+              seq: at + 2,
               clientId: randomUUID(),
               role: MESSAGE_ROLE.ASSISTANT,
               // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
@@ -8087,7 +8098,8 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
         );
         assert.deepEqual(wordsOf(newest), said.slice(-PAGE), "the newest page, oldest first");
-        assert.equal(newest.status, CODING_AGENT_STATUS.STARTING);
+        // The Start's line awaits the first turn.
+        assert.equal(newest.status, CODING_AGENT_STATUS.RUNNING);
         assert.notEqual(newest.before, undefined, "a full page says more stands below it");
 
         const read = [...wordsOf(newest)];
@@ -8103,11 +8115,15 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           before = older.before;
           pages += 1;
         }
-        assert.deepEqual(read, said, "every row once, in order");
+        assert.deepEqual(
+          read,
+          [SNAPSHOT, ...said],
+          "every row once, in order, the Start's line first",
+        );
         assert.equal(pages, 3);
 
         // A row written after the newest page was read is heard by the follow from its cursor, and nothing before it.
-        yield* transcriptRow(stored, total + 1, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
+        yield* transcriptRow(stored, total + 2, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
         const followed = readAnswer(
           transcriptNowAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -8140,8 +8156,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
-        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text("Expire invitations.")]);
+        // The Start's own line is the transcript's one row.
         const newest = readAnswer(
           codingAgentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -8172,10 +8187,10 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
         const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
-        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text("Expire invitations.")]);
-        yield* transcriptRow(stored, 2, MESSAGE_ROLE.ASSISTANT, [text("Expired.")]);
-        const dropped = yield* transcriptRow(stored, 3, MESSAGE_ROLE.USER, [text("And emails.")]);
-        yield* transcriptRow(stored, 4, MESSAGE_ROLE.ASSISTANT, [text("Emailed.")]);
+        yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Expire invitations.")]);
+        yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [text("Expired.")]);
+        const dropped = yield* transcriptRow(stored, 4, MESSAGE_ROLE.USER, [text("And emails.")]);
+        yield* transcriptRow(stored, 5, MESSAGE_ROLE.ASSISTANT, [text("Emailed.")]);
         const newest = () =>
           Effect.map(ask(request(AGENT_NEWEST, owner, { id: agent.id })), (answered) =>
             readAnswer(codingAgentNewestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
@@ -8191,7 +8206,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         );
 
         assert.equal(before.rewound, undefined);
-        assert.equal(after.messages.length, 2);
+        assert.equal(after.messages.length, 3);
         assert.notEqual(after.rewound, undefined);
         // Note that the read past the stale cursor asked to be held, and was answered at once all the same.
         assert.equal(past.rewound, after.rewound);
@@ -8220,7 +8235,7 @@ const transcriptRow = (
           parts: parts as never,
           metadata:
             role === MESSAGE_ROLE.USER
-              ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK)
+              ? userMetadataOf(TURN_TRIGGER.ASK)
               : { author: MESSAGE_AUTHOR.MODEL },
           placedAt: new Date(),
         })
@@ -8272,7 +8287,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ),
       ).agent;
       const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, source.id));
-      yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
       yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Use the mailer.")]);
       const firstTurn = yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [
         { type: "reasoning", text: "A thought of its own.", state: "done" },
@@ -8393,12 +8407,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const turnId = randomUUID();
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         conversationId: sessionKey(target.conversationId),
         turnId,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
       // The source's lines are the turn's, so none of them reads as awaiting a turn of its own.
@@ -8897,16 +8911,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
         const bodies = [
           {
-            kind: BRAIN_RUN_EVENT.TURN_STARTED,
-            origin: BRAIN_TURN_ORIGIN.TYPED,
-            trigger: BRAIN_TURN_TRIGGER.ASK,
+            kind: RUN_EVENT.TURN_STARTED,
+            origin: RUN_TURN_ORIGIN.TYPED,
+            trigger: TURN_TRIGGER.ASK,
             at: 0,
           },
-          { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
-          { kind: BRAIN_RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
+          { kind: RUN_EVENT.STEP_STARTED, step: 1 },
+          { kind: RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
           {
-            kind: BRAIN_RUN_EVENT.TURN_ENDED,
-            status: BRAIN_REQUEST_STATUS.FAILED,
+            kind: RUN_EVENT.TURN_ENDED,
+            status: RUN_STATUS.FAILED,
             responseIds: [],
             at: 1,
           },
@@ -9328,7 +9342,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a continue attaches again the image its source's prompt carried, read from the picture kept beside the source's conversation, since the first message eve's receipt wrote names it by id with no bytes",
+    "a source's first row, the line its Start wrote, keeps no bytes of the image its prompt carried, naming the picture kept beside its conversation by id, and a continue attaches the image again from that picture",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve } = yield* openTask();
@@ -9346,20 +9360,20 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             }),
           ),
         ).agent;
-        // The source's first message as the relay writes it from eve's receipt: its words, then its files by name.
-        const received = receivedMessage({
-          message: "",
-          parts: receiptOf(eve.opened.at(-1)?.message.message),
-        });
         const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
-        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [
-          text(received.words),
-          ...received.files,
-        ]);
+        const [first] = yield* Database.use((db) =>
+          db
+            .select({ parts: messages.parts })
+            .from(messages)
+            .where(eq(messages.conversationId, stored.conversationId)),
+        );
         assert.deepEqual(
-          received.files.map((file) => file.url),
-          [""],
-          "eve's receipt carries no bytes of the image",
+          (first?.parts ?? []).flatMap((part) =>
+            part.type === "file"
+              ? [[part.filename, part.url, keptPictureIdOf(part.providerMetadata) !== undefined]]
+              : [],
+          ),
+          [["flow.png", "", true]],
         );
 
         yield* ask(
@@ -9375,59 +9389,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.doesNotMatch(
           openedWithFiles(eve).parts.replay?.preamble ?? "",
           /could not be passed on/u,
-        );
-      }),
-  );
-
-  it.effect(
-    "a source's first row keeps no bytes of a kept image where eve's receipt handed them back, naming the picture by id, and a continue attaches the image again from it",
-    () =>
-      Effect.gen(function* () {
-        const { owner, task, ask, eve } = yield* openTask();
-        const data = Buffer.from(SIZED_PNG).toString("base64");
-        const url = `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`;
-        const source = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(
-            startAs(owner, task.id, {
-              idempotencyKey: randomUUID(),
-              task: "Match this screen.",
-              attachments: [
-                { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
-              ],
-            }),
-          ),
-        ).agent;
-        // eve's receipt of a file it did not stage carries its bytes back as a `data:` URL.
-        const received = receivedMessage({
-          message: "",
-          parts: receiptOf(eve.opened.at(-1)?.message.message).map((part) =>
-            part.type === "file" ? { ...part, url } : part,
-          ),
-        });
-        assert.deepEqual(
-          received.files.map((file) => [
-            file.url,
-            keptPictureIdOf(file.providerMetadata) !== undefined,
-          ]),
-          [["", true]],
-        );
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
-        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [
-          text(received.words),
-          ...received.files,
-        ]);
-
-        yield* ask(
-          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
-        );
-        const opened = eve.opened.at(-1)?.message.message;
-        assert.ok(Array.isArray(opened));
-
-        assert.deepEqual(
-          opened.flatMap((part) => (part.type === "file" ? [[part.filename, part.data]] : [])),
-          [["flow.png", url]],
         );
       }),
   );
@@ -9587,7 +9548,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
         const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
-        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
         const turns = REPLAY_BOUNDS.MAX_ROWS + 50;
         const ids: string[] = [];
         // Note that the rows go in by the thousand, because one insert a row would take minutes.
@@ -9675,7 +9635,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ),
       ).agent;
       const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, first.id));
-      yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text(SNAPSHOT)]);
       for (let turn = 0; turn < LONG_TURNS; turn += 1) {
         yield* transcriptRow(stored, turn + 2, MESSAGE_ROLE.ASSISTANT, [
           text(`Step ${turn}. ${"x".repeat(5_000)}`),
@@ -9846,15 +9805,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
         const summaryModel: SummaryModelOf = () =>
           Effect.succeed({ model, providerOptions: {}, counted: Effect.void });
-        const { owner, eve, first, continueFrom } = yield* longSource({ summaryModel });
+        const { eve, first, continueFrom } = yield* longSource({ summaryModel });
         const second = yield* continueFrom(first.id);
         const carried = openedParts(eve).parts.replay;
         assert.ok(carried?.summary !== undefined);
 
-        const secondStored = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
-        yield* transcriptRow(secondStored, 1, MESSAGE_ROLE.USER, [
-          text(secondStored.planSnapshot ?? ""),
-        ]);
         yield* continueFrom(second.id, { model: SOL, effort: "low" });
         const third = openedParts(eve).parts.replay;
 
@@ -9996,9 +9951,6 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const secondSteps = openedParts(eve).parts.replay?.steps ?? [];
 
         const secondStored = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
-        yield* transcriptRow(secondStored, 1, MESSAGE_ROLE.USER, [
-          text(secondStored.planSnapshot ?? ""),
-        ]);
         yield* transcriptRow(secondStored, 2, MESSAGE_ROLE.ASSISTANT, [
           text(`Picked it up. ${"y".repeat(5_000)}`),
         ]);

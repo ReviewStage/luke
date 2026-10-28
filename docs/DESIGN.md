@@ -174,8 +174,7 @@ appearance, which Luke's Theme setting drives through Electron's
 `nativeTheme.themeSource`. Every colour of the window's own that differs in
 the light is written the same way, as a `light-dark()` pair in its own file,
 so a change of appearance is the stylesheet's alone:
-nothing re-renders, and the whiteboard takes it as a new theme for the canvas
-already mounted. No colour literal belongs anywhere but a token block, a
+nothing re-renders. No colour literal belongs anywhere but a token block, a
 `:root` or a palette's profile; a mask's black is an alpha rather than a
 colour, so a mask may spell it.
 Text that communicates a label, status, count, or instruction must meet WCAG

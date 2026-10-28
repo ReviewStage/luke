@@ -55,7 +55,6 @@ import {
 } from "../agents/coder-host/channel.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { ASK_ORIGIN, TURN_SLOW_STEP, TURN_STATUS } from "../core.js";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { type RecordingSentry, recordingSentry, sentOfType } from "../testing/sentry-transport.js";
@@ -1061,67 +1060,5 @@ it.live(
       );
       assert.equal(nothing.missed, undefined);
       yield* Effect.promise(() => after.stop());
-    }),
-);
-
-it.live(
-  "a call back is handed the questions Luke queued while no call was up, less any he took back",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const first = yield* Effect.promise(() => stand(target));
-      const accepted = yield* Effect.promise(() =>
-        database.run(first.agent.submitAsk(spokenAsk("q"))),
-      );
-      assert.equal(accepted.outcome, LIVE_AGENT_SUBMISSION.ACCEPTED);
-      if (accepted.outcome !== LIVE_AGENT_SUBMISSION.ACCEPTED) return;
-      yield* Effect.promise(() => first.stop());
-      const standing = yield* Effect.promise(() => turnStanding(target, accepted.runId));
-      const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-        stampedEveEvent(event, NOW);
-      const turnId = FIRST_EVE_TURN;
-      const sequence = 0;
-      const call = (callId: string, toolName: string, input: Record<string, string>) =>
-        stamped({
-          type: "actions.requested",
-          data: {
-            turnId,
-            sequence,
-            stepIndex: 0,
-            actions: [{ kind: "tool-call", callId, toolName, input }],
-          },
-        });
-      yield* Effect.promise(() =>
-        play(
-          [
-            stampedEveEvent({ type: "turn.started", data: { turnId, sequence } }, NOW),
-            stamped({ type: "message.received", data: { turnId, sequence, message: "q" } }),
-            stamped({
-              type: "step.started",
-              data: { turnId, sequence, stepIndex: 0, modelId: "m" },
-            }),
-            call("call-1", QUEUE_QUESTION_TOOL.name, {
-              question: "Which email provider?",
-              recommendation: "Postmark.",
-            }),
-            call("call-2", QUEUE_QUESTION_TOOL.name, {
-              question: "Resend after a day?",
-              recommendation: "Yes.",
-            }),
-            call("call-3", WITHDRAW_QUESTION_TOOL.name, { question: "Resend after a day?" }),
-          ],
-          standing,
-        ),
-      );
-
-      const back = yield* Effect.promise(() => stand(target));
-      const joined = yield* Effect.promise(() =>
-        database.run(back.agent.join(`voice_${randomUUID()}`)),
-      );
-      assert.deepEqual(joined.questions, [
-        { question: "Which email provider?", recommendation: "Postmark." },
-      ]);
-      assert.deepEqual(joined.runs, [accepted.runId]);
-      yield* Effect.promise(() => back.stop());
     }),
 );

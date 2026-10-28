@@ -40,6 +40,7 @@ import {
   Tooltip,
   useAnnounce,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { Clock, Duration, Effect, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -61,6 +62,7 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useCopyToast } from "../copy-feedback.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { usePhoneRoom } from "../stage-room.js";
@@ -271,8 +273,10 @@ function CloudBrowserBar({
   };
   // Note that a step's hint is its name while it works, and the name with the reason while it is off.
   const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
-  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯.
+  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯,
+  // and the page's address copied or opened in a browser of the reader's own after them.
   const phone = usePhoneRoom();
+  const copyWithToast = useCopyToast();
   useTabActions(
     phone
       ? [
@@ -299,7 +303,21 @@ function CloudBrowserBar({
               onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.RELOAD),
             },
           ],
-        ]
+          address === ""
+            ? []
+            : [
+                {
+                  label: "Copy address",
+                  icon: <GLYPH.COPY />,
+                  onSelect: () => copyWithToast(address, "Address copied"),
+                },
+                {
+                  label: "Open in browser",
+                  icon: <GLYPH.OPEN_EXTERNALLY />,
+                  onSelect: () => appPlatform().openWeb(address),
+                },
+              ],
+        ].filter((group) => group.length > 0)
       : undefined,
   );
   return (

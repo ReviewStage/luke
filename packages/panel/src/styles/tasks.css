@@ -1,69 +1,3 @@
-/* A board narrower than Excalidraw's phone breakpoint draws its phone
-   toolbar, a row of tools wider than the side panel at its narrowest,
-   centred and cut off at both edges. There the row wraps within the board
-   instead, clear of the column of tools Excalidraw stands at its right, so
-   every tool is in reach. Note that these name Excalidraw's own classes,
-   which hold for the version the workspace pins. */
-.task-board .excalidraw--mobile .App-top-bar > section {
-  width: 100%;
-  padding-right: var(--default-button-size);
-}
-
-.task-board .excalidraw--mobile .App-top-bar > section > .Stack,
-.task-board .excalidraw--mobile .App-toolbar-container {
-  display: flex;
-  justify-content: center;
-}
-
-.task-board .excalidraw--mobile .App-toolbar--mobile {
-  min-width: 0;
-}
-
-.task-board .excalidraw--mobile .App-toolbar--mobile > .Stack_horizontal {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-/* A finger works the board's controls, so each takes a finger's press:
-   Excalidraw sizes its buttons by its own `--default-button-size` and
-   `--lg-button-size`, and shrinks its toolbar's tools on a narrow screen and
-   the column of tools it stands at its right to fixed sizes of its own,
-   which here take the finger's size too. That column is drawn as a tab run
-   off the canvas's right edge, which on a phone's screen reads as cut off,
-   so there it stands whole inside the board, at the canvas's own inset, and
-   the toolbar's rows keep clear of it. A mouse keeps Excalidraw's sizes and
-   its tab. */
-@media (pointer: coarse) {
-  .task-board .excalidraw {
-    --default-button-size: 44px;
-    --lg-button-size: 44px;
-  }
-
-  .task-board .excalidraw .App-toolbar-container .ToolIcon__icon {
-    width: var(--lg-button-size);
-    height: var(--lg-button-size);
-  }
-
-  .task-board .excalidraw--mobile .mobile-misc-tools-container {
-    right: 0;
-    border-right-width: 1px;
-    border-right-style: solid;
-    border-right-color: var(--sidebar-border-color, var(--luke-color-border));
-    border-radius: var(--border-radius-lg, var(--luke-radius-8));
-  }
-
-  .task-board .excalidraw--mobile .mobile-misc-tools-container .ToolIcon__icon,
-  .task-board .excalidraw--mobile .mobile-misc-tools-container .sidebar-trigger {
-    width: var(--default-button-size);
-    height: var(--default-button-size);
-  }
-
-  .task-board .excalidraw--mobile .App-top-bar > section {
-    padding-right: calc(var(--default-button-size) + 2px + var(--luke-space-8));
-  }
-}
-
 /* The caret a save is typed behind: solid, as a caret is while someone types.
    Note that it and the selection are inline, so they take none of the gap
    a note (`@luke/ui`'s prose.css) opens between a list item's blocks, which as an inline-block
@@ -88,14 +22,6 @@
   color: inherit;
 }
 
-/* The caret waiting where the last word went in, blinking as an editor's
-   idle cursor does, and held by `--luke-loop-motion` like every animation with no
-   end of its own. */
-.plan-caret-resting .markdown-caret {
-  animation: plan-caret-blink 1060ms steps(1, end) infinite;
-  animation-play-state: var(--luke-loop-motion);
-}
-
 /* The unit the caret is typing in: a small ring in the accent turning after
    its heading on the window's one spinner turn (`spinner.tsx`), held by
    `--luke-loop-motion` like every animation with no end of its own and still
@@ -113,12 +39,6 @@
   animation: luke-spinner-turn 900ms linear infinite;
   animation-play-state: var(--luke-loop-motion);
   content: "";
-}
-
-@keyframes plan-caret-blink {
-  50% {
-    opacity: 0;
-  }
 }
 
 /* The byline's people (`DocumentByline`) each take a press a finger's
@@ -369,42 +289,6 @@
 .luke-message-actions svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
-}
-
-/* The Code tab's log (`code-pane.tsx`), whose calls each open at a
-   checkpoint stuck to the log's top (../ai-elements/checkpoint.tsx): the
-   log's fade starts beneath the checkpoint's band
-   (`SCROLL_FADE_INSET.BAND`), so the time stands whole and what scrolls
-   under it dissolves just below it. The band is held at that inset's height
-   whatever it holds, because a band taller than the inset would slice what
-   passes under its foot, and one shorter would fade its own foot; and the
-   log keeps no top padding, because a sticky checkpoint would leave what
-   scrolled under it showing in that band. What the keys reach, and a card a
-   File tab's note reveals (code-pane.tsx), scrolls in past both. A divider
-   sticks to the log's top as its cards scroll under it, on the well's own
-   ground, which is the feed's, so nothing shows through; a call's start
-   sticks as a divider does, whether or not the call still stands. */
-.checkpoint-log .checkpoint {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--luke-color-well);
-}
-
-/* One line, as a teammate's heading already keeps (`.call-caller`), so a
-   time that would wrap in a narrow panel cannot outgrow the band. */
-.checkpoint-log :is([data-checkpoint], [data-call-marker="start"]) {
-  height: var(--luke-scroll-band);
-  white-space: nowrap;
-}
-
-.checkpoint-log .call-marker[data-call-marker="start"] {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  box-sizing: border-box;
-  padding-block: 0;
-  background: var(--luke-color-well);
 }
 
 /* A crumb's tree (file-breadcrumbs.tsx), hung under the crumb on a menu's
@@ -714,13 +598,6 @@
 
 .diff-list-offer[data-below] {
   transform: translate(-50%, var(--luke-space-4));
-}
-
-/* The scroller ends clear of a phone's call card standing over it
-   (`--luke-card-room`, `call.css`), past Pierre's container, which Pierre
-   sizes itself. */
-[data-diff-list-scroller] {
-  padding-block-end: var(--luke-card-room, 0px);
 }
 
 /* Pierre's own container, which it draws the files into inside the scroller. */
@@ -1216,12 +1093,9 @@
   mask-repeat: no-repeat;
 }
 
-/* The Conversation's scroller ends a page's inset short of the foot, or, on
-   a phone, clear of the call card standing over it (`--luke-card-room`,
-   `call.css`). Note that this stays a rule, because it is the larger of
-   the two. */
+/* The Conversation's scroller ends a page's inset short of the foot. */
 .pull-request-page {
-  padding-bottom: max(var(--luke-page-inset), var(--luke-card-room, 0px));
+  padding-bottom: var(--luke-page-inset);
 }
 
 /* On the web, the Conversation's scroller (`.pull-request-page`) stands at
@@ -1235,8 +1109,8 @@
    scroller's top while its section is in view, on the panel's own ground so
    nothing shows through; the next section's heading pushes it off, since a
    sticky box stands only inside its own section. It is held at the
-   scroller's band (`SCROLL_FADE_INSET.BAND`), as a call's checkpoint is
-   (`.checkpoint-log`), because the fade begins beneath that band: taller,
+   scroller's band (`SCROLL_FADE_INSET.BAND`), because the fade begins
+   beneath that band: taller,
    it would slice what passes under its foot, and shorter, it would fade
    its own. The whole row presses as a `DisclosureSummary` does: the chevron
    leading at its inset and the row filled under the pointer; what stands at
@@ -1670,32 +1544,6 @@
 }
 
 /* What a read left on GitHub, counted as a press in the caption's type. */
-/* A note under a line of a whole file (file-tab.tsx), its card or its
-   chip: Pierre stands it at the code's column, sticky in view while
-   unwrapped lines scroll sideways, so it keeps only the room between it and
-   the lines, and none while it is a chip alone, which floats over the end of
-   its line. */
-.whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
-  padding-block: 0;
-}
-
-.whole-file-note .file-note {
-  margin: 0;
-}
-
-/* Luke's note under the lines it is on (file-note.tsx): the annotation card
-   (`.annotation-card`), measured as one so a narrow place steps its parts
-   back, in the element Pierre keeps for it under a File tab's line or a
-   Code card's (`.whole-file-note`, `.diff-note`), which insets it. */
-.file-note {
-  container: annotation luke-room / inline-size;
-}
-
-/* Luke is told by his wing mark, at the card's face size (`--luke-glyph-size`), on the card a review thread wears. */
-.file-note .annotation-card {
-  --luke-glyph-size: var(--annotation-face);
-}
-
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
    selectable, breaking a long path anywhere rather than widening the
    column. Its headings are a note's, a step above the words around them and
@@ -1762,8 +1610,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
 }
 
-/* An inline span of code, in a transcript, a pull request's description, or
-   a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
+/* An inline span of code, in a transcript, a to-do's step, a pull request's
+   description, or a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
    prose.css) in its padding, tint, face and size, and the corner role nearest
    its own, so code reads the same wherever words carry it. */
 .transcript-inline-code,
@@ -2131,9 +1979,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The composer answers its card's width, not the window's, so it holds in
    the main column and the side panel alike (`agent-composer.tsx`). The
    presses never give way, the model chip's words do first, and the ⋯
-   stands only once it has something to take in. */
+   stands only once it has something to take in. The card is a `luke-room`
+   too, so the badge saying where the agent runs gives up its words under
+   it (`agent-place.tsx`) rather than under a room around the box. */
 .agent-composer > form {
-  container: composer / inline-size;
+  container: composer luke-room / inline-size;
 }
 
 .agent-composer-actions > :is(.agent-servers, .agent-context) {
@@ -2410,22 +2260,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .issue-mark[data-issue-state="not-planned"] {
   color: var(--luke-color-text-muted);
-}
-
-/* A task's linked issues under its status and priority
-   (`task-issue-links.tsx`): a row of chips in the status chip's own look,
-   wrapping where the page is narrow, each its issue's mark, its key in the
-   code face, and its title cut short at a chip's widest, and Link issue,
-   quiet, at the row's end. What did not land is said under the row. */
-.task-issue-link .issue-mark {
-  width: var(--luke-icon-12);
-  height: var(--luke-icon-12);
-}
-
-.task-issue-link-unread > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 /* The pull request's row pinned over the composer, a card of one row

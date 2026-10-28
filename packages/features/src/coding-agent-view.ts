@@ -58,12 +58,6 @@ import {
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
 import {
-  planTemplateAnswerSchema,
-  planTemplateRevisionAnswerSchema,
-  planTemplateRevisionsAnswerSchema,
-  planTemplateWriteRequestSchema,
-} from "./plan-document-template.js";
-import {
   PROVIDER_KEY_PROVIDER,
   providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
@@ -76,7 +70,6 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
-import { planRevisionSeqSchema } from "./task-wire.js";
 import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
@@ -102,10 +95,6 @@ import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
  * box is an agent's: the clip and its words to listen for, and the text
  * back, or why there is none, the account having saved no OpenAI key among
  * the reasons.
- *
- * The account's plan template travels here too, since it is the account's
- * own on the service as the default and the keys are, and Settings asks for
- * all three the same way: the template read, and one kept or reset.
  */
 
 /** Why a coding-agent call answered nothing a window can draw. */
@@ -266,9 +255,6 @@ export const githubTokenSaveParamsSchema = githubTokenSaveRequestSchema;
 
 export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
-/** The account's plan template, as the window hears it read or written: the template as kept and whether the account wrote it, or why there is none. */
-export const planTemplateAnswerViewSchema = EffectSchema.Union([planTemplateAnswerSchema, failed]);
-
 /** A workspace's memories, as the window hears them read or one forgotten: the memories as they stand, or why there are none. */
 export const memoriesAnswerViewSchema = EffectSchema.Union([memoriesAnswerSchema, failed]);
 
@@ -288,41 +274,6 @@ export const memoryForgetParamsSchema = EffectSchema.Struct({
 });
 
 export type MemoryForgetParams = typeof memoryForgetParamsSchema.Type;
-
-export type PlanTemplateAnswerView = typeof planTemplateAnswerViewSchema.Type;
-
-/** Writing the template, as the window asks it: the text to keep verbatim, or null for the default. */
-export const planTemplateWriteParamsSchema = planTemplateWriteRequestSchema;
-
-export type PlanTemplateWriteParams = typeof planTemplateWriteParamsSchema.Type;
-
-/** A page of the template's history, as the window asks it: the newest, or the one before a revision. */
-export const planTemplateRevisionsParamsSchema = EffectSchema.Struct({
-  before: EffectSchema.optionalKey(planRevisionSeqSchema),
-});
-
-export type PlanTemplateRevisionsParams = typeof planTemplateRevisionsParamsSchema.Type;
-
-/** A page of the template's history, as the window hears it read: the page, or why there is none. */
-export const planTemplateRevisionsAnswerViewSchema = EffectSchema.Union([
-  planTemplateRevisionsAnswerSchema,
-  failed,
-]);
-
-export type PlanTemplateRevisionsAnswerView = typeof planTemplateRevisionsAnswerViewSchema.Type;
-
-/** One revision of the template, as the window asks it read or restored: its number. */
-export const planTemplateRevisionParamsSchema = EffectSchema.Struct({ seq: planRevisionSeqSchema });
-
-export type PlanTemplateRevisionParams = typeof planTemplateRevisionParamsSchema.Type;
-
-/** One revision of the template, as the window hears it read: the revision beside the one before it, or why there is none. */
-export const planTemplateRevisionAnswerViewSchema = EffectSchema.Union([
-  planTemplateRevisionAnswerSchema,
-  failed,
-]);
-
-export type PlanTemplateRevisionAnswerView = typeof planTemplateRevisionAnswerViewSchema.Type;
 
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;

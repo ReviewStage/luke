@@ -22,7 +22,6 @@ function source(overrides: Partial<AdminReliabilitySource["daily"]> = {}): Admin
       lukeTurns: new Map(),
       agentRuns: new Map(),
       abandonedTurns: new Map(),
-      calls: new Map(),
       automationRuns: new Map(),
       ...overrides,
     },

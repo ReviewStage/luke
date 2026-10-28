@@ -1,7 +1,7 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { land } from "@luke/ui/landed";
 import { createContext, useContext, useEffect, useRef } from "react";
-import { centreWithin, scrollerOf } from "./code-pane.js";
+import { centreWithin, scrollerOf } from "../scroll-within.js";
 
 /**
  * message-links.tsx -- a message's own link: whose transcript a message is of, so its Copy link can name it, and the ask to bring a linked message into view.

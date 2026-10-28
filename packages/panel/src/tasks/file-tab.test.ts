@@ -9,7 +9,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
@@ -21,18 +20,14 @@ import {
   wholeFileLines,
   wholeFileRoot,
 } from "../testing/whole-file.js";
-import type { FileNotes } from "./file-note.js";
 import { FileTab, type ReadFileWindow } from "./file-tab.js";
-import { OpenLinkProvider } from "./use-open-link.js";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
  * file-tab.test.ts -- a File tab as the developer meets it, its file drawn by
  * the real diff bundle: read whole, at the head's commit or the one the tab
- * is pinned to; an agent's note under the last line of its range, lighting its
- * lines under the pointer, or put away behind a chip while Minimize inline
- * comments is on, which I turns; and ⌘F counting every match in the file and
- * in the notes' words. Synthetic repository.
+ * is pinned to, the lines it was opened on lit; and ⌘F counting every match
+ * in the file. Synthetic repository.
  */
 
 declare global {
@@ -53,7 +48,6 @@ const TEXT = [
   "export { seat };",
   "",
 ].join("\n");
-const NOTE = "Seats are counted before the invite goes out";
 
 const roots: Root[] = [];
 
@@ -102,74 +96,25 @@ function service(asked: TaskFileRequest[]): ReadFileWindow {
   };
 }
 
-const AGENT_ID = "3f1c9e2a-6b7d-4e8f-a1b2-c3d4e5f60718";
-
-const NOTES = [
-  {
-    callId: "call-1",
-    shownAt: 1_760_000_000_000,
-    turnId: "turn-1",
-    agentId: AGENT_ID,
-    startLine: 3,
-    endLine: 4,
-    note: NOTE,
-  },
-];
-
-function notes(shown: FileNotes["notes"] = NOTES): FileNotes {
-  return {
-    notes: shown,
-    folded: [],
-    onFold: () => undefined,
-    taskId: "task-1",
-    agentLabel: (agentId) => (agentId === AGENT_ID ? "Invite emails" : undefined),
-  };
-}
-
-/** Draws the latest tab mounted again with the agents' notes as `shown`, as a note one adds does. */
-let draw: (shown: FileNotes["notes"]) => void = () => undefined;
-
 /** A File tab opened on `file`, in a find's scope, drawn once its file is. */
 async function tab(file: OpenFile, read: ReadFileWindow): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
-  draw = (shown) =>
-    act(() =>
-      root.render(
-        onRegistry(
-          registry,
-          createElement(
-            OpenLinkProvider,
-            { value: () => undefined },
-            createElement(
-              LinkWorkspaceProvider,
-              { value: "acme" },
-              createElement(
-                FindScope,
-                { active: true, subject: { task: "task-1", tab: { file: PATH } } },
-                createElement(FileTab, {
-                  file,
-                  snippet: undefined,
-                  notes: notes(shown),
-                  readFile: read,
-                  onRead: () => undefined,
-                }),
-              ),
-            ),
-          ),
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          FindScope,
+          { active: true, subject: { task: "task-1", tab: { file: PATH } } },
+          createElement(FileTab, { file, readFile: read, onRead: () => undefined }),
         ),
       ),
-    );
-  draw(NOTES);
+    ),
+  );
   await wholeFileDrawn(container);
   return container;
-}
-
-/** The element the note is drawn in, under its line. */
-function noteSlot(container: HTMLElement): Element {
-  return container.querySelector("[data-whole-file-note]") ?? assert.fail("the note is drawn");
 }
 
 /** The lines the file draws lit. */
@@ -208,48 +153,13 @@ test("a File tab pinned to a commit reads the whole text there in one read", asy
   assert.deepEqual(asked, [{ path: PATH, firstLine: 1, lastLine: 1, raw: true, ref: PINNED }]);
 });
 
-test("the lines a File tab was opened on are lit, and an agent's note stands under the last line of its range, lighting its own lines under the pointer", async () => {
+test("the lines a File tab was opened on are lit", async () => {
   const container = await tab(
     { path: PATH, range: { startLine: 1, endLine: 1 }, opened: 1 },
     service([]),
   );
 
   assert.deepEqual(litLines(container), ["1"]);
-  assert.equal(noteSlot(container).parentElement?.getAttribute("slot"), "annotation-4");
-  assert.match(noteSlot(container).textContent ?? "", /Seats are counted/);
-  assert.ok(
-    noteSlot(container).querySelector('button[aria-label="Note actions"]'),
-    "its ⋯ stands at rest, the page's links reaching it under its line",
-  );
-
-  const note = noteSlot(container).querySelector(".file-note") ?? assert.fail("the card is drawn");
-  act(() => note.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-  await vi.waitFor(() => assert.deepEqual(litLines(container), ["3", "4"]));
-
-  act(() => note.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })));
-  await vi.waitFor(() => assert.deepEqual(litLines(container), ["1"]));
-});
-
-test("with Minimize inline comments on, an agent's note stands behind a chip with the mark, which shows it, and I in the tab turns the setting", async () => {
-  handSettings({ diffMinimizeComments: true });
-  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
-  const chip = () =>
-    noteSlot(container).querySelector<HTMLElement>(".diff-thread-chip-row > summary");
-
-  assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, show");
-  act(() => chip()?.click());
-  assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, hide");
-
-  const section = container.querySelector<HTMLElement>(".file-tab") ?? assert.fail();
-  await act(async () => {
-    section.dispatchEvent(new KeyboardEvent("keydown", { key: "i", code: "KeyI", bubbles: true }));
-  });
-  assert.equal(chip(), null, "the note stands as its card again");
-
-  await act(async () => {
-    section.dispatchEvent(new KeyboardEvent("keydown", { key: "i", code: "KeyI", bubbles: true }));
-  });
-  assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, show");
 });
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
@@ -268,83 +178,17 @@ function findTally(): string | null | undefined {
     ?.textContent;
 }
 
-test("⌘F over a File tab counts every match in the file and in its agents' notes, from its text, and steps through them", async () => {
+test("⌘F over a File tab counts every match in the file, from its text, and steps through them", async () => {
   await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
   act(() => {
     runAppCommand(APP_COMMAND.FIND);
   });
   typeFind("seat");
 
-  // Four on the lines (seats, seat, seats, and the export's seat), and one in the note.
-  assert.equal(findTally(), "1 of 5");
+  // Four on the lines: seats, seat, seats, and the export's seat.
+  assert.equal(findTally(), "1 of 4");
   act(() => {
     runAppCommand(APP_COMMAND.FIND_NEXT);
   });
-  assert.equal(findTally(), "2 of 5");
-});
-
-test("a note an agent adds while ⌘F stands open over a File tab joins the count at once, the find kept at its match", async () => {
-  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
-  act(() => {
-    runAppCommand(APP_COMMAND.FIND);
-  });
-  typeFind("seat");
-  act(() => {
-    runAppCommand(APP_COMMAND.FIND_NEXT);
-  });
-  assert.equal(findTally(), "2 of 5");
-
-  draw([
-    ...NOTES,
-    {
-      callId: "call-2",
-      shownAt: 1_760_000_100_000,
-      startLine: 6,
-      endLine: 6,
-      note: "The seat is exported",
-    },
-  ]);
-  await wholeFileDrawn(container);
-
-  assert.equal(findTally(), "2 of 6");
-});
-
-test("⌘F counts a note's words as its card shows them: a link by its words and never its address, a code span as written", async () => {
-  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
-  draw([
-    {
-      callId: "call-1",
-      shownAt: 1_760_000_000_000,
-      startLine: 3,
-      endLine: 4,
-      note: "See [the docs](https://example.com/seat) and `seat**s`",
-    },
-  ]);
-  await wholeFileDrawn(container);
-  act(() => {
-    runAppCommand(APP_COMMAND.FIND);
-  });
-  typeFind("seat");
-
-  // Four on the lines, and one in the note's code span; none in the link's address.
-  assert.equal(findTally(), "1 of 5");
-  typeFind("seat**s");
-  assert.equal(findTally(), "1 of 1");
-});
-
-test("a note's card drawing new words of its own while ⌘F stands open, as its age moves on, is counted again", async () => {
-  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
-  act(() => {
-    runAppCommand(APP_COMMAND.FIND);
-  });
-  typeFind("seat");
-  assert.equal(findTally(), "1 of 5");
-
-  // The card's own words change with no draw of the tab's, as its age does each minute.
-  const words =
-    noteSlot(container).querySelector(".file-note-words") ??
-    assert.fail("the note's words are drawn");
-  act(() => words.append(document.createTextNode(" One more seat.")));
-
-  await vi.waitFor(() => assert.equal(findTally(), "1 of 6"));
+  assert.equal(findTally(), "2 of 4");
 });

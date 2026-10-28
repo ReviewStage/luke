@@ -14,11 +14,8 @@ import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { accountPreference } from "@luke/database/schemas/preferences";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
-import { voiceSessionUsage } from "@luke/database/schemas/usage";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, WORKSPACE_ROLE } from "@luke/database/testing";
-import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
@@ -50,14 +47,14 @@ import {
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { Effect } from "effect";
-import { BRAIN_REQUEST_FAILURE, DAY_MS } from "../core.js";
+import { DAY_MS, TURN_FAILURE } from "../core.js";
 import { buildAdminAccountSupport } from "./admin-account.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 
 /**
  * admin-account.test.ts -- one account's support sections, read over a real
- * dialect and folded: the window's tasks, agents, pull requests, and call
- * minutes; its newest agents with the status and failure class the panel
+ * dialect and folded: the window's tasks, agents, and pull requests; its
+ * newest agents with the status and failure class the panel
  * would draw and their pull request's state; its workspaces by name, role,
  * size, and GitHub installation; its keys and connections; its defaults and
  * experiments; and the window's failures, newest first, each an enumerated
@@ -174,7 +171,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
     const overflowed = yield* startAgent(userId, sharedWorkspace, 2, {
       turn: {
         status: TURN_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.MODEL,
+        failure: TURN_FAILURE.MODEL,
         failureDetail: "prompt is too long: 1368155 tokens > 1000000 maximum",
       },
       published: PULL_REQUEST_STATE.DRAFT,
@@ -184,29 +181,6 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       turn: { status: TURN_STATUS.SETTLED },
       published: PULL_REQUEST_STATE.CLOSED,
     });
-    yield* db.insert(voiceSessionUsage).values([
-      { sessionId: randomUUID(), userId, seconds: 600, recordedAt: at(2).getTime() },
-      { sessionId: randomUUID(), userId, seconds: 1230, recordedAt: at(5).getTime() },
-      { sessionId: randomUUID(), userId, seconds: 6000, recordedAt: at(60).getTime() },
-    ]);
-    const call = (
-      closeReason: (typeof VOICE_CLOSE_REASON)[keyof typeof VOICE_CLOSE_REASON],
-      daysAgo: number,
-    ) => ({
-      userId,
-      liveSessionId: randomUUID(),
-      delegationMode: "client" as const,
-      startedAt: at(daysAgo + 0.01),
-      closedAt: at(daysAgo),
-      closeReason,
-    });
-    yield* db
-      .insert(voiceSessions)
-      .values([
-        call(VOICE_CLOSE_REASON.CONNECTION_LOST, 3),
-        call(VOICE_CLOSE_REASON.CLOSE_REQUESTED, 4),
-        call(VOICE_CLOSE_REASON.CONNECTION_LOST, 50),
-      ]);
     const key = (
       provider: (typeof PROVIDER_KEY_PROVIDER)[keyof typeof PROVIDER_KEY_PROVIDER],
       status: (typeof PROVIDER_KEY_STATUS)[keyof typeof PROVIDER_KEY_STATUS],
@@ -253,7 +227,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       userId,
       codingAgentModel: "anthropic/claude-opus-5.5",
       codingAgentEffort: "high",
-      experiments: { [EXPERIMENT.VIDEO_CALLS]: true, [EXPERIMENT.BROWSER]: false },
+      experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.BROWSER]: false },
     });
     const [made] = yield* db
       .insert(automation)
@@ -282,7 +256,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
     const lateFailure = yield* startAgent(userId, own, 45, {
       turn: {
         status: TURN_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        failure: TURN_FAILURE.SESSION_ENDED,
         endedDaysAgo: 1,
       },
     });
@@ -328,7 +302,6 @@ it.layer(getTestDB())("one account's support sections", (it) => {
         agentsRead: 3,
         pullRequestsOpened: 2,
         pullRequestsMerged: 1,
-        callMinutes: 31,
       });
       assert.deepEqual(
         support.recentAgents.map((agent) => [
@@ -451,7 +424,7 @@ it.layer(getTestDB())("one account's support sections", (it) => {
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         contextWindow: null,
-        experiments: [{ key: EXPERIMENT.VIDEO_CALLS, name: "Video calls" }],
+        experiments: [{ key: EXPERIMENT.MEMORY, name: "Memory" }],
       });
     }),
   );
@@ -476,7 +449,6 @@ it.layer(getTestDB())("one account's support sections", (it) => {
             reason: CODING_AGENT_FAILURE.CONTEXT_OVERFLOW,
           },
           { kind: ADMIN_FAILURE_KIND.AGENT, at: 3, reason: CODING_AGENT_FAILURE.NOT_STARTED },
-          { kind: ADMIN_FAILURE_KIND.CALL, at: 3, reason: VOICE_CLOSE_REASON.CONNECTION_LOST },
           {
             kind: ADMIN_FAILURE_KIND.CONNECTION,
             at: 4,
@@ -510,7 +482,6 @@ it.layer(getTestDB())("one account's support sections", (it) => {
           agentsRead: 0,
           pullRequestsOpened: 0,
           pullRequestsMerged: 0,
-          callMinutes: 0,
         },
         recentAgents: [],
         workspaces: [],

@@ -29,6 +29,7 @@ export {
 } from "./coding-agent-client.js";
 export {
   DEVICE_AGENT_NOT_CLAIMED,
+  type DeviceAgentBeat,
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
   enrollHost,
@@ -122,13 +123,10 @@ export {
   sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
-  taskCodeFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
-  webSocketOrigin,
 } from "./live-contract.js";
 export {
   HostedMacCommandClient,
@@ -153,6 +151,7 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export { webSocketOrigin } from "./socket-origin.js";
 export {
   HostedTaskClient,
   type HostedTaskClientOptions,

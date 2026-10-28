@@ -57,6 +57,7 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
+import { automationRun } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
@@ -111,7 +112,6 @@ import {
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
-import { isNativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -888,9 +888,10 @@ function openingOf(
 }
 
 /**
- * The first message of a native agent's Start, written as the line awaiting
- * its turn under a fresh key, as a steer's is (`steer.ts`), and its line id,
- * which the runner is handed and names back as it takes the line. Its
+ * The first message of a Start, written as the line awaiting its turn under
+ * a fresh key, as a steer's is (`steer.ts`), and its line id, which a native
+ * runner is handed and names back as it takes the line, and eve's receipt
+ * takes by its words. Its
  * dispatch has already happened by the time it matters: the line is written
  * standing, and the Start's own open is what hands it over.
  */
@@ -1136,35 +1137,34 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
     const mentioned =
       words === undefined ? undefined : mentionedContext(words, landing.task, reads);
-    // eve writes the first message into the transcript as its session takes it; a native harness's
-    // runner only names its line back as it takes it (`native-events/`), so the line is written here,
-    // awaiting its turn, before the runner can name it. A launch refused discards the agent, line and all.
-    // A line that could not be written discards the agent, as a refused launch does, so a retry
-    // under the same key starts it afresh rather than finding an agent that was never launched.
-    const line = isNativeRuntime(runtime.runtime)
-      ? yield* openingLine(
-          agent,
-          handed,
-          files,
-          mentioned,
-          openingOf(
-            agent,
-            ask,
-            brief,
-            from === undefined ? undefined : { source: from.source, continued },
-          ),
-        ).pipe(
-          Effect.tapError(() =>
-            Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
-          ),
-        )
-      : undefined;
+    // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
+    // who sent it: a native harness's runner names the line back as it takes it (`native-events/`), and
+    // eve's receipt takes it by its words (`relay.ts`'s `#received`) rather than writing a typed line.
+    // A launch refused discards the agent, line and all. A line that could not be written discards the
+    // agent, as a refused launch does, so a retry under the same key starts it afresh rather than
+    // finding an agent that was never launched.
+    const line = yield* openingLine(
+      agent,
+      handed,
+      files,
+      mentioned,
+      openingOf(
+        agent,
+        ask,
+        brief,
+        from === undefined ? undefined : { source: from.source, continued },
+      ),
+    ).pipe(
+      Effect.tapError(() =>
+        Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
+      ),
+    );
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
         turn: BRAIN_HOST_TURN.TYPED,
         message: eveContent(handed, files, mentioned),
-        ...(line === undefined ? undefined : { lineId: line }),
+        lineId: line,
       })
       .pipe(
         Effect.catchTag("EveUnreachable", (failure) =>
@@ -1217,8 +1217,9 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         : continued
           ? SERVER_AGENT_START_KIND.CONTINUE
           : SERVER_AGENT_START_KIND.FORK,
-    is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
+    is_from_automation: automationRun(ask) !== undefined,
     has_task: ask.taskId !== null,
+    agent_kind: agent.kind,
   });
   return committed === undefined ? { agent, created } : { agent, created, txid: committed };
 });

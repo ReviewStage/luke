@@ -691,16 +691,11 @@ function answeredFields(within: Element): (string | null | undefined)[][] {
     const name = field.querySelector(".luke-field-label, .luke-checkbox-words")?.firstChild
       ?.textContent;
     const box = field.querySelector<HTMLElement>('[role="checkbox"]');
-    const number = field.querySelector<HTMLInputElement>('input[type="number"]');
     const words = field.querySelector('[role="textbox"]');
     const pills = field.querySelector<HTMLElement>(".luke-choice-list");
     if (box !== null) {
       assert.equal(box.getAttribute("aria-readonly"), "true");
       return [kind, name, box.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"];
-    }
-    if (number !== null) {
-      assert.equal(number.readOnly, true);
-      return [kind, name, number.value];
     }
     if (pills !== null) {
       assert.equal(pills.dataset.readOnly, "true");
@@ -1037,16 +1032,22 @@ test("picking an option in the draft reply stands it picked and lights Send, the
   assert.deepEqual(boxParts(pane), ["line: Reply", "row: Attach files, Dictate, Send"]);
 });
 
-test("an approve-or-request-changes ask is two small buttons in the draft reply: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
+test("an approve-or-request-changes ask is two small buttons in the draft reply, the one the agent recommends saying so: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
   const shown = threadItem([
     askingMessage({
       type: INBOX_ASK.DECIDE,
       options: [{ label: "Approve" }, { label: "Request changes" }],
+      recommended: "Approve",
     }),
   ]);
   const pane = await mountThread(shown);
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000012"));
   assert.deepEqual(openOptions(pane), [], "no radio list stands for a yes or no");
+  assert.deepEqual(
+    [askPress(pane, "Approve").textContent, askPress(pane, "Request changes").textContent],
+    ["ApproveRecommended", "Request changes"],
+    "the recommended press wears its badge",
+  );
 
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Approve").click());
@@ -1072,7 +1073,7 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
   );
   const reply =
     pane.querySelector(".inbox-thread > li:nth-last-child(2)") ?? assert.fail("the reply");
-  assert.equal(answeredCard(reply), "ApproveRequest changes");
+  assert.equal(answeredCard(reply), "ApproveRecommendedRequest changes");
   assert.equal(
     reply.querySelector('[aria-pressed="true"] .inbox-ask-pressed[data-tone="neutral"]')
       ?.parentElement?.textContent,
@@ -1265,6 +1266,28 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
     [...legacy.querySelectorAll("[data-inbox-step]")].map((step) => step.textContent),
     ["How long should invites last?"],
   );
+});
+
+test("a to-do's step draws its Markdown in its box's words: bold as strong words, not asterisks", async () => {
+  const pane = await mountThread(
+    threadItem([askingMessage({ type: INBOX_ASK.DO, steps: ["Open the **Domains** page"] })]),
+  );
+  const step = pane.querySelector("[data-inbox-step]") ?? assert.fail("the step");
+  assert.equal(step.textContent, "Open the Domains page");
+  assert.equal(step.querySelector("strong")?.textContent, "Domains");
+});
+
+test("Enter on a to-do step's link is the link's own, sending no reply", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({ type: INBOX_ASK.DO, steps: ["Read [the guide](https://example.com/guide)"] }),
+    ]),
+  );
+  act(() => pane.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
+  const link = pane.querySelector("[data-inbox-step] a") ?? assert.fail("the step's link");
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  act(() => link.dispatchEvent(enter));
+  assert.equal(enter.defaultPrevented, false, "the link opens on its Enter");
 });
 
 test("a to-do with every step ticked by hand stands marked done and Send sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
@@ -1528,7 +1551,7 @@ function answeredBox(pane: HTMLElement): HTMLElement {
 /** Each press of an answered box, by its words, whether it was the one given, and its glyph's tone where it wears one; every one read-only. */
 function answeredPresses(box: HTMLElement): (string | boolean | undefined)[][] {
   return [...box.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")].map((press) => {
-    assert.equal(press.disabled, true, "a press given takes no press");
+    assert.equal(press.getAttribute("aria-disabled"), "true", "a press given takes no press");
     assert.equal(press.dataset.readOnly, "true", "and stands at full strength, not faded");
     return [
       press.textContent ?? "",
@@ -1555,11 +1578,15 @@ test("an answered decide's card leaves the agent's message for the head of the r
   const box = answeredBox(pane);
   const rows = [...box.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
-    rows.map((row) => [wordsOf(row), row.getAttribute("aria-checked"), row.disabled]),
+    rows.map((row) => [
+      wordsOf(row),
+      row.getAttribute("aria-checked"),
+      row.getAttribute("aria-disabled"),
+    ]),
     [
-      ["1 dayAs today.", "false", true],
-      ["7 daysRecommendedWhat most teams use.", "true", true],
-      ["30 days", "false", true],
+      ["1 dayAs today.", "false", "true"],
+      ["7 daysRecommendedWhat most teams use.", "true", "true"],
+      ["30 days", "false", "true"],
     ],
     "each row as offered, unnumbered, the pick checked and none pressable",
   );
@@ -1582,10 +1609,14 @@ test("an answered decide's card leaves the agent's message for the head of the r
   );
 });
 
-test("an answered yes-or-no heads its reply with its two small buttons, the one pressed marked in its tone and neither pressable", async () => {
+test("an answered yes-or-no heads its reply with its two small buttons, the one pressed marked in its tone, the one recommended still saying so, and neither pressable", async () => {
   const pane = await mountThread(
     answeredThread(
-      { type: INBOX_ASK.DECIDE, options: [{ label: "Approve" }, { label: "Request changes" }] },
+      {
+        type: INBOX_ASK.DECIDE,
+        options: [{ label: "Approve" }, { label: "Request changes" }],
+        recommended: "Approve",
+      },
       { reply: INBOX_REPLY.CHOSE, choices: ["Request changes"] },
       "The banner overlaps the header.",
     ),
@@ -1593,7 +1624,7 @@ test("an answered yes-or-no heads its reply with its two small buttons, the one 
 
   assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(answeredPresses(answeredBox(pane)), [
-    ["Approve", false, undefined],
+    ["ApproveRecommended", false, undefined],
     ["Request changes", true, "neutral"],
   ]);
   assert.equal(answeredBox(pane).querySelector('[role="radio"]'), null, "no radio list stands");

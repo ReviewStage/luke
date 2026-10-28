@@ -10,6 +10,7 @@ import { Schema } from "effect";
 export const APP_SETTING_ID = {
   VOICE: "voice",
   VOICE_CAPTIONS: "voice_captions",
+  /** Offered by no build: the Video calls experiment's Avatar picker, removed with video calls. */
   VIDEO_AVATAR: "video_avatar",
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
@@ -19,6 +20,7 @@ export const APP_SETTING_ID = {
   OPEN_AT_LOGIN: "open_at_login",
   AGENT_NOTIFICATIONS: "agent_notifications",
   MAC_COMMANDS: "mac_commands",
+  /** Offered by no build: Run agents on this Mac, removed since the Local agents experiment is the opt-in and Runs on the choice. */
   LOCAL_AGENTS: "local_agents",
   /** Offered by no build: This Mac's sandbox switch, which never drew a row and runs every agent sandboxed now. */
   LOCAL_AGENTS_SANDBOX: "local_agents_sandbox",

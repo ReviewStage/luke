@@ -1112,6 +1112,46 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect(
+    "a Stop its runner never confirms ends that runner and settles the turn cancelled once its bound is up",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const turnId = yield* turnUnderWay(userId, agent);
+        const kept = keptAfterResponse();
+
+        const cancelled = yield* sessions
+          .cancel(opened.sessionId, turnId)
+          .pipe(Effect.provide(kept.layer));
+        // The Stop's stamp, as `stop.ts` writes it once the cancel is taken.
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.requestTurnCancel(
+          { userId, conversationId: agent.conversationId },
+          { turnId, at: yield* DateTime.nowAsDate },
+        );
+        const forcing = yield* Effect.forkChild(kept.run);
+        yield* turnsPass;
+        yield* TestClock.adjust(Duration.subtract(CODER.STOP_CONFIRM, Duration.seconds(1)));
+        yield* turnsPass;
+        const before = yield* newestTurn(agent);
+        yield* TestClock.adjust("1 second");
+        yield* across(Fiber.join(forcing), CODER.RUNNER_LEASE.POLL, 5);
+
+        assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
+        assert.equal(before.status, TURN_STATUS.QUEUED);
+        assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.CANCELLED);
+        assert.equal(api.commands.length, 1);
+        assert.notEqual(api.commands[0]?.exitCode, null, "the runner was ended");
+      }),
+  );
+
   it.effect("a Stop of a turn no longer under way writes nothing to the runner", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2371,7 +2411,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The call's words, how to talk the plan through, and the task as it stands, ahead of what was said.
         for (const told of [
           "## This turn is spoken",
-          `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+          `\`${CODER_TOOL.DELEGATE}\``,
           "## Talking the plan through",
           "The task as it stands as this turn opens",
         ]) {

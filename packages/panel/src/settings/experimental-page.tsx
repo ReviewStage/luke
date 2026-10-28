@@ -1,20 +1,9 @@
 import { SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  EXPERIMENT,
-  type Experiment,
-  type ExperimentChoices,
-  type ExperimentEntry,
-  experimentOn,
-  SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
-  SETTING_SECTION,
-  type SettingSection,
-  type SettingsRowsInput,
-} from "@luke/settings";
+import { type ExperimentChoices, type ExperimentEntry, experimentOn } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
 import {
   EmptyState,
-  Reveal,
   SettingsSection,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
@@ -25,9 +14,7 @@ import {
 import { FlaskConicalIcon } from "lucide-react";
 import { askActResult, useAct } from "../act.js";
 import { useOpenFeedback } from "../open-feedback.js";
-import { SchemaSettingRows } from "./schema-rows.js";
 import { SwitchRow } from "./switch-row.js";
-import type { SettingsWrites } from "./writes.js";
 
 /**
  * experimental-page.tsx -- Settings › Experimental: a switch for each feature the account can try before it is finished, or the empty state between them.
@@ -42,13 +29,8 @@ import type { SettingsWrites } from "./writes.js";
  * empty state the empty Inbox draws, so a link or a search result that lands
  * here never lands on nothing.
  *
- * Each experiment is a card of its own, its switch first. One with stored
- * settings of its own, such as the avatar Video calls shows, draws them in
- * its card beneath the switch, from the schema section named for it, while
- * the schema says they stand: so they appear as the switch is turned on, and
- * read as that experiment's rather than the page's, unrolling in as it turns
- * on and rolling up as it turns off (`Reveal`). The card wears no title,
- * since its switch already names the experiment.
+ * Each experiment is a card of its own, holding its switch. The card wears
+ * no title, since its switch already names the experiment.
  *
  * Each card is `@luke/ui`'s `SettingsSection` and the signed-out note its
  * caption `Text`; Send feedback stays a press among the row's detail words,
@@ -60,11 +42,6 @@ const NO_EXPERIMENTS_LINE = "No experiments.";
 
 /** Why a signed-out page holds no switches: experiments are an account's. */
 const SIGN_IN_NOTE = SIGNED_OUT_WORDS;
-
-/** The schema section an experiment's own settings stand in, for one that has any. */
-function sectionOf(experiment: Experiment): SettingSection | undefined {
-  return experiment === EXPERIMENT.VIDEO_CALLS ? SETTING_SECTION.VIDEO_CALLS : undefined;
-}
 
 /** One experiment's row: its switch, what turning it on brings, and the way to say how it went. */
 function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): React.JSX.Element {
@@ -95,17 +72,12 @@ export function ExperimentalPage({
   entries,
   experiments,
   signedIn,
-  view,
-  writes,
 }: {
   /** The experiments standing, newest first: `EXPERIMENTS`, as the registry lists them. */
   entries: readonly ExperimentEntry[];
   /** The account's choices, as the settings carry them. */
   experiments: ExperimentChoices;
   signedIn: boolean;
-  /** What the schema rows are judged from; absent until the settings arrive, when only the switches stand. */
-  view?: SettingsRowsInput | undefined;
-  writes: SettingsWrites;
 }): React.JSX.Element {
   if (!signedIn) {
     return (
@@ -119,27 +91,11 @@ export function ExperimentalPage({
   }
   return (
     <>
-      {entries.map((entry) => {
-        const section = sectionOf(entry.key);
-        const on = experimentOn(experiments, entry.key);
-        return (
-          <SettingsSection key={entry.key}>
-            <ExperimentRow entry={entry} on={on} />
-            {section === undefined ? null : (
-              <Reveal shown={on && view !== undefined}>
-                {view === undefined ? null : (
-                  <SchemaSettingRows
-                    page={SCHEMA_SETTINGS_PAGE.EXPERIMENTAL}
-                    section={section}
-                    view={view}
-                    writes={writes}
-                  />
-                )}
-              </Reveal>
-            )}
-          </SettingsSection>
-        );
-      })}
+      {entries.map((entry) => (
+        <SettingsSection key={entry.key}>
+          <ExperimentRow entry={entry} on={experimentOn(experiments, entry.key)} />
+        </SettingsSection>
+      ))}
     </>
   );
 }

@@ -42,8 +42,8 @@ import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { centreWithin, scrollerOf } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
-import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { AUTOMATION_ROW_META } from "./automation-list-frame.js";
@@ -148,7 +148,7 @@ export function RunRow({
     subject === undefined
       ? undefined
       : { label: subject.label, icon: <ExternalLinkIcon />, onSelect: () => openLink(subject.url) };
-  const items = [copyLink, openSubject].filter((item) => item !== undefined);
+  const groups = [copyLink, openSubject].flatMap((item) => (item === undefined ? [] : [[item]]));
   // A run a link named is brought into the middle of the box that scrolls it, once, as it is drawn.
   const row = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -197,7 +197,7 @@ export function RunRow({
             ? undefined
             : () => openLink(subject.url)
       }
-      menu={rowMenu(RUN_THING, [items])}
+      menu={rowMenu(RUN_THING, groups)}
     />
   );
 }

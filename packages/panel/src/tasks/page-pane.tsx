@@ -16,7 +16,6 @@ import {
   Fill,
   IconButton,
   PaneBar,
-  type PaneBarMenu,
   SpinnerRegion,
   Tooltip,
 } from "@luke/ui";
@@ -42,7 +41,6 @@ import {
   useFindSource,
 } from "../find-in-tab.js";
 import { usePhoneRoom } from "../stage-room.js";
-import { barMenuItems } from "./file-view.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
@@ -64,7 +62,9 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  *
  * The bar's code toggle shows the version's HTML in the frame's place, as a
  * File tab draws a file (`file-tab.tsx`): the same numbered, coloured lines
- * under the same settings, the same ⋯ to copy them by, and ⌘F over them.
+ * under the same settings, and ⌘F over them. The tab's one ⋯, the strip's,
+ * offers its Copy link, then Copy source while the source is shown, then
+ * Reload page, which the page hands up on every screen (`useTabActions`).
  * The frame's own read is the frame's alone, so the source is read again,
  * once a version, through main, which colours it as HTML
  * (`ACT_KIND.TASKS_PAGE_SOURCE`), and is held by the tab until Reload.
@@ -350,25 +350,18 @@ function PageSource({
   );
 }
 
-/** The bar's ⋯ over the source: its text copied. */
-function sourceMenu(
+/** Copy source, copying the version's source text, which stands dimmed until it is read. */
+function copySourceAction(
   read: SourceRead | undefined,
   copy: (text: string, words: string) => void,
-): PaneBarMenu {
+): MenuAction {
   return {
-    thing: "Source",
-    groups: [
-      [
-        {
-          label: "Copy source",
-          icon: <GLYPH.COPY />,
-          disabled: read?.kind !== SOURCE_READ.READY,
-          onSelect: () => {
-            if (read?.kind === SOURCE_READ.READY) copy(sourceText(read.lines), "Source copied");
-          },
-        },
-      ],
-    ],
+    label: "Copy source",
+    icon: <GLYPH.COPY />,
+    disabled: read?.kind !== SOURCE_READ.READY,
+    onSelect: () => {
+      if (read?.kind === SOURCE_READ.READY) copy(sourceText(read.lines), "Source copied");
+    },
   };
 }
 
@@ -434,8 +427,13 @@ export function PagePane({
     setReloads((was) => was + 1);
     sources.forget();
   };
-  const sourceMore = sourceMenu(source, copyWithToast);
-  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES, notes: false });
+  const copySource = copySourceAction(source, copyWithToast);
+  const reloadAction: MenuAction = {
+    label: "Reload page",
+    icon: <RotateCwIcon aria-hidden="true" />,
+    onSelect: reload,
+  };
+  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES });
   const phone = usePhoneRoom();
   const versionWords = `Version ${version} of ${page.version}`;
   useTabActions(
@@ -461,11 +459,12 @@ export function PagePane({
             : [],
           [
             { label: toggleLabel, icon: <CodeXmlIcon aria-hidden="true" />, onSelect: toggleView },
-            { label: "Reload page", icon: <RotateCwIcon aria-hidden="true" />, onSelect: reload },
+            reloadAction,
           ],
-          showingSource ? [settings.action, ...barMenuItems(sourceMore).flat()] : [],
+          showingSource ? [settings.action, copySource] : [],
         ].filter((group) => group.length > 0)
-      : undefined,
+      : // Note that the strip's one ⋯ for the tab offers these after its Copy link, so the bar draws no ⋯ of its own.
+        [showingSource ? [copySource] : [], [reloadAction]].filter((group) => group.length > 0),
   );
   return (
     <FindScope
@@ -522,11 +521,10 @@ export function PagePane({
                   />
                 </Tooltip>
                 {showingSource ? (
-                  <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: false }} />
+                  <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
                 ) : null}
               </>
             }
-            menu={showingSource ? sourceMore : undefined}
           />
         )}
         {showingSource ? (

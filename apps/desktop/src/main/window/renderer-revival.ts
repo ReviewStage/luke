@@ -1,10 +1,10 @@
 /**
  * renderer-revival.ts -- stands a window's renderer back up after it dies or fails to load, a bounded number of times before one load succeeds.
  *
- * The voice window and the panel share one bound, so a renderer that dies on
- * load cannot spin the process in either: each death waits a short pause
- * before the window is stood back up, and past the bound the window's owner
- * is told it gave up instead. A load that finishes clears the count.
+ * A renderer that dies on load cannot spin the process: each death waits a
+ * short pause before the window is stood back up, and past the bound the
+ * window's owner is told it gave up instead. A load that finishes clears the
+ * count.
  */
 
 import type { WebContents } from "electron";

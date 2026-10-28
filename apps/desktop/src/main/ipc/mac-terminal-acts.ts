@@ -15,8 +15,8 @@
  * output first, which is held in memory here up to a bound and nowhere
  * else, never logged or written to app state. A run that ended is
  * shown again as it ended, and started anew only by a Run press. A closed tab closes its terminal, and a
- * panel whose page is gone has every terminal it opened closed. Only a panel draws a terminal, so the procedures refuse the voice and
- * call windows.
+ * panel whose page is gone has every terminal it opened closed. Only a panel draws a terminal, so the procedures refuse any other
+ * window.
  */
 
 import path from "node:path";

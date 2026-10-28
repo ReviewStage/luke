@@ -1,13 +1,6 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  LINEAR_BOUNDS,
-  type LinearIssueSummary,
-  linearIssueIdentifierIn,
-} from "@luke/features/linear-wire";
-import { mentionMarkdownLink } from "@luke/features/link-grammar";
-import {
   type RepositoryPin,
-  TASK_BOUNDS,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -21,21 +14,9 @@ import {
   type StartCallFailure,
   TASK_CALL_FAILURE,
   TASKS_READ,
-  type TaskActivity,
   type TasksView,
-  VOICE_PHASE,
-  type VoicePhase,
 } from "@luke/features/tasks-view";
-import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
-import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
-import { LIVE_STATUS, type LiveStatus } from "@luke/live";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
-import {
-  microphoneAccessRow,
-  OPENAI_KEY_MISSING_NOTE,
-  VOICE_KEYLESS_NOTE,
-} from "@luke/voice/microphone-access";
-import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
+import type { Workspace } from "@luke/features/workspace-wire";
 import {
   type PendingValue,
   type PendingValues,
@@ -44,15 +25,14 @@ import {
   pendingWithout,
   type SameValue,
 } from "./pending-values.js";
-import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
- * tasks-model.ts -- what the panel's Tasks tab draws, decided from the document and the voice view alone.
+ * tasks-model.ts -- what the panel's Tasks tab draws, decided from the document alone.
  *
  * Every decision the tab makes is here and pure, so the components only lay
  * it out: which page shows, which state the document region is in, how the
- * repository chip starts on, what a refusal about a repository says, what
- * Copy shows, and the word beside the microphone.
+ * repository chip starts on, what a refusal about a repository says, and
+ * what Copy shows.
  */
 
 /** How many recent repositories the chip's menu offers. */
@@ -147,118 +127,6 @@ export function workspaceReaches(
 }
 
 /**
- * The name a plan started from a Linear issue takes: the issue's title,
- * its ends trimmed and cut to a plan name's bound, or the issue's key where
- * its title is blank.
- */
-export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
-  const title = issue.title.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
-  return title === "" ? issue.identifier : title;
-}
-
-/** One issue as the app writes a link to it: its key and title over its own address. */
-function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
-  return mentionMarkdownLink(`${issue.identifier} ${issue.title.trim()}`.trim(), issue.url);
-}
-
-/**
- * The prompt a coding agent New task starts is handed: a mention of each
- * issue picked, in the order picked, one to a line, by its key and title
- * over its own address, a Linear issue's as the app writes its link
- * (`[@ENG-1 Title](https://linear.app/…)`), a GitHub issue's over its page
- * (`[@acme/relay#7 Title](https://github.com/…)`), and one of the
- * workspace's own over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
- * then a blank line and the words, trimmed; the issues alone where no words
- * were written, and the words alone where no issue was picked.
- */
-export function agentPromptOf(
-  issues: readonly Pick<LinearIssueSummary, "identifier" | "title" | "url">[],
-  words: string,
-): string {
-  const said = words.trim();
-  const mentions = issues.map(issueMention).join("\n");
-  if (mentions === "") return said;
-  return said === "" ? mentions : `${mentions}\n\n${said}`;
-}
-
-/** How many of a workspace's Linear issues New task offers under its name field at once. */
-export const ISSUE_MATCH_LIMIT = 6;
-
-/** What New task asks a workspace's Linear for beyond the issues it listed: the one issue a key or link names, or a search. */
-export type LinearIssuesAsk = Omit<LinearIssuesRequest, "workspaceId">;
-
-/**
- * What New task asks Linear for, for the name as typed: the one issue a key
- * or a link to it names, which a search may not find, or a search over
- * every issue for any other words; nothing for a blank name, which the
- * issues listed as the card opened answer.
- */
-export function linearIssuesAskOf(typed: string): LinearIssuesAsk | undefined {
-  const words = typed.trim();
-  if (words === "") return undefined;
-  const identifier = linearIssueIdentifierIn(words);
-  return identifier === undefined
-    ? { query: words.slice(0, LINEAR_BOUNDS.MAX_QUERY_CHARS) }
-    : { identifier };
-}
-
-/** How near an issue Linear found for the words, though neither its title nor its key holds them all, stands: after every one that does. */
-const FOUND_ELSEWHERE = 3;
-
-/**
- * How closely an issue answers what was typed, nearest first: its key or
- * its number typed whole, or a link to it pasted, then every word typed at
- * the start of a word of its title, then every word anywhere in its title or
- * key, then words Linear's search found elsewhere in it.
- */
-function issueNearness(
-  issue: Pick<LinearIssueSummary, "identifier" | "title">,
-  tokens: readonly string[],
-  named: string | undefined,
-): number {
-  if (issue.identifier === named) return 0;
-  if (!matchesTokens([issue.title, issue.identifier], tokens)) return FOUND_ELSEWHERE;
-  const key = issue.identifier.toLowerCase();
-  const number = key.slice(key.lastIndexOf("-") + 1);
-  if (tokens.some((token) => token === key || token === number)) return 0;
-  const words = issue.title.toLowerCase().split(/[^\p{L}\p{N}]+/u);
-  if (tokens.every((token) => words.some((word) => word.startsWith(token)))) return 1;
-  return 2;
-}
-
-/**
- * The issues New task offers for the name typed so far, at most
- * `ISSUE_MATCH_LIMIT` of them: those listed whose title or key holds every
- * word typed, case aside, and every issue Linear answered for the words
- * (`found`: what its search matched, or the one issue a key or link names),
- * each once, nearest first and otherwise listed first; none for a blank
- * name, which leaves the field a plain name.
- */
-export function offeredIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
-  listed: readonly Issue[],
-  typed: string,
-  found: readonly Issue[] = [],
-): readonly Issue[] {
-  const tokens = searchTokens(typed);
-  if (tokens.length === 0) return [];
-  const named = linearIssueIdentifierIn(typed);
-  const foundKeys = new Set(found.map((issue) => issue.identifier));
-  const once = new Map<string, Issue>();
-  for (const issue of [...listed, ...found]) {
-    if (!once.has(issue.identifier)) once.set(issue.identifier, issue);
-  }
-  return [...once.values()]
-    .filter(
-      (issue) =>
-        foundKeys.has(issue.identifier) || matchesTokens([issue.title, issue.identifier], tokens),
-    )
-    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens, named) }))
-    .sort((first, second) => first.nearness - second.nearness || first.order - second.order)
-    .slice(0, ISSUE_MATCH_LIMIT)
-    .map(({ issue }) => issue);
-}
-
-/**
  * The other workspace a task's repository belongs to, where its own
  * workspace's GitHub does not reach it and one of the account's other
  * workspaces' does: the task stranded there by #2524, which moving it to
@@ -326,12 +194,8 @@ export function repositoryChangeFailureNote(failure: RepositoryCallFailure): str
   return REPOSITORY_CHANGE_FAILURE_NOTES[failure];
 }
 
-/** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
-const LINEAR_START_FAILED_NOTE =
-  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it.";
-
-/** What a start from one of the workspace's issues says when the issue is gone, or is another workspace's. */
-const ISSUE_START_FAILED_NOTE = "That issue is gone, or it belongs to another workspace.";
+/** What a start says when the workspace it named is gone, or no longer the account's. */
+const WORKSPACE_START_FAILED_NOTE = "That workspace is gone, or you're no longer a member of it.";
 
 /** What a start says when the device it named for the task's agents would not take them, where the page knows no more of why. */
 const DEVICE_START_FAILED_NOTE =
@@ -339,8 +203,7 @@ const DEVICE_START_FAILED_NOTE =
 
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
-  if (failure === TASK_CALL_FAILURE.LINEAR_UNAVAILABLE) return LINEAR_START_FAILED_NOTE;
-  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return ISSUE_START_FAILED_NOTE;
+  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return WORKSPACE_START_FAILED_NOTE;
   if (failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED) return DEVICE_START_FAILED_NOTE;
   return repositoryFailureNote(failure);
 }
@@ -985,194 +848,4 @@ export function sidebarTasks(tasks: readonly TaskSummary[]): SidebarTasks {
     .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
   const rest = tasks.filter((task) => task.pinnedAt === undefined);
   return { pinned, rest };
-}
-
-/** The status word beside the microphone for a call, or nothing where none stands. */
-const STATUS_WORD = {
-  [LIVE_STATUS.UNAVAILABLE]: undefined,
-  [LIVE_STATUS.IDLE]: undefined,
-  [LIVE_STATUS.CONNECTING]: "Connecting",
-  [LIVE_STATUS.MUTED]: "Muted",
-  [LIVE_STATUS.LISTENING]: "Listening",
-  [LIVE_STATUS.SPEAKING]: "Speaking",
-  [LIVE_STATUS.CLOSING]: "Closing",
-  [LIVE_STATUS.FAILED]: "Call failed",
-} as const satisfies Record<LiveStatus, string | undefined>;
-
-/** The voice's word for each of its waits the service names, in place of the call's own. */
-const VOICE_PHASE_WORD = {
-  [VOICE_PHASE.HANDING_OFF]: "Handing off",
-  [VOICE_PHASE.ABOUT_TO_ANSWER]: "About to answer",
-} as const satisfies Record<VoicePhase, string>;
-
-/** The statuses whose own word gives way to the voice's wait: Luke is not speaking, and the call is not opening or closing. */
-const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
-  LIVE_STATUS.MUTED,
-  LIVE_STATUS.LISTENING,
-]);
-
-/**
- * An agent's call as its tab's call bar draws it: the voice's word, and the
- * backend's line, which is the agent while it works, with its pending
- * command where it has one.
- */
-export interface CallStatus {
-  voiceWord: string;
-  backend: { agent: { action: string | undefined } | undefined };
-}
-
-/**
- * The call bar's two lines while a call into the agent stands, and nothing
- * otherwise. A voice error or notice is not repeated here, since
- * the panel's own strip already carries it under the shape, exactly as it
- * does for any call. The voice line is the call's status, except that a
- * listening or muted call reads the wait the service says the voice is in;
- * speaking, connecting, and closing keep their own word, since each says
- * more. The backend line is each backend part's own, so neither stands in
- * for the voice.
- */
-export function callStatus(
-  view: Pick<VoiceView, "voiceStatus" | "call">,
-  activity: TaskActivity | undefined,
-  agentId: string,
-): CallStatus | undefined {
-  if (view.call?.agentId !== agentId) return undefined;
-  return standingCallStatus(view, activity);
-}
-
-/**
- * The standing call's two lines whichever agent it speaks into, read off
- * that call's own activity: the call bar's words, which the call card draws
- * in the same bar while the call's agent is off screen.
- */
-export function standingCallStatus(
-  view: Pick<VoiceView, "voiceStatus">,
-  activity: TaskActivity | undefined,
-): CallStatus | undefined {
-  const word = STATUS_WORD[view.voiceStatus];
-  if (word === undefined) return undefined;
-  const phase = VOICE_PHASE_SHOWN.has(view.voiceStatus) ? activity?.voice : undefined;
-  const agent = activity?.planner;
-  return {
-    voiceWord: phase === undefined ? word : VOICE_PHASE_WORD[phase],
-    backend: {
-      agent: agent === undefined ? undefined : { action: agent.action },
-    },
-  };
-}
-
-/** What an agent's Call button does when pressed. */
-export const MICROPHONE_PRESS = {
-  /** Nothing: voice cannot run, or the agent is archived. */
-  NONE: "none",
-  /** Raises macOS's own microphone prompt. */
-  ASK_ACCESS: "ask-access",
-  /** Opens System Settings, the one place a denial can be changed. */
-  OPEN_SETTINGS: "open-settings",
-  /** Opens Settings › Agents, where the OpenAI API key a call runs on is saved. */
-  ADD_OPENAI_KEY: "add-openai-key",
-  /** Talks to the agent: opens a call into it and hears it, or toggles its call's microphone. */
-  TALK: "talk",
-} as const;
-
-type MicrophonePress = (typeof MICROPHONE_PRESS)[keyof typeof MICROPHONE_PRESS];
-
-export interface MicrophoneButton {
-  readonly press: MicrophonePress;
-  /** The button's name for a reader and its hover. */
-  readonly label: string;
-  /** Whether the agent's call stands with the developer not heard, which the button draws struck through. */
-  readonly muted: boolean;
-}
-
-/** What the Call button says on an archived agent, which no call speaks into. */
-const ARCHIVED_CALL_LABEL = "Unarchive the agent to call it";
-
-/** What the Call button says while the developer is heard on the call, and what a mute's own control says: one wording for the press wherever it stands. */
-export const MUTE_MICROPHONE_LABEL = "Mute microphone";
-
-/** What the Call button says while the developer is not heard on the call. */
-export const UNMUTE_MICROPHONE_LABEL = "Unmute microphone";
-
-/** What the Call button says where a press opens a call into its agent. */
-export const CALL_LABEL = "Call";
-
-/** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
-const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
-  LIVE_STATUS.MUTED,
-  LIVE_STATUS.LISTENING,
-  LIVE_STATUS.SPEAKING,
-]);
-
-/**
- * An agent's Call button, and its call bar's microphone, from what voice can
- * run on and which agent the call speaks into. The microphone permission
- * comes first, on the panel's own rules, because a press that cannot be
- * heard is no press. The press toggles: while the developer is heard on
- * this agent's own call it mutes, and otherwise it opens a call into the
- * agent or hears it again, hanging up another agent's first, which is also
- * how a call that failed or was lost is tried again. Muted is this agent's
- * own call standing with the developer not heard, so the button says so
- * rather than reading as a call not yet begun. An archived agent takes no
- * call, so its press is none until it is brought back; a call of its own
- * still standing, which only a race leaves, is still muted and heard again.
- * A call runs on the account's own OpenAI key, so an account known to have
- * none is sent to save one before anything else, even the microphone, which
- * is worth asking for only once a call can run; a call of the agent's own
- * still standing keeps its mute. A voice window given up on runs no call for
- * the rest of the run, so the button says that, and how to get voice back,
- * in place of a press that would reach nothing.
- */
-export function microphoneButton(input: {
-  voiceAvailable: boolean;
-  microphoneStatus: MicrophoneStatus;
-  /** The agent whose tab the button stands in. */
-  agentId: string;
-  /** Whether the agent is archived; only its own page's press names it, since an archived agent draws no Call. */
-  archived?: boolean;
-  listening: boolean;
-  /** What the standing call speaks into, as the voice window reports it. */
-  call: VoiceCallAbout | undefined;
-  voiceStatus: LiveStatus;
-  /** Whether the account is known to have no OpenAI API key; unknown is not missing. */
-  openAiKeyMissing?: boolean;
-  /** Whether the voice window was given up on for this run, so no call can run until Luke is reopened. */
-  voiceLost?: boolean;
-}): MicrophoneButton {
-  if (!input.voiceAvailable) {
-    return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE, muted: false };
-  }
-  if (input.voiceLost === true) {
-    const { words } = VOICE_FAILURE_WORDS[VOICE_FAILURE.VOICE_WINDOW_LOST];
-    return { press: MICROPHONE_PRESS.NONE, label: words, muted: false };
-  }
-  const ownCall = input.call?.agentId === input.agentId;
-  const ownCallStands = ownCall && (input.listening || CALL_STANDING.has(input.voiceStatus));
-  if (input.openAiKeyMissing === true && !ownCallStands) {
-    return { press: MICROPHONE_PRESS.ADD_OPENAI_KEY, label: OPENAI_KEY_MISSING_NOTE, muted: false };
-  }
-  const row = microphoneAccessRow({ voiceAvailable: true, status: input.microphoneStatus });
-  if (row.offerAccess) {
-    return { press: MICROPHONE_PRESS.ASK_ACCESS, label: "Allow the microphone", muted: false };
-  }
-  if (input.microphoneStatus === MICROPHONE_STATUS.DENIED) {
-    return {
-      press: MICROPHONE_PRESS.OPEN_SETTINGS,
-      label: "Allow the microphone in System Settings",
-      muted: false,
-    };
-  }
-  if (!row.ready) {
-    return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
-  }
-  if (ownCall && input.listening) {
-    return { press: MICROPHONE_PRESS.TALK, label: MUTE_MICROPHONE_LABEL, muted: false };
-  }
-  if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
-    return { press: MICROPHONE_PRESS.TALK, label: UNMUTE_MICROPHONE_LABEL, muted: true };
-  }
-  if (input.archived === true) {
-    return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };
-  }
-  return { press: MICROPHONE_PRESS.TALK, label: CALL_LABEL, muted: false };
 }

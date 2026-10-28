@@ -231,8 +231,8 @@ interface PlatformHost {
  * picture, a download, focus, the contact mail, feedback, and an agent's Terminal tab, its shells' ports posted to the
  * page. Every other platform kind is refused in its own words, since a page
  * cannot carry it yet: the updater, the microphone, the system's
- * notification settings, the Mac's own terminal, the voice, the call
- * window, and the avatar.
+ * notification settings, the Mac's own terminal, the voice, and the call
+ * window.
  */
 function platformProcedures(
   http: HttpClient.HttpClient,
@@ -302,7 +302,6 @@ function portDependencies(
     // through the in-process bridge's own listeners, so its push stream is
     // never opened and this table stays empty.
     pushes: new WindowPushes(),
-    taskIssues: { host },
     thisMacHost: { host },
     settings: {
       host,
@@ -316,13 +315,11 @@ function portDependencies(
         [SETTING_SIDE_EFFECT.USAGE_DATA]: nothing,
       },
     },
-    // No voice stands in a tab, so an agent's Call press reaches none.
     tasks: {
       host,
       colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
-      talkTo: nothing,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
@@ -346,7 +343,7 @@ const servedActPort = (
       const channel = new MessageChannel();
       createActPortHandler(dependencies, procedures).upgrade(channel.port2, {
         context: () => ({
-          actor: { sender: window, panel: true, voice: false, call: false },
+          actor: { sender: window, panel: true },
           trusted: true,
           "effect/context": services,
         }),
@@ -402,8 +399,6 @@ const composedWeb = (
         node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
-      // No voice window stands beside the panel.
-      operator.link({ sendToVoice: () => undefined });
       yield* linkNetworkWatch({
         state,
         isOnline: () => navigator.onLine,

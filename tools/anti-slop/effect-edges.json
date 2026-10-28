@@ -4,8 +4,6 @@
     "apps/desktop/src/main/services/compose-desktop.ts",
     "apps/desktop/src/utility/task-code.ts",
     "packages/panel/src/renderer-runtime.ts",
-    "apps/desktop/src/renderer/voice/live-call.ts",
-    "apps/desktop/src/renderer/voice/use-voice-session.ts",
     "apps/desktop/src/renderer/window-root.tsx",
     "apps/dev/agent.ts",
     "apps/dev/channels/eve.ts",
@@ -43,12 +41,10 @@
   ],
   "rawAsyncPrimitives": [
     "apps/desktop/src/main/ipc/register-desktop-ipc.ts",
-    "apps/desktop/src/main/native/media-duck.ts",
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/renderer-revival.ts",
     "packages/panel/src/feedback-images.ts",
     "packages/panel/src/luke-face-mood.ts",
-    "packages/panel/src/use-voice-notice.ts",
     "packages/ui/src/components/menu/touch-hold.ts",
     "packages/panel/src/admin/use-admin-read.ts",
     "packages/service/src/testing/voice-fakes.ts"
