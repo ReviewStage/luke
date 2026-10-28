@@ -134,7 +134,6 @@ import {
   listHeadControl,
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
-import { NEW_THREAD } from "./inbox-compose.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
 import {
   AddressedTo,
@@ -1243,9 +1242,6 @@ function ListHead({
                           onSelect: channel.unarchive.onUnarchive,
                         },
                       ]),
-                  ...(head.onCompose === undefined
-                    ? []
-                    : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
                   {
                     label: VIEW_OPTIONS,
                     icon: <SlidersHorizontalIcon />,
@@ -1284,11 +1280,6 @@ function ListHead({
         >
           {ARCHIVED_WORDS.UNARCHIVE}
         </Button>
-      )}
-      {head.onCompose === undefined ? null : (
-        <Tooltip label={NEW_THREAD}>
-          <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
-        </Tooltip>
       )}
       <ViewOptions
         shown={shown}
@@ -1412,12 +1403,10 @@ export interface InboxListHead {
   readonly readAll?: InboxReadAll | undefined;
   /** The list's search, under its head, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
-  /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
-  readonly onCompose?: (() => void) | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
    * phone's places: its one start control, New task, the title centred, and
-   * the ⋯ holding New thread and View options, the search standing under it; none elsewhere.
+   * the ⋯ holding View options, the search standing under it; none elsewhere.
    */
   readonly phone?: { readonly start: React.ReactNode } | undefined;
   /**
@@ -1438,7 +1427,7 @@ export interface InboxChannelHead {
   readonly name: string;
   /** Its purpose, or when it was archived; none where it has neither. */
   readonly detail: string | undefined;
-  /** An archived channel's Unarchive, standing in New thread's place, and whether it is under way; none on an open one. */
+  /** An archived channel's Unarchive, and whether it is under way; none on an open one. */
   readonly unarchive: { readonly busy: boolean; readonly onUnarchive: () => void } | undefined;
   /** What refused the head's action, under the head; none where nothing did. */
   readonly refusal: string | undefined;

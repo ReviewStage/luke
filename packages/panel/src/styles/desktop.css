@@ -605,39 +605,6 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* A New thread stands in the reading pane at the thread's own measure: To
-   and Subject each a row, its label in the caption's voice before it, and
-   each value a field of the one height and inset, the agent picked as a
-   field's pop-up and the subject typed in a field, so the two read as one
-   mail's head; the reply's box under them, growing into the room left. */
-.desktop-inbox.inbox-compose {
-  padding-block: var(--luke-space-16);
-  padding-inline: max(var(--content-inset), var(--reading-room));
-}
-
-.inbox-compose-row {
-  display: grid;
-  min-height: var(--luke-space-48);
-  align-items: center;
-  column-gap: var(--luke-block-gap);
-  grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
-}
-
-.inbox-compose-label {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* The box stands at the rows' own width, its edges on their hairlines: the
-   form's inset is already the room's, so the box takes none of its own. It
-   stands as far under Subject as Subject stands under To: the room a row
-   leaves around its control, which Subject's row already leaves under it. */
-.inbox-compose > .inbox-compose-box {
-  margin-top: calc((var(--luke-space-48) - var(--luke-control-height)) / 2);
-  padding-inline: 0;
-}
-
 /* A line written again where it stands (`edit-composer.tsx`) is already in the
    transcript's measure, so its box takes no inset of its own, and opens out of
    the bubble's corner as a card the window opens in place does. */
@@ -1733,10 +1700,4 @@ body,
   position: relative;
   z-index: 1;
   pointer-events: auto;
-}
-
-/* New thread's bar, should it stand its title on a row of its own, stands
-   it where the form's labels start, rather than where a crumb's words do. */
-.inbox-view-items:has(> .inbox-compose) {
-  --luke-toolbar-wrap-heading-at: var(--content-inset);
 }

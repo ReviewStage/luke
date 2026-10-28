@@ -24,8 +24,7 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, the Inbox's New thread its To, Subject, and words
- * per workspace (`inbox-compose.tsx`), a plan's comment its words per
+ * the task starts in, a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
  * (`plan-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
@@ -73,14 +72,13 @@ const MAX_KEPT = 200;
 /** How long the typing rests before what the window changed is written to storage. */
 const STORE_PAUSE = Duration.millis(300);
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, an Inbox thread not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
-  NEW_THREAD: "newThread",
   PLAN_COMMENT: "planComment",
   LINE_COMMENT: "lineComment",
   EDIT: "edit",
@@ -125,11 +123,6 @@ const draftPlaceSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.NEW_AUTOMATION),
     /** The workspace the automation's helper starts in; null before the workspaces are read. */
-    workspaceId: Schema.NullOr(Schema.String),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.NEW_THREAD),
-    /** The workspace whose Inbox the thread is written in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
@@ -204,14 +197,15 @@ const revisedPlaceSchema = Schema.Struct({
   thread: Schema.optionalKey(Schema.Literal(true)),
 });
 
-/** The places of the boxes Chat had, a channel's or a thread's and an ask's answer, as a build from before Chat was removed stored them. */
+/** The places of boxes since removed, as a build from before stored them: Chat's, a channel's or a thread's and an ask's answer, and the Inbox's New thread's. */
 const RETIRED_DRAFT_PLACE = {
   CHAT: "chat",
   CHAT_ASK: "chatAsk",
+  NEW_THREAD: "newThread",
 } as const;
 
 /**
- * A Chat box's place, as a build from before Chat was removed stored it. No
+ * A removed box's place, as a build from before it was removed stored it. No
  * box opens on one now, so such an entry is read past rather than refusing
  * every draft beside it, and goes once its account writes again.
  */
@@ -219,7 +213,7 @@ const retiredPlaceSchema = Schema.Struct({
   kind: Schema.Literals(Object.values(RETIRED_DRAFT_PLACE)),
 });
 
-/** A place as storage may hold it: one of today's, New task's on an issue (`issueDraftPlaceSchema`), one with its revision (`revisedPlaceSchema`), or a Chat box's (`retiredPlaceSchema`). */
+/** A place as storage may hold it: one of today's, New task's on an issue (`issueDraftPlaceSchema`), one with its revision (`revisedPlaceSchema`), or a removed box's (`retiredPlaceSchema`). */
 const storedPlaceSchema = Schema.Union([
   issueDraftPlaceSchema,
   revisedPlaceSchema,
@@ -229,9 +223,9 @@ const storedPlaceSchema = Schema.Union([
 
 type StoredPlace = typeof storedPlaceSchema.Type;
 
-/** Whether a stored place is a Chat box's, which no box opens now. */
+/** Whether a stored place is a removed box's, which no box opens now. */
 function retired(stored: StoredPlace): stored is typeof retiredPlaceSchema.Type {
-  return stored.kind === RETIRED_DRAFT_PLACE.CHAT || stored.kind === RETIRED_DRAFT_PLACE.CHAT_ASK;
+  return Object.values<string>(RETIRED_DRAFT_PLACE).includes(stored.kind);
 }
 
 /** The place a box opens today that a stored place names, with the revision a place from before held for its picks; none for a place no box opens now. */
@@ -255,8 +249,6 @@ const storedDrafts = Schema.fromJsonString(
       values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
       steps: Schema.optionalKey(Schema.Array(Schema.Number)),
       press: Schema.optionalKey(Schema.Literals(Object.values(INBOX_REPLY))),
-      title: Schema.optionalKey(Schema.String),
-      to: Schema.optionalKey(Schema.String),
       dropped: Schema.optionalKey(Schema.Array(Schema.String)),
       revision: Schema.optionalKey(Schema.Number),
     }),
@@ -268,7 +260,7 @@ type StoredDraft = (typeof storedDrafts.Type)[number];
 /** The account a window's drafts are written by: the one signed in, none before its state is read, as in a test. */
 type Owner = string | null;
 
-/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled, and a thread's steps ticked and answer pressed; a box that names its own title and whom it goes to, as New thread's Subject and To do, keeps those beside them. */
+/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled, and a thread's steps ticked and answer pressed. */
 export interface Draft {
   readonly text: string;
   readonly attachments: readonly CodingAgentAttachment[];
@@ -276,9 +268,6 @@ export interface Draft {
   readonly values: readonly InboxFormValue[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  readonly title?: string | undefined;
-  /** The agent the draft goes to, by its id; kept only beside something written, since a pick alone is no draft. */
-  readonly to?: string | undefined;
   /** The files of a line written again that its box took off, by their key in the line, so they stay off where the line's files are offered again (`edit-composer.tsx`). */
   readonly dropped?: readonly string[] | undefined;
   /** The revision of the inbox item its picks were made on, so they never land on an ask changed since (`draftAt`). */
@@ -295,9 +284,6 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
-
-/** New thread's place: the workspace whose Inbox it is written in. */
-export type NewThreadPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_THREAD }>;
 
 /** A plan comment's place: a thread being started, answered, or one of its comments edited. */
 export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
@@ -319,7 +305,6 @@ function stored(draft: Draft): boolean {
     draft.values.length > 0 ||
     (draft.steps ?? []).length > 0 ||
     draft.press !== undefined ||
-    (draft.title ?? "") !== "" ||
     (draft.dropped ?? []).length > 0
   );
 }
@@ -341,7 +326,7 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
     .flatMap(({ place: storedPlace, text, choices = [], values = [], ...rest }) => {
       const read = placeOf(storedPlace);
       if (read === undefined) return [];
-      const { steps, press, title, to, dropped } = rest;
+      const { steps, press, dropped } = rest;
       const revision = rest.revision ?? read.revision;
       return [
         {
@@ -352,8 +337,6 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
           values,
           ...(steps === undefined ? undefined : { steps }),
           ...(press === undefined ? undefined : { press }),
-          ...(title === undefined ? undefined : { title }),
-          ...(to === undefined ? undefined : { to }),
           ...(dropped === undefined ? undefined : { dropped }),
           ...(revision === undefined ? undefined : { revision }),
         },
@@ -376,8 +359,6 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
     Equal.equals(entry.values ?? [], kept.values) &&
     Equal.equals(entry.steps ?? [], kept.steps ?? []) &&
     entry.press === kept.press &&
-    (entry.title ?? "") === (kept.title ?? "") &&
-    entry.to === kept.to &&
     Equal.equals(entry.dropped ?? [], kept.dropped ?? []) &&
     entry.revision === kept.revision
   );
@@ -386,18 +367,7 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
 /** A draft as storage keeps it, a card's picks only where it holds some. */
 function entryOf(
   owner: Owner,
-  {
-    place,
-    text,
-    choices,
-    values,
-    steps = [],
-    press,
-    title = "",
-    to,
-    dropped = [],
-    revision,
-  }: KeptDraft,
+  { place, text, choices, values, steps = [], press, dropped = [], revision }: KeptDraft,
 ): StoredDraft {
   return {
     accountId: owner,
@@ -407,8 +377,6 @@ function entryOf(
     ...(values.length === 0 ? undefined : { values }),
     ...(steps.length === 0 ? undefined : { steps }),
     ...(press === undefined ? undefined : { press }),
-    ...(title === "" ? undefined : { title }),
-    ...(to === undefined ? undefined : { to }),
     ...(dropped.length === 0 ? undefined : { dropped }),
     ...(revision === undefined ? undefined : { revision }),
   };
