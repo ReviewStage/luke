@@ -373,6 +373,23 @@ export const automationFiringSchema = EffectSchema.Union([
 
 export type AutomationFiring = typeof automationFiringSchema.Type;
 
+export type AutomationFiringKind = (typeof AUTOMATION_FIRING)[keyof typeof AUTOMATION_FIRING];
+
+/**
+ * Whether a run of each firing hands its agent words someone other than the
+ * automation's owner chose, beside the owner's prompt: a GitHub event's
+ * title and branch, chosen by whoever caused it; a webhook's body, by its
+ * caller; and an integration's event, by whoever caused the error. A
+ * schedule's run and a "Run now" carry the owner's prompt alone.
+ */
+export const FIRING_HANDS_OUTSIDE_WORDS = {
+  [AUTOMATION_FIRING.SCHEDULE]: false,
+  [AUTOMATION_FIRING.GITHUB]: true,
+  [AUTOMATION_FIRING.WEBHOOK]: true,
+  [AUTOMATION_FIRING.INTEGRATION]: true,
+  [AUTOMATION_FIRING.MANUAL]: false,
+} as const satisfies Record<AutomationFiringKind, boolean>;
+
 /** Where a run stands. */
 export const AUTOMATION_RUN_STATUS = {
   /** Recorded and not yet acted on. */
