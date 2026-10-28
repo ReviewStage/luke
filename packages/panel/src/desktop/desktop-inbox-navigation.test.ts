@@ -1527,7 +1527,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
-  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
+  assert.deepEqual(sidebarChannels(page), ["general2 for you", "app", "launch", "Add channel"]);
   act(() =>
     (
       [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(

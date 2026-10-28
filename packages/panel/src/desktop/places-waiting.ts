@@ -1,5 +1,5 @@
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
-import { listedIn, NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model.js";
+import { listedIn, waitsOnReader } from "../tasks/inbox-model.js";
 import { type SettledWaiting, useSettledToDo, useSettledWaiting } from "../tasks/inbox-settling.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
@@ -61,10 +61,8 @@ function waitingThreads(
   return [...ofTasks, ...taskless];
 }
 
-/** What a count of what waits on the developer is said with, after its figure: "3 need you". */
-export function needsYouNoun(count: number): string {
-  return count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many;
-}
+/** What the Inbox's and a channel's count are said with, after the figure, as the list they count is named: "3 for you". */
+export const FOR_YOU_NOUN = "for you";
 
 /** How many questions wait on the developer on each task, by task, as main counts them; a task where none waits is left out, and every one while signed out. */
 export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number> {

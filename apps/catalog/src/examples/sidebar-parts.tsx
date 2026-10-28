@@ -5,6 +5,7 @@ import {
   GearIcon,
   IconButton,
   InboxIcon,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   SearchIcon,
@@ -57,7 +58,7 @@ function SidebarParts(): React.JSX.Element {
           <SidebarPlaces label="Places">
             <NavItem
               icon={<InboxIcon />}
-              count={{ value: 3, noun: "need you", tone: STATUS_TONE.ATTENTION }}
+              count={{ value: 3, noun: "for you", tone: NAV_COUNT_TONE.UNREAD }}
             >
               Inbox
             </NavItem>

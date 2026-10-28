@@ -5,7 +5,7 @@ import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useInboxNarrowed } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
+import { FOR_YOU_NOUN, useInboxWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -88,7 +88,7 @@ export function MobileBar({
       <BarItem
         icon={<InboxIcon />}
         current={inInbox && !narrowed}
-        count={{ value: waiting, noun: needsYouNoun(waiting) }}
+        count={{ value: waiting, noun: FOR_YOU_NOUN }}
         inert={drawerOpen}
         onPress={go(inboxView.onOpen)}
       >
