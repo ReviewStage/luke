@@ -1,7 +1,7 @@
 import { type CodingAgentInboxScope, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxAgentHolding, AppInboxTaskHolding } from "@luke/host/app-state";
 import { useMemo } from "react";
 import { useFedInboxes, useFeedFailed, useRetryFeed, useUnderWindowRoot } from "./held-inboxes.js";
 import {
@@ -30,19 +30,11 @@ import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.
 
 type ScopeKind = CodingAgentInboxScope["kind"];
 
-/** One holder of inbox items as the Inbox follows it: a task or an agent with no task, by its id, and when main says the latest of its items changed. */
+/** One holder of inbox items as the Inbox follows it: a task or an agent with no task, by its id, and when main says the latest of its items, settled ones included, changed. */
 export interface InboxHolding {
   readonly kind: ScopeKind;
   readonly id: string;
   readonly updatedAt: number;
-  /**
-   * The items main lists of it, each with when it changed, where main lists
-   * only some of them: an agent's open items, which leave out its settled
-   * ones. A push is current only once it holds each as new as main says it
-   * is, since a newer settled item says nothing of them. Absent where
-   * `updatedAt` is of every item, as a task's is.
-   */
-  readonly listed?: readonly Pick<InboxItem, "id" | "updatedAt">[];
 }
 
 /** One value for each kind of holder, a task's and an agent's apart, since each is keyed by its own id. */
@@ -75,22 +67,12 @@ export function taskHoldings(holdings: readonly AppInboxTaskHolding[]): readonly
   }));
 }
 
-/**
- * Each agent with no task main lists an item of, once, as a holding to
- * follow, changed when the latest of its items listed did, and those items
- * (`listed`). Note that main lists an agent's open items alone, so an agent
- * whose items are all settled is not among them.
- */
-export function agentHoldings(waiting: readonly AppInboxTasklessItem[]): readonly InboxHolding[] {
-  const listed = new Map<string, Pick<InboxItem, "id" | "updatedAt">[]>();
-  for (const { agentId, id, updatedAt } of waiting) {
-    listed.set(agentId, [...(listed.get(agentId) ?? []), { id, updatedAt }]);
-  }
-  return [...listed].map(([id, items]) => ({
+/** Each agent with no task main lists as holding items, an agent whose items are all settled among them, as a holding to follow, as a task's is. */
+export function agentHoldings(holdings: readonly AppInboxAgentHolding[]): readonly InboxHolding[] {
+  return holdings.map(({ agentId, updatedAt }) => ({
     kind: INBOX_SCOPE_KIND.AGENT,
-    id,
-    updatedAt: Math.max(...items.map((item) => item.updatedAt)),
-    listed: items,
+    id: agentId,
+    updatedAt,
   }));
 }
 
@@ -156,14 +138,6 @@ function idsOf(holdings: readonly InboxHolding[], kind: ScopeKind): readonly str
   return holdings.flatMap((holding) => (holding.kind === kind ? [holding.id] : []));
 }
 
-/** Whether a push holds a holder as main says it now stands: each item it lists as new as main says, or, where it lists none, something as new as its latest. */
-function holdsAsMainSays(held: readonly InboxItem[], holding: InboxHolding): boolean {
-  if (holding.listed === undefined) return newest(held) >= holding.updatedAt;
-  return holding.listed.every((listed) =>
-    held.some((each) => each.id === listed.id && each.updatedAt >= listed.updatedAt),
-  );
-}
-
 /**
  * The holders of one kind pushed as main says they now stand, or pushed and
  * handed here no more. Note that a holder main says changed later than its
@@ -181,7 +155,9 @@ function currentOf(
     [...pushed].flatMap(([id, held]) => {
       const holding = holdings.find((each) => each.kind === kind && each.id === id);
       const absentFromFeed = fed !== undefined && !fed.has(id);
-      return holding === undefined || absentFromFeed || holdsAsMainSays(held, holding) ? [id] : [];
+      return holding === undefined || absentFromFeed || newest(held) >= holding.updatedAt
+        ? [id]
+        : [];
     }),
   );
 }

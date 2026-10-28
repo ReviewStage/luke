@@ -36,6 +36,7 @@ import { inboxMessage } from "@luke/database/schemas/inbox-message";
 import { task } from "@luke/database/schemas/task";
 import { INBOX_ATTACHMENT_KIND } from "@luke/database/storage-vocabulary";
 import type {
+  AccountInboxAgent,
   AccountInboxAutomation,
   AccountInboxEntry,
   AccountInboxTask,
@@ -1130,16 +1131,17 @@ function toDoCount(userId: string): SQL<number> {
 }
 
 /**
- * The settled items still unread that wait on the reader (`WAITS_ON`) on
- * the tasks of their workspaces, among those they may read
- * (`itemVisibleTo`): what To do lists beside the open items, so their read
- * marks and new messages on those items move the account's cursor as an
- * open item's change does. Note that who it waits on is spelled out
- * against the joined task rather than read through `WAITS_ON`, because the
- * starter's side then reaches the items by the reader's own index
- * (`inbox_item_user_status_updated`) and the assignee's by the task's,
- * where a `coalesce` would read every settled item of their workspaces on
- * each look; an item addressed to someone waits on them alone.
+ * The settled items still unread that wait on the reader (`WAITS_ON`) in
+ * their workspaces, a task's or an agent's with no task, among those they
+ * may read (`itemVisibleTo`): what To do lists beside the open items, so
+ * their read marks and new messages on those items move the account's
+ * cursor as an open item's change does. Note that who it waits on is
+ * spelled out against the task joined on the left rather than read through
+ * `WAITS_ON`, because the starter's side then reaches the items by the
+ * reader's own index (`inbox_item_user_status_updated`) and the assignee's
+ * by the task's, where a `coalesce` would read every settled item of their
+ * workspaces on each look; an item addressed to someone waits on them
+ * alone, and one with no task, which joins no assignee, on its starter.
  */
 function accountUnreadSettled(userId: string) {
   const derived = or(
@@ -1147,7 +1149,6 @@ function accountUnreadSettled(userId: string) {
     eq(task.assigneeId, userId),
   );
   return and(
-    isNotNull(inboxItem.taskId),
     itemVisibleTo(userId),
     or(eq(inboxItem.addresseeId, userId), and(isNull(inboxItem.addresseeId), derived)),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
@@ -1359,19 +1360,84 @@ const findAutomationsWithItems = SqlSchema.findAll({
     ),
 });
 
+/** How an agent with no task holding items is named, as an open item of it names it (`findTasklessWaitingItems`), its automation only to a reader who may read it. */
+const AGENT_HOLDING_NAMING = {
+  agentKind: codingAgent.kind,
+  // The name the agent goes by: Luke for an operator, else its title.
+  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+  agentModel: codingAgent.model,
+  automationId: automation.id,
+  automationName: automation.name,
+  repository: codingAgent.repository,
+  workspaceId: codingAgent.organizationId,
+};
+
+/** One agent with no task holding items as the account's read lists it, as a task is listed, and as an open item of it names it. */
+const AgentItemsRowSchema = Schema.Struct({
+  agentId: Schema.String,
+  items: Schema.Number,
+  toDo: Schema.Number,
+  updatedAt: InstantColumnSchema,
+  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentTitle: Schema.NullOr(Schema.String),
+  agentModel: Schema.String,
+  automationId: Schema.NullOr(Schema.String),
+  automationName: Schema.NullOr(Schema.String),
+  repository: Schema.NullOr(Schema.String),
+  workspaceId: Schema.NullOr(Schema.String),
+});
+
+/**
+ * Every agent with no task of the account's workspaces that holds an item
+ * the reader may read (`itemVisibleTo`), open or settled, whichever
+ * member's agent posted it, with how many of them are questions waiting on
+ * the reader (`askingReader`), the agent whose item changed latest first,
+ * as `findTasksWithItems` lists the tasks; those of agents with no
+ * repository only where `repositoryless` asks (`repositoryCarried`). Note
+ * that it groups by the agent's and the automation's own keys, which every
+ * column it names of either depends on.
+ */
+const findAgentsWithItems = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, repositoryless: Schema.Boolean }),
+  Result: AgentItemsRowSchema,
+  execute: ({ userId, repositoryless }) =>
+    Database.use((db) =>
+      db
+        .select({
+          agentId: codingAgent.id,
+          items: count(),
+          toDo: toDoCount(userId),
+          updatedAt: LATEST_ITEM,
+          ...AGENT_HOLDING_NAMING,
+        })
+        .from(inboxItem)
+        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .leftJoin(
+          automation,
+          and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+        )
+        .where(
+          and(isNull(inboxItem.taskId), itemVisibleTo(userId), repositoryCarried(repositoryless)),
+        )
+        .groupBy(codingAgent.id, automation.id)
+        .orderBy(desc(LATEST_ITEM), desc(codingAgent.id)),
+    ),
+});
+
 /** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape. */
 export interface AccountInboxLiveStatements {
   readonly items: LiveStatement;
   readonly planless: LiveStatement;
   readonly plans: LiveStatement;
   readonly automations: LiveStatement;
+  readonly agents: LiveStatement;
 }
 
 /**
  * What waits on the developer across the account, written for Neon Realtime:
  * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
  * `accountTasklessItems`, `accountInboxTasks`, and
- * `accountInboxAutomations`, each item unread or not for the account as they say it, each
+ * `accountInboxAutomations`, and `accountInboxAgents`, each item unread or not for the account as they say it, each
  * column under the key `account-inbox-wire.ts` reads it by and each instant
  * in epoch milliseconds, so a row decodes as the held read's entry does. The order is the reader's to keep, since Realtime keeps none.
  * None where a statement names a value Realtime cannot carry.
@@ -1464,11 +1530,27 @@ export function accountInboxLiveStatements(
     )
     .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
     .groupBy(automation.id);
+  const agents = queryBuilder
+    .select({
+      ...liveSelection({ agentId: codingAgent.id, ...AGENT_HOLDING_NAMING }),
+      items: LIVE_COUNT.as("items"),
+      toDo: toDoCount(userId).as("toDo"),
+      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
+    })
+    .from(inboxItem)
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .leftJoin(
+      automation,
+      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+    )
+    .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId), repositoryCarried(repositoryless)))
+    .groupBy(codingAgent.id, automation.id);
   return Option.all({
     items: liveStatementOf(items),
     planless: liveStatementOf(planless),
     plans: liveStatementOf(plans),
     automations: liveStatementOf(automations),
+    agents: liveStatementOf(agents),
   });
 }
 
@@ -4123,6 +4205,20 @@ export function accountInboxAutomations(
 ): InboxStoreEffect<readonly AccountInboxAutomation[]> {
   return Effect.map(findAutomationsWithItems({ userId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
+  );
+}
+
+/** Every agent with no task holding an item, waiting or settled, listed as `accountInboxTasks` lists the tasks, and named as `accountTasklessItems` names an open item's agent. */
+export function accountInboxAgents(
+  userId: string,
+  repositoryless: boolean,
+): InboxStoreEffect<readonly AccountInboxAgent[]> {
+  return Effect.map(findAgentsWithItems({ userId, repositoryless }), (rows) =>
+    rows.map(({ workspaceId, ...row }) => ({
+      ...row,
+      ...(workspaceId === null ? undefined : { workspaceId }),
+      updatedAt: row.updatedAt.getTime(),
+    })),
   );
 }
 

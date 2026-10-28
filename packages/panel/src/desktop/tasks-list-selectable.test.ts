@@ -102,6 +102,7 @@ async function mount() {
       inboxWaiting: [],
       inboxTasks: [],
       inboxTaskless: [],
+      inboxAgents: [],
       failedRuns: [],
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,

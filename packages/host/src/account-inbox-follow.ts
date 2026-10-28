@@ -39,6 +39,14 @@ import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-fo
 /** How long a follow no reader holds is kept, so a reader started again soon finds it standing. */
 const IDLE = Duration.seconds(30);
 
+/**
+ * The parts every service answers, which the follow is typed by. Note that a
+ * part only a newer service answers, its agents holding items, is followed
+ * too where the first answer carries it, since the follow takes its parts
+ * from that answer.
+ */
+type AnsweredPart = Exclude<keyof AccountInboxLiveAnswer["queries"], "agents">;
+
 /** A read the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
 
@@ -202,7 +210,7 @@ export function accountInboxes(
           drawn,
           accountWide: true,
         });
-        const follow = followTakingRows(
+        const follow = followTakingRows<AnsweredPart, AccountInboxLiveRows>(
           {
             poll: (after) => dependencies.seal(userId, true, after),
             onTxWait: (handed) => {

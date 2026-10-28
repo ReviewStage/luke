@@ -35,7 +35,12 @@ import {
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import type {
+  AppInboxAgentHolding,
+  AppInboxTask,
+  AppInboxTaskHolding,
+  AppInboxTasklessItem,
+} from "@luke/host/app-state";
 import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
@@ -647,8 +652,10 @@ export interface TasksControl {
   inboxShown: string | null;
   /** Every task holding an inbox item, waiting or settled, the task whose item changed latest first: what the window's Inbox lists. */
   inboxTasks: readonly AppInboxTaskHolding[];
-  /** What waits on the developer from agents with no task, as main's read last answered: what the window's Inbox lists beside the tasks' and counts with them. */
+  /** What waits on the developer from agents with no task, as main's read last answered: what the window's Inbox counts beside the tasks'. */
   inboxTaskless: readonly AppInboxTasklessItem[];
+  /** Every agent with no task holding an inbox item, waiting or settled, the agent whose item changed latest first: what the window's Inbox lists beside the tasks. */
+  inboxAgents: readonly AppInboxAgentHolding[];
   /** The newest run of each of the account's own automations that failed to start lately, every workspace's, which marks the sidebar's Automations of the run's workspace until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the task's place, the task chosen in it, and its presses. */
@@ -1055,6 +1062,8 @@ export function useTasksTab(input: {
   inboxTasks: readonly AppInboxTaskHolding[];
   /** What main says waits on the developer from agents with no task. */
   inboxTaskless: readonly AppInboxTasklessItem[];
+  /** Every agent with no task main says holds an inbox item, waiting or settled. */
+  inboxAgents: readonly AppInboxAgentHolding[];
   /** The newest run of each of the account's own automations main says failed to start lately. */
   failedRuns: readonly AccountFailedRun[];
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
@@ -3103,6 +3112,7 @@ export function useTasksTab(input: {
     inboxShown: shownInbox,
     inboxTasks: input.inboxTasks,
     inboxTaskless: input.inboxTaskless,
+    inboxAgents: input.inboxAgents,
     failedRuns: input.failedRuns,
     // The window's Inbox stands over the task's place, so a version history there gives way.
     inboxView: {

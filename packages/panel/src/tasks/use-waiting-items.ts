@@ -38,7 +38,7 @@ export interface WaitingItems {
  * them: each plan main says holds an item and the listed workspace's list
  * holds, read whole, a teammate's agent's items among them, as every
  * member's Inbox lists them, and each agent with no plan main says
- * something waits on.
+ * holds an item.
  */
 export function useWaitingItems(tasks: TasksControl): WaitingItems {
   const { inboxTasks, tasks: listed } = tasks.listed;
@@ -50,14 +50,14 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   );
   const read = useHolderInboxItems(
     useMemo(
-      () => [...taskHoldings(holdings), ...agentHoldings(tasks.inboxTaskless)],
-      [holdings, tasks.inboxTaskless],
+      () => [...taskHoldings(holdings), ...agentHoldings(tasks.inboxAgents)],
+      [holdings, tasks.inboxAgents],
     ),
   );
   const entries = inboxGroups(read.items, {
     tasks: holdings,
     listed,
-    agents: tasks.inboxTaskless,
+    agents: tasks.inboxAgents,
     workspaceId: tasks.workspace?.id,
   });
   // Note that every open item is kept as one that waits, whoever started its agent.

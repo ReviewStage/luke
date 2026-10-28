@@ -288,6 +288,7 @@ const liveAnswerOf = (userId: string, readAt: number) =>
         planless: yield* runLive(parts.planless, accountInboxLiveRowSchemas.planless),
         plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
         automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
+        agents: yield* runLive(parts.agents, accountInboxLiveRowSchemas.agents),
         failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
       },
       readAt,
@@ -647,7 +648,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "the teammate's read names who started the agent, whom it asks",
         );
         assert.ok(!theirs.items.some((entry) => entry.id === posted.id));
-        assert.deepEqual([others.planless, others.automations], [[], []]);
+        assert.deepEqual([others.planless, others.automations, others.agents], [[], [], []]);
 
         // Made personal, the automation's runs stay the workspace's, and which automation it is its creator's.
         yield* Database.use((db) =>
@@ -674,6 +675,25 @@ it.layer(getTestDB())("the inbox store", (it) => {
           creatorRead.planless?.map((entry) => [entry.automationId, entry.automationName]),
           [[automationId, "Flaky-test sweep"]],
         );
+
+        // Settled, the item waits no longer, and its agent is still listed as holding it, named as its open item was, to every member who may read it.
+        assert.ok(Option.isSome(yield* answerDone(agent.userId, posted)));
+        const settled = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        assert.deepEqual(settled.planless, []);
+        assert.deepEqual(
+          settled.agents?.map((held) => [
+            held.agentId,
+            held.items,
+            held.toDo,
+            held.automationName,
+            held.repository,
+            held.workspaceId,
+          ]),
+          [[agent.agentId, 1, 0, null, "acme/relay", workspaceId]],
+        );
+        assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).agents, []);
+        const live = yield* liveAnswerOf(teammate, settled.readAt);
+        assert.deepEqual({ ...live, cursor: settled.cursor }, settled);
       }),
   );
 
@@ -2010,6 +2030,49 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
       const [item] = yield* memberAgentInboxItems(teammate, agent.agentId);
       assert.equal(item?.waitsOn?.userId, agent.userId);
     }),
+  );
+
+  it.effect(
+    "a settled item still unread of an agent with no task, the member's operator's among them, is counted in the account's read of its starter alone, never a teammate's",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openTasklessAgent;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+        const operatorAgent = { userId: owner, taskId: null, agentId: operator.id };
+        // Each answered by the owner, then written on again by its agent: settled, and unread for the owner.
+        const settledOf = (of: InboxAgent) =>
+          Effect.gen(function* () {
+            const item = yield* postedItem(of, "settled");
+            assert.ok(Option.isSome(yield* answerDone(owner, item)));
+            yield* TestClock.adjust(Duration.seconds(1));
+            assert.ok(Option.isSome(yield* replyInboxItem(of, "settled", "One more thing.")));
+            return item.id;
+          });
+        const coder = yield* settledOf(agent);
+        const operated = yield* settledOf(operatorAgent);
+        const stampIds = (readerId: string) =>
+          Effect.map(accountWaitingStamps(readerId), (stamps) => stamps.map((stamp) => stamp.id));
+
+        assert.deepEqual(
+          [(yield* stampIds(owner)).toSorted(), yield* stampIds(teammate)],
+          [[coder, operated].toSorted(), []],
+        );
+      }),
   );
 });
 
