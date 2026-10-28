@@ -1,8 +1,12 @@
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { useMemo } from "react";
-import { type InboxListed, openItems, taskHolder, tasklessGroups } from "./inbox-model.js";
-import { useSettledReads } from "./inbox-settling.js";
-import { useInboxItems } from "./use-inbox-items.js";
-import { useTasklessInboxItems } from "./use-taskless-inbox-items.js";
+import { type InboxListed, openItems } from "./inbox-model.js";
+import {
+  agentHoldings,
+  inboxGroups,
+  taskHoldings,
+  useHolderInboxItems,
+} from "./use-holder-inbox-items.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -44,35 +48,27 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     () => inboxTasks.filter((holding) => listed.some((task) => task.id === holding.taskId)),
     [inboxTasks, listed],
   );
-  const read = useInboxItems({ holdings });
-  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
-  // Note that the window's own answers and messages stand over the agents' pushes until they hold them, so a stale push never brings an answered item back.
-  const tasklessItems = useSettledReads(tasklessReads.items);
-  const taskless = { ...tasklessReads, items: tasklessItems };
-  const entries = [
-    ...holdings.flatMap((holding) => {
-      const task = listed.find((each) => each.id === holding.taskId);
-      return task === undefined
-        ? []
-        : [{ holder: taskHolder(task), items: read.items.get(holding.taskId) ?? [] }];
-    }),
-    ...tasklessGroups(tasks.inboxTaskless, taskless.items, tasks.workspace?.id),
-  ];
+  const read = useHolderInboxItems(
+    useMemo(
+      () => [...taskHoldings(holdings), ...agentHoldings(tasks.inboxTaskless)],
+      [holdings, tasks.inboxTaskless],
+    ),
+  );
+  const entries = inboxGroups(read.items, {
+    tasks: holdings,
+    listed,
+    agents: tasks.inboxTaskless,
+    workspaceId: tasks.workspace?.id,
+  });
   // Note that every open item is kept as one that waits, whoever started its agent.
   const items = openItems(entries);
-  // Note that a listed plan not pushed yet is still being read.
-  const reading =
-    read.pending || tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));
-  const onRetry = () => {
-    read.onRetry();
-    taskless.onRetry();
-  };
   return {
     items,
-    readTasks: read.current,
-    readAgents: taskless.current,
-    reading,
-    failed: read.failed || taskless.failed,
-    onRetry,
+    readTasks: read.current[INBOX_SCOPE_KIND.PLAN],
+    readAgents: read.current[INBOX_SCOPE_KIND.AGENT],
+    // Note that a listed holder not pushed as main says it stands is still being read.
+    reading: read.pending,
+    failed: read.failed,
+    onRetry: read.onRetry,
   };
 }

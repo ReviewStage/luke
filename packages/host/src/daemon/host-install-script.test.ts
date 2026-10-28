@@ -1,5 +1,5 @@
 /**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release and sandbox image it carries are the ones the daemon pins, a box without a usable `/dev/kvm` is refused with how to check it before anything is changed, and a download whose SHA-256 is not the one carried is refused.
+ * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release and sandbox image it carries are the ones the daemon pins, a computer it does not run on (a Mac, an Intel Mac, WSL, another kernel) is refused by name, a box without a usable `/dev/kvm` is refused with how to check it before anything is changed, and a download whose SHA-256 is not the one carried is refused.
  *
  * The script is run by `sh` in a temporary folder; `LUKE_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
@@ -40,6 +40,21 @@ const sh = (args: readonly string[], env: Readonly<Record<string, string>>) =>
     encoding: "utf8",
   });
 
+/**
+ * A folder holding a `uname` that answers as an x64 Linux box, put first on
+ * the script's PATH so its own refusal of other computers lets a test that
+ * means to reach the KVM check through on a developer's Mac too.
+ */
+const linuxUname = () => {
+  const bin = folder();
+  writeFileSync(
+    join(bin, "uname"),
+    '#!/bin/sh\ncase "$1" in\n  -m) echo x86_64 ;;\n  *) echo Linux ;;\nesac\n',
+    { mode: 0o755 },
+  );
+  return bin;
+};
+
 /** What the script carries after it is sourced as a library, by name. */
 const carried = (name: string) => {
   const answer = sh(["-c", `. "${SCRIPT}"; printf '%s' "$${name}"`], {
@@ -74,6 +89,7 @@ describe("the host's install script", () => {
       const root = folder();
       const answer = sh([SCRIPT, "--token", "lkh_fixture"], {
         LUKE_HOST_KVM_DEVICE: make(root),
+        PATH: `${linuxUname()}:${process.env.PATH}`,
       });
       expect(answer.status).toBe(1);
       expect(answer.stdout).toBe("");
@@ -85,6 +101,69 @@ describe("the host's install script", () => {
       expect(answer.stderr).toContain("nothing was installed");
     });
   }
+
+  for (const [computer, kernel, machine, procVersion, words] of [
+    [
+      "an Apple silicon Mac",
+      "Darwin",
+      "arm64",
+      "",
+      "On a Mac, install the Luke app and sign in instead.",
+    ],
+    ["an Intel Mac", "Darwin", "x86_64", "", "Luke does not run agents on Intel Macs."],
+    [
+      "WSL",
+      "Linux",
+      "x86_64",
+      "Linux version 6.6.87.2-microsoft-standard-WSL2",
+      "Luke host does not run on Windows, including WSL.",
+    ],
+    ["another kernel", "FreeBSD", "amd64", "", "Luke host runs on Linux, not FreeBSD."],
+  ] as const) {
+    it(`refuses ${computer} by name`, () => {
+      const answer = sh(
+        ["-c", `. "${SCRIPT}"; require_supported_os "${kernel}" "${machine}" "${procVersion}"`],
+        { LUKE_HOST_INSTALL_LIBRARY: "1" },
+      );
+      expect(answer.status).toBe(1);
+      expect(answer.stderr).toContain(words);
+    });
+  }
+
+  for (const [shell, arm64, expected] of [
+    ["a native shell on Apple silicon", "1", "arm64"],
+    ["a Rosetta shell on Apple silicon", "1", "arm64"],
+    ["an Intel Mac", "0", "x86_64"],
+  ] as const) {
+    it(`reads ${shell} as ${expected}`, () => {
+      const bin = folder();
+      const machine = shell.startsWith("a native") ? "arm64" : "x86_64";
+      writeFileSync(
+        join(bin, "uname"),
+        `#!/bin/sh\ncase "$1" in\n  -m) echo ${machine} ;;\n  *) echo Darwin ;;\nesac\n`,
+        { mode: 0o755 },
+      );
+      writeFileSync(join(bin, "sysctl"), `#!/bin/sh\necho ${arm64}\n`, { mode: 0o755 });
+      const answer = sh(["-c", `. "${SCRIPT}"; hardware_machine`], {
+        LUKE_HOST_INSTALL_LIBRARY: "1",
+        PATH: `${bin}:${process.env.PATH}`,
+      });
+      expect(answer.status).toBe(0);
+      expect(answer.stdout.trim()).toBe(expected);
+    });
+  }
+
+  it("lets a Linux box that is not WSL through", () => {
+    const answer = sh(
+      [
+        "-c",
+        `. "${SCRIPT}"; require_supported_os Linux aarch64 "Linux version 6.8.0-45-generic (buildd@ubuntu)"`,
+      ],
+      { LUKE_HOST_INSTALL_LIBRARY: "1" },
+    );
+    expect(answer.status).toBe(0);
+    expect(answer.stderr).toBe("");
+  });
 
   it("refuses a download whose SHA-256 is not the one carried, and accepts the one that is", () => {
     const download = join(folder(), "download.tar.gz");

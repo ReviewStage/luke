@@ -2,6 +2,7 @@ import type { HostedCodingAgentClient } from "@luke/features";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountItems,
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -78,7 +79,6 @@ import {
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
   type ChaptersModelAnswerView,
@@ -97,10 +97,12 @@ import {
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
+import { type AccountItems, accountItems, followSignedInItems } from "./account-items-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type InboxTxWaits, inboxTxWaits } from "./inbox-tx-waits.js";
+import type { RowWrite } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -108,6 +110,7 @@ import {
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
+import type { AgentRow } from "./task-list-collections.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -131,7 +134,9 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
  * go. What waits across the account is followed the same way, on the
  * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
- * (`agent-notices.ts`). Behind a
+ * (`agent-notices.ts`). Every item the account reaches is followed whole
+ * on one read of its own (`account-items-follow.ts`), heard by a window as
+ * `ACCOUNT_ITEMS_CHANGED` events. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -201,6 +206,7 @@ export type CodingAgentClient = Pick<
   | "taskInboxLive"
   | "agentInboxLive"
   | "accountInboxLive"
+  | "accountInboxItemsLive"
   | "inboxAttachment"
   | "agentPicture"
 >;
@@ -212,31 +218,23 @@ export interface CodingAgentsDependencies {
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
   /**
-   * Hands a line typed to an agent to the call standing on that agent, where
-   * one does (`LiveSessionHolder.typeLine`); answers whether the call took
-   * it. None where this Mac holds no calls, and every line steers.
-   */
-  typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
-  /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every agent's row (`TasksComposer.listed`), so a
    * Start, a rename, an archive, or a pin is confirmed once the list
    * carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
+  /**
+   * A change to an agent's row of the task list, drawn at once and kept or
+   * taken back as the service answers it (`TasksComposer.writeAgent`); none
+   * writes alone, drawing nothing.
+   */
+  writeAgent?: RowWrite<AgentRow>;
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** Every transcript's, every plan's and agent's inbox's, and the account inbox's subscription let go, as a sign-out lets them go. */
+  /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
-  /**
-   * The task an agent a call may go into is on, as the service reads it now,
-   * which a call into the agent is checked against: null for an agent on no
-   * task, and none for one no call goes into: archived, on a provider's own
-   * harness rather than eve, or that the account does not reach or could
-   * not read.
-   */
-  readonly callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -293,14 +291,21 @@ export function composeCodingAgents(
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
       txWaits,
     });
+    const items = yield* accountItems({
+      seal: (userId, since, poll, after) =>
+        asked(client.accountInboxItemsLive(userId, since, poll, after)),
+      txWaits,
+    });
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
+    const itemsFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
       http,
       { transcripts, followed, held },
       { inboxes, followed: inboxFollows, txWaits },
       { accounts, followed: accountFollow },
+      { items, followed: itemsFollow },
     );
   });
 }
@@ -326,6 +331,12 @@ interface AccountFollow {
   readonly followed: FiberHandle.FiberHandle;
 }
 
+/** The account's items' subscriptions, and the one follow the windows asked for. */
+interface ItemsFollow {
+  readonly items: AccountItems;
+  readonly followed: FiberHandle.FiberHandle;
+}
+
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
@@ -334,11 +345,17 @@ function composed(
   { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
+  /** Every item the account reaches, and the windows' one follow of them. */
+  { items, followed: itemsFollow }: ItemsFollow,
 ): CodingAgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
   const listed = dependencies.listed ?? (() => Effect.void);
+  const writeAgent: RowWrite<AgentRow> =
+    dependencies.writeAgent ??
+    ((_agentId, _change, written) =>
+      Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer)));
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
   const memoryOf = (key: TranscriptKey): TranscriptMemory => {
@@ -370,26 +387,6 @@ function composed(
       ),
     );
 
-  /**
-   * The agent as a line handed to its call leaves it, as a message's answer
-   * carries it: read whole and answered as its summary, running, as a steer's
-   * answer is read after the message was taken. The call writes and asks the
-   * line a moment after the frame leaves, so a read now could still say the
-   * agent is idle; the transcript's follow settles the status from there.
-   */
-  const agentAsItStands = (agentId: string): Effect.Effect<CodingAgentAgentAnswer> =>
-    Effect.map(asked(client.agent(agentId)), (answer) => {
-      if ("failure" in answer) return answer;
-      const {
-        automationId: _automation,
-        origin: _origin,
-        workspaceId: _workspace,
-        repository: _repository,
-        ...agent
-      } = answer.agent;
-      return { agent: { ...agent, status: CODING_AGENT_STATUS.RUNNING } };
-    });
-
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
   const agentTranscriptOf = (
     params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
@@ -403,6 +400,17 @@ function composed(
         key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
       };
     });
+
+  /** The account's items as a window is told them. */
+  const tellItems = (told: CodingAgentAccountItems) =>
+    Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
+  /** Whether a window follows the account's items, so a sign-out follows them again for whoever signs in next. */
+  let itemsFollowed = false;
+  const followItems = followSignedInItems(
+    items,
+    () => (gate() ? dependencies.accountId() : undefined),
+    tellItems,
+  );
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -626,18 +634,6 @@ function composed(
           params,
           "messaging an agent names the agent, its words, and the send's key",
         );
-        // A line of words alone, typed while this Mac's call is up on the agent, is the call's: the
-        // service answers it aloud and writes it down as typed. Note that a line carrying files
-        // steers as it would with no call up, because the call hands on words alone and its files
-        // would otherwise be lost.
-        const files = request.attachments ?? [];
-        if (
-          request.text !== "" &&
-          files.length === 0 &&
-          dependencies.typeIntoCall?.(agentId, request.text, request.clientKey) === true
-        ) {
-          return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
-        }
         const answer = yield* asked(client.message(agentId, request));
         if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
         // Note that a send answers at once rather than once its row reaches the followed transcript,
@@ -696,8 +692,20 @@ function composed(
           params,
           "pinning an agent names the agent and whether it is pinned",
         );
-        const answer = yield* asked(client.pin(agentId, request));
-        if ("txid" in answer) yield* listed(answer.txid);
+        // A pin is drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it.
+        const answer = yield* writeAgent<CodingAgentAgentAnswer>(
+          agentId,
+          (row) =>
+            request.pinned
+              ? {
+                  pinnedAt: row.pinnedAt ?? kernel.now(),
+                  pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
+                }
+              : { pinnedAt: null, pinPosition: null },
+          Effect.map(asked(client.pin(agentId, request)), (answered) =>
+            "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
+          ),
+        );
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR]: (params) =>
@@ -1007,26 +1015,33 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
       Effect.as(FiberHandle.clear(accountFollow), {}),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () =>
+      Effect.gen(function* () {
+        itemsFollowed = true;
+        yield* FiberHandle.run(itemsFollow, followItems);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW]: () =>
+      Effect.gen(function* () {
+        itemsFollowed = false;
+        yield* FiberHandle.clear(itemsFollow);
+        return {};
+      }),
   };
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* FiberMap.clear(inboxFollows);
     yield* FiberHandle.clear(accountFollow);
+    yield* FiberHandle.clear(itemsFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
+    for (const userId of yield* RcMap.keys(items)) yield* RcMap.invalidate(items, userId);
+    // Note that a window still following the account's items is told there are none, then the next account's whole once one signs in.
+    if (itemsFollowed) yield* FiberHandle.run(itemsFollow, followItems);
   });
 
-  // Note that an agent naming a runtime runs on Claude Code or Codex, which takes no call: calls run on eve alone.
-  const callTaskOf = (agentId: string) =>
-    Effect.map(asked(client.agent(agentId)), (answer) =>
-      "agent" in answer &&
-      answer.agent.archivedAt === undefined &&
-      answer.agent.runtime === undefined
-        ? answer.agent.planId
-        : undefined,
-    );
-  return { methods, lifetime: Effect.void, reset, callTaskOf };
+  return { methods, lifetime: Effect.void, reset };
 }

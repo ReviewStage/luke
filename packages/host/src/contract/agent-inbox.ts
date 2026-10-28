@@ -2,8 +2,9 @@
  * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
  *
  * What a task's coding agents need of the developer: a task's or an agent's
- * inbox followed, one item answered, closed, messaged, or marked, a thread
- * started, every item marked read, and an item's image and an agent's picture.
+ * inbox followed, and every item the account reaches; one item answered,
+ * closed, messaged, or marked, a thread started, every item marked read, and
+ * an item's image and an agent's picture.
  *
  * Each output is its view schema's type side (`EffectSchema.toType`) rather
  * than the view flipped, as the agents' acts' are. The only difference
@@ -17,6 +18,7 @@
  */
 
 import {
+  type CodingAgentAccountItems,
   type CodingAgentInboxChanged,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
@@ -44,6 +46,11 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentInboxScopeSchema))
     .output(eventIterator(type<CodingAgentInboxChanged["inbox"]>())),
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: actProcedure(
+    "Could not follow the inbox on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(eventIterator(type<CodingAgentAccountItems>())),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not acknowledge the inbox item on this system.",
   )

@@ -196,6 +196,13 @@ export const AGENT_INBOX_ACT_KIND = {
    * is none.
    */
   CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  /**
+   * Every inbox item the account reaches, followed while the window holds
+   * the stream open: by the plans and agents with no task they are on,
+   * whole as the stream opens and then those that moved, or why there are
+   * none.
+   */
+  CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW: "codingAgents.accountItemsFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
@@ -278,9 +285,9 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, and a call about the open task. And
+ * GitHub connected or disconnected. And
  * what one task holds, read as its tabs draw it: its
- * earlier work and conversation, a call's messages, its repository's files,
+ * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
  * status and priority.

@@ -38,7 +38,6 @@ import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@l
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
-import { pendingShown, pendingWithout } from "@luke/ui/pending-values";
 import {
   isAgentTab,
   isChangesTab,
@@ -57,41 +56,23 @@ import {
 import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import {
   AGENT_PIN_FAILED_NOTES,
-  agentsPinned,
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
   MARK_FAILED_NOTES,
-  markAsked,
-  markedView,
-  NO_PENDING_STANDINGS,
-  type PendingAgentPins,
-  type PendingMarks,
-  type PendingPinPositions,
-  type PendingRenames,
-  type PendingStandings,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
-  positionedView,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
-  renameAsked,
   renamedView,
   repositoryChangeFailureNote,
   repositoryPageUrl,
   STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
-  settledMarks,
   settledNote,
-  settledRenames,
-  settledStandings,
   settleFailedNote,
   sidebarTasks,
-  standingAsked,
-  standingTasks,
-  standingView,
-  standingWithout,
   startFailureNote,
   TASK_MARK,
   TASKS_PAGE,
@@ -100,9 +81,6 @@ import {
   type TasksPage,
   tasksPage,
   undoStillDue,
-  unsettledAgentPins,
-  unsettledPinPositions,
-  withStanding,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -115,7 +93,6 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
-import { usePendingNow } from "../pending-clock.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
@@ -196,9 +173,9 @@ import { sayRestored } from "./version-view.js";
 /**
  * use-tasks-tab.ts -- the panel's Tasks tab as one control: which page shows, the presses each page makes, and the host's read of the tasks as the tab shows.
  *
- * The tab draws the tasks view main holds and the voice window's report,
- * and every press is an act. It saves nothing and decides nothing about a
- * task: the task's notetaker writes the document, and the tab redraws it in
+ * The tab draws the tasks view main holds, and every press is an act. It
+ * saves nothing and decides nothing about a task: the task's notetaker writes
+ * the document, and the tab redraws it in
  * place as the host brings its drafts and its reads. A rename, a pin, and an
  * archive are the presses drawn before the host answers them: each shows at
  * once, and goes back if the service refuses it, a pin or an archive with a
@@ -542,7 +519,7 @@ export interface TasksControl {
     inbox: readonly AppInboxTask[];
     inboxTasks: readonly AppInboxTaskHolding[];
   };
-  /** The tasks a name, status, priority, or assignee given here stands over until the view carries it (`@luke/ui/pending-values`), which a list held still moves at once; none where nothing waits. */
+  /** The tasks a rename, a pin, or where they stand, asked here and not yet carried by the list, is drawn over (main's view's own), which a list held still moves at once; none where nothing waits. */
   pendingTasks?: ReadonlySet<string>;
   /** The chosen workspace's agents an automation started with no plan, newest started first, which the sidebar lists among the plans, and those archived, which its Archived view lists among the archived plans. */
   listedAgents: {
@@ -941,20 +918,11 @@ interface TaskAsk {
   over: string | undefined;
 }
 
-/** No name given here and still waiting on main's view. */
-const NO_PENDING_RENAMES: PendingRenames = new Map();
-
-/** No task pin given here and still waiting on main's view. */
-const NO_PENDING_MARKS: PendingMarks = new Map();
-
 /** No repository pinned, as before main's view carries the sidebar. */
 const NO_REPOSITORY_PINS: readonly RepositoryPin[] = [];
 
-/** No agent pin given here and still waiting on main's view. */
-const NO_PENDING_AGENT_PINS: PendingAgentPins = new Map();
-
-/** No pin dragged here whose new place main's view has yet to carry. */
-const NO_PENDING_POSITIONS: PendingPinPositions = new Map();
+/** No task a write asked here stands over, as main's view says where it names none. */
+const NO_PENDING_TASKS: readonly string[] = [];
 
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<TasksView["pages"]> = [];
@@ -1127,31 +1095,12 @@ export function useTasksTab(input: {
   const fixture = tasksFixture?.fixtureTasksView(input.run);
   const viewed = fixture ?? input.tasks;
   const accountSignedIn = input.signedIn;
-  // A name, pin, status, priority, or assignee given here stands until main's view answers it
-  // (`@luke/ui/pending-values`), so a press that landed never flickers back
-  // while main's copy of the view catches up, and one the service or a
-  // teammate answered otherwise, or that waited past its time, gives way to
-  // the view. Note that a sign-out lets every one go, because each names a
-  // task of the account it was given under. The clock is read only while
-  // one waits, so a window with nothing pending draws nothing on its ticks.
-  const [renames, setRenames] = useState<PendingRenames>(NO_PENDING_RENAMES);
-  const [marks, setMarks] = useState<PendingMarks>(NO_PENDING_MARKS);
-  const [standings, setStandings] = useState<PendingStandings>(NO_PENDING_STANDINGS);
-  const waiting = renames.size > 0 || marks.size > 0 || standingTasks(standings).length > 0;
-  const pendingNow = usePendingNow(waiting);
-  useEffect(() => {
-    setRenames((held) =>
-      accountSignedIn ? settledRenames(held, viewed, pendingNow) : NO_PENDING_RENAMES,
-    );
-    setMarks((held) =>
-      accountSignedIn ? settledMarks(held, viewed, pendingNow) : NO_PENDING_MARKS,
-    );
-    setStandings((held) =>
-      accountSignedIn ? settledStandings(held, viewed, pendingNow) : NO_PENDING_STANDINGS,
-    );
-  }, [viewed, accountSignedIn, pendingNow]);
-  // A name being typed is drawn over both, held here rather than read back
-  // from main, so every surface naming the task follows the typing at once.
+  // A name, pin, status, priority, or assignee given here, a task's or an
+  // agent's pin, and a pin's new place, are drawn by main the moment they
+  // are asked (`@luke/host`'s `task-list-collections.ts`), so the view
+  // already carries them. A name being typed is drawn over the view, held
+  // here rather than read back from main, so every surface naming the task
+  // follows the typing at once.
   const [drafts, setDrafts] = useState<TaskNames>(new Map());
   const draftName = useCallback((taskId: string, name: string | undefined) => {
     setDrafts((held) => {
@@ -1162,26 +1111,6 @@ export function useTasksTab(input: {
       return next;
     });
   }, []);
-  // An agent's pin given here stands until main's view carries it, as a plan's does.
-  const [agentPins, setAgentPins] = useState<PendingAgentPins>(NO_PENDING_AGENT_PINS);
-  useEffect(
-    () =>
-      setAgentPins((held) =>
-        accountSignedIn
-          ? unsettledAgentPins(held, viewed.tasklessAgents ?? NO_TASKLESS_AGENTS)
-          : NO_PENDING_AGENT_PINS,
-      ),
-    [viewed, accountSignedIn],
-  );
-  // A pin dragged here stands in its new place until main's view carries it, as a pin does.
-  const [pinPositions, setPinPositions] = useState<PendingPinPositions>(NO_PENDING_POSITIONS);
-  useEffect(
-    () =>
-      setPinPositions((held) =>
-        accountSignedIn ? unsettledPinPositions(held, viewed) : NO_PENDING_POSITIONS,
-      ),
-    [viewed, accountSignedIn],
-  );
   // Note that every list step below is memoized on what it reads, because
   // this runs on every render of the window and each step walks every task
   // of every workspace. A repository's pin and a change to the sections are
@@ -1191,17 +1120,11 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
   }, [accountSignedIn, setClosedTabs]);
-  const renamed = useMemo(() => renamedView(viewed, pendingShown(renames)), [viewed, renames]);
   const pendingTasks = useMemo(
-    () => new Set([...renames.keys(), ...standingTasks(standings)]),
-    [renames, standings],
+    () => new Set(viewed.pendingTasks ?? NO_PENDING_TASKS),
+    [viewed.pendingTasks],
   );
-  const drafted = useMemo(() => renamedView(renamed, drafts), [renamed, drafts]);
-  const marked = useMemo(
-    () => standingView(markedView(drafted, marks), standings),
-    [drafted, marks, standings],
-  );
-  const tasks = useMemo(() => positionedView(marked, pinPositions), [marked, pinPositions]);
+  const tasks = useMemo(() => renamedView(viewed, drafts), [viewed, drafts]);
   // The sidebar lists the chosen workspace's tasks alone, and everything
   // else that finds a task, the palette, the inbox, and the history, finds
   // it among them all; with no workspace listed yet, every task is listed.
@@ -1285,18 +1208,17 @@ export function useTasksTab(input: {
     device: openDocument?.id === viewed.activeTaskId ? openDocument?.runsOn?.device : undefined,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
-  // each pinned, named, and archived as given here until main's view carries it.
+  // each named and archived as given here until main's view carries it, and pinned as main draws it.
   const agentsGiven = agents.pending;
   const listedAgents = useMemo(() => {
-    const listed = withPendingAgents(
-      agentsPinned(tasklessAgents ?? NO_TASKLESS_AGENTS, agentPins),
-      agentsGiven,
-    ).filter((agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId);
+    const listed = withPendingAgents(tasklessAgents ?? NO_TASKLESS_AGENTS, agentsGiven).filter(
+      (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
+    );
     return {
       standing: listed.filter((agent) => agent.archivedAt === undefined),
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
-  }, [tasklessAgents, agentPins, agentsGiven, listedWorkspaceId]);
+  }, [tasklessAgents, agentsGiven, listedWorkspaceId]);
   // An Untitled task takes its first agent's title on the service, and the
   // window hears no push for a task's row, so the tasks are read again as an
   // agent of the open task first holds a title while it stands Untitled.
@@ -1772,11 +1694,7 @@ export function useTasksTab(input: {
   // A fixture's tasks are renamed nowhere, as they are read from nowhere.
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
-    const pending = renameAsked(renames, viewed, taskId, name);
-    setRenames((held) => new Map(held).set(taskId, pending));
-    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
-    if (!renamed) setRenames((held) => pendingWithout(held, taskId, pending));
-    return renamed;
+    return act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
   };
 
   // The open task as it stands when a move is answered, which may be
@@ -1784,21 +1702,18 @@ export function useTasksTab(input: {
   const openNow = useRef(openTaskId);
   openNow.current = openTaskId;
 
-  // A fixture's tasks are marked nowhere, as they are read from nowhere. A
-  // pin says nothing once it lands, since the row it moves is in sight; a
-  // refusal puts back the mark it drew only while no later press replaced
-  // it, and says so in a toast, since the menu that asked has closed. It
-  // answers whether the service kept the mark, which the pin migration
+  // A fixture's tasks are marked nowhere, as they are read from nowhere.
+  // Main draws a pin at once and puts it back where the service refused it;
+  // a pin says nothing once it lands, since the row it moves is in sight,
+  // and a refusal says so in a toast, since the menu that asked has closed.
+  // It answers whether the service kept the mark, which the pin migration
   // above waits on.
   const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    const next = markAsked(marks, viewed, taskId, mark, Date.now());
-    setMarks((held) => new Map(held).set(taskId, next));
     return act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
       .catch(() => false)
       .then((changed) => {
         if (!changed) {
-          setMarks((held) => pendingWithout(held, taskId, next));
           toast({
             words: MARK_FAILED_NOTES[mark],
             tone: STATUS_TONE.DANGER,
@@ -1834,20 +1749,17 @@ export function useTasksTab(input: {
   // The account signed in now, which a pin waiting its turn must still be pressed under.
   const accountNow = useRef(input.account);
   accountNow.current = input.account;
-  // A fixture's agents are pinned nowhere, as its plans are marked nowhere. A
-  // pin says nothing once it lands, since the row it moves is in sight; a
-  // refusal puts the row back only while no later press replaced it, and
-  // says so in a toast, since the menu that asked has closed. Note that one
-  // agent's pins are asked one after another, because each writes as it
-  // lands, so a Pin and an Unpin pressed together landing out of order would
-  // leave standing the one not pressed last. One still waiting when the
-  // account changes is never asked, since a pin is its presser's own and
-  // would land on whoever signed in since; the sign-out already let go of
-  // what it drew.
+  // A fixture's agents are pinned nowhere, as its plans are marked nowhere.
+  // Main draws a pin at once and puts the row back where the service refused
+  // it; a pin says nothing once it lands, since the row it moves is in sight,
+  // and a refusal says so in a toast, since the menu that asked has closed.
+  // Note that one agent's pins are asked one after another, because each
+  // writes as it lands, so a Pin and an Unpin pressed together landing out
+  // of order would leave standing the one not pressed last. One still
+  // waiting when the account changes is never asked, since a pin is its
+  // presser's own and would land on whoever signed in since.
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    const next = { pinned, at: Date.now() };
-    setAgentPins((held) => new Map(held).set(agentId, next));
     const flights = agentPinFlights.current;
     const pressedBy = input.account;
     const asked = (flights.get(agentId) ?? Promise.resolve(true)).then(() =>
@@ -1862,11 +1774,6 @@ export function useTasksTab(input: {
     asked.then((changed) => {
       if (flights.get(agentId) === asked) flights.delete(agentId);
       if (changed !== false) return;
-      setAgentPins((held) =>
-        held.get(agentId) === next
-          ? new Map([...held].filter(([pending]) => pending !== agentId))
-          : held,
-      );
       toast({
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
@@ -1875,34 +1782,16 @@ export function useTasksTab(input: {
     });
   };
 
-  // A fixture's pins are moved nowhere, as they are pinned nowhere. A drop
-  // stands at once, and each pin it gave a place is asked of the service: a
+  // A fixture's pins are moved nowhere, as they are pinned nowhere. Each pin
+  // a drop gave a place is asked of the service, which main draws at once: a
   // plan's through the host, which asks one change at a time, and an agent's
   // after that agent's pins already in flight, as a pin waits, and never
-  // under an account signed in since. A place answered is let go with the
-  // next view, which carries it or a later drag from another Mac. A refusal
-  // puts back only the places no later drop replaced, and whatever else the
-  // drop placed on this Mac alone (`putBack`), and says so once for the
-  // drop, since the pointer that asked has let go.
+  // under an account signed in since. A refusal is put back by main, and
+  // whatever else the drop placed on this Mac alone by `putBack`, and says
+  // so once for the drop, since the pointer that asked has let go.
   const movePins = (moves: readonly PinMove[], putBack?: () => void) => {
     if (fixture !== undefined || moves.length === 0) return;
-    setPinPositions(
-      (held) =>
-        new Map([
-          ...held,
-          ...moves.map(({ id, position }) => [id, { position, answered: false }] as const),
-        ]),
-    );
     const pressedBy = input.account;
-    const settle = (id: string, position: string, changed: boolean | undefined) =>
-      setPinPositions((held) => {
-        const place = held.get(id);
-        if (place?.position !== position) return held;
-        const next = new Map(held);
-        if (changed === false) next.delete(id);
-        else next.set(id, { position, answered: true });
-        return next;
-      });
     const asked = moves.map(({ agent, id, position }) => {
       const flights = agentPinFlights.current;
       const flight: Promise<boolean | undefined> = agent
@@ -1918,7 +1807,6 @@ export function useTasksTab(input: {
       if (agent) flights.set(id, flight);
       return flight.then((changed) => {
         if (agent && flights.get(id) === flight) flights.delete(id);
-        settle(id, position, changed);
         return changed;
       });
     });
@@ -1964,22 +1852,17 @@ export function useTasksTab(input: {
     });
   };
   // A change of where a task stands, its status, priority, or assignee, is
-  // drawn at once and sent, and a refused one goes back where it was only
-  // while no later press replaced it. Answers whether the service kept it.
+  // sent, which main draws at once and puts back where the service refused
+  // it. Answers whether the service kept it.
   const sendStanding = (
     taskId: string,
     standing: TaskStanding,
     assigneeName?: string,
   ): Promise<boolean> => {
     if (standing.status !== undefined) chooseStatus(taskId);
-    const asked = standingAsked(standings, viewed, taskId, standing, assigneeName);
-    setStandings((held) => withStanding(held, taskId, asked));
-    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing })
-      .catch(() => false)
-      .then((kept) => {
-        if (!kept) setStandings((held) => standingWithout(held, taskId, asked));
-        return kept;
-      });
+    // Note that the name the reader knows a member by goes with them, so main draws them by it until the list carries them.
+    const named = standing.assigneeId && assigneeName !== undefined ? { assigneeName } : undefined;
+    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing, ...named }).catch(() => false);
   };
   // Each status change is sent as one standing. Answers which tasks the
   // service kept and how many it refused.

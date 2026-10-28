@@ -34,7 +34,6 @@ import {
   joinRefs,
   LAYOUT_ELEMENT,
   ListMotion,
-  MarkDoneIcon,
   MoreButton,
   motionKey,
   motionRows,
@@ -114,13 +113,7 @@ import {
   unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import {
-  repositoryPageUrl,
-  SETTLED_STATUS,
-  settleOffered,
-  TASK_MARK,
-  TASKS_PAGE,
-} from "@luke/ui/tasks-model";
+import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
@@ -187,6 +180,7 @@ import {
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view.js";
+import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
 import { ChosenTasksContext, useTasksSelection } from "./tasks-selection.js";
@@ -834,32 +828,27 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Mark all done sets every task under the header Done, which the
- * sidebar's status filter then leaves out, and Open on GitHub opens the
- * repository's page, under GitHub's mark rather than the owner's picture,
- * since it is about GitHub. Mark all done asks nothing first, since it
- * stops no agent. The tasks with no repository have no pin, since they
- * always stand last, and no page to open. A group of tasks all done
- * already offers no Mark all done, so the plans with no repository offer
- * nothing there.
+ * account, Status sets every task under the header at one, its toast's Undo
+ * putting each back, and Open on GitHub opens the repository's page, under
+ * GitHub's mark rather than the owner's picture, since it is about GitHub.
+ * Status asks nothing first, since no status stops an agent. The tasks with
+ * no repository have no pin, since they always stand last, and no page to
+ * open, so they offer Status alone.
  */
-function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuAction[][] {
+function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuEntry[][] {
   const { repository } = group;
   const listed = groupTasks(group);
-  const settle: MenuAction[] = !listed.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
-    ? []
-    : [
-        {
-          label: "Mark all done",
-          icon: <MarkDoneIcon />,
-          onSelect: () =>
-            tasks.onSettleTasks(
-              listed.map(({ id }) => id),
-              SETTLED_STATUS.DONE,
-            ),
-        },
-      ];
-  if (repository === null) return settle.length === 0 ? [] : [settle];
+  const status: MenuEntry[] =
+    listed.length === 0
+      ? []
+      : [
+          statusSubmenu(
+            tasks,
+            listed.map(({ id }) => id),
+            sharedStatus(listed),
+          ),
+        ];
+  if (repository === null) return status.length === 0 ? [] : [status];
   const pin: MenuAction = tasks.pinnedRepositories.includes(repository)
     ? {
         label: "Unpin",
@@ -872,7 +861,7 @@ function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): Me
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => tasks.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [[pin, ...settle], [github]];
+  return [status, [pin], [github]].filter((each) => each.length > 0);
 }
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
@@ -2373,6 +2362,7 @@ function SidebarColumn({
         onSignOut={onSignOut}
       />
       {sectionDialogs.dialog}
+      {selection.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
     </PanePin>

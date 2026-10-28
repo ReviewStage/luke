@@ -6,10 +6,9 @@
  * that closed with the send, a task archived from a menu, or a change
  * refused where nothing beside it is left to say so. Beside those it says
  * only what is rare enough to be worth the interruption, as Luke updated to
- * a new version (`update-toast.ts`), or what the voice says still stands;
- * what happened elsewhere, an agent's turn ended, an Inbox item posted, or
- * an automation's run that failed, is said by the
- * window's own marks and counts instead. Each is a
+ * a new version (`update-toast.ts`); what happened elsewhere, an agent's
+ * turn ended, an Inbox item posted, or an automation's run that failed, is
+ * said by the window's own marks and counts instead. Each is a
  * card of its words, an optional second line under them, each cut at two
  * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the
  * bottom, or two in a window too short for three to leave the rest of it in
@@ -25,8 +24,7 @@
  * whose action is the one way back to something the developer would
  * otherwise lose, such as words a save left unsaved, persists until it is
  * dismissed, and one with no action persists only while what it says still
- * stands, until whoever showed it withdraws it, as the voice's notices are
- * (`voice-notice-toast.ts`). One whose hold runs down by itself with an action drains a bar
+ * stands, until whoever showed it withdraws it. One whose hold runs down by itself with an action drains a bar
  * along its foot over that hold, paused with it. One saying work is under
  * way (`useWorkingToast`) stands until the work settles, then turns in
  * place into what came of it, done or failed, and stands for that one's

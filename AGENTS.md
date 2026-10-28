@@ -1,7 +1,9 @@
 # Agent guide
 
-Luke is a macOS Electron app for working through a task by voice: the
-developer talks a task through with Luke, who writes its plan down as they go.
+Luke is a macOS Electron app, with a web app beside it, for working through a
+task with coding agents: the developer works a task through with them in typed
+conversations, and they write its plan down as they go and open its pull
+requests.
 
 ## Commands
 
@@ -10,7 +12,7 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
 | `./scripts/check.sh` | Every portable repository, migration, lint, type, and test check: before a release, for a broad refactor, or on request |
-| `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
+| `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
@@ -332,10 +334,6 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **`packages/host/src/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
   the launch handed them, on the same terms as the client's `app-state-store.ts`.
-- **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
-  strip's two clocks, armed from callbacks belonging to no fiber of their own,
-  start on the services the orchestrator was constructed with; the standing
-  call's lifecycle is a `forkDetach` and needs no door.
 - **`packages/host/src/live-collection.ts`** — TanStack DB takes a write's
   work as a promise it awaits before it keeps or takes back what the write
   drew, so the one wait for that work to settle runs on the services the

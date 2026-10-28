@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   PLAN_ACTOR,
+  TASK_PRIORITY,
   TASK_STATUS,
   type Task,
   type TaskStatus,
@@ -538,7 +539,7 @@ test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to de
   assert.equal(container.querySelector(".side-panel-bar"), null, "the panel is shut");
 
   act(() => {
-    assert.ok(runAppCommand(APP_COMMAND.DELETE_TASK), "⌘⌫ is offered");
+    assert.ok(runAppCommand(APP_COMMAND.DELETE), "⌘⌫ is offered");
   });
   assert.equal(asking(), true, "⌘⌫ asks first");
   assert.match(dialog()?.textContent ?? "", /Teammate invitations/u);
@@ -802,9 +803,23 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task, drawn red, cancels it, and a task already done offers neither Mark done nor its check", async () => {
+/** Where a task from a service with statuses stands before anything moves it. */
+const STANDING = { status: TASK_STATUS.TODO, priority: TASK_PRIORITY.NONE } as const;
+
+/** Opens the open menu's submenu `submenu`, then chooses `label` in it. */
+function chooseIn(submenu: string, label: string): void {
+  choose(submenu);
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')].find(
+    (candidate) => itemLabel(candidate) === label,
+  );
+  assert.ok(item, `${submenu} offers ${label}`);
+  act(() => item.click());
+}
+
+test("a row's Status, opened by a right-click or by S on the focused row, sets the task at the status picked, Done as the row's Mark done check does, asking nothing even where agents work on it, and checks the status it stands at", async () => {
   const working: TaskSummary = {
     ...OTHER,
+    ...STANDING,
     status: TASK_STATUS.IN_PROGRESS,
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
@@ -832,10 +847,25 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   assert.equal(asking(), false, "Mark done asks nothing, since it stops no agent");
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
+  // S on the focused row opens its menu on Status, the status it stands at checked.
+  act(() => rowButton.focus());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
+  });
+  await act(async () => undefined);
+  assert.deepEqual(
+    [...document.querySelectorAll<HTMLElement>('[role="menu"] [aria-checked="true"]')].map(
+      itemLabel,
+    ),
+    ["In progress"],
+  );
+  const doneItem = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]'),
+  ].find((item) => itemLabel(item) === "Done");
+  act(() => (doneItem ?? assert.fail("Status offers Done")).click());
   rightClick(rowButton, 40, 60);
-  choose("Mark done");
-  rightClick(rowButton, 40, 60);
-  choose("Cancel task");
+  chooseIn("Status", "Canceled");
+  assert.equal(asking(), false, "no status asks anything");
   assert.deepEqual(settled, [
     [[working.id], TASK_STATUS.DONE],
     [[working.id], TASK_STATUS.DONE],
@@ -845,23 +875,21 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   unmountAll();
   const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
-  const doneRowButton = doneRow.querySelector("ul > li > button");
-  assert.ok(doneRowButton instanceof HTMLButtonElement);
-  rightClick(doneRowButton, 40, 60);
-  const labels = menuItems().map(itemLabel);
-  assert.equal(labels.includes("Mark done"), false);
-  assert.equal(labels.includes("Cancel task"), true);
 });
 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
-const CHIP_ITEMS = ["Mark done", "Cancel task", "Change repository"];
+const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
 
-test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, which act on the open task, and leaves Mark done, Cancel task, and Change repository to the plan's chips, which the open task's row keeps; another task's menu prints no chord, and Open on GitHub wears the GitHub mark", () => {
+test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⇧⌘C"],
+    ["Copy plan", "⌥⌘C"],
+    ["Version history", "⌥⇧⌘H"],
+    ["Mark as unread", "U"],
+    ["Pin", "P"],
+    ["Open on GitHub", "⇧⌘O"],
     ["Permanently delete", "⌘⌫"],
   ]);
   const offered = menuItems().map(itemLabel);
@@ -878,22 +906,24 @@ test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, 
   );
 
   unmountAll();
-  rightClick(mountSidebarTask(tasks, TASK, asked, true), 40, 60);
+  const other: TaskSummary = { ...OTHER, ...STANDING };
+  rightClick(mountSidebarTask(tasksControl({ tasks: [other] }), other, asked), 40, 60);
   const row = menuItems().map(itemLabel);
   assert.deepEqual(
     CHIP_ITEMS.filter((item) => row.includes(item)),
     CHIP_ITEMS,
     "a row draws no chips, so its menu keeps them",
   );
-
-  unmountAll();
-  rightClick(mountSidebarTask(tasks, OTHER, asked), 40, 60);
-  assert.ok(menuItems().some((item) => itemLabel(item) === "Mark done"));
   // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
   assert.deepEqual(
     itemChords(),
-    [["Show details", "⌥↓"]],
-    "no chord acts on a task that is not open",
+    [
+      ["Mark as unread", "U"],
+      ["Status", "S"],
+      ["Pin", "P"],
+      ["Show details", "⌥↓"],
+    ],
+    "no chord but the focused row's letters acts on a task that is not open",
   );
 });
 

@@ -13,7 +13,10 @@
  * the agent's place with its checkout, find it again and record the runner
  * it runs, set the repository's credential at its firewall, resume, stop,
  * and discard it, write files into it, launch the runner there and write
- * its stdin, read whether it ended, end it, and read one file. What a
+ * its stdin, read whether it ended, end it, and read one file. A runner on a
+ * machine whose layout says it reads its lines takes them from Luke's store
+ * instead (`../coder-host/runner-sessions.ts`), and its stdin carries only
+ * its config. What a
  * machine keeps of its own beyond that (a Vercel sandbox's snapshots, the
  * Terminal, the browser) stays outside it until a second machine needs it.
  *
@@ -87,6 +90,13 @@ export interface MachineLayout {
   readonly signedIn: DeviceSignedIn;
   /** How a local agent's device runs it, in a VM of its own or directly on the machine; none for a sandbox of Luke's. */
   readonly isolation: DeviceIsolation | undefined;
+  /**
+   * Whether the runner reads its lines past its config from Luke
+   * (`@luke/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
+   * from its stdin, as a Mac's follower writes them to the runner its
+   * release bundled.
+   */
+  readonly linesRead: boolean;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */
@@ -96,6 +106,8 @@ export interface RunnerMark {
   readonly fingerprint?: string;
   /** Whether the launch runs on its Mac's own sign-in rather than a credential of the account's; nothing secret, and none for any other launch. */
   readonly ownLogin?: boolean;
+  /** Whether the launch reads its lines from Luke (`MachineLayout`'s `linesRead`); none for one Luke writes them to the stdin of, a launch from before the read among them. */
+  readonly linesRead?: boolean;
 }
 
 /** A runner as its machine recorded it: the handle a later call writes to, and its launch's mark. */

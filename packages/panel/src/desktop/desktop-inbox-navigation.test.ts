@@ -12,6 +12,7 @@ import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxStartParams,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
@@ -102,6 +103,43 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
+  const { page } = mount([], { windowRoot: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the rows are pushed and drawn",
+  );
+
+  act(() => world.setInboxOpen(false));
+  await settle();
+  act(() => world.setInboxOpen(true));
+  assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
+});
+
+test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
+  const { page } = mount([], { windowRoot: true });
+  await settle();
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  );
+  act(() => world.setInboxOpen(false));
+  await settle();
+
+  act(() => world.setInboxOpen(true));
+  await settle();
+  assert.ok(
+    world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }),
+    "the failed task is followed anew",
+  );
+  assert.ok(
+    listed(page).some((row) => row.endsWith(EXPIRY.title)),
+    "its items are drawn again",
+  );
+});
 
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
   const { page } = mount([], { listUnread: true });
@@ -231,6 +269,7 @@ test("an item of an agent with no plan stands under the automation that started 
       agentId: SWEEP_AGENT,
       title: QUARANTINE.title,
       postedAt: QUARANTINE.postedAt,
+      updatedAt: QUARANTINE.updatedAt,
       agentTitle: "Sweep the flaky tests",
       agentModel: "anthropic/claude-opus-5.5",
       automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -274,6 +313,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
     agentId: SWEEP_AGENT,
     title: QUARANTINE.title,
     postedAt: QUARANTINE.postedAt,
+    updatedAt: QUARANTINE.updatedAt,
     agentTitle: "Sweep the flaky tests",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
@@ -363,6 +403,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
     agentKind: CODING_AGENT_KIND.OPERATOR,
     title: asked.title,
     postedAt: asked.postedAt,
+    updatedAt: asked.updatedAt,
     agentTitle: "Luke",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
@@ -489,7 +530,7 @@ test("an item's card names the automation that holds it by a chip that hangs the
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   const chip =
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip");
   restOn(chip);
   await settle();
@@ -516,7 +557,7 @@ test("an item from a service that names no workspace for it still names its auto
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   restOn(
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip"),
   );
 

@@ -43,6 +43,7 @@ import {
 import { InboxList, InboxListNote, InboxPaneEmpty } from "../tasks/inbox-list.js";
 import {
   anyUnread,
+  holderAutomationId,
   INBOX_HOLDER,
   type InboxHolder,
   type InboxListed,
@@ -102,10 +103,9 @@ import { taskCardOf } from "./task-card.js";
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
  * workspace the sidebar lists that main says holds one (the switcher counts
  * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-inbox-items.ts`), under its task, its
+ * as main says it changed (`use-holder-inbox-items.ts`), under its task, its
  * person, its status, or in one run, the latest first or the oldest
- * first, For you, what needs them, what of theirs is unread, and their
- * updates on a task still under way, or All,
+ * first, For you, the open threads that wait on them, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
@@ -331,7 +331,7 @@ export function DesktopInbox({
       ? undefined
       : chosen.holder.kind === INBOX_HOLDER.TASK
         ? chosen.holder.task.workspaceId
-        : (agents.workspaceId ?? itemWorkspaceId(chosen.holder, chosen.item.agentId));
+        : (agents.workspaceId ?? itemWorkspaceId(chosen.holder));
   const chosenLinkWorkspace =
     chosenWorkspaceId === undefined
       ? (tasks.workspace?.slug ?? tasks.workspace?.id)
@@ -710,15 +710,15 @@ function answerPlace(
   agents: CodingAgentsControl,
   tasks: TasksControl,
 ): TasklessPlace | undefined {
-  const { holder, item } = chosen;
+  const { holder } = chosen;
   const workspaceId =
     holder.kind === INBOX_HOLDER.TASK
       ? holder.task.workspaceId
-      : (agents.workspaceId ?? itemWorkspaceId(holder, item.agentId));
+      : (agents.workspaceId ?? itemWorkspaceId(holder));
   const repository =
     holder.kind === INBOX_HOLDER.TASK
       ? holder.task.repository
-      : (agents.agentRepository ?? holder.agents.get(item.agentId)?.repository);
+      : (agents.agentRepository ?? holder.agent.repository);
   if (workspaceId === undefined || repository === undefined || repository === null) {
     return undefined;
   }
@@ -917,7 +917,7 @@ function paneDoors(
       },
     };
   }
-  const { automationId } = holder;
+  const automationId = holderAutomationId(holder);
   return {
     onOpenHolder:
       automationId !== null

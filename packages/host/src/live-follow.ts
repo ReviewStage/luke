@@ -1,4 +1,9 @@
-import { LIVE_SIGNED_OUT, liveDigestOf, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import {
+  LIVE_SIGNED_OUT,
+  liveDigestOf,
+  liveDigestOn,
+  type SealedLiveQueryWire,
+} from "@luke/features/live-wire";
 import {
   Cause,
   Clock,
@@ -22,7 +27,9 @@ import {
  * of every part are handed on whole, undecoded, for the caller to decode at
  * this boundary, and again each time any part moves. A poll names where the
  * rows last stood (`liveDigestOf`), the service holds it until they move or
- * a while passes, and it is asked again once the floor passes, a failed one
+ * a while passes, or, for a read held on some of its parts alone
+ * (`heldOn`), until those move (`liveDigestOn`), and it is asked again once
+ * the floor passes, a failed one
  * after a wait drawn at random up to a second and then up to five, the
  * caller told it may be behind meanwhile.
  *
@@ -127,6 +134,13 @@ export interface LiveFollowDependencies<Part extends string> {
    * did not move, so the caller hears that it caught up.
    */
   readonly behind?: () => void;
+  /**
+   * The parts the service holds a poll on alone, whose digest alone is sent
+   * as `after` (`liveDigestOn`); every part where none are named. A read
+   * held on some parts answers the others only past the reader's own query,
+   * so their digest would move with every answer and never be held.
+   */
+  readonly heldOn?: readonly Part[];
 }
 
 /**
@@ -281,8 +295,12 @@ function liveAnswers<Part extends string>(
           }
           return true;
         });
+      const standing = (queries: SealedRead<Part>["queries"]) =>
+        dependencies.heldOn === undefined
+          ? liveDigestOf(queries)
+          : liveDigestOn(queries, dependencies.heldOn);
       /** Where the rows stood at the last answer, which the next poll is held past. */
-      let seen = liveDigestOf(first.queries);
+      let seen = standing(first.queries);
       /** The cursor the last answer named, past which the next poll reads the cursor parts; kept through a failed poll, since the rows held stand at it still. */
       let cursor = cursorOf(first);
       yield* answered(first);
@@ -299,7 +317,7 @@ function liveAnswers<Part extends string>(
           dependencies.behind?.();
           return yield* Effect.fail(read);
         }
-        seen = liveDigestOf(read.queries) ?? seen;
+        seen = standing(read.queries) ?? seen;
         cursor = cursorOf(read) ?? cursor;
         return yield* answered(read);
       });

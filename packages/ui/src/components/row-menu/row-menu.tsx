@@ -1,5 +1,12 @@
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import { type KeyboardEvent, type ReactNode, type RefObject, useRef } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { BUTTON_LIGHT, type ButtonSize } from "../button/button.js";
 import {
   dropBelowStart,
@@ -44,6 +51,14 @@ export interface ListRowMenu {
   readonly footer?: ReactNode;
   /** Whether the surface the row stands on is shown; its menu closes once it is not, and stands while it is where unsaid. */
   readonly shown?: boolean | undefined;
+  /** The asks from elsewhere to open the menu, as a key pressed on the row, each count opening it under the row, on the submenu named where one is. */
+  readonly openRequest?: RowMenuRequest | undefined;
+}
+
+/** An ask to open a row's menu from elsewhere: how many so far, so each opens it, and the submenu it opens on, where one. */
+export interface RowMenuRequest {
+  readonly count: number;
+  readonly submenu?: string | undefined;
 }
 
 /** The chord Show details names, which opens the card from the control itself. */
@@ -106,6 +121,20 @@ export function useRowMenu(
     const held = event.target instanceof HTMLElement ? event.target : event.currentTarget;
     state.show(dropBelowStart(event.currentTarget), held);
   };
+  // Each ask from elsewhere hangs the menu under the row as the menu key does, on the submenu it names.
+  const [openOn, setOpenOn] = useState<string | undefined>(undefined);
+  const asked = live?.openRequest;
+  useEffect(() => {
+    if (asked === undefined || asked.count === 0) return;
+    const from = opener?.current ?? moreElement.current;
+    if (from === null) return;
+    setOpenOn(asked.submenu);
+    state.show(dropBelowStart(from), from);
+  }, [asked?.count]);
+  const close = (returnFocus: boolean) => {
+    setOpenOn(undefined);
+    state.close(returnFocus);
+  };
   const doors = offered ? state.contextMenu(opener ?? moreElement) : undefined;
   const open = state.open !== undefined;
   // Note that a row's ⋯ lights its glyph alone at any size, because the row is already lit and, while its menu stands, ringed.
@@ -131,7 +160,8 @@ export function useRowMenu(
         heading={live.heading}
         footer={live.footer}
         groups={details === undefined ? live.groups : withDetails(live.groups, details)}
-        onClose={state.close}
+        openOn={openOn}
+        onClose={close}
       />
     ) : null;
   return {

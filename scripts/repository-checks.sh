@@ -34,7 +34,7 @@ if [[ -n "$engines_drift" ]]; then
     exit 1
 fi
 
-# The packages below the runtime (live, features, voice) open
+# The packages below the runtime (live, features) open
 # `@luke/runtime/vocabulary` precisely because it resolves no Node module
 # and no Effect layer that would carry one in. The renderer's own `node:` grep
 # (below) can only see files inside one directory; this walks the door's

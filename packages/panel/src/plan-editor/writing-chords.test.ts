@@ -44,7 +44,7 @@ afterEach(() => {
 function KeyedWindow({ ran }: { ran: string[] }): ReactElement | null {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, () => ran.push("toggle sidebar"));
-  useAppCommand(APP_COMMAND.COPY_LINK, () => ran.push("copy link"));
+  useAppCommand(APP_COMMAND.COPY_CONTENT, () => ran.push("copy plan"));
   useAppCommand(APP_COMMAND.TOGGLE_FULL_SCREEN, () => ran.push("toggle full screen"));
   return null;
 }
@@ -125,11 +125,11 @@ test("⇧⌘X strikes the plan's words", () => {
   assert.deepEqual(ran, []);
 });
 
-test("⌥⌘C leaves the plan's line as words and copies the link", () => {
+test("⌥⌘C leaves the plan's line as words and copies the plan", () => {
   const { ran, handle, element } = mount("Ship the invite flow.\n");
   press(element, "c", { option: true });
   assert.equal(handle.markdown().trim(), "Ship the invite flow.");
-  assert.deepEqual(ran, ["copy link"]);
+  assert.deepEqual(ran, ["copy plan"]);
 });
 
 test("⌘E sets code, ⌥⌘2 a second heading, and ⇧⌘8 a bulleted list, none of them reaching the window", () => {

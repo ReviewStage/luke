@@ -23,7 +23,7 @@ import {
 import { listTasks } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { conversations } from "@luke/database/schemas/storage";
+import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
@@ -35,6 +35,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { listTasklessAgents, withTaskAgents } from "@luke/service/agents/task-agents";
+import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -259,6 +260,40 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         );
         assert.equal(listed.agents?.total, 0);
         assert.deepEqual(listed.agents?.agents, []);
+      }),
+  );
+
+  it.effect(
+    "a plan whose agent woke for a new turn reads the agent's activity from its last turn to end, not the new turn's start",
+    () =>
+      Effect.gen(function* () {
+        const { userId, taskId } = yield* openTask;
+        const agent = started(yield* createCodingAgent(userId, start(taskId)));
+        const ended = new Date(agent.createdAt.getTime() + 10 * 60_000);
+        const woke = new Date(agent.createdAt.getTime() + 35 * 60_000);
+        const db = yield* Database;
+        yield* db.insert(turns).values([
+          {
+            userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.SETTLED,
+            queuedAt: agent.createdAt,
+            startedAt: agent.createdAt,
+            settledAt: ended,
+          },
+          {
+            userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.RUNNING,
+            queuedAt: woke,
+            startedAt: woke,
+          },
+        ]);
+
+        const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
+        assert.equal(listed?.agents?.activityAt, ended.getTime());
       }),
   );
 

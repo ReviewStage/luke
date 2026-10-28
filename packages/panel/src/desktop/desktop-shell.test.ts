@@ -430,7 +430,8 @@ test("an account with no plan is welcomed on New task's composer, and the title 
   assert.ok(newTask, "the title bar offers New task");
   act(() => newTask.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-  assert.equal(dialog?.querySelector("h2")?.textContent, "New task");
+  const name = dialog?.getAttribute("aria-labelledby") ?? assert.fail("the dialog is named");
+  assert.equal(document.getElementById(name)?.textContent, "New task");
   act(() => {
     dialog?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
@@ -608,15 +609,17 @@ function rowReadMark(name: string, choose = false): string | undefined {
   });
   const menu = document.querySelector('[role="menu"]');
   assert.ok(menu, `${name}'s menu opens`);
+  // Note that the item is read by its words, since its U is drawn beside them.
+  const words = (each: Element) => each.querySelector(".luke-menu-item-label")?.textContent ?? "";
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
-    /^Mark as (un)?read$/u.test(each.textContent ?? ""),
+    /^Mark as (un)?read$/u.test(words(each)),
   );
   act(() => {
     if (choose) item?.click();
     else menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
   assert.equal(document.querySelector('[role="menu"]') === null, true, "the menu closes");
-  return item?.textContent ?? undefined;
+  return item === undefined ? undefined : words(item);
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {

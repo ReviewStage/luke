@@ -18,8 +18,6 @@ import {
   gatewayHost,
 } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import type { OpenSocket } from "@luke/voice/live-socket";
-import { scriptedOpenSocket } from "@luke/voice/testing";
 import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { jsonResponse } from "@luke/wire/testing";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
@@ -84,7 +82,6 @@ const until = (holds: () => boolean) =>
 const signedInAccount = (input: {
   readonly kernel: HostKernel;
   readonly machine: Layer.Layer<AppIdentity>;
-  readonly openSocket: OpenSocket;
 }) => desktopAccount({ ...input, consent: grantingConsent, signedIn: true });
 
 /**
@@ -95,7 +92,6 @@ const signedInAccount = (input: {
 const desktopAccount = (input: {
   readonly kernel: HostKernel;
   readonly machine: Layer.Layer<AppIdentity>;
-  readonly openSocket: OpenSocket;
   readonly consent: OpenConsent;
   readonly signedIn: boolean;
 }) =>
@@ -133,10 +129,7 @@ const desktopAccount = (input: {
         }),
       );
     }
-    const account = yield* Effect.provide(
-      composeAccount({ settings, openSocket: input.openSocket }),
-      machine,
-    );
+    const account = yield* Effect.provide(composeAccount({ settings }), machine);
     yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
     yield* account.lifetime;
     return account;
@@ -167,7 +160,6 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     const account = yield* signedInAccount({
       kernel,
       machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
-      openSocket: scriptedOpenSocket([]).openSocket,
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = account.methods[method];
@@ -217,7 +209,6 @@ it.effect(
         const account = yield* desktopAccount({
           kernel,
           machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
-          openSocket: scriptedOpenSocket([]).openSocket,
           consent: () => ({
             signInEffect: () => Effect.succeed({ reason, failure }),
             cancel: () => undefined,
@@ -267,7 +258,6 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
     const account = yield* signedInAccount({
       kernel,
       machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
-      openSocket: scriptedOpenSocket([]).openSocket,
     });
     // Nothing is read until the gate opening asks, so nothing is an admin before it, and the read is owed.
     assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
@@ -394,16 +384,11 @@ const browserAccount = (service: TabService) =>
       NodePath.layer,
     );
     const settings = yield* Effect.provide(composeSettings(), machine);
-    const account = yield* Effect.provide(
-      composeAccount({ settings, openSocket: scriptedOpenSocket([]).openSocket }),
-      machine,
-    );
+    const account = yield* Effect.provide(composeAccount({ settings }), machine);
     yield* settings.link({
       credential: account.credential,
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
-      setVoice: () => Effect.void,
-      endLiveSession: Effect.void,
     });
     yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
     const launched = yield* Effect.forkScoped(account.lifetime);

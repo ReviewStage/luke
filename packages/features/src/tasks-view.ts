@@ -93,9 +93,8 @@ import {
  * The host reads the service for these and tells the desktop the whole view
  * whenever it moves; the desktop writes it into the document the tasks
  * window draws from. Exactly one task is ever active, the one the window has
- * open, and it is the task a voice session binds to. The view carries task
- * names, documents, and what was said on the active task's calls from the
- * service, and nothing of this Mac's own: a task's repository is the
+ * open. The view carries task names and documents from the service, and
+ * nothing of this Mac's own: a task's repository is the
  * service's, named on the task itself. Beside the tasks it carries the
  * workspaces the account is a member of, and the shapes the window asks a
  * workspace made, a GitHub organization connected or disconnected, a
@@ -144,43 +143,6 @@ const tasksDocumentSchema = EffectSchema.Struct({
 
 export type TasksDocument = typeof tasksDocumentSchema.Type;
 
-/**
- * The two waits on the voice side that no live status names: the voice model
- * delegated an ask the brain has not yet taken, or words are queued
- * for Luke that his voice has not begun to say.
- */
-export const VOICE_PHASE = {
-  HANDING_OFF: "handing_off",
-  ABOUT_TO_ANSWER: "about_to_answer",
-} as const;
-
-export type VoicePhase = (typeof VOICE_PHASE)[keyof typeof VOICE_PHASE];
-
-/** The most of the brain's pending command an activity carries; the service cuts it there. */
-export const TASK_ACTIVITY_ACTION_MAX_CHARS = 120;
-
-/**
- * What each part of Luke is doing on a task call, whole, as the service's
- * `task.activity` frame says it: the voice's wait where it is in one, the
- * brain while it works on an ask with the command it is running
- * where one is pending. Nothing of the ask, and no tool's output.
- */
-export const taskActivitySchema = EffectSchema.Struct({
-  voice: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(VOICE_PHASE))),
-  // Note that the key keeps the wire's legacy spelling, renamed with the wire in the follow-up.
-  planner: EffectSchema.optionalKey(
-    EffectSchema.Struct({
-      action: EffectSchema.optionalKey(
-        EffectSchema.String.check(EffectSchema.isMaxLength(TASK_ACTIVITY_ACTION_MAX_CHARS)),
-      ),
-    }),
-  ),
-  // Note that no notetaker writes beside a call any more and no desktop draws one, so the key is optional here, never removed: this release parses a frame with or without it, while the service keeps sending `notes: false` for the earlier desktops that still require it.
-  notes: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
-
-export type TaskActivity = typeof taskActivitySchema.Type;
-
 /** One run of a line in one colour per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,
@@ -227,6 +189,12 @@ export const tasksViewSchema = EffectSchema.Struct({
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The tasks a rename, a pin, or where they stand, asked on this Mac and not
+   * yet carried by the list, is drawn over, so a list that holds its rows
+   * still while read moves those at once; absent where none stands.
+   */
+  pendingTasks: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
   listStatus: tasksReadSchema,
   /** Whether what the host follows live is current (`HOST_LIVE`); absent before the list's follow first says, which reads as live. */
   live: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOST_LIVE))),
@@ -243,19 +211,10 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
-  /** What each part of Luke is doing on the call about the active task, as last told; absent with no task open or no word yet. */
-  activity: EffectSchema.optionalKey(taskActivitySchema),
-  /**
-   * What each part of Luke is doing on the standing call, whichever task it
-   * is about, as last told: what the floating call window draws while the
-   * call's task is not the one open. Absent before the first word and once
-   * the call has ended.
-   */
-  callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
-   * none, and cleared with the activity. Their HTML is never held here: the
+   * none, and cleared as the task is left. Their HTML is never held here: the
    * frame that draws a page reads it alone (`brain.page`).
    */
   pages: EffectSchema.optionalKey(EffectSchema.Array(pageLineSchema)),
@@ -351,6 +310,8 @@ export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
+  /** The name the window knows the member assigned by, which the host draws them by until the list carries them; never sent to the service. */
+  assigneeName: EffectSchema.optionalKey(EffectSchema.String),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;

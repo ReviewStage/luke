@@ -37,7 +37,7 @@ agents run on your Mac"). Apart from that, nothing in Luke reads an agent sessio
 Mac's disk or from any other app, except a file you hand it to attach to a
 agent's message (see "Files you attach to an agent"). The only
 agents it lists are the ones started on a task from Luke — its Start
-button, New agent, New voice chat, or another agent — which
+button, New agent, or another agent — which
 our service runs in sandboxes of their own (see "Who we send it to"), and
 the transcripts it shows, each an agent's or one of its workers', are
 read from our service. Each agent reads a task's repository in its
@@ -109,10 +109,10 @@ and an agent is told its command was not run or had no answer; after that, it
 is told that no Mac is listening.
 
 **Your conversations with agents.** Nothing on your Mac writes what you said
-or what the voice spoke to disk, and no record of what an agent did is kept
+to disk, and no record of what an agent did is kept
 there. Opening an agent, yours or another member's, reads its
 transcript (its words, reasoning summaries, and tool calls with their input
-and output, and the lines said on its calls) for its tab, as it runs, and
+and output, and the lines said on calls an earlier version took) for its tab, as it runs, and
 opening one of its workers reads that worker's whole session for its own
 tab. All of this is held in Luke's memory, never on disk, goes when you leave
 the task or quit Luke, and is left out of the screen recording (see "Screen
@@ -149,7 +149,7 @@ workspace: the first workspace made for your account unless you start it in
 another workspace you are a member of, and the task records which, and who
 started it, named by their account's name to every member of the workspace. Every member of that
 workspace can read, change, and delete the task, its pages, and its
-history, read what was said on its calls, yours included, and read,
+history, read what was said on calls an earlier version took, yours included, and read,
 message, rename, and stop the agents any member started on it. Each
 message a member sends an agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
@@ -195,9 +195,9 @@ lost him, is already marked deleted, whether or not the task is, and is
 removed seven days after it was marked. Before it deletes anything, it
 stops every agent of the task still at work, as Stop does; if one
 cannot be stopped just then, or is still starting, the task is not deleted
-and you can try again in a moment. It also deletes the record of each call an
-earlier version made on the task, with every line said on it (see "Your
-account"), within a minute or so. Deleting your account removes every task. Pinning or archiving a task
+and you can try again in a moment. A deleted task's or agent's past call
+records are kept, unread, until the voice tables are dropped (see "Your
+account"). Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
 
 **A plan's pictures.** When you paste, drop, or choose a picture into a
@@ -521,7 +521,12 @@ on that disk between turns and in the snapshot Vercel keeps when the sandbox
 stops, and are deleted with the sandbox when the task is deleted, as above.
 Your plan's token, or your API key, is handed to Claude Code alone, in its
 process's environment: it is never written to that disk, a command Claude Code runs,
-or the conversation's record.
+or the conversation's record. What you send such an agent in its sandbox, a
+message with the files it carries as Claude Code takes them, a Stop, or a change
+of model, waits in our database as a line for the agent's runner, which reads it
+from there; a message the runner never took is handed to the agent's next launch
+within five minutes of your sending it, or not at all. A line is deleted once
+it is a day old and a later one is sent to that agent, and with the agent.
 
 **An agent that runs on Codex.** On the same terms, for the accounts in
 the early test of ChatGPT plans, an agent your ChatGPT plan pays for
@@ -748,23 +753,23 @@ installation, and activity counts, on an admin page that only an account we
 have marked as an administrator can open: on our site, and in the Mac app and
 the web app, where it reads the same answers through the app's own
 connection to our service. Beside them it shows
-how many tasks you created and minutes of calls you held over a window; your
+how many tasks you created over a window; your
 agents, each with when it started, the repository it works in, its
 model and effort, whether it is running, finished, or failed with the fixed
 word for why, and whether its pull request is open, merged, or closed; which
 providers you saved a key for or connected, and whether each key or
 connection works; your agent model and effort, and the experiments
-you turned on; and when a call of yours dropped or an automation of yours
-failed to start, with the fixed word for why. For the most active accounts it
+you turned on; and when an automation of yours failed to start, with the
+fixed word for why. For the most active accounts it
 also shows how many agents you started and pull requests of theirs
-merged, on how many days you created a task, wrote a plan revision, started
-an agent, or held a call, and when you last signed in. Counted across all
+merged, on how many days you created a task, wrote a plan revision, or
+started an agent, and when you last signed in. Counted across all
 accounts, never named to one, it shows how many plan revisions, inbox
 answers, and automation runs there were, and how many accounts have GitHub
 connected on a workspace, have an integration
 connected, or opened or merged a pull request.
 Across every account, the same page counts how many of Luke's turns,
-agents' runs, calls, and automation runs ended and how many failed, were
+agents' runs, and automation runs ended and how many failed, were
 dropped, or were skipped, each by the fixed word the service records for why.
 Where one of your own API keys stands refused, out of quota, or unreadable,
 one of your integrations stands expired, or a workspace you belong to has its
@@ -773,8 +778,8 @@ which provider or integration it is and that status, when it last changed,
 and how many of your agents failed in the past week; that list names
 no workspace and no repository. The same page shows the service's use at
 public list prices, a figure for comparison and not what we are billed,
-from the model tokens each turn recorded and the seconds of voice,
-dictation, and video avatar it metered: mostly as totals across every
+from the model tokens each turn recorded and the seconds of dictation it
+metered: mostly as totals across every
 account, and, for the accounts whose use comes to the most at those prices
 over the days chosen, what each one's use comes to, how many tokens of it
 no price was known for, and how many of its agents' pull requests
@@ -829,8 +834,8 @@ as written, and our own operators can read them. They stand until you delete
 your account, which removes them at once. A deleted task's agents'
 transcripts are marked deleted and removed seven days later, as is every
 conversation a task held with its own Luke before tasks lost him (see
-"Tasks"); its call records, with the lines said on them, are deleted within a
-minute or so of the task.
+"Tasks"). A deleted task's or agent's past call records are kept, unread,
+until the voice tables are dropped.
 
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
 signs you in to Linear in your browser through Vercel Connect, which stores
@@ -1168,8 +1173,8 @@ query parameters, and the IP address a request came from; every line they
 log; and Sentry's agent traces of each turn, which name the model and each
 tool called and say how long each call took, how many tokens it used, and
 whether it failed. Neither the agents nor the web functions send Sentry the
-instructions or messages sent to a model (the plan, the conversation, what was
-said on a call, or what the agents read, such as code, a command's output from
+instructions or messages sent to a model (the plan, the conversation, or what
+the agents read, such as code, a command's output from
 your Mac, or an integration's answer), a model's replies, or a tool call's
 arguments or result. The words of an error, a log line, or a local variable
 can still quote what an agent was working on, such as the path of a file a

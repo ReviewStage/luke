@@ -186,7 +186,7 @@ const runGoesOn = (sandbox: NativeSandbox) =>
       : Option.none(),
   );
 
-/** Whether the run of the sandbox's agent ended longer ago than the wait given, the grace where none is, read from the store. */
+/** The run of the sandbox's agent where it ended longer ago than the wait given, the grace where none is, read from the store: its conversation and its starter. */
 const runEnded = (
   sandbox: NativeSandbox,
   now: Date,
@@ -194,11 +194,9 @@ const runEnded = (
 ) =>
   Effect.map(readNativeRunStanding(sandbox.agentId), (standing) => {
     if (Option.isNone(standing)) return Option.none();
-    const { conversationId, endedAt } = standing.value;
+    const { endedAt } = standing.value;
     const endedBefore = now.getTime() - Duration.toMillis(wait);
-    return endedAt === null || endedAt.getTime() > endedBefore
-      ? Option.none()
-      : Option.some(conversationId);
+    return endedAt === null || endedAt.getTime() > endedBefore ? Option.none() : standing;
   });
 
 /**
@@ -210,10 +208,11 @@ const runEnded = (
  */
 const retiredPastWarm = (api: VercelSandboxApi, sandbox: NativeSandbox, now: Date) =>
   Effect.gen(function* () {
-    if (Option.isNone(yield* runEnded(sandbox, now, CODER.RUNNER_WARM))) {
-      return SANDBOX_ENDING.LEFT;
-    }
-    const retired = yield* Effect.result(retireWarmRunner(sandbox));
+    const ended = yield* runEnded(sandbox, now, CODER.RUNNER_WARM);
+    if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
+    const retired = yield* Effect.result(
+      retireWarmRunner({ ...sandbox, userId: ended.value.userId }),
+    );
     if (Result.isFailure(retired)) {
       yield* Effect.logWarning(`a warm native runner was not retired: ${retired.failure._tag}`);
       return SANDBOX_ENDING.FAILED;
@@ -257,7 +256,7 @@ const endSandbox = (
     if (runner === RUNNER_STANDING.RUNNING) return yield* retiredPastWarm(api, sandbox, now);
     const ended = yield* runEnded(sandbox, now);
     if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
-    if (yield* sandboxHeld(ended.value, now)) return SANDBOX_ENDING.HELD;
+    if (yield* sandboxHeld(ended.value.conversationId, now)) return SANDBOX_ENDING.HELD;
     return yield* stopWithinBudget(api, sandbox.running, budget, "an ended native sandbox");
   });
 

@@ -109,12 +109,15 @@ import {
   inboxReadAllRequestSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
-import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
+  ACCOUNT_INBOX_ITEMS,
+  type AccountInboxItemsLiveAnswer,
+  type AccountInboxLiveAnswer,
   type AgentTranscriptLiveAnswer,
   LIVE_POLL,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
+  type ScopeInboxLiveAnswer,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -1067,7 +1070,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams as GitHub holds them now. */
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams as GitHub holds them now. */
   reviewOptions(
     agentId: string,
   ): Effect.Effect<CodingAgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
@@ -1158,6 +1161,39 @@ export class HostedCodingAgentClient {
         poll,
         after,
       ),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, {}));
+  }
+
+  /**
+   * Every inbox item the account reaches sealed for following over Neon
+   * Realtime, or with `poll` its rows inline, answered at once: where each
+   * stands, and those changed since `since` (epoch milliseconds; every one
+   * where none is named) whole. A poll is held on where they stand alone, so
+   * `after` is that part's digest (`liveDigestOn` over
+   * `ACCOUNT_INBOX_ITEMS.HELD_ON`). Unanswered for anything that went wrong,
+   * which the caller answers by asking again. Sealed for the account
+   * `userId` names, and signed out where the session is no longer that
+   * account's.
+   */
+  accountInboxItemsLive(
+    userId: string,
+    since: number | undefined,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AccountInboxItemsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = {
+      [LIVE_USER_QUERY]: userId,
+      ...(since === undefined ? undefined : { [ACCOUNT_INBOX_ITEMS.SINCE]: String(since) }),
+    };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.inboxItems, read, poll, after),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

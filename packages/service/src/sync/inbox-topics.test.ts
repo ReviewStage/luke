@@ -36,7 +36,13 @@ import {
   postInboxThread,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
-import { agentInboxLive, channelsLive, inboxLive, taskInboxLive } from "./live-queries.js";
+import {
+  agentInboxLive,
+  channelsLive,
+  inboxItemsLive,
+  inboxLive,
+  taskInboxLive,
+} from "./live-queries.js";
 import type { LiveParams, LiveQuery } from "./live-query.js";
 
 /**
@@ -105,9 +111,10 @@ const wakes = <A, E, R>(
     return fired;
   });
 
-/** The four reads of the world's inbox, as the member follows them. */
+/** The five reads of the world's inbox, as the member follows them. */
 const inboxReadsOf = (world: InboxWorld, userId: string) => ({
   account: [inboxLive, { userId }] as const,
+  items: [inboxItemsLive, { userId, since: "0", settledSince: "0" }] as const,
   task: [taskInboxLive, { userId, taskId: world.taskId }] as const,
   agent: [agentInboxLive, { userId, agentId: world.agentId }] as const,
   channels: [channelsLive, { userId, workspaceId: world.workspaceId }] as const,
@@ -142,9 +149,11 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
 
         yield* wakes(postQuestion(world), itemTopics(world), [
           owner.account,
+          owner.items,
           owner.task,
           owner.agent,
           teammate.account,
+          teammate.items,
           teammate.channels,
         ]);
       }),
@@ -174,7 +183,7 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
             ],
           }),
           itemTopics(world),
-          [teammate.account, teammate.task, teammate.agent, teammate.channels],
+          [teammate.account, teammate.items, teammate.task, teammate.agent, teammate.channels],
         );
         yield* wakes(
           withdrawInboxMessage(world.teammate, itemId, clientKey),
@@ -202,7 +211,7 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
             [TOPIC.TASK, world.taskId],
             [TOPIC.AGENT, world.agentId],
           ],
-          [teammate.account, teammate.task, teammate.agent],
+          [teammate.account, teammate.items, teammate.task, teammate.agent],
         );
         assert.ok(marked.value !== false && marked.value.txid !== undefined, "the mark moved");
         assert.deepEqual(marked.txids, [marked.value.txid]);

@@ -387,15 +387,11 @@ const FIXTURE_TASK_LIST: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/**
- * The open task mid-call, the brain running a repository command, so the
- * capture shows both of the status row's lines.
- */
+/** The open task, its document read. */
 const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
   document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
-  activity: { planner: { action: "grep -rn pending src/members" } },
 };
 
 /** One thread's comment, written by `writer` at `at`. */

@@ -56,6 +56,7 @@ import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { HeldInboxesProvider } from "../tasks/held-inboxes.js";
 import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
@@ -581,6 +582,7 @@ export function mount(
     toasts = false,
     channels = false,
     chosen: firstChosen,
+    windowRoot = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -601,6 +603,8 @@ export function mount(
     channels?: boolean;
     /** The item the Inbox opens on, as a row's press chose it before; none where nothing is chosen yet. */
     chosen?: InboxChoice;
+    /** Whether the Inbox stands under the window's root, holding the window's inboxes, and is drawn only while open, as the shell draws it. */
+    windowRoot?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -679,7 +683,10 @@ export function mount(
         onClose: () => undefined,
       },
     });
-    const inbox = createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
+    const inbox =
+      windowRoot && !inboxOpen
+        ? null
+        : createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
@@ -706,7 +713,10 @@ export function mount(
       : createElement(Panelled, { at: room });
   const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   if (channels) chooseChannel(GENERAL.id);
-  act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
+  const rooted = windowRoot
+    ? createElement(HeldInboxesProvider, { account: READER.userId }, page)
+    : page;
+  act(() => world.root?.render(onRegistry(AtomRegistry.make(), rooted)));
   return { page: container, asked };
 }
 
@@ -1138,6 +1148,7 @@ export function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
     agentId: asked.agentId,
     title: asked.title,
     postedAt: asked.postedAt,
+    updatedAt: asked.updatedAt,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",

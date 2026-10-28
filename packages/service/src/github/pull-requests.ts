@@ -2697,8 +2697,14 @@ export function viewerCanUpdateOf(
 /** The repository's labels, as its pickers list them. */
 const LabelsSchema = Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String }));
 
-/** The repository's collaborators, each an account. */
-const CollaboratorsSchema = Schema.Array(GitHubAccountSchema);
+/**
+ * The users who may be assigned in the repository, each an account: who the
+ * reviewer picker offers. Note that they are read rather than its
+ * collaborators, because GitHub lists an installation token no collaborator
+ * whose access comes through the organization, which leaves an
+ * organization's repository with nobody to ask.
+ */
+const AssigneesSchema = Schema.Array(GitHubAccountSchema);
 
 /** The teams that reach the repository. */
 const TeamsSchema = Schema.Array(TeamSchema);
@@ -2706,7 +2712,7 @@ const TeamsSchema = Schema.Array(TeamSchema);
 /** The most pages of each of the pickers' listings read: their bound, a hundred to a page. */
 const OPTIONS_MAX_PAGES = Math.ceil(OVERVIEW_BOUNDS.MAX_OPTIONS / PEOPLE_PER_PAGE);
 
-/** What the reviewer and label pickers offer, read of the repository: its labels, its collaborators, and its teams, each up to the bound. */
+/** What the reviewer and label pickers offer, read of the repository: its labels, its assignable users, and its teams, each up to the bound. */
 export interface GitHubReviewOptions {
   readonly labels: readonly GitHubLabel[];
   readonly users: readonly GitHubAccount[];
@@ -2739,8 +2745,8 @@ function optionsListing<A>(
 
 /**
  * What the reviewer and label pickers offer, read on the token of the
- * agent's repository in three asks at once: its labels, its collaborators,
- * who may be asked for a review, and the teams that reach it.
+ * agent's repository in three asks at once: its labels, its assignable
+ * users, who may be asked for a review, and the teams that reach it.
  */
 export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullRequestReviewOptions")(
   function* (
@@ -2751,7 +2757,7 @@ export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullReque
     const [labels, users, teams] = yield* Effect.all(
       [
         optionsListing(token, `${path}/labels`, LabelsSchema, "labels"),
-        optionsListing(token, `${path}/collaborators`, CollaboratorsSchema, "collaborators"),
+        optionsListing(token, `${path}/assignees`, AssigneesSchema, "assignees"),
         optionsListing(token, `${path}/teams`, TeamsSchema, "teams"),
       ],
       { concurrency: "unbounded" },

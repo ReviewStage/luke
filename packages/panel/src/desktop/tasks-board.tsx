@@ -884,6 +884,7 @@ export function TasksBoard({
           />
         </div>
       </div>
+      {selection.dialog}
     </CollectionPage>
   );
 }

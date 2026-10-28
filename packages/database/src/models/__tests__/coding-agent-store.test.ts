@@ -14,7 +14,6 @@ import {
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
-import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_CHANNEL,
@@ -33,14 +32,12 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
-import { voiceSessions, voiceTranscriptSegments } from "../../schemas/voice.js";
 import {
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace } from "../../testing/index.js";
-import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
@@ -103,7 +100,6 @@ import {
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
-import { VOICE_WRITE_REFUSAL, voiceWriter } from "../voice-writer.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
 /**
@@ -396,7 +392,7 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) => {
   it.effect(
-    "a line typed into a call into the agent is its ask's, and a turn receiving the same words never takes it as a line awaiting a turn",
+    "a line an earlier build's call typed into the agent is never taken by a turn receiving the same words as a line awaiting a turn",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -408,20 +404,26 @@ it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) =
         const turnId = randomUUID();
         yield* writer.enqueueTurn(target, {
           turnId,
-          origin: TURN_ORIGIN.SPOKEN,
+          origin: TURN_ORIGIN.TYPED,
           eveTurnId: "turn_0",
         });
         const text = "Use the fixture branch.";
-        yield* writer.writeTypedCallLine(target, {
-          clientId: "typed-line-1",
-          text,
-          metadata: {
-            channel: MESSAGE_CHANNEL.TYPED,
-            voice_session_id: randomUUID(),
-            from_ms: 900,
-          },
-          sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
-        });
+        yield* Database.use((db) =>
+          db.insert(messages).values({
+            userId: owner,
+            conversationId: target.conversationId,
+            seq: 100,
+            clientId: "typed-line-1",
+            role: MESSAGE_ROLE.USER,
+            parts: [{ type: "text", text }],
+            metadata: {
+              channel: MESSAGE_CHANNEL.TYPED,
+              voice_session_id: randomUUID(),
+              from_ms: 900,
+            },
+            placedAt: new Date(),
+          }),
+        );
         assert.deepEqual(
           Result.map(yield* writer.takeAwaitingLine(target, { text, turnId }), (ids) => ids.length),
           Result.succeed(0),
@@ -2025,18 +2027,22 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
 
         assert.deepEqual(Option.getOrThrow(beforeAnyTurn), {
           conversationId: claude.conversationId,
+          userId: starter,
           endedAt: null,
         });
         assert.deepEqual(Option.getOrThrow(ended), {
           conversationId: claude.conversationId,
+          userId: starter,
           endedAt: settledAt,
         });
         assert.deepEqual(Option.getOrThrow(cancelled), {
           conversationId: codex.conversationId,
+          userId: starter,
           endedAt: settledAt,
         });
         assert.deepEqual(Option.getOrThrow(running), {
           conversationId: claude.conversationId,
+          userId: starter,
           endedAt: null,
         });
         assert.ok(Option.isNone(yield* readNativeRunStanding(eve.id)));
@@ -2288,7 +2294,7 @@ it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
 
 it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
   it.effect(
-    "a teammate's delete takes the agent, its pins, and the words said on its calls, keeps the calls, and stamps its conversation deleted; one that no longer stands stopped refuses with nothing written, and an outsider reaches nothing",
+    "a teammate's delete takes the agent and its pins, and stamps its conversation deleted; one that no longer stands stopped refuses with nothing written, and an outsider reaches nothing",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -2299,26 +2305,6 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
         yield* openWorkspace(outsider);
         const { agentId, conversationId } = yield* tasklessAgent(starter, workspace);
         yield* pinCodingAgent(starter, agentId, true);
-        const call = randomUUID();
-        yield* Database.use((db) =>
-          db.insert(voiceSessions).values({
-            id: call,
-            userId: starter,
-            agentId,
-            liveSessionId: `live-${call}`,
-            delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          }),
-        );
-        yield* Database.use((db) =>
-          db.insert(voiceTranscriptSegments).values({
-            voiceSessionId: call,
-            seq: 1,
-            role: VOICE_SEGMENT_ROLE.USER,
-            text: "Ship the flaky test fix.",
-            startMs: 0,
-            endMs: 900,
-          }),
-        );
         const retired: string[][] = [];
         const guard = (stopped: boolean) => ({
           standsStopped: () => Effect.succeed(stopped),
@@ -2340,45 +2326,12 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
           .select({ userId: agentPin.userId })
           .from(agentPin)
           .where(eq(agentPin.codingAgentId, agentId));
-        const words = yield* db
-          .select({ seq: voiceTranscriptSegments.seq })
-          .from(voiceTranscriptSegments)
-          .where(eq(voiceTranscriptSegments.voiceSessionId, call));
-        const calls = yield* db
-          .select({ agentId: voiceSessions.agentId })
-          .from(voiceSessions)
-          .where(eq(voiceSessions.id, call));
         const [stamped] = yield* db
           .select({ deletedAt: conversations.deletedAt })
           .from(conversations)
           .where(eq(conversations.id, conversationId));
-        assert.deepEqual(
-          [pins, words, calls, stamped?.deletedAt !== null],
-          [[], [], [{ agentId: null }], true],
-        );
+        assert.deepEqual([pins, stamped?.deletedAt !== null], [[], true]);
         assert.ok(Option.isNone(yield* deleteCodingAgent(starter, agentId, guard(true))));
-        // The call is still open, and a word its voice writes after the delete is taken by nothing.
-        const voice = voiceWriter({ store: yield* storeWriter({ tools: {} }) });
-        const late = yield* voice.consume(
-          {
-            userId: starter,
-            liveSessionId: `live-${call}`,
-            conversation: { userId: starter, conversationId },
-          },
-          {
-            type: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
-            event_id: "event_late",
-            delta: " and the release notes",
-            start_ms: 1_000,
-            end_ms: 1_400,
-          },
-        );
-        assert.ok(Result.isFailure(late) && late.failure === VOICE_WRITE_REFUSAL.NO_SESSION);
-        const after = yield* db
-          .select({ seq: voiceTranscriptSegments.seq })
-          .from(voiceTranscriptSegments)
-          .where(eq(voiceTranscriptSegments.voiceSessionId, call));
-        assert.deepEqual(after, []);
       }),
   );
 });

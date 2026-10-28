@@ -126,12 +126,15 @@ import {
   answerOf,
   askNumberedPick,
   EMPTY_INBOX_DRAFT,
+  holderAutomationId,
+  holderName,
   INBOX_HOLDER,
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
   itemWorkspaceId,
   knownAsk,
+  operatorHolder,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
@@ -874,7 +877,7 @@ function phoneItemGroups(
         : [
             {
               label: OPEN_AUTOMATION,
-              detail: holder.name,
+              detail: holderName(holder),
               icon: <ZapIcon />,
               onSelect: onOpenHolder,
             },
@@ -1079,7 +1082,7 @@ function AnswerMentions({
 /** The words a dictation into an item's box is likely to say: its repository's, its title's, and its thread's. */
 function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[] {
   const repository =
-    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.repository || null;
+    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.agent.repository;
   const body = (item.thread ?? []).map((message) => message.text).join("\n");
   return dictationKeywords({ repository, title: item.title, body });
 }
@@ -1150,14 +1153,15 @@ function useAutomationCrumb(
   holder: InboxHolder,
   onOpen: (() => void) | undefined,
 ): Crumb | undefined {
-  const automationId = holder.kind === INBOX_HOLDER.AUTOMATION ? holder.automationId : null;
+  const automationId = holderAutomationId(holder);
   const known = useAutomation(automationId ?? undefined);
-  if (holder.kind !== INBOX_HOLDER.AUTOMATION) return undefined;
+  if (holder.kind !== INBOX_HOLDER.AGENT) return undefined;
+  const name = holderName(holder);
   return {
-    label: holder.name,
+    label: name,
     // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
     glyph: <HolderGlyph holder={holder} />,
-    hint: holder.name,
+    hint: name,
     card:
       known === undefined ? undefined : (
         <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
@@ -1199,7 +1203,7 @@ function Crumbs({
 }): React.JSX.Element {
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
   // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
-  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
+  const operator = operatorHolder(holder);
   const crumbs: Crumb[] = [
     taskCrumb(holder, doors) ?? (operator ? undefined : automation),
     // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
@@ -1230,7 +1234,7 @@ function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefine
 /** The path's agent crumb, wearing its mark, or Luke's face for Luke's own, and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
 function agentCrumb(holder: InboxHolder, by: ItemAgent, fixed = false): Crumb {
   const { name, agent } = by.subject;
-  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
+  const operator = operatorHolder(holder);
   return {
     label: name,
     glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
@@ -1346,7 +1350,7 @@ export function InboxPane({
     onEnter: () => sendFromPane(pane.current),
   };
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
-  const workspaceId = itemWorkspaceId(holder, item.agentId);
+  const workspaceId = itemWorkspaceId(holder);
   const onDraft = (next: InboxDraft) => control.onDraft(item, next);
   // The open ask's controls stand in the draft reply, over its note.
   const asking = openAskOf(thread);

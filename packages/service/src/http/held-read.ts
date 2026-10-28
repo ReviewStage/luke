@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SyncTopic } from "@luke/database/sync/notification";
-import { type Duration, Effect, Option } from "effect";
+import { Clock, Duration, Effect, Option } from "effect";
 import { Sync } from "../sync/watch.js";
 
 /**
@@ -68,12 +68,22 @@ export interface Held<A> {
   readonly heardAt: Option.Option<number>;
 }
 
+/** The instant, in epoch milliseconds, past which the clock alone may move a read that has not moved; none where only a write may. */
+type ClockEdge<A> = (read: A) => number | undefined;
+
+/** A read no clock moves, only a write. */
+const NO_CLOCK_EDGE: ClockEdge<unknown> = () => undefined;
+
+/** What a wait the clock edge ended rather than a write answers. */
+const NO_TXIDS: readonly string[] = [];
+
 /**
  * Reads until a read is one `moved` says moved, which it answers, or the
  * hold ends, answering none, waiting between reads on a watch of the
- * topics, which wakes every `poll` where nothing else does. Note that the
- * watch is opened before the first read, so a write that commits while that
- * read runs still wakes the look after it.
+ * topics, which wakes every `poll` where nothing else does, and, where
+ * `edge` names an instant the clock alone may move the read, then at the
+ * latest. Note that the watch is opened before the first read, so a write
+ * that commits while that read runs still wakes the look after it.
  */
 export function heldUntil<A, E, R>(
   read: Effect.Effect<A, E, R>,
@@ -81,6 +91,7 @@ export function heldUntil<A, E, R>(
   topics: readonly SyncTopic[],
   poll: Duration.Duration,
   hold: Duration.Duration,
+  edge: ClockEdge<A> = NO_CLOCK_EDGE,
 ): Effect.Effect<Option.Option<Held<A>>, E, R> {
   return Effect.scoped(
     Effect.gen(function* () {
@@ -89,9 +100,17 @@ export function heldUntil<A, E, R>(
       let heardAt = Option.none<number>();
       let standing = yield* read;
       while (!moved(standing)) {
-        for (const txid of yield* watch.next) woken.add(txid);
-        // Note that only the wake before the look that moved is kept, since an earlier one that moved nothing, as a parent's write may on a worker's read, is not what this read answers.
-        heardAt = yield* watch.heardAt;
+        const at = edge(standing);
+        const wait =
+          at === undefined
+            ? Effect.map(watch.next, Option.some)
+            : Effect.flatMap(Clock.currentTimeMillis, (now) =>
+                Effect.timeoutOption(watch.next, Duration.millis(Math.max(0, at - now))),
+              );
+        const heard = yield* wait;
+        for (const txid of Option.getOrElse(heard, () => NO_TXIDS)) woken.add(txid);
+        // Note that only the wake before the look that moved is kept, since an earlier one that moved nothing, as a parent's write may on a worker's read, is not what this read answers; a wait its clock edge ended was woken by no write.
+        heardAt = Option.isSome(heard) ? yield* watch.heardAt : Option.none();
         standing = yield* read;
       }
       return { read: standing, txids: [...woken], heardAt };

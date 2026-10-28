@@ -682,17 +682,103 @@ function inboxItemOfLiveRow(
   };
 }
 
-/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
-export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+/** Items as the held read orders a scope's: every open one, then the settled, each the latest changed first. */
+export function inboxInOrder(items: readonly InboxItem[]): readonly InboxItem[] {
   const ordered = latestFirst((item: InboxItem) => item.id);
-  const threads = groupedBy(rows.messages, (message) => message.itemId);
-  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
-  const items = rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf));
   return [
     ...items.filter((item) => item.status === INBOX_STATUS.OPEN).toSorted(ordered),
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
   ];
 }
+
+/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
+export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+  const threads = groupedBy(rows.messages, (message) => message.itemId);
+  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
+  return inboxInOrder(rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf)));
+}
+
+/**
+ * The account's inbox items as one read follows them (`/api/live/inbox-items`):
+ * the query naming the instant the reader holds every item changed since,
+ * in epoch milliseconds (`SINCE`); the parts its poll is held on alone
+ * (`HELD_ON`), so a reader whose `since` moved with no item moving is held
+ * still; and how far back a settled item is carried (`SETTLED_WINDOW_MILLIS`),
+ * an open one always.
+ */
+export const ACCOUNT_INBOX_ITEMS = {
+  SINCE: "since",
+  HELD_ON: ["stamps"],
+  SETTLED_WINDOW_MILLIS: 7 * 24 * 60 * 60 * 1000,
+} as const;
+
+/**
+ * Where a polled read's named parts stand as one value (`liveDigestOf` over
+ * those parts alone): what a reader of a read held on some of its parts
+ * sends as `after`.
+ */
+export function liveDigestOn(
+  queries: Readonly<Record<string, { readonly digest?: string; readonly cursor?: unknown }>>,
+  parts: readonly string[],
+): string | undefined {
+  return liveDigestOf(Object.fromEntries(parts.map((part) => [part, queries[part] ?? {}])));
+}
+
+/**
+ * Every inbox item the account reaches, sealed for following: the address;
+ * where each item stands (`stamps`), every open item and every settled one
+ * changed in the last week, on the account's tasks and of its agents with
+ * no task; and the items among them changed since the reader's `since`,
+ * whole, with their threads and files, as a plan's inbox carries them
+ * (`scopeInboxLiveAnswerSchema`). Its poll is held on `stamps` alone
+ * (`ACCOUNT_INBOX_ITEMS.HELD_ON`), whose digest the reader sends as `after`
+ * (`liveDigestOn`).
+ */
+export const accountInboxItemsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    stamps: sealedLiveQuerySchema,
+    items: sealedLiveQuerySchema,
+    messages: sealedLiveQuerySchema,
+    files: sealedLiveQuerySchema,
+  }),
+});
+
+export type AccountInboxItemsLiveAnswer = typeof accountInboxItemsLiveAnswerSchema.Type;
+
+/**
+ * Where one item stands as its row carries it: its plan, null for an item
+ * of an agent with no task, and its agent; its stamp; whether it is unread
+ * for the reader, which a read mark moves without moving `updatedAt`; who
+ * it waits on; the channel it lives in, which a move between channels
+ * changes alone; and how many messages its thread holds, which a withdrawn
+ * message moves.
+ */
+const inboxItemStampRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  planId: EffectSchema.NullOr(EffectSchema.String),
+  agentId: EffectSchema.String,
+  revision: countedNumber,
+  version: countedNumber,
+  status: inboxItemSchema.fields.status,
+  updatedAt: countedNumber,
+  unread: EffectSchema.Boolean,
+  waitsOn: EffectSchema.String,
+  channelId: EffectSchema.String,
+  messages: countedNumber,
+});
+
+/** The account's items' rows as one delivery carries them, decoded whole where they arrive. */
+export const accountInboxItemsLiveRowsSchema = EffectSchema.Struct({
+  stamps: EffectSchema.Array(inboxItemStampRowSchema),
+  ...scopeInboxLiveRowsSchema.fields,
+});
+
+/** Each part's rows of the account's inbox items, decoded. */
+export type AccountInboxItemsLiveRows = typeof accountInboxItemsLiveRowsSchema.Type;
+
+/** Where one item stands as its stamp row carries it. */
+export type InboxItemStamp = AccountInboxItemsLiveRows["stamps"][number];
 
 /** Two keys compared in order: the first that differs decides. */
 function byKeys(...keys: readonly (readonly [number | string, number | string])[]): number {

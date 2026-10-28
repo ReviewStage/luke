@@ -27,7 +27,7 @@ import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { eq } from "drizzle-orm";
-import { type Context, Effect, Layer, Option, Redacted, Result, Stream } from "effect";
+import { type Context, Effect, Layer, Option, Redacted, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TURN_ORIGIN } from "../../core.js";
 import { HOSTED_API_ERROR } from "../../http/http.js";
@@ -107,10 +107,6 @@ function recordingEve() {
         calls.push(`reset:${sessionId}`);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
-    stream: (sessionId) => {
-      calls.push(`stream:${sessionId}`);
-      return Stream.empty;
-    },
   };
   return { calls, sessions };
 }

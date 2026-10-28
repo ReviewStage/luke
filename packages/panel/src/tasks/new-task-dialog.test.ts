@@ -53,7 +53,7 @@ import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.
 
 /**
  * New task as the developer meets it: a card over the window whose head row
- * holds its title and the repository chip, over the composer, whose words start a coding agent. Each test
+ * holds the repository chip, over the composer, whose words start a coding agent. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
  * does, so closing is read as the card leaving the window, on a registry
  * of its own, as one launch of the window holds.
@@ -251,7 +251,7 @@ async function mount(
   };
 }
 
-test("the card holds the composer with its words focused, the repository chip in the head row after the title, and the model chip on the account's default and Start at its foot, with no Plan toggle", async () => {
+test("the card, named New task, holds the composer with its words focused, the repository chip in the head row, and the model chip on the account's default and Start at its foot, with no Plan toggle", async () => {
   const card = await mount();
   const controls = card.controls();
   const head = card.dialog()?.querySelector(".new-task-head");
@@ -263,7 +263,8 @@ test("the card holds the composer with its words focused, the repository chip in
   for (const each of ["Attach files", "acme/web", "Start a task with no agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
-  assert.equal(head?.querySelector("h2")?.textContent, "New task");
+  const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
+  assert.equal(document.getElementById(name)?.textContent, "New task");
   assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
   assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
   assert.equal(

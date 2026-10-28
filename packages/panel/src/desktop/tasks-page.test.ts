@@ -292,7 +292,7 @@ test("a refresh that failed after the tasks were read keeps the rows drawn under
   assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
-test("a row and a card count the questions waiting on the reader, as the sidebar does, a notice and a teammate's question counting nowhere", async () => {
+test("a row and a card count the questions waiting on the reader, a notice and a teammate's question counting nowhere, while the sidebar counts the notice too, as For you lists it", async () => {
   const page = await mountPage();
   const sidebar = { count: -1 };
   function Sidebar() {
@@ -319,7 +319,7 @@ test("a row and a card count the questions waiting on the reader, as the sidebar
   const listSays = (key: string) => says(rowOf(page, key));
 
   assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 0, 1]);
-  assert.equal(sidebar.count, 3);
+  assert.equal(sidebar.count, 4);
 
   act(() => buttonNamed(page, "Columns").click());
   const cardSays = (key: string) =>

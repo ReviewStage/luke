@@ -48,13 +48,12 @@ A reviewer can hold the build to these as easily as to the layout:
 - An assumption is edited like any other line of the text, never confirmed or
   accepted: there is no checkbox, no Accept, and nothing that moves one
   elsewhere.
-- The document is the record. What was said on a call can be read back in
-  the transcript of the agent it spoke into, but nothing there is a second
+- The document is the record. An agent's transcript is never a second
   document: it is never copied, edited, or handed to an agent. The document
   itself is what Start hands to an agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
 - The work column is the agents'. Each agent started on the task stands in
-  a tab of its own, and any of them takes a call; everything else, the plan's document and the task's Inbox, stands
+  a tab of its own; everything else, the plan's document and the task's Inbox, stands
   in a side panel ("Side panel" below) that the developer opens and closes.
   A task opens with the panel shown on its plan; only an Inbox item not yet
   seen opens it on its own, and there are no second documents.
@@ -799,10 +798,6 @@ the exact shape.
 | Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`packages/panel/src/markdown-message.tsx`) over `@luke/ui/markdown`'s note look (Streamdown, GitHub's dialect), raw HTML not rendered, only `http`/`https` links kept; `@luke/ui`'s `prose.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the task's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
-| Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open task's call alone. |
-| Levels, errors | The voice's notices (`useVoiceNotice`, `voice-notice-toast.ts`), as toasts, and the sidebar's waveform (`desktop/luke-identity.tsx`) | None. |
-| Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
-| The call | `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`tasks/agent-tab.tsx`), their control (`tasks/use-coding-agents.ts`) and the held transcript read (`tasks/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | The plan | Hosted storage; the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), research (LUKE-339), the notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and an agent's `edit_plan` (`packages/service/src/agents/coder-host/plan-edit.ts`). |
 
@@ -843,8 +838,6 @@ changes when a check is run, not when one is planned.
     Start, list, messages, and Stop routes over a fake eve
     (`packages/service/src/agents/coding-agents-app.test.ts`);
   - re-attaching and resuming on the same task;
-  - switching tasks and leaving the task leave its call standing, and
-    deleting the call's task or signing out ends it;
   - Copy's Markdown, at the store's largest document;
 - The Tasks tab (LUKE-347) is held by renderer tests: the tab bar's four
   tabs, the list and document pages, Back leaving the task, the tasks read
@@ -870,9 +863,6 @@ changes when a check is run, not when one is planned.
   the synthetic task list with none open (`app-smoke-expanded.png`, the
   window opening on Tasks), but neither
   capture has been taken yet.
-- **Real voice.** No spoken conversation with Luke has run against GPT Live:
-  ordinary assent, interruption, a continuing answer, a correction, resuming,
-  and switching tasks by voice are untested outside the fakes.
 - **An agent.** No agent has run against a real provider, a
   real checkout, a push, or a pull request. The coder eval
   (`apps/dev/evals/coder.eval.ts`) runs one turn under a scripted model

@@ -118,6 +118,9 @@ const readPlaces = Schema.decodeUnknownOption(
   }),
 );
 
+/** A delete's payload, read back as far as its task goes. */
+const readDelete = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
+
 const roots: Root[] = [];
 
 /** Each status the service was asked to set, as task id and status, in order. */
@@ -126,9 +129,17 @@ let asked: [string, string | undefined][] = [];
 /** Each place in a section the service was asked to put a task, as task id and section, in order. */
 let placed: [string, string | null][] = [];
 
+/** Each task the service was asked to delete, in order. */
+let deleted: string[] = [];
+
+/** The tasks the service refuses to delete. */
+const refusing = new Set<string>();
+
 beforeEach(() => {
   asked = [];
   placed = [];
+  deleted = [];
+  refusing.clear();
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
@@ -164,8 +175,13 @@ async function mountPage(): Promise<{
     restand = setView;
     const control = useTasksTab({
       acts: {
-        // SAFETY: the kinds the test answers are the status and section writes, each answered as kept; every other kind is refused.
+        // SAFETY: the kinds the test answers are the status and section writes and deletes, each answered as kept; every other kind is refused.
         act: ((kind: PortActKind, payload: unknown) => {
+          if (kind === ACT_KIND.TASKS_DELETE) {
+            const doomed = Option.getOrUndefined(readDelete(payload));
+            if (doomed !== undefined) deleted.push(doomed.taskId);
+            return Promise.resolve(doomed === undefined || !refusing.has(doomed.taskId));
+          }
           if (kind === ACT_KIND.TASKS_WRITE_SECTION) {
             const places = Option.getOrUndefined(readPlaces(payload))?.writes ?? [];
             for (const place of places) placed.push([place.taskId, place.sectionId]);
@@ -289,7 +305,7 @@ function barButton(page: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
-test("⌘-clicking two tasks chooses them without opening either, and the bar's Mark done sets both Done under one toast", async () => {
+test("⌘-clicking two tasks chooses them without opening either, and the bar's Status sets both Done under one toast", async () => {
   const { page } = await mountPage();
 
   commandClick(page, "ACME-39");
@@ -297,26 +313,24 @@ test("⌘-clicking two tasks chooses them without opening either, and the bar's 
   assert.deepEqual(chosen(page), ["ACME-42", "ACME-39"]);
   assert.match(page.querySelector('[role="toolbar"]')?.textContent ?? "", /2 selected/u);
 
-  act(() => barButton(page, "Mark done").click());
+  act(() => barButton(page, "Status").click());
+  choose("Done");
   await settle();
 
   assert.deepEqual(asked, [
     ["t-39", TASK_STATUS.DONE],
     ["t-42", TASK_STATUS.DONE],
   ]);
-  assert.deepEqual(groups(page), [
-    ["Launch", []],
-    ["Backlog", ["ACME-36"]],
-  ]);
   assert.match(newestToastSays() ?? "", /2 tasks marked done/u);
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
 
-test("Mark done's Undo puts both tasks back at the status each stood at", async () => {
+test("Status's Undo puts both tasks back at the status each stood at", async () => {
   const { page, hold } = await mountPage();
   commandClick(page, "ACME-39");
   commandClick(page, "ACME-42");
-  act(() => barButton(page, "Mark done").click());
+  act(() => barButton(page, "Status").click());
+  choose("Done");
   await settle();
   // The service's word reaches the tab: both tasks now stand Done.
   hold(TASKS.map((each) => (each.number === 36 ? each : { ...each, status: TASK_STATUS.DONE })));
@@ -338,7 +352,7 @@ test("Mark done's Undo puts both tasks back at the status each stood at", async 
   ]);
 });
 
-test("right-clicking a task chosen among several offers the bar's acts under how many, and Mark done there sets them all Done", async () => {
+test("right-clicking a task chosen among several offers the bar's acts under how many, and Status there sets them all Done", async () => {
   const { page } = await mountPage();
   commandClick(page, "ACME-39");
   commandClick(page, "ACME-42");
@@ -346,9 +360,10 @@ test("right-clicking a task chosen among several offers the bar's acts under how
   rightClick(page, "ACME-42");
   assert.deepEqual(openMenu(), {
     heading: "2 tasks",
-    items: ["Mark done", "Set status", "Move to section"],
+    items: ["Status", "Move to section", "Permanently delete"],
   });
-  choose("Mark done");
+  choose("Status");
+  choose("Done");
   await settle();
 
   assert.deepEqual(asked, [
@@ -359,13 +374,13 @@ test("right-clicking a task chosen among several offers the bar's acts under how
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
 
-test("a chosen task's menu sets every task chosen at the status picked from its Set status", async () => {
+test("a chosen task's menu sets every task chosen at the status picked from its Status", async () => {
   const { page } = await mountPage();
   commandClick(page, "ACME-39");
   commandClick(page, "ACME-36");
 
   rightClick(page, "ACME-39");
-  choose("Set status");
+  choose("Status");
   choose("In progress");
   await settle();
 
@@ -384,7 +399,8 @@ test("right-clicking a task outside the selection offers that task's own menu, a
   const menu = openMenu();
   assert.equal(menu.heading, undefined);
   assert.ok(menu.items.includes("Rename"), "the task's own menu offers Rename");
-  choose("Mark done");
+  choose("Status");
+  choose("Done");
   await settle();
 
   assert.deepEqual(asked, [["t-36", TASK_STATUS.DONE]]);
@@ -407,22 +423,18 @@ test("Esc lets the selection go, and the bar with it", async () => {
   assert.equal(page.querySelector('[role="toolbar"]'), null);
 });
 
-test("Set status sets every task chosen at the status picked, under one toast", async () => {
+test("Status sets every task chosen at the status picked, under one toast", async () => {
   const { page } = await mountPage();
   commandClick(page, "ACME-39");
   commandClick(page, "ACME-36");
 
-  act(() => barButton(page, "Set status").click());
+  act(() => barButton(page, "Status").click());
   choose("In progress");
   await settle();
 
   assert.deepEqual(asked, [
     ["t-39", TASK_STATUS.IN_PROGRESS],
     ["t-36", TASK_STATUS.IN_PROGRESS],
-  ]);
-  assert.deepEqual(groups(page), [
-    ["Launch", []],
-    ["In progress", ["ACME-36", "ACME-39", "ACME-42"]],
   ]);
   assert.match(newestToastSays() ?? "", /2 tasks moved to In progress/u);
 });
@@ -445,6 +457,56 @@ test("Move to section keeps every task chosen in the section picked, and its Und
     ["t-39", null],
     ["t-42", null],
   ]);
+});
+
+test("the bar's Permanently delete asks first, naming how many, and deletes only the tasks chosen once answered", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  commandClick(page, "ACME-42");
+
+  act(() => barButton(page, "Permanently delete").click());
+  const question = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  assert.match(question?.textContent ?? "", /Permanently delete 2 tasks\?/u);
+  assert.deepEqual(deleted, [], "nothing goes before the answer");
+  const confirm = [...(question?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (button) => button.textContent === "Permanently delete",
+  );
+  assert.ok(confirm, "the question offers Permanently delete");
+  act(() => confirm.click());
+  await settle();
+
+  assert.deepEqual([...deleted].sort(), ["t-39", "t-42"]);
+  assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
+});
+
+test("a delete the service refuses for some tasks keeps only those asked of and chosen, and Retry sends none already deleted", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  commandClick(page, "ACME-42");
+  refusing.add("t-42");
+  const question = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+  const press = () => {
+    const button = [...(question()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+      (each) => each.textContent === "Permanently delete",
+    );
+    act(() => (button ?? assert.fail("the question offers Permanently delete")).click());
+  };
+
+  act(() => barButton(page, "Permanently delete").click());
+  press();
+  await settle();
+  assert.match(question()?.textContent ?? "", /Permanently delete 1 task\?/u);
+  assert.match(
+    page.querySelector('[role="toolbar"]')?.textContent ?? "",
+    /1 selected/u,
+    "the task deleted leaves the selection, the one refused stays",
+  );
+
+  refusing.clear();
+  press();
+  await settle();
+  assert.deepEqual(deleted.slice(2), ["t-42"]);
+  assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
 
 test("a task folded away leaves the selection, and reopening its group chooses it no more", async () => {

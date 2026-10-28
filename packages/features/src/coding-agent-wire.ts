@@ -1123,7 +1123,7 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   automationId: codingAgentPageSchema.fields.automationId,
   workspaceId: codingAgentPageSchema.fields.workspaceId,
   repository: codingAgentPageSchema.fields.repository,
-  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  /** Epoch milliseconds the agent last moved: its start, or its newest run to end's end, whichever is later; a run's start is none. */
   activityAt: countedNumber,
   /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
@@ -1695,8 +1695,8 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
 /**
  * What the reviewer and label pickers of an agent's Pull request tab offer
  * (GET), read of its repository rather than its pull request: the
- * repository's labels, the users who may be asked for a review (its
- * collaborators), and its organization's teams that reach it, each up to
+ * repository's labels, the users who may be asked for a review (those it
+ * may assign), and its organization's teams that reach it, each up to
  * the bound; each empty where the Luke GitHub App may not read it.
  */
 export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({

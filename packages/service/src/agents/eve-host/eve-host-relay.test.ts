@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { askRecord } from "@luke/database/models/asks";
 import { hostTurnId } from "@luke/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import {
@@ -11,22 +10,18 @@ import {
   readTurnsByConversation,
 } from "@luke/database/testing";
 import { isToolUIPart } from "ai";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import {
-  ASK_ORIGIN,
-  MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
-  type SpokenAskMetadata,
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
   UNKNOWN_ACTION_STATUS,
 } from "../../core.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
-import { spokenTurn } from "../../testing/eve-turns.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { EVE_HOST_TURN, type EveHostTurn } from "./bounds.js";
@@ -48,36 +43,9 @@ afterAll(() => database.close());
 
 const writer = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 
-/**
- * The developer's spoken line as the voice writer leaves it since the ledger
- * mints row ids: a user row under an id of its own, attached to its
- * delegation, which takes it into the ask's turn where the turn is known and
- * leaves it for the received message otherwise. Answers the row as the old
- * cut did, by id.
- */
-async function spokenLine(
-  target: ConversationTarget,
-  delegationId: string,
-  text: string,
-  metadata: SpokenAskMetadata,
-): Promise<{ readonly ok: true; readonly id: string }> {
-  const rowId = `line-${delegationId}`;
-  const written = await database.run(
-    writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
-  );
-  assert.ok(Result.isSuccess(written));
-  if (!Result.isSuccess(written)) throw new Error("the spoken row was refused");
-  const attached = await database.run(
-    writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
-  );
-  assert.ok(Result.isSuccess(attached));
-  assert.deepEqual(Result.getOrUndefined(attached), [written.success.id]);
-  return { ok: true, id: written.success.id };
-}
 const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
-  asks: { binding: askRecord(), stopTurn: () => Effect.void },
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
@@ -200,28 +168,6 @@ async function rows(target: ConversationTarget) {
   return { turnRows, messageRows };
 }
 
-/**
- * The rows a device would take past the position it holds: the conversation's
- * rows whose place is past it, in sequence, with an absent turn or finish
- * read as absent.
- */
-async function pastCursor(target: ConversationTarget, after: number) {
-  const stored = await readMessagesByConversationTyped(database.run, target.conversationId);
-  return stored
-    .filter((row) => row.seq > after)
-    .map((row) => ({
-      id: row.id,
-      seq: row.seq,
-      clientId: row.clientId,
-      turnId: row.turnId ?? undefined,
-      finishedAt: row.finishedAt ?? undefined,
-    }));
-}
-
-function readMessageSeqs(records: readonly { readonly seq: number }[]): number[] {
-  return records.map((record) => record.seq);
-}
-
 it.effect(
   "a typed ask lands as one turn and its messages through the writer: the words, then the answer with its parts in step order",
   () =>
@@ -268,130 +214,6 @@ it.effect(
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(toolPart.toolCallId, "call-1");
       assert.deepEqual(standing.state.get(), { turns: {} });
-      assert.deepEqual(refusals, []);
-    }),
-);
-
-it.effect(
-  "a spoken turn's received message writes no user row: the developer's line is the transcript's under the ask's own id, and the turn ties that row to itself where it stood unattached; a typed turn's received message is its user row, so one utterance is one line either way",
-  () =>
-    Effect.promise(async () => {
-      const spoken = await conversation();
-      const typed = await conversation();
-      const spokenStanding = standingFor(spoken, EVE_HOST_TURN.SPOKEN);
-      // The service's ask under the delegation's id, dispatched into this eve session, and the
-      // transcript row the voice writer cut for it, written before eve's turn started.
-      const delegationId = `dl_${randomUUID()}`;
-      const askRecordEffects = askRecord();
-      const record = {
-        record: (write: Parameters<typeof askRecordEffects.record>[0]) =>
-          database.run(askRecordEffects.record(write)),
-        dispatchOnce: (
-          target: Parameters<typeof askRecordEffects.dispatchOnce>[0],
-          id: string,
-          dispatch: Parameters<typeof askRecordEffects.dispatchOnce>[2],
-        ) => database.run(askRecordEffects.dispatchOnce(target, id, dispatch)),
-      };
-      const ask = await record.record({
-        userId: spoken.userId,
-        conversationId: spoken.conversationId,
-        clientId: delegationId,
-        origin: ASK_ORIGIN.SPOKEN,
-        createdAt: new Date(NOW),
-      });
-      await record.dispatchOnce(spoken, ask.id, () =>
-        Effect.succeed({
-          sessionId: spokenStanding.sessionId,
-          deliveryId: "delivery-1",
-        }),
-      );
-      const transcript = await spokenLine(spoken, delegationId, "What changed?", {
-        author: MESSAGE_AUTHOR.DEVELOPER,
-        channel: MESSAGE_CHANNEL.VOICE,
-      });
-      assert.ok(transcript.ok);
-      // A device that read the conversation to its end before the turn: the line stands
-      // outside any turn, and the cursor it holds is the line's own position.
-      const early = await pastCursor(spoken, 0);
-      assert.deepEqual(
-        early.map((row) => [row.id, row.turnId]),
-        [[transcript.id, undefined]],
-      );
-      const earlyCursor = early.at(-1)?.seq ?? 0;
-      await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
-      await play(typedTurn("turn_0", 0), standingFor(typed, EVE_HOST_TURN.TYPED));
-
-      const spokenRows = await rows(spoken);
-      const typedRows = await rows(typed);
-      const spokenTurnId = hostTurnId(spokenStanding.sessionId, "turn_0");
-      assert.deepEqual(
-        spokenRows.messageRows.map((row) => [
-          row.role,
-          row.clientId,
-          row.turnId,
-          row.finishedAt !== null,
-        ]),
-        [
-          [MESSAGE_ROLE.USER, `line-${delegationId}`, spokenTurnId, true],
-          [MESSAGE_ROLE.ASSISTANT, spokenTurnId, spokenTurnId, true],
-        ],
-      );
-      // The turn took the line to a fresh place past the early reader's cursor, ahead of its
-      // own reply, so that reader's next page carries the line again, in the turn's group and
-      // first in it; a reader who never passed the old place reads the same rows in the same order.
-      const late = await pastCursor(spoken, earlyCursor);
-      assert.deepEqual(
-        late.map((row) => [row.id, row.turnId]),
-        [
-          [transcript.id, spokenTurnId],
-          [spokenRows.messageRows[1]?.id, spokenTurnId],
-        ],
-      );
-      assert.deepEqual(
-        (await pastCursor(spoken, 0)).map((row) => row.id),
-        late.map((row) => row.id),
-      );
-      assert.deepEqual(
-        readMessageSeqs(late),
-        readMessageSeqs(late).toSorted((a, b) => a - b),
-      );
-      assert.ok((late[0]?.seq ?? 0) > earlyCursor);
-      assert.deepEqual(
-        typedRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
-        [
-          [MESSAGE_ROLE.USER, true],
-          [MESSAGE_ROLE.ASSISTANT, true],
-        ],
-      );
-      assert.deepEqual(
-        [spokenRows.turnRows[0]?.status, typedRows.turnRows[0]?.status],
-        [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED],
-      );
-      // The other half: a row written after its ask learned a turn on record lands tied at its insert.
-      const laterDelegation = `dl_${randomUUID()}`;
-      const later = await record.record({
-        userId: spoken.userId,
-        conversationId: spoken.conversationId,
-        clientId: laterDelegation,
-        origin: ASK_ORIGIN.SPOKEN,
-        createdAt: new Date(NOW),
-      });
-      await record.dispatchOnce(spoken, later.id, () =>
-        Effect.succeed({
-          sessionId: spokenStanding.sessionId,
-          deliveryId: "delivery-2",
-          turnId: spokenTurnId,
-        }),
-      );
-      const laterRow = await spokenLine(spoken, laterDelegation, "And now?", {
-        author: MESSAGE_AUTHOR.DEVELOPER,
-        channel: MESSAGE_CHANNEL.VOICE,
-      });
-      assert.ok(laterRow.ok);
-      const written = (
-        await readMessagesByConversationTyped(database.run, spoken.conversationId)
-      ).find((row) => row.id === laterRow.id);
-      assert.equal(written?.turnId, spokenTurnId);
       assert.deepEqual(refusals, []);
     }),
 );
