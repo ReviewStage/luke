@@ -30,10 +30,14 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js"
  * request or a GitHub issue by its repository and number through the
  * workspace's GitHub App, each on the service, once per chip, and only where that workspace has the
  * connection, so a chip in a workspace without it asks nothing. Until it
- * answers, or where it never does, a repository the App does not reach
- * among them, the chip says what the address says, as it always has, and an
- * answer is held to the workspace it was read through and the connection it
- * was read over, so a workspace that disconnects stops drawing it.
+ * first answers, or where it never does, a repository the App does not reach
+ * among them, the chip says what the address says, as it always has. The
+ * window keeps the last answer for each page by the workspace it was read
+ * through, so a chip drawn again, as a plan's text is when a section opens
+ * in its editor and when it closes, says it at once while it is read again,
+ * rather than its address until the read lands; and a kept answer is drawn
+ * only while that workspace still has the connection, so a workspace that
+ * disconnects stops drawing it.
  */
 
 /** Where the words a chip stands in are: the plan's id, or none off a plan, and the workspace's slug its mentions are written under. */
@@ -210,19 +214,40 @@ function keyOf(asked: Asked): string {
     : `${asked.repository.split("/")[1] ?? asked.repository}#${asked.number}`;
 }
 
-/** Whether two asks ask for the same page. */
-function sameAsked(first: Asked, second: Asked): boolean {
-  if (first.provider === INTEGRATION_PROVIDER.LINEAR) {
-    return (
-      second.provider === INTEGRATION_PROVIDER.LINEAR && first.identifier === second.identifier
-    );
+/** The answers a workspace's connection gave: Linear's issues by identifier, and GitHub's pages by kind, repository, and number. */
+interface HeldStandings {
+  readonly linear: Map<string, LinkStanding>;
+  readonly github: Map<GitHubPage, Map<string, Map<number, LinkStanding>>>;
+}
+
+/**
+ * The last answer this window read for each page, by the workspace it was
+ * read through. Note that each is small and replaced by the next read of
+ * the same page, so the window keeps every one it read rather than bound
+ * them.
+ */
+const heldStandings = new Map<string, HeldStandings>();
+
+/** The last answer read for an ask through a workspace; none before any landed. */
+function heldStanding(workspaceId: string, asked: Asked): LinkStanding | undefined {
+  const held = heldStandings.get(workspaceId);
+  if (asked.provider === INTEGRATION_PROVIDER.LINEAR) return held?.linear.get(asked.identifier);
+  return held?.github.get(asked.page)?.get(asked.repository)?.get(asked.number);
+}
+
+/** An answer kept as the last read for its ask through a workspace. */
+function keepStanding(workspaceId: string, asked: Asked, standing: LinkStanding): void {
+  const held = heldStandings.get(workspaceId) ?? { linear: new Map(), github: new Map() };
+  heldStandings.set(workspaceId, held);
+  if (asked.provider === INTEGRATION_PROVIDER.LINEAR) {
+    held.linear.set(asked.identifier, standing);
+    return;
   }
-  return (
-    second.provider === INTEGRATION_PROVIDER.GITHUB &&
-    first.page === second.page &&
-    first.repository === second.repository &&
-    first.number === second.number
-  );
+  const pages = held.github.get(asked.page) ?? new Map<string, Map<number, LinkStanding>>();
+  held.github.set(asked.page, pages);
+  const numbers = pages.get(asked.repository) ?? new Map<number, LinkStanding>();
+  pages.set(asked.repository, numbers);
+  numbers.set(asked.number, standing);
 }
 
 /** The provider's answer for an ask, through the workspace's connection: a Linear issue by identifier, a pull request or a GitHub issue by repository and number; none where it holds none. */
@@ -340,11 +365,8 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
   );
   const workspaceId = workspace?.id;
   const connected = asked !== undefined && connectedFor(asked, workspace);
-  const [read, setRead] = useState<{
-    workspaceId: string;
-    asked: Asked;
-    standing: LinkStanding;
-  }>();
+  // Note that the answer itself is kept by the window, so this only draws the chip again as it lands.
+  const [, setAnswered] = useState<LinkStanding>();
   // Note that the read stands on what it asks, field by field, so a chip redrawn asks no more.
   const identifier = asked?.provider === INTEGRATION_PROVIDER.LINEAR ? asked.identifier : undefined;
   const page = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.page : undefined;
@@ -361,7 +383,9 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
     let live = true;
     readStanding(act, workspaceId, ask).then(
       (standing) => {
-        if (live && standing !== undefined) setRead({ workspaceId, asked: ask, standing });
+        if (standing === undefined) return;
+        keepStanding(workspaceId, ask, standing);
+        if (live) setAnswered(standing);
       },
       // Note that a refused read leaves the chip as the address says it, which is how it always stood.
       () => undefined,
@@ -371,11 +395,5 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
     };
   }, [act, identifier, page, repository, number, workspaceId, connected]);
   // Note that an answer stands only for the workspace and the connection it was read through, so a disconnect or another workspace drops it at once.
-  const current =
-    connected &&
-    read !== undefined &&
-    asked !== undefined &&
-    read.workspaceId === workspaceId &&
-    sameAsked(read.asked, asked);
-  return current ? read.standing : undefined;
+  return connected && workspaceId !== undefined ? heldStanding(workspaceId, asked) : undefined;
 }
