@@ -78,6 +78,25 @@ fail() {
   exit 1
 }
 
+# Refuses a computer Luke host does not run on, as the script's first word on
+# it, before it changes anything: its kernel ($1), its machine ($2), and its
+# /proc/version ($3), which names Microsoft under WSL.
+require_supported_os() {
+  case "$1" in
+    Linux) ;;
+    Darwin)
+      case "$2" in
+        arm64) fail "Luke host runs on Linux. On a Mac, install the Luke app and sign in instead." ;;
+        *) fail "Luke does not run agents on Intel Macs." ;;
+      esac
+      ;;
+    *) fail "Luke host runs on Linux, not $1." ;;
+  esac
+  case "$3" in
+    *[Mm]icrosoft* | *WSL*) fail "Luke host does not run on Windows, including WSL." ;;
+  esac
+}
+
 # Refuses a box whose KVM device is missing or cannot be opened, as the script's
 # first word on it, before it changes anything.
 require_kvm() {
@@ -176,9 +195,9 @@ case "$ORIGIN" in
   https://*) ;;
   *) fail "--origin must be an https:// address, not $ORIGIN" ;;
 esac
+require_supported_os "$(uname -s)" "$(uname -m)" "$(cat /proc/version 2>/dev/null || true)"
 require_kvm
 [ "$(id -u)" -eq 0 ] || fail "Run it as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
-[ "$(uname -s)" = "Linux" ] || fail "Luke host runs on Linux."
 command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] || fail "Luke host needs systemd."
 command -v sha256sum >/dev/null 2>&1 || fail "Luke host needs sha256sum (coreutils)."
 command -v git >/dev/null 2>&1 || fail "Luke host needs git, which its agents make their worktrees with."
