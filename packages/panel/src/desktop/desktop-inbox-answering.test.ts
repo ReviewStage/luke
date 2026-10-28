@@ -1276,6 +1276,19 @@ test("a to-do's step draws its Markdown in its box's words: bold as strong words
   assert.equal(step.querySelector("strong")?.textContent, "Domains");
 });
 
+test("Enter on a to-do step's link is the link's own, sending no reply", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({ type: INBOX_ASK.DO, steps: ["Read [the guide](https://example.com/guide)"] }),
+    ]),
+  );
+  act(() => pane.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
+  const link = pane.querySelector("[data-inbox-step] a") ?? assert.fail("the step's link");
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  act(() => link.dispatchEvent(enter));
+  assert.equal(enter.defaultPrevented, false, "the link opens on its Enter");
+});
+
 test("a to-do with every step ticked by hand stands marked done and Send sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
   const toDo = { type: INBOX_ASK.DO, steps: ["Open the repository's settings", "Add the secret"] };
   const shown = threadItem([askingMessage(toDo)]);

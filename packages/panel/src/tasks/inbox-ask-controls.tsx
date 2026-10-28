@@ -425,18 +425,23 @@ export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
 }
 
+/** Whether a key goes to a link, a step's say, whose own Enter opens it. */
+function opensLink(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.matches("a[href]");
+}
+
 /**
  * Enter in an open item's question, on an option or in a form's field,
  * sends the answer, and never presses the option it stands on, which Space
- * or a press picks. Shift+Enter is no send, and an editor's Enter is the
- * editor's own to hand on.
+ * or a press picks. Shift+Enter is no send, and an editor's Enter and a
+ * link's are their own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
-  if (writesLines(event.target)) return;
+  if (writesLines(event.target) || opensLink(event.target)) return;
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
