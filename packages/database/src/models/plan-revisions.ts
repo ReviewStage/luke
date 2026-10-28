@@ -23,7 +23,6 @@ import { user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { task } from "../schemas/task.js";
-import { voiceSessions } from "../schemas/voice.js";
 import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import { taskReachableBy } from "./workspace-store.js";
@@ -260,7 +259,6 @@ const restored = alias(planRevision, "restored");
 
 const RevisionLineRowSchema = Schema.Struct({
   ...LastEditRowSchema.fields,
-  callId: Schema.NullOr(Schema.String),
   seq: Schema.Number,
   startedAt: InstantColumnSchema,
   changes: Schema.Number,
@@ -297,7 +295,6 @@ const findRevisionLines = SqlSchema.findAll({
             string | null
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentId: planRevision.agentId,
-          callId: voiceSessions.id,
           seq: planRevision.seq,
           startedAt: planRevision.startedAt,
           changes: planRevision.changes,
@@ -308,14 +305,6 @@ const findRevisionLines = SqlSchema.findAll({
         .innerJoin(task, eq(task.id, planRevision.taskId))
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
-        // The call a revision names by its Live API id, read as the transcript names it.
-        .leftJoin(
-          voiceSessions,
-          and(
-            eq(voiceSessions.liveSessionId, planRevision.liveSessionId),
-            eq(voiceSessions.userId, userId),
-          ),
-        )
         .leftJoin(
           restored,
           and(
@@ -605,7 +594,6 @@ export function listRevisions(
         seq: row.seq,
         lastEdit: lastEditOf(row),
         ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-        ...(row.callId === null ? undefined : { callId: row.callId }),
         startedAt: row.startedAt.getTime(),
         changes: row.changes,
         ...(row.restoredFrom === null || row.restoredAt === null

@@ -164,8 +164,7 @@ import {
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
-import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
-import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -287,7 +286,6 @@ const AGENT_NEWEST = "/api/agents/messages-newest";
 const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
 const AGENT_STARTS = "/api/agents/agents";
 const AGENT = "/api/agents/agent";
-const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
@@ -537,7 +535,6 @@ const countedFor = (userId: string, name: string) =>
 const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/plans/agents", (id: string) => `/api/plans/${id}/agents`],
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
-  ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
@@ -2484,110 +2481,6 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           { startedAt: spoken.startedAt, model: spoken.model, sentAt: spoken.sentAt },
           { startedAt: undefined, model: undefined, sentAt: call.startedAt + 1_500 },
         );
-      }),
-  );
-
-  it.effect(
-    "an agent's calls are read by every member of its workspace, each call with when it started and ended, its record, whose it was, and its lines naming their rows, and by no one outside it, as an agent that is none is not found",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other: teammate, task, ask } = yield* openTask({ repository: null });
-        const outsider = yield* openTask();
-        yield* joinWorkspace(task.workspaceId, teammate);
-        const started = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
-        ).agent;
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
-        const sibling = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
-        ).agent;
-        const first = yield* callInto(agent, owner, owner, task.id, [
-          "Start on the export.",
-          "Starting on it.",
-        ]);
-        yield* Database.use((db) =>
-          db
-            .update(voiceSessions)
-            .set({
-              closedAt: new Date(first.startedAt + 60_000),
-              closeReason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
-            })
-            .where(eq(voiceSessions.id, first.voiceSessionId)),
-        );
-        yield* TestClock.adjust(Duration.minutes(5));
-        const second = yield* callInto(agent, teammate, owner, task.id, ["Is it done?", "It is."]);
-        yield* callInto(
-          Option.getOrThrow(yield* readCodingAgent(owner, sibling.id)),
-          owner,
-          owner,
-          task.id,
-          ["Not this one.", "No."],
-        );
-        const callsAs = (reader: string, id: string) => ask(request(AGENT_CALLS, reader, { id }));
-
-        const read = readAnswer(
-          taskTranscriptAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* callsAs(owner, agent.id),
-        );
-        assert.deepEqual(
-          read.transcript.calls.map((each) => ({
-            id: each.id,
-            startedAt: each.startedAt,
-            endedAt: each.endedAt,
-            ending: each.ending,
-            by: each.by?.userId,
-            lines: each.messages.map((line) => [
-              line.role,
-              line.parts.map((part) => part.text).join(""),
-              line.metadata?.rowIds,
-            ]),
-          })),
-          [
-            {
-              id: first.voiceSessionId,
-              startedAt: first.startedAt,
-              endedAt: first.startedAt + 60_000,
-              ending: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
-              by: owner,
-              lines: [
-                [TRANSCRIPT_SPEAKER.USER, "Start on the export.", [first.developerRow]],
-                [TRANSCRIPT_SPEAKER.ASSISTANT, "Starting on it.", [first.agentRow]],
-              ],
-            },
-            {
-              id: second.voiceSessionId,
-              startedAt: second.startedAt,
-              endedAt: undefined,
-              ending: undefined,
-              by: teammate,
-              lines: [
-                [TRANSCRIPT_SPEAKER.USER, "Is it done?", [second.developerRow]],
-                [TRANSCRIPT_SPEAKER.ASSISTANT, "It is.", [second.agentRow]],
-              ],
-            },
-          ],
-        );
-        assert.deepEqual(
-          readAnswer(
-            taskTranscriptAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* callsAs(teammate, agent.id),
-          ),
-          read,
-        );
-
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-        assert.deepEqual(
-          yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
-          notFound,
-        );
-        assert.deepEqual(yield* callsAs(owner, randomUUID()), notFound);
-        assert.deepEqual(yield* callsAs(owner, "not-an-id"), notFound);
       }),
   );
 });

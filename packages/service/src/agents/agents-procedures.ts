@@ -58,7 +58,6 @@ import { devicesNamed } from "@luke/database/models/device-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
-import { readAgentTranscript } from "@luke/database/models/transcript-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { runtimeChoiceRefusal } from "@luke/features/agent-runtime-models";
@@ -463,18 +462,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       };
     }),
     /**
-     * What was said on every member's calls into the agent, oldest call
-     * first, with each call's record (`readAgentTranscript`): read under
-     * the caller's membership of the agent's workspace, so an agent of any
-     * other is not found, as one that is no agent is.
+     * The calls into the agent: none, since Luke takes no calls. A released
+     * desktop still asks on every agent tab, so the read still answers.
      */
-    calls: signedIn.calls.effect(function* ({ input, context }) {
-      const agentId = yield* pathUuid(input.id);
-      const transcript = yield* hostedStoreOrUnavailable(
-        readAgentTranscript(context.userId, agentId),
-      );
-      if (Option.isNone(transcript)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { transcript: transcript.value };
+    calls: signedIn.calls.effect(function* ({ input }) {
+      yield* pathUuid(input.id);
+      return { transcript: { calls: [], earlierOmitted: false } };
     }),
     /**
      * The agent changed for what follows, answered as it then stands. A

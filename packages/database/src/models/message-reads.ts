@@ -1216,61 +1216,6 @@ export function turnsNamed(
   );
 }
 
-/** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
-const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
-
-/** One utterance the voice wrote as a row: its client id, its speaker, its call, and where on the call its words began. */
-const SpokenRowSchema = Schema.Struct({
-  clientId: Schema.String,
-  role: Schema.Literals([MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
-  voiceSessionId: Schema.String,
-  fromMs: Schema.Number,
-});
-
-export type SpokenRow = typeof SpokenRowSchema.Type;
-
-const findSpokenRows = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    voiceSessionIds: Schema.Array(Schema.String),
-  }),
-  Result: SpokenRowSchema,
-  execute: ({ userId, conversationId, voiceSessionIds }) =>
-    Database.use((db) =>
-      db
-        .select({
-          clientId: messages.clientId,
-          role: messages.role,
-          voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
-          fromMs: SPOKEN_FROM_MS,
-        })
-        .from(messages)
-        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-        .where(
-          and(
-            eq(messages.userId, userId),
-            eq(messages.conversationId, conversationId),
-            inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
-            // A line typed into the call names it too, but nothing of it was said.
-            sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
-            sql`${messages.metadata}->>'from_ms' is not null`,
-          ),
-        )
-        .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
-    ),
-});
-
-/** The rows the voice wrote in a conversation for what was said on the calls named, each with its call and where on it its words began, in the order they were said. */
-export function spokenRowsOn(
-  userId: string,
-  conversationId: string,
-  voiceSessionIds: readonly string[],
-): Effect.Effect<readonly SpokenRow[], StoreFailure, DatabaseServices> {
-  if (voiceSessionIds.length === 0) return Effect.succeed([]);
-  return findSpokenRows({ userId, conversationId, voiceSessionIds });
-}
-
 const findTurnQueuedAt = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
