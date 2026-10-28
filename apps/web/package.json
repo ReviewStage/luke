@@ -38,7 +38,6 @@
     "@luke/settings": "workspace:*",
     "@luke/brand": "workspace:*",
     "@luke/ui": "workspace:*",
-    "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@sentry/browser": "11.7.0",
     "@tailwindcss/vite": "4.3.3",

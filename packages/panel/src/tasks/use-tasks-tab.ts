@@ -196,9 +196,9 @@ import { sayRestored } from "./version-view.js";
 /**
  * use-tasks-tab.ts -- the panel's Tasks tab as one control: which page shows, the presses each page makes, and the host's read of the tasks as the tab shows.
  *
- * The tab draws the tasks view main holds and the voice window's report,
- * and every press is an act. It saves nothing and decides nothing about a
- * task: the task's notetaker writes the document, and the tab redraws it in
+ * The tab draws the tasks view main holds, and every press is an act. It
+ * saves nothing and decides nothing about a task: the task's notetaker writes
+ * the document, and the tab redraws it in
  * place as the host brings its drafts and its reads. A rename, a pin, and an
  * archive are the presses drawn before the host answers them: each shows at
  * once, and goes back if the service refuses it, a pin or an archive with a

@@ -20,7 +20,6 @@ luke_ensure_dependencies
 # one without asking, named for its Preview (`luke_preview_instance`). Every
 # other argument is forwarded to Electron.
 replace_running_app=true
-capture_trace=true
 use_preview=false
 preview_address=
 preview_address_given=false
@@ -31,10 +30,6 @@ while ((remaining_arguments-- > 0)); do
     shift
     if [[ $argument == --keep-running ]]; then
         replace_running_app=false
-        continue
-    fi
-    if [[ $argument == --no-trace ]]; then
-        capture_trace=false
         continue
     fi
     if [[ $argument == --preview ]]; then
@@ -63,7 +58,7 @@ done
 
 # The preview stands in for production through the one development override
 # the build honours (`LUKE_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
-# which the voice socket follows; a packaged build ignores both. The preview's
+# which a packaged build ignores. The preview's
 # Neon branch is its own database, so the account there starts empty, and no
 # cron tick runs on a preview.
 if [[ $use_preview == true ]]; then
@@ -92,17 +87,6 @@ if [[ -n $instance ]]; then
     printf 'instance: launching as "%s", beside the plain Luke Dev\n' "$(luke_instance_app_name "$instance")" >&2
 else
     unset LUKE_INSTANCE
-fi
-
-# Development runs record the trace of Luke's own agent traffic by default,
-# under the gitignored build directory; `pnpm trace:export` turns one file
-# into the document unbox-ai opens. `--no-trace` opts a run out, a directory
-# already in the environment wins over the default, and the app itself keeps
-# the last word: only an unpackaged live run honours the variable at all, so
-# fixture runs and packaged builds record nothing whatever this exports.
-# A named instance's traces go to a folder of their own.
-if [[ $capture_trace == true && -z ${LUKE_TRACE_DIR:-} ]]; then
-    export LUKE_TRACE_DIR="$LUKE_BUILD_ROOT/traces${instance:+/$instance}"
 fi
 
 if [[ $replace_running_app == true ]]; then

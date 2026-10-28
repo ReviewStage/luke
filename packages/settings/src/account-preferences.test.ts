@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { LINK_OPEN } from "@luke/features/link-open";
-import { LIVE_VOICE } from "@luke/live";
 import { test } from "vitest";
 import {
   type AccountPreferences,
@@ -15,8 +14,9 @@ import {
  * `ACCOUNT_PREFERENCE_FIELDS`) and pinned here rather than read from this
  * build. Note that they are pinned, because that build's reader refuses the
  * whole part on any key it does not know, so a Mac still on it would lose
- * the account's voice the moment the service answered a newer one; a new
- * preference rides a part of its own beside `preferences`, as `linkOpen` does.
+ * the account's preferences the moment the service answered a newer one; a
+ * new preference rides a part of its own beside `preferences`, as `linkOpen`
+ * does.
  */
 const V0_18_0_PREFERENCE_KEYS: readonly string[] = ["voice"];
 
@@ -28,22 +28,17 @@ const V0_18_0_PREFERENCE_KEYS: readonly string[] = ["voice"];
  */
 
 test("a link choice cleared since the last sync is written as the browser", () => {
-  const written = accountPreferencesToWrite(
-    { voice: LIVE_VOICE.CEDAR },
-    { voice: LIVE_VOICE.CEDAR, linkOpen: LINK_OPEN.MAC_APP },
-  );
+  const written = accountPreferencesToWrite({}, { linkOpen: LINK_OPEN.MAC_APP });
   assert.deepEqual(accountPreferencesParts(written), {
-    preferences: { voice: LIVE_VOICE.CEDAR },
+    preferences: {},
     linkOpen: LINK_OPEN.BROWSER,
   });
 });
 
 test("a link choice never held is left out of the write, whatever was synced", () => {
-  for (const baseline of [undefined, {}, { voice: LIVE_VOICE.CEDAR }]) {
-    const written = accountPreferencesToWrite({ voice: LIVE_VOICE.CEDAR }, baseline);
-    assert.deepEqual(accountPreferencesParts(written), {
-      preferences: { voice: LIVE_VOICE.CEDAR },
-    });
+  for (const baseline of [undefined, {}]) {
+    const written = accountPreferencesToWrite({}, baseline);
+    assert.deepEqual(accountPreferencesParts(written), { preferences: {} });
   }
 });
 
@@ -55,12 +50,12 @@ test("a link choice held is written as it stands", () => {
   });
 });
 
-test("a voice change pushes no link part a Mac has not changed since it synced, so the web's newer choice stands", () => {
+test("a push leaves out a link part a Mac has not changed since it synced, so the web's newer choice stands", () => {
   const pushed = accountPreferencesToPush(
-    { voice: LIVE_VOICE.MARIN, linkOpen: LINK_OPEN.MAC_APP },
-    { voice: LIVE_VOICE.CEDAR, linkOpen: LINK_OPEN.MAC_APP },
+    { linkOpen: LINK_OPEN.MAC_APP },
+    { linkOpen: LINK_OPEN.MAC_APP },
   );
-  assert.deepEqual(accountPreferencesParts(pushed), { preferences: { voice: LIVE_VOICE.MARIN } });
+  assert.deepEqual(accountPreferencesParts(pushed), { preferences: {} });
 });
 
 test("a push carries a link choice changed or cleared since the last sync", () => {
@@ -81,7 +76,6 @@ test("the snapshot's preferences part carries only the keys v0.18.0 reads, whate
   // Note that every preference is held, and `Required` makes a new one a compile error here until
   // it is given a value, so a preference added to the shared part is caught below.
   const everything = {
-    voice: LIVE_VOICE.CEDAR,
     linkOpen: LINK_OPEN.MAC_APP,
   } satisfies Required<AccountPreferences>;
   const shared = Object.keys(accountPreferencesParts(everything).preferences);

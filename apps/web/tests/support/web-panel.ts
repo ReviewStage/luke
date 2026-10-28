@@ -81,7 +81,6 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
     ),
     settings: {
       stored: APP_SETTING_DEFAULTS,
-      status: { voiceAvailable: false },
       experiments: NO_EXPERIMENTS,
     },
     version: 1,

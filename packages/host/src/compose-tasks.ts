@@ -3,7 +3,6 @@ import {
   type HostedGitHubConnectionClient,
   type HostedTaskClient,
   type HostedWorkspaceClient,
-  type TaskActivityFrame,
   type TaskCallResult,
   type TaskMarks,
   WORKSPACE_CALL_FAILURE,
@@ -121,7 +120,6 @@ import {
   type GatewayMethodTable,
   readParams,
 } from "@luke/gateway";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { keepIdentity } from "@luke/wire";
 import {
   Cache,
@@ -181,9 +179,8 @@ import {
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the task it answers.
  * The pages agents wrote for the open task are listed with its document, by
- * title and newest version alone, and again whenever the call's activity
- * says a page just settled; a page's HTML is answered to the frame that
- * draws it and held nowhere here.
+ * title and newest version alone, and again whenever their mark moves; a
+ * page's HTML is answered to the frame that draws it and held nowhere here.
  *
  * The workspaces the account is a member of are carried on the view beside
  * the tasks and followed apart from them over Neon Realtime, so the tasks
@@ -347,30 +344,13 @@ export interface TasksDependencies {
   client: TasksClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /**
-   * Ends the call standing about `taskId`, or whatever it is about
-   * where none is named, and waits for it to end. A call about another task
-   * is left standing.
-   */
-  endTaskCall: (taskId: string | undefined) => Effect.Effect<void>;
 }
 
 export interface TasksComposer extends Composer {
   /** The view as this Mac holds it now. */
   snapshot: () => TasksView;
-  /** The one active task, which a voice session binds to; nothing while the panel has none open. */
-  activeTaskId: () => string | undefined;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
-  /**
-   * Shows what each part of the call is doing about the open task,
-   * as the service last said it; a word about any other task is dropped.
-   * Leaving or switching tasks clears it, and the call's end says nothing
-   * doing.
-   */
-  showActivity: (activity: TaskActivityFrame) => void;
-  /** The call ended: what it was doing is no longer drawn. */
-  callEnded: (about: VoiceCallAbout) => void;
   /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every task and agent row, so a write is confirmed once
@@ -423,17 +403,14 @@ type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
  * The panel's tasks as one concern. The view is told to every client whole
  * whenever it moves, and exactly one task is active at a time: opening or
  * starting one replaces whichever was, and a read still out for the replaced
- * task is dropped when it lands. Only one task is ever the spoken
- * conversation, so opening another task, starting one, leaving the open task,
- * or a sign-out ends the call about the task that was open before anything
- * else moves. The Tasks tab showing reads the list and the open task again,
- * while the open task and its call stand through the tab hiding. Behind a
+ * task is dropped when it lands. The Tasks tab showing reads the list and the
+ * open task again, while the open task stands through the tab hiding. Behind a
  * closed account gate, or on a run that sends nothing, nothing is read.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
 ): Effect.fn.Return<TasksComposer, never, Scope.Scope | HttpClient.HttpClient> {
-  const { kernel, account, client, endTaskCall } = dependencies;
+  const { kernel, account, client } = dependencies;
   const http = yield* HttpClient.HttpClient;
   /** One ask of the service, over the host's own HTTP client. */
   const served = <Answer, Failure>(call: Effect.Effect<Answer, Failure, HttpClient.HttpClient>) =>
@@ -490,8 +467,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The view with no activity and no pages read or told, as a task left behind leaves it. */
-  function withoutActivity({ activity: _activity, pages: _pages, ...rest }: TasksView): TasksView {
+  /** The view with no pages read or told, as a task left behind leaves it. */
+  function withoutPages({ pages: _pages, ...rest }: TasksView): TasksView {
     return rest;
   }
 
@@ -1300,29 +1277,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
   }
 
-  /** Shows the call's activity; the pages are read as their mark moves (`followRecord`). */
-  function showActivity({
-    type: _type,
-    planId: taskId,
-    agentId: _agentId,
-    ...activity
-  }: TaskActivityFrame): void {
-    // The call's own copy is kept whatever task is open, for the floating
-    // call window; the panel's is the active task's alone, and a call into
-    // an agent with no task is no task's.
-    if (taskId === undefined || view.activeTaskId !== taskId) {
-      write({ callActivity: activity });
-      return;
-    }
-    write({ activity, callActivity: activity });
-  }
-
-  function callEnded(_about: VoiceCallAbout): void {
-    const { callActivity: _ended, ...rest } = view;
-    view = rest;
-    publish();
-  }
-
   /**
    * The open document of `taskId` given everything its row of the list now
    * reads, its name, status, assignee, and repository among them, so a
@@ -1402,7 +1356,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * list, and on the open document where it is the one held. Note that the
    * row keeps what the list said of the task's coding agents, which only the
    * list answers, and the held document keeps everything else it holds,
-   * because a draft drawn during a call may be ahead of the copy the service
+   * because a draft drawn meanwhile may be ahead of the copy the service
    * answered.
    */
   function takeMarks(task: Task): void {
@@ -1532,13 +1486,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           yield* openRecord(taskId, { onlyIfMissing: true });
           return { opened: true };
         }
-        // Note that a call about the task left behind goes on standing,
-        // because the call outlives the task on screen: moving it to this
-        // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
           // Note that the page is told twice in all: that it is reading, then what it read.
           view = {
-            ...withoutActivity(view),
+            ...withoutPages(view),
             activeTaskId: taskId,
             document: { status: TASKS_READ.READING },
           };
@@ -1900,13 +1851,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return { restored: true };
       }),
     // Leaving the task returns to the list, which was read when the tab
-    // showed, and leaves its call standing, as opening another task does.
+    // showed.
     [GATEWAY_METHOD.TASKS_CLOSE]: () =>
       Effect.gen(function* () {
         yield* FiberHandle.clear(recordFollow);
         yield* serial(
           Effect.sync(() => {
-            const { activeTaskId: _closed, ...rest } = withoutActivity(view);
+            const { activeTaskId: _closed, ...rest } = withoutPages(view);
             view = { ...rest, document: { status: TASKS_READ.IDLE } };
             publish();
           }),
@@ -1948,10 +1899,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               );
             }
             const { task, agent } = started.answer;
-            // A task just started has had no call. A call about another task
-            // is left to the start's own Talk press, which moves it here.
             view = {
-              ...withoutActivity(view),
+              ...withoutPages(view),
               activeTaskId: task.id,
               document: { status: TASKS_READ.READY, task },
             };
@@ -1964,8 +1913,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
       }),
-    // Note that the task's call ends before the task is deleted, open or not,
-    // because a call still standing would go on writing a document that is gone.
     [GATEWAY_METHOD.TASKS_DELETE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1975,7 +1922,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return { deleted: false };
         const { taskId } = read;
-        yield* endTaskCall(taskId);
         return yield* writtenThenListed(
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
@@ -1983,7 +1929,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(recordFollow);
-              const { activeTaskId: _deleted, ...rest } = withoutActivity(view);
+              const { activeTaskId: _deleted, ...rest } = withoutPages(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
             }
             write({ tasks });
@@ -2525,11 +2471,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
         );
       }),
-    // Note that a leave ends a call about any task of the workspace left,
-    // the open one or one closed since, and closes the open task where it is
-    // that workspace's, as a delete of it does, because the account can no
-    // longer read or write a task of a workspace it left; a refused leave
-    // ends and closes nothing.
+    // Note that a leave closes the open task where it is that workspace's, as
+    // a delete of it does, because the account can no longer read or write a
+    // task of a workspace it left; a refused leave closes nothing.
     [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2541,31 +2485,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { workspaceId } = read;
         const openTaskId = view.activeTaskId;
         const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
-        const departedTaskIds = view.tasks
-          .filter((task) => task.workspaceId === workspaceId)
-          .map((task) => task.id);
-        // A standing call is ended only by its own task's id, so each task left is named.
-        const endDepartedCalls = Effect.forEach(departedTaskIds, (taskId) => endTaskCall(taskId), {
-          discard: true,
-        });
         const closeOpenTask = Effect.gen(function* () {
           yield* serial(
             Effect.gen(function* () {
               if (view.activeTaskId !== openTaskId) return;
               yield* FiberHandle.clear(recordFollow);
-              const { activeTaskId: _left, ...rest } = withoutActivity(view);
+              const { activeTaskId: _left, ...rest } = withoutPages(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
               publish();
             }),
           );
         });
         const leave = Effect.tap(client.workspaces.leave(workspaceId), (answer) =>
-          answer.ok
-            ? Effect.andThen(
-                endDepartedCalls,
-                openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
-              )
-            : Effect.void,
+          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
         );
         const left = yield* workspaceCall(leave);
         return carried<TasksWorkspaceLeaveAnswer>(
@@ -2622,12 +2554,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   return {
     methods,
     snapshot: () => view,
-    activeTaskId: () => view.activeTaskId,
-    showActivity,
-    callEnded,
     listed,
     reset: Effect.gen(function* () {
-      yield* endTaskCall(undefined);
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(openedRead);

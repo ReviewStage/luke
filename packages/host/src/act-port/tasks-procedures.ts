@@ -201,8 +201,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.tasksClose();
     }),
-    // Note that a started task opens no call: a call starts only from an
-    // agent's own Call button.
     [TASKS_ACT_KIND.TASKS_START]: actPort[TASKS_ACT_KIND.TASKS_START].effect(function* ({
       input,
       context,

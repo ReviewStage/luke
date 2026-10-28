@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { WireValue } from "@luke/wire";
@@ -35,16 +34,16 @@ function delivered(capabilities: WireValue) {
 describe("a delivered snapshot's capabilities", () => {
   test("are taken when each is one this build knows, none included", () => {
     assert.equal(
-      isAppStateSnapshot(delivered([HOST_CAPABILITY.VOICE, HOST_CAPABILITY.TERMINALS])),
+      isAppStateSnapshot(delivered([HOST_CAPABILITY.MICROPHONE, HOST_CAPABILITY.TERMINALS])),
       true,
     );
     assert.equal(isAppStateSnapshot(delivered([])), true);
   });
 
   test("are refused when one is unknown, one is not a word, or there is no list", () => {
-    assert.equal(isAppStateSnapshot(delivered([HOST_CAPABILITY.VOICE, "teleport"])), false);
+    assert.equal(isAppStateSnapshot(delivered([HOST_CAPABILITY.MICROPHONE, "teleport"])), false);
     assert.equal(isAppStateSnapshot(delivered([7])), false);
-    assert.equal(isAppStateSnapshot(delivered(HOST_CAPABILITY.VOICE)), false);
+    assert.equal(isAppStateSnapshot(delivered(HOST_CAPABILITY.MICROPHONE)), false);
     assert.equal(isAppStateSnapshot({ ...delivered([]), run: {} }), false);
   });
 });
@@ -109,20 +108,5 @@ describe("a delivery that crosses the wire", () => {
     const { settings: _settings, ...signedOut } = held;
     const delivered = acrossTheWire(appStateDelivery(held, { ...signedOut, version: 2 }));
     assert.equal("settings" in withAppStateDelivery(held, delivered), false);
-  });
-
-  test("still ends a call whose session was never named", () => {
-    const held: AppStateSnapshot = {
-      ...document,
-      callTranscript: {
-        voiceSessionId: undefined,
-        lines: [
-          { rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words: "Hi", startMs: 0, endMs: 1 },
-        ],
-      },
-    };
-    const { callTranscript: _ended, ...ended } = held;
-    const delivered = acrossTheWire(appStateDelivery(held, { ...ended, version: 2 }));
-    assert.equal(withAppStateDelivery(held, delivered).callTranscript, undefined);
   });
 });

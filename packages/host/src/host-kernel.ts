@@ -64,8 +64,8 @@ export function accountBaseUrlFor(input: {
 }
 
 /**
- * The hosted voice endpoints live on the same origin as the account service, so
- * the one development override redirects both together.
+ * The hosted service lives on the same origin as the account service, so the
+ * one development override redirects both together.
  */
 function hostedServiceBaseUrlFor(accountBaseUrl: string): string {
   return accountBaseUrl.replace(/\/api\/auth\/?$/, "");

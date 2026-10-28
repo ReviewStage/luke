@@ -19,8 +19,8 @@ export interface AccountProceduresDependencies {
     "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount" | "accountSnapshot"
   >;
   /**
-   * Asks before a sign-out while something would be lost, a call standing or
-   * unsaved work, answering whether to sign out. A shell that asks nothing
+   * Asks before a sign-out while something would be lost, unsaved work,
+   * answering whether to sign out. A shell that asks nothing
    * first, a browser tab, leaves this out.
    */
   askBeforeSignOut?: () => Promise<boolean>;
