@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@luke/features": "workspace:*",
-    "@luke/live": "workspace:*",
     "@luke/wire": "workspace:*",
     "effect": "catalog:"
   }

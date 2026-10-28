@@ -70,7 +70,6 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
-import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
 import { steerCodingAgentWritten } from "./coder-host/steer.js";
@@ -95,6 +94,7 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
+import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -328,7 +328,15 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
             )
           : {
               page: yield* hostedStoreOrUnavailable(
-                transcriptPast(target, CODER_TOOL_SET, cursor, standing, agent, titleAwaited),
+                transcriptPast(
+                  target,
+                  CODER_TOOL_SET,
+                  cursor,
+                  standing,
+                  agent,
+                  titleAwaited,
+                  titleEdgeOf(target),
+                ),
               ),
               holds: undefined,
               wakeIn: undefined,
@@ -401,7 +409,15 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           )
         : {
             page: yield* hostedStoreOrUnavailable(
-              transcriptPast(worker, CODER_TOOL_SET, cursor, started, undefined, titleAwaited),
+              transcriptPast(
+                worker,
+                CODER_TOOL_SET,
+                cursor,
+                started,
+                undefined,
+                titleAwaited,
+                titleEdgeOf(target, conversationId),
+              ),
             ),
             holds: undefined,
             wakeIn: undefined,

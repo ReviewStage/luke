@@ -20,6 +20,7 @@ function agentHanded(handed: Pick<CodingAgent, "planSnapshot" | "prompt">): Codi
     automationId: null,
     automationOrigin: null,
     startedFrom: null,
+    startedByAgentId: null,
     conversationId: "conversation-1",
     model: "anthropic/claude-opus-5.5",
     effort: "high",

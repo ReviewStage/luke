@@ -26,7 +26,7 @@ import {
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
-import { AUTOMATION_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
+import { automationLineMetadata, storeWriter } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -55,11 +55,11 @@ import { failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { AgentSessions, EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { AgentSessions, EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { fenceable } from "../agents/fenced-text.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
@@ -437,7 +437,7 @@ const steerClaimed = Effect.fnUntraced(function* (
         serverWords: automation.action.prompt,
         clientKey: run.id,
         sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
-        metadata: AUTOMATION_LINE_METADATA,
+        metadata: automationLineMetadata(run.firing),
       },
     ),
   );
@@ -611,8 +611,7 @@ const decide = (automationId: string, run: ActedRun) =>
  * the start's refusal in one fixed word. The agent starts in the
  * automation's workspace on no task, in the repository a GitHub event named
  * and on the first of its repositories otherwise, so
- * the automation's runs stand apart from the task it was made on and
- * group under the automation itself.
+ * the automation's runs group under the automation itself.
  */
 const startClaimed = Effect.fnUntraced(function* (
   eveFor: EveForAccount,
@@ -628,11 +627,8 @@ const startClaimed = Effect.fnUntraced(function* (
   }
   const repository = runRepository(automation, run);
   const { organizationId } = automation;
-  if (organizationId === null || repository === undefined) {
-    const reason =
-      organizationId === null
-        ? AUTOMATION_RUN_REASON.TASK_UNREACHABLE
-        : AUTOMATION_RUN_REASON.NO_REPOSITORY;
+  if (repository === undefined) {
+    const reason = AUTOMATION_RUN_REASON.NO_REPOSITORY;
     yield* failClaimedRun(run.id, reason);
     const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
     return outcome;

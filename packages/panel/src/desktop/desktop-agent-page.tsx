@@ -1,11 +1,13 @@
 import {
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_KIND,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import type { MentionLines } from "@luke/features/mention-link";
 import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -28,12 +30,11 @@ import {
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { isAgentTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
-import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
@@ -68,10 +69,12 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
+  agentMenuGroups,
   useAgentActions,
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
+import { useAgentReadMarks } from "./agent-read-marks.js";
 import {
   AutomationRunSteps,
   AutomationRunStrip,
@@ -89,7 +92,8 @@ import {
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel.js";
-import { contentActionGroups, useTabViews } from "./strip-tabs.js";
+import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
+import { useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
@@ -117,11 +121,16 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
- * its tab would, and its ⋯ offers the agent's own actions, the very ones its
- * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Show terminal, Copy link, the
- * transcript's two copies, and Archive, so an agent with no task is
- * acted on as a task's is; ⌘J and New terminal open its terminal as on a
+ * its tab would, and its ⋯ offers the agent's one menu, the very one its
+ * tab's ⋯ offers on a task (`agent-actions.tsx`'s `agentMenuGroups`): Copy
+ * link and the transcript's two copies, Rename, which turns the title into
+ * its name's field, Show terminal, Archive, and Permanently delete, so an
+ * agent with no task is acted on as a task's is; and, since such an agent
+ * has a row of its own among the sidebar's tasks, what that row offers too:
+ * Mark as unread or Mark as read, through a task's marks
+ * (`agent-read-marks.ts`), and Pin or Unpin and Move to section, the
+ * reader's own, while the agent is not archived, and never for Luke, who
+ * has a row of his own kind; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
  * Archive's place, and it is not renamed. An agent the service will not hand the reader,
@@ -152,12 +161,26 @@ const ACTIONS_THING = "Agent";
 const NAME_LABEL = "Agent name";
 
 /**
- * The page's bar: its title and its ⋯, which offer the agent's own actions as its
- * tab in a task's column does (`agent-actions.tsx`): its title turned into
- * its name's field by Rename, and every action of the tab's ⋯, in the same
- * groups (`strip-tabs.tsx`'s `contentActionGroups`).
+ * The row the sidebar lists the agent by among its tasks, whose pin, read
+ * marks, and section are the page's too: for an agent with no task, as the
+ * listed workspace's agents hold it; none for an agent on a task, or one the
+ * list does not hold, whose page then offers neither.
+ */
+function listedAgent(tasks: TasksControl, agent: CodingAgentSummary): TasklessAgent | undefined {
+  if (agent.planId !== null) return undefined;
+  const { standing, archived } = tasks.listedAgents;
+  return [...standing, ...archived].find((each) => each.id === agent.id);
+}
+
+/**
+ * The page's bar: its title and its ⋯, which offer the agent's one menu as
+ * its tab in a task's column does (`agent-actions.tsx`'s
+ * `agentMenuGroups`): its title turned into its name's field by Rename, and,
+ * for an agent with no task, its sidebar row's own read mark, Pin, and
+ * Move to section beside the tab's actions.
  */
 function AgentPageBar({
+  tasks,
   agent,
   agents,
   shown,
@@ -167,6 +190,7 @@ function AgentPageBar({
   trail,
   steps,
 }: {
+  tasks: TasksControl;
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
@@ -183,13 +207,38 @@ function AgentPageBar({
   const label = agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
-  const groups = contentActionGroups({
-    chosen: true,
-    onClose: undefined,
-    onCloseOthers: undefined,
-    pin: undefined,
-    ...actions.doors,
-  });
+  const listed = listedAgent(tasks, agent);
+  const reads = useAgentReadMarks();
+  const sectionDialogs = useSectionDialogs(tasks, shown);
+  // The agent's read mark is its sidebar row's: main's unseen dot, which a mark by hand adds to.
+  const unseen = tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agent.id);
+  const read =
+    listed === undefined
+      ? undefined
+      : {
+          unread: unseen || reads.markedUnread(agent.id),
+          onMark: (next: boolean) => reads.mark(listed, next),
+        };
+  // Note that an archived agent offers neither a pin nor a section, as an archived task, and Luke never does.
+  const own =
+    listed !== undefined &&
+    agent.archivedAt === undefined &&
+    agent.kind !== CODING_AGENT_KIND.OPERATOR;
+  const agentPin = own
+    ? {
+        pinned: listed.pinnedAt !== undefined,
+        onToggle: () => tasks.onPinAgent(agent.id, listed.pinnedAt === undefined),
+      }
+    : undefined;
+  const section = own
+    ? moveToSectionEntry(
+        tasks,
+        { agent: true, id: agent.id },
+        listed.workspaceId,
+        sectionDialogs.askNew,
+      )
+    : undefined;
+  const groups = agentMenuGroups({ chosen: true, ...actions.doors, read, agentPin, section });
   const { rename } = actions;
   const title =
     rename?.editing === true ? (
@@ -226,6 +275,7 @@ function AgentPageBar({
         />
       )}
       {actions.dialog}
+      {sectionDialogs.dialog}
     </>
   );
   if (phone !== undefined) {
@@ -467,12 +517,27 @@ export function DesktopAgentPage({
       }),
     [control, views.held, tab, sideTab, planId, agentId],
   );
-  // A skill's file opens where a file the agent names does: its page on GitHub.
+  // The agent's repository, which the panel beside it reads a file of by its workspace, once the read named both.
+  const repositoryPlace = useMemo(
+    () =>
+      workspaceId === undefined || agentRepository === undefined
+        ? undefined
+        : { workspaceId, repository: agentRepository },
+    [workspaceId, agentRepository],
+  );
+  // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
+  const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
+    lines === undefined
+      ? sidePanel.onPreviewFile({ path })
+      : sidePanel.onPreviewFile(
+          { path, startLine: lines.startLine, endLine: lines.endLine },
+          lines.commit,
+        ),
+  );
+  // A skill's file opens where a file the agent names does: in the panel beside it.
   const openSkill = (skill: { readonly path: string }) => {
-    if (agentRepository === undefined) return;
-    const place = { workspace: listed?.slug ?? workspaceId ?? "", repository: agentRepository };
-    const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-    appPlatform().openGitHub(url);
+    if (repositoryPlace === undefined) return;
+    sidePanel.onPreviewFile({ path: skill.path });
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
   const pullRequestCard = useSteadyDoor((url: string) => {
@@ -505,7 +570,10 @@ export function DesktopAgentPage({
             { workspace: mentionWorkspace, workspaceId, repository: agentRepository ?? null },
             onShowMention,
             readMentionAgents,
-            pullRequestCard,
+            {
+              pullRequestOf: pullRequestCard,
+              onOpenFile: repositoryPlace === undefined ? undefined : openMentionedFile,
+            },
           ),
     [
       workspaceId,
@@ -514,6 +582,8 @@ export function DesktopAgentPage({
       onShowMention,
       readMentionAgents,
       pullRequestCard,
+      repositoryPlace,
+      openMentionedFile,
     ],
   );
   // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
@@ -544,6 +614,7 @@ export function DesktopAgentPage({
       )
     ) : (
       <AgentPageBar
+        tasks={tasks}
         agent={agent}
         agents={control}
         shown={tasks.shown}
@@ -659,6 +730,7 @@ export function DesktopAgentPage({
                           holder={SIDE_PANEL_HOLDER.AGENT}
                           taskId={agentId}
                           repository={agentRepository ?? null}
+                          repositoryPlace={repositoryPlace}
                           pages={tasks.agentView.pages}
                           agents={control}
                           openAgents={openAgents}

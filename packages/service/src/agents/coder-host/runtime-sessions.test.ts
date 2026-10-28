@@ -69,7 +69,8 @@ import {
 } from "../../testing/github-app-fake.js";
 import { PLAN_AGENT_WRITERS, writesToAgent } from "../agent-reach.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { deploymentEveForAccounts } from "../deployment-eve.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -80,8 +81,7 @@ import {
   type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
-} from "../brain-host/eve-sessions.js";
-import { deploymentEveForAccounts } from "../deployment-eve.js";
+} from "../eve-host/eve-sessions.js";
 import { macOffers, THIS_MAC } from "./agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import { rewoundAgent } from "./rewind.js";
@@ -146,6 +146,7 @@ function recording(sessionPrefix: string) {
         calls.push(`halt:${sessionId}:${conversationId}`);
         return answers.halts;
       }),
+    deliverWaiting: () => Effect.succeed(false),
     open: (message) =>
       Effect.sync(() => {
         calls.push(`open:${message.conversationId}`);
@@ -280,7 +281,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" |
 
 const messageTo = (agent: CodingAgent, text = "Expire invitations after a week.") => ({
   conversationId: agent.conversationId,
-  turn: BRAIN_HOST_TURN.TYPED,
+  turn: EVE_HOST_TURN.TYPED,
   message: text,
 });
 
@@ -399,17 +400,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const route = yield* sessionsRouter.pipe(Effect.provide(native));
           const composed: readonly (readonly [
             string,
-            AgentSessions<typeof BRAIN_HOST_TURN.TYPED>,
+            AgentSessions<typeof EVE_HOST_TURN.TYPED>,
           ])[] = [
             [
               "a route's bearer",
-              yield* eveFor<typeof BRAIN_HOST_TURN.TYPED>(reach, bearer, owner).pipe(
+              yield* eveFor<typeof EVE_HOST_TURN.TYPED>(reach, bearer, owner).pipe(
                 Effect.provide(native),
               ),
             ],
             [
               "a route's cookie",
-              yield* eveFor<typeof BRAIN_HOST_TURN.TYPED>(reach, cookie, owner).pipe(
+              yield* eveFor<typeof EVE_HOST_TURN.TYPED>(reach, cookie, owner).pipe(
                 Effect.provide(native),
               ),
             ],
@@ -433,7 +434,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           // The deployment's own eve, over HTTP, as a GitHub wake, an automation, and another agent's message reach it.
           const posted: string[] = [];
-          const deployment = yield* deploymentEveForAccounts<typeof BRAIN_HOST_TURN.TYPED>(
+          const deployment = yield* deploymentEveForAccounts<typeof EVE_HOST_TURN.TYPED>(
             "https://luke.test",
             "/eve/coder",
           ).pipe(
@@ -1771,7 +1772,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(said, {
             sender: MESSAGE_SENDER.AUTOMATION,
             senderName: "Nightly checks",
-            metadata: { channel: "automation" },
+            // A schedule's run carries its owner's prompt alone.
+            metadata: { channel: "automation", outside_words: false },
           });
           assert.ok(run.agent.conversationId !== "");
 

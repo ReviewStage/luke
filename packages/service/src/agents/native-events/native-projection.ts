@@ -13,7 +13,7 @@ import {
   sessionKey,
   TURN_FAILURE,
 } from "../../core.js";
-import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN, EVE_HOST_TURN_KIND } from "../eve-host/bounds.js";
 import {
   NATIVE_ENDING,
   NATIVE_MOMENT,
@@ -275,7 +275,7 @@ class Fold {
     if (held !== undefined) return held;
     const id = nativeTurnId(this.#context.conversationId, this.#context.sequence);
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
-    const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
+    const { origin, trigger } = EVE_HOST_TURN_KIND[EVE_HOST_TURN.TYPED];
     const opened = this.#tell(
       { id, told: 0, steps: 0, calls: {}, taken: false, openedAt: this.#context.now },
       { kind: RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
@@ -462,7 +462,7 @@ class Fold {
       case NATIVE_MOMENT.LINE_ACCEPTED: {
         // Note that a line taken into a turn another line already opened joined it at the steps begun so
         // far, none among them, which is where a call's ask that joined it is told from and what keeps its
-        // Stop its own, as eve's relay binds one (`brain-host/relay.ts`). The turn's first line has none,
+        // Stop its own, as eve's relay binds one (`eve-host/relay.ts`). The turn's first line has none,
         // though the harness may have opened the turn a moment before it named the line (Codex does). A turn saved
         // before `taken` was kept reads as taken, so a call joining it after a deploy still stops only its own ask.
         const before = this.state.turn;

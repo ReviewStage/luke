@@ -8,7 +8,6 @@ import {
   type TaskCallResult,
   type TaskStarted,
   type TaskWritten,
-  VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
@@ -20,7 +19,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   PAGE_SHOWER,
@@ -157,10 +155,17 @@ interface FakeService extends TasksClient {
   folders: Record<string, TaskTreeAnswer>;
   /** What the service answers for each task's skills, by task id; a task with none answers nothing, as a service that did not answer. */
   skills: Record<string, TaskSkillsAnswer>;
-  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its folders by path, and its skills. */
+  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its files' windows and its folders by path, and its skills. */
   places: Record<
     string,
-    Record<string, { folders: Record<string, TaskTreeAnswer>; skills: TaskSkillsAnswer }>
+    Record<
+      string,
+      {
+        files: Record<string, TaskFileAnswer>;
+        folders: Record<string, TaskTreeAnswer>;
+        skills: TaskSkillsAnswer;
+      }
+    >
   >;
   /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
@@ -187,10 +192,16 @@ interface FakeService extends TasksClient {
   pins: RepositoryPin[];
   /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
+  /** The transaction a pin's write answers it committed in, where a test names one. */
+  pinTxid: string | undefined;
+  /** What a pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
+  pinAnswered: Effect.Effect<void>;
   /** The account's sidebar sections as the service keeps them; none where it does not answer, as before any test sets them. */
   sections: TaskSections | undefined;
   /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
+  /** The kind of section change the service refuses, where a test names one. */
+  sectionRefused: TaskSectionWrite["kind"] | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -226,8 +237,6 @@ interface FakeService extends TasksClient {
   members: Record<string, WorkspaceMember[]>;
   /** Who each workspace's work names but left, as the service answers beside its members. */
   former: Record<string, FormerMember[]>;
-  /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
-  linearIssues: Record<string, LinearIssueSummary[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -311,7 +320,6 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
       own: each.id === PERSONAL.id,
       personal: each.personal === true,
       role: each.role,
-      linearActive: each.linear?.active ?? null,
       memberCount: each.memberCount ?? 1,
       photoVersion: each.photoVersion ?? null,
       ownerImage: null,
@@ -326,7 +334,6 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
   };
 }
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
-const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -501,8 +508,11 @@ function fakeService(tasks: Task[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    pinTxid: undefined,
+    pinAnswered: Effect.void,
     sections: undefined,
     sectionWrites: [],
+    sectionRefused: undefined,
     get memberships() {
       return memberships;
     },
@@ -524,7 +534,6 @@ function fakeService(tasks: Task[]): FakeService {
     renameAnswered: Effect.void,
     members: {},
     former: {},
-    linearIssues: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -667,33 +676,6 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }),
-      linearConnect: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-connect:${workspaceId}`);
-          return service.notPermitted
-            ? NOT_PERMITTED_WORKSPACE
-            : ({ ok: true, answer: LINEAR_SIGN_IN_URL } as const);
-        }),
-      linearDisconnect: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-disconnect:${workspaceId}`);
-          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
-          const found = service.memberships.find((each) => each.id === workspaceId);
-          if (found === undefined) return UNANSWERED_WORKSPACE;
-          const { linear: _gone, ...now } = found;
-          service.memberships = service.memberships.map((each) =>
-            each.id === workspaceId ? now : each,
-          );
-          return { ok: true, answer: now } as const;
-        }),
-      linearIssues: ({ workspaceId, query }) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-issues:${workspaceId}:${query ?? ""}`);
-          const issues = service.linearIssues[workspaceId];
-          return issues === undefined
-            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
-            : ({ ok: true, answer: issues } as const);
-        }),
       sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
@@ -801,20 +783,24 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
-      Effect.sync(() => {
-        if (service.pinsFail) return undefined;
-        const others = service.pins.filter((pin) => pin.repository !== repository);
-        const standing = service.pins.find((pin) => pin.repository === repository);
-        service.pins = pinned
-          ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
-          : others;
-        return { pins: service.pins };
-      }),
+      Effect.andThen(
+        Effect.sync(() => {
+          if (service.pinsFail) return undefined;
+          const others = service.pins.filter((pin) => pin.repository !== repository);
+          const standing = service.pins.find((pin) => pin.repository === repository);
+          service.pins = pinned
+            ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
+            : others;
+          const txid = service.pinTxid;
+          return { pins: service.pins, ...(txid === undefined ? undefined : { txid }) };
+        }),
+        (answer) => Effect.as(service.pinAnswered, answer),
+      ),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync(() => {
         service.sectionWrites.push(write);
-        return service.sections;
+        return write.kind === service.sectionRefused ? undefined : service.sections;
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -839,6 +825,8 @@ function fakeService(tasks: Task[]): FakeService {
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
     readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
+    readRepositoryFile: (place, window) =>
+      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.files[window.path]),
     readRepositoryTree: (place, folder) =>
       Effect.sync(
         () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
@@ -1019,20 +1007,12 @@ const listAnswers = (
     nextPoll(settledTurns),
   );
 
-/** The one voice call as the live composer holds it: about a task, about the desk, or none. */
-interface StandingCall {
-  about: { readonly taskId: string | undefined } | undefined;
-  /** Where ending a call waits before it lands, as a real call's close does. */
-  closing?: Effect.Effect<void>;
-}
-
 function subject(
   service: FakeService,
   options: {
     signedIn?: boolean;
     /** Whether the run reaches the service, which a fixture run does not. */
     sendsNetwork?: boolean;
-    call?: StandingCall;
     /** The account signed in now, Dana's where none is named. */
     accountId?: () => string;
   } = {},
@@ -1047,7 +1027,6 @@ function subject(
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
     }[] = [];
-    const standing = options.call ?? { about: undefined };
     /** Every followed transcript's page the host told, in order. */
     const pages: WireValue[] = [];
     const tasks = yield* composeTasks({
@@ -1073,13 +1052,6 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       accountId: options.accountId ?? (() => "user-dana"),
-      endTaskCall: (taskId) =>
-        Effect.gen(function* () {
-          const about = standing.about?.taskId;
-          if (about === undefined || (taskId !== undefined && about !== taskId)) return;
-          yield* standing.closing ?? Effect.void;
-          standing.about = undefined;
-        }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
@@ -1297,7 +1269,7 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     });
     assert.equal(last()?.activeTaskId, INVITES);
     assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-    assert.equal(tasks.activeTaskId(), INVITES);
+    assert.equal(tasks.snapshot().activeTaskId, INVITES);
 
     yield* openTask(BILLING);
     assert.equal(last()?.activeTaskId, BILLING);
@@ -1709,11 +1681,11 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
 );
 
 it.effect(
-  "the sidebar's sections and pins are followed from the first refresh and never read again, a change takes the service's answer, one refused leaves them, and another Mac's change is pushed",
+  "the sidebar's sections and pins are followed from the first refresh and never read again, a change takes the service's answer, one refused leaves them, and another Mac's change is told at once",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, last, settled } = yield* subject(service);
+      const { call, last, told, settled } = yield* subject(service);
       const launch: TaskSection = {
         id: SECTION_ID,
         workspaceId: PERSONAL.id,
@@ -1733,7 +1705,9 @@ it.effect(
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
       service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place), { changed: true });
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [place] }), {
+        changed: true,
+      });
       assert.deepEqual(last()?.taskSections, {
         sections: [launch],
         entries: [placed],
@@ -1742,7 +1716,7 @@ it.effect(
 
       service.sections = undefined;
       const removal = { ...place, sectionId: null };
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, removal), {
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [removal] }), {
         changed: false,
       });
       assert.deepEqual(last()?.taskSections, {
@@ -1763,8 +1737,11 @@ it.effect(
         { repository: "acme/relay", pinnedAt: 3 },
         { repository: "acme/web", pinnedAt: 9 },
       ];
+      const before = told.length;
       service.live.sidebar.move();
       yield* nextPoll(settled);
+      // Note that an answer moving two parts is told once, so no window draws one moved without the other.
+      assert.equal(told.length - before, 1);
       assert.deepEqual(
         last()?.taskSections?.sections.map((section) => section.title),
         ["Launch", "Later"],
@@ -1773,6 +1750,38 @@ it.effect(
         last()?.repositoryPins?.map((pin) => pin.repository),
         ["acme/web", "acme/relay"],
       );
+    }),
+);
+
+it.effect(
+  "a drag's change the service refused takes back only what it drew, so the changes the service kept before it stay drawn",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      // The service keeps the section, then refuses to put the task in it.
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
+      service.sectionRefused = TASK_SECTION_WRITE.PLACE;
+      const writes = [
+        {
+          kind: TASK_SECTION_WRITE.CREATE,
+          id: SECTION_ID,
+          workspaceId: PERSONAL.id,
+          title: "Launch",
+        },
+        { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID },
+      ];
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes }), {
+        changed: false,
+      });
+      assert.deepEqual(last()?.taskSections, service.sections);
     }),
 );
 
@@ -1796,6 +1805,76 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a pin stands from the press until the followed sidebar carries its transaction, through an answer from before it, and a refused one is put back",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, told, settled } = yield* subject(service);
+      const pinned = (view: TasksView | undefined) =>
+        view?.repositoryPins?.map((pin) => pin.repository) ?? [];
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      service.live.sidebar.set({}, ["tx-earlier"]);
+      yield* nextPoll(settled);
+
+      service.pinTxid = "tx-pin";
+      const from = told.length;
+      const pin = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/relay", pinned: true }),
+      );
+      yield* settled;
+      // Another Mac's change from before the pin landed is answered without it.
+      service.live.sidebar.set({ pins: [] }, ["tx-other"]);
+      yield* nextPoll(settled);
+      service.live.sidebar.set({ pins: service.pins }, ["tx-pin"]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(pin), { changed: true });
+      assert.ok(told.length > from);
+      assert.deepEqual(
+        told.slice(from).filter((view) => !pinned(view).includes("acme/relay")),
+        [],
+        "the pin is never drawn back",
+      );
+
+      service.pinsFail = true;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
+        { changed: false },
+      );
+      assert.deepEqual(pinned(last()), ["acme/relay"]);
+    }),
+);
+
+it.effect("a pin still being written when the account signs out is drawn for nobody after", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, told, tasks, settled } = yield* subject(service);
+    const answered = yield* Deferred.make<void>();
+    service.pinAnswered = Deferred.await(answered);
+
+    const pin = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/secret", pinned: true }),
+    );
+    yield* settled;
+    const from = told.length;
+    // Note that the sign-out waits on the pin's service call, which holds the one lock reads take.
+    const signingOut = yield* Effect.forkChild(tasks.reset);
+    yield* settled;
+    yield* Deferred.succeed(answered, undefined);
+    yield* Fiber.join(pin);
+    yield* Fiber.join(signingOut);
+    yield* settled;
+
+    assert.deepEqual(
+      told.slice(from).flatMap((view) => view.repositoryPins ?? []),
+      [],
+    );
+  }),
+);
+
 it.effect("a sign-out drops the view the window drew", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -1814,26 +1893,6 @@ it.effect("a sign-out drops the view the window drew", () =>
   }),
 );
 
-it.effect(
-  "a call into an agent with no task tells its activity to the floating call alone, never to the open task",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { tasks, viewLands, openTask } = yield* subject(service);
-      yield* tasks.lifetime;
-      yield* openTask(INVITES);
-
-      const told = yield* viewLands((next) => next.callActivity?.notes === true);
-      tasks.showActivity({
-        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-        agentId: "taskless-agent",
-        notes: true,
-      });
-      const toldView = yield* told;
-      assert.equal(toldView.activity, undefined);
-      assert.deepEqual(toldView.callActivity, { notes: true });
-    }),
-);
 it.effect(
   "the first refresh follows the account's workspaces with their GitHub organizations, and a sign-out clears them",
   () =>
@@ -2566,7 +2625,7 @@ it.effect("leaving a workspace reaches the service and the view then holds it no
 );
 
 it.effect(
-  "leaving the open plan's workspace ends the plan's call and closes the plan, and a refused leave keeps it open",
+  "leaving the open plan's workspace closes the plan, and a refused leave keeps it open",
   () =>
     Effect.gen(function* () {
       const acmeTask = {
@@ -2576,8 +2635,7 @@ it.effect(
       const service = fakeService([acmeTask]);
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
-      const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last, listed, openTask } = yield* subject(service, { call: standing });
+      const { call, last, listed, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(INVITES);
@@ -2587,7 +2645,6 @@ it.effect(
       assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
       assert.equal(last()?.activeTaskId, INVITES);
       assert.equal(last()?.document.status, TASKS_READ.READY);
-      assert.deepEqual(standing.about, { taskId: INVITES });
 
       service.notPermitted = false;
       const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
@@ -2595,51 +2652,20 @@ it.effect(
       assert.deepEqual(left, { left: true });
       assert.equal(last()?.activeTaskId, undefined);
       assert.deepEqual(last()?.document, { status: TASKS_READ.IDLE });
-      assert.equal(standing.about, undefined);
     }),
 );
 
-it.effect(
-  "leaving a workspace ends a call still standing about one of its plans that is no longer open, and keeps the open plan of another",
-  () =>
-    Effect.gen(function* () {
-      const acmeTask = {
-        ...task(INVITES, "Teammate invitations", "# Draft", 10),
-        workspaceId: ACME.id,
-      };
-      const personalTask = {
-        ...task(BILLING, "Billing", "# Billing", 20),
-        workspaceId: PERSONAL.id,
-      };
-      const service = fakeService([acmeTask, personalTask]);
-      service.memberships = [PERSONAL, ACME];
-      const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last, listed, openTask } = yield* subject(service, { call: standing });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* listed();
-      yield* openTask(BILLING);
-
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
-
-      assert.deepEqual(left, { left: true });
-      assert.equal(standing.about, undefined);
-      assert.equal(last()?.activeTaskId, BILLING);
-    }),
-);
-
-it.effect("leaving another workspace than the open plan's keeps the plan and its call", () =>
+it.effect("leaving another workspace than the open plan's keeps the plan open", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.memberships = [PERSONAL, ACME];
-    const standing: StandingCall = { about: { taskId: INVITES } };
-    const { call, last, openTask } = yield* subject(service, { call: standing });
+    const { call, last, openTask } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     yield* openTask(INVITES);
 
     yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
 
     assert.equal(last()?.activeTaskId, INVITES);
-    assert.deepEqual(standing.about, { taskId: INVITES });
   }),
 );
 
@@ -2714,7 +2740,7 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
 );
 
 it.effect(
-  "a folder and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
+  "a file, a folder, and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2735,14 +2761,42 @@ it.effect(
           ],
         },
       });
+      const file = (path: string): TaskFileAnswer => ({
+        file: {
+          path,
+          repository: "acme/relay",
+          branch: "main",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["const seats = 3;"],
+        },
+      });
       service.places[ACME.id] = {
-        "acme/relay": { folders: { src: folder("src") }, skills: skills("release") },
+        "acme/relay": {
+          files: { "src/seats.ts": file("src/seats.ts") },
+          folders: { src: folder("src") },
+          skills: skills("release"),
+        },
       };
+      service.files["docs/plan.md"] = file("docs/plan.md");
       service.folders.docs = folder("docs");
       service.skills[INVITES] = skills("review");
       const { call } = yield* subject(service);
       const place = { workspaceId: ACME.id, repository: "acme/relay" };
 
+      const window = { firstLine: 1, lastLine: 1 };
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, { ...place, path: "src/seats.ts", ...window }),
+        file("src/seats.ts"),
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, {
+          taskId: INVITES,
+          path: "docs/plan.md",
+          ...window,
+        }),
+        file("docs/plan.md"),
+      );
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.TASKS_TREE, { ...place, path: "src" }),
         folder("src"),
@@ -3142,49 +3196,41 @@ function callRow(lastSegment: number, closedAt: number | null) {
   };
 }
 
-it.effect(
-  "the open task's pages are read again as their mark moves, not on a call's words, its activity, or its end",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const record = recordLive();
-      service.recordLives[INVITES] = record;
-      const { call, tasks, openTask } = yield* subject(service);
-      yield* tasks.lifetime;
-      yield* openTask(INVITES);
-      yield* followSettled;
-      assert.equal(record.held(), 1, "its poll is held while nothing moves");
-      const taken = () => service.recordReads.splice(0).toSorted();
-      taken();
-      const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
-        answered(() => record.set({ plan: [], pages, calls, code: [] }));
-      const page = (version: number) => ({ pageId: "page-1", version });
+it.effect("the open task's pages are read again as their mark moves, not on a call's words", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+    const record = recordLive();
+    service.recordLives[INVITES] = record;
+    const { call, tasks, openTask } = yield* subject(service);
+    yield* tasks.lifetime;
+    yield* openTask(INVITES);
+    yield* followSettled;
+    assert.equal(record.held(), 1, "its poll is held while nothing moves");
+    const taken = () => service.recordReads.splice(0).toSorted();
+    taken();
+    const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
+      answered(() => record.set({ plan: [], pages, calls, code: [] }));
+    const page = (version: number) => ({ pageId: "page-1", version });
 
-      // The first answer with rows reads every part, since the reads the task opened with may have missed it.
-      yield* deliver([page(1)], []);
-      assert.deepEqual(taken(), ["pages"]);
+    // The first answer with rows reads every part, since the reads the task opened with may have missed it.
+    yield* deliver([page(1)], []);
+    assert.deepEqual(taken(), ["pages"]);
 
-      yield* deliver([page(2)], []);
-      assert.deepEqual(taken(), ["pages"]);
+    yield* deliver([page(2)], []);
+    assert.deepEqual(taken(), ["pages"]);
 
-      // A call's words landing, its activity, and its end read nothing.
-      yield* deliver([page(2)], [callRow(3, null)]);
-      tasks.showActivity({
-        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-        planId: INVITES,
-        notes: false,
-      });
-      tasks.callEnded({ agentId: "agent-1", taskId: INVITES });
-      yield* deliver([page(2)], [callRow(3, 5_000)]);
-      yield* TestClock.adjust(Duration.seconds(5));
-      yield* followSettled;
-      assert.deepEqual(taken(), []);
+    // A call's words landing read nothing.
+    yield* deliver([page(2)], [callRow(3, null)]);
+    yield* deliver([page(2)], [callRow(3, 5_000)]);
+    yield* TestClock.adjust(Duration.seconds(5));
+    yield* followSettled;
+    assert.deepEqual(taken(), []);
 
-      // Leaving the task lets the follow go.
-      yield* call(GATEWAY_METHOD.TASKS_CLOSE);
-      yield* followSettled;
-      assert.equal(record.held(), 0);
-    }),
+    // Leaving the task lets the follow go.
+    yield* call(GATEWAY_METHOD.TASKS_CLOSE);
+    yield* followSettled;
+    assert.equal(record.held(), 0);
+  }),
 );
 
 it.effect(

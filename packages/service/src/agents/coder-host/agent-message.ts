@@ -21,7 +21,6 @@ import {
 } from "../../core.js";
 import type { HostedRefusal } from "../../http/http-effect.js";
 import {
-  AGENT_CALLER,
   agentToolRejected,
   type CodingAgentCall,
   type CodingAgentToolServices,
@@ -68,7 +67,6 @@ export const MESSAGE_AGENT_REFUSAL = {
   UNREADABLE:
     `Not sent: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and the message as text of at ` +
     `most ${MAX_MESSAGE_WORDS_CHARS} characters.`,
-  NOT_AGENT: "Not sent: only a coding agent messages another.",
   SELF: "Not sent: that id is your own; message another agent.",
   NO_AGENT: `Not sent: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
@@ -161,9 +159,6 @@ export function runMessageAgent(
   }
   const { agentId, text } = asked.success;
   const { caller } = call;
-  if (caller.kind !== AGENT_CALLER.AGENT) {
-    return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.NOT_AGENT));
-  }
   const sender = caller.agent;
   if (agentId === sender.id) return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.SELF));
   return orStoreRefusal(

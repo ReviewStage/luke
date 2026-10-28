@@ -62,6 +62,8 @@ import {
   mount,
   needsYouMark,
   noticeOf,
+  ON_EXPIRY,
+  ON_THRESHOLD,
   openViewOptions,
   pagerOf,
   pressKey,
@@ -133,13 +135,13 @@ function scopes(page: HTMLElement): string[] {
   return [headTitle(page) ?? "", ...words];
 }
 
-test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and wearing the attention mark while it needs you, the first such item chosen; Group by None from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
+test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and wearing the attention mark while it needs you, none chosen; Group by None from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",
-    "▸ *Alert at 80%?",
+    "*Alert at 80%?",
     "# Invites",
     "*Expire after 7 days?",
   ]);
@@ -153,22 +155,14 @@ test("the list holds every plan's items under the sidebar's group header for eac
     ["true", "false", "false"],
   );
   act(() => viewItem("None").click());
-  assert.deepEqual(listed(page), [
-    "How is a failed email retried?",
-    "*Expire after 7 days?",
-    "▸ *Alert at 80%?",
-  ]);
+  const oneRun = ["How is a failed email retried?", "*Expire after 7 days?", "*Alert at 80%?"];
+  assert.deepEqual(listed(page), oneRun);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount());
   await settle();
-  // Relaunched, nothing is chosen, so the first waiting item of the one run stands chosen.
-  assert.deepEqual(listed(page), [
-    "How is a failed email retried?",
-    "▸ *Expire after 7 days?",
-    "*Alert at 80%?",
-  ]);
+  assert.deepEqual(listed(page), oneRun);
 });
 
 /** Presses Media previews in the view's menu, handing back whether it stood checked before. */
@@ -519,7 +513,7 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
 });
 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the list is shown; To do then lists only what still needs you until All is chosen, which sorts it anew, and the choice outlives a relaunch", async () => {
-  let { page } = mount();
+  let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   world.inboxes.set(INVITES.id, [
     { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
@@ -556,7 +550,7 @@ test("a plan main says changed is read again, so an item answered on another Mac
 
   act(() => world.root?.unmount());
   world.root = undefined;
-  ({ page } = mount());
+  ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
@@ -568,7 +562,7 @@ test("a plan main says changed is read again, so an item answered on another Mac
 
 test("To do lists what needs you and anything of yours unread: a thread you answered that its agent writes on again comes back to it, which waiting on you alone would leave out", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(listed(page), [
     "# Invites",
@@ -672,7 +666,7 @@ test("the sidebar's Inbox counts the open items alone, as before, where main car
 
 test("a fresh profile opens the Inbox on To do, grouped by nothing, None first and checked under Group by, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
   window.localStorage.clear();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
@@ -784,7 +778,7 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
 
 test("Order by in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
   window.localStorage.setItem(SORT_KEY, JSON.stringify("waiting"));
-  let { page } = mount();
+  let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   openViewOptions(page);
   act(() => viewItem("Order by").click());
@@ -863,13 +857,15 @@ test("grouped by person or by nothing, each row names its task on a line of its 
   );
 });
 
-test("on To do, your unread update leading the list is the first item chosen, and keeps its row, gray, once opening it reads it, so J steps on from it and K finds it gone once left", async () => {
+test("on To do, your unread update opened keeps its row, gray, once opening it reads it, so J steps on from it and K finds it gone once left", async () => {
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
   const { page } = mount();
   await settle();
   const keys = standKeymap();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.deepEqual(
     listed(page),
@@ -1004,7 +1000,7 @@ test("while its plans are first read, the list stands placeholder rows in its it
     [INVITES.id, pending()],
   ]);
   world.startRead = (taskId) => reads.get(taskId)?.promise;
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const list = page.querySelector<HTMLElement>(".inbox-tasks");
   assert.ok(list, "the list is drawn");
@@ -1031,7 +1027,7 @@ test("while its plans are first read, the list stands placeholder rows in its it
 });
 
 test("an Inbox opened before the account's task list is read stands placeholder rows, and neither the list nor the pane says nothing needs you, whatever its width; once the list lands, its items stand", async () => {
-  const { page } = mount([], { listUnread: true });
+  const { page } = mount([], { chosen: ON_THRESHOLD, listUnread: true });
   await settle();
   const list = page.querySelector<HTMLElement>(".inbox-tasks");
   assert.ok(list, "the list is drawn");
@@ -1078,7 +1074,7 @@ function listEmpty(page: HTMLElement): readonly (string | null | undefined)[] | 
 test("with only settled items, read, To do lists no row, the item read still shown beside the list, which says there is nothing to do and offers Show all; its press shows All", async () => {
   world.inboxes.set(INVITES.id, [answeredBy(EXPIRY, READER, "Retry once", "", 4_000)]);
   world.inboxes.set(BILLING.id, [RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: { taskId: BILLING.id, itemId: RETRY.id } });
   await settle();
   const everything = [
     "# Billing usage alerts",
@@ -1095,7 +1091,7 @@ test("with only settled items, read, To do lists no row, the item read still sho
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
-  // One column wide, the item read stands alone with nothing to page to, and its way back reaches the empty list.
+  // One column wide, the item read stands alone with nothing to page to, and its way back, choosing nothing, reaches the empty list.
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
   assert.equal(pagerOf(page), null);
@@ -1114,9 +1110,14 @@ test("with only settled items, read, To do lists no row, the item read still sho
   );
   assert.ok(
     document.activeElement === rowNamed(page, "How is a failed email retried?"),
-    "the keyboard lands on the row of the item read, not on the button Show all took away",
+    "the keyboard lands on the first row, not on the button Show all took away",
   );
-  assert.deepEqual(listed(page), everything);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "# Invites",
+    "Expire after 7 days?",
+  ]);
   assert.equal(listEmpty(page), null);
 });
 
@@ -1140,7 +1141,7 @@ test("one column wide, an answered item that To do draws no row for shows no cou
 });
 
 test("on To do, a focused row whose item is answered on another Mac leaves the keyboard on View options rather than nowhere", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   showScope(page, "For you");
   rowNamed(page, "Expire after 7 days?").focus();
@@ -1162,7 +1163,7 @@ test("on To do, a focused row whose item is answered on another Mac leaves the k
 });
 
 test("on a phone, a focused row whose item is answered elsewhere leaves the keyboard on the head's ⋯, which holds View options there", async () => {
-  const { page } = mount([], { room: SHELL_ROOM.NARROW });
+  const { page } = mount([], { chosen: ON_THRESHOLD, room: SHELL_ROOM.NARROW });
   await settle();
   // To do is chosen as a phone chooses it: the ⋯'s View options opens the list's own menu where the ⋯ stood.
   const more = () =>
@@ -1224,7 +1225,7 @@ async function answerExpiryElsewhere(): Promise<void> {
 
 test("on To do, an item answered on another Mac slides out from where its row stood, its task's group with it, out of reach while it goes, and leaves the list once its exit has played", async () => {
   const played = playListMotions();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   showScope(page, "For you");
   await answerExpiryElsewhere();
@@ -1337,7 +1338,7 @@ test("an item's row reads as two lines, its title and time over the last word in
 
 test("no row draws the attention mark, which an open item nearly always would: the reader's own open item says to a reader before its time that it needs them, its card showing it; a teammate's open item wears their face there with no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const ends = (title: string) => {
     const row = rowNamed(page, title);
@@ -1402,7 +1403,7 @@ function hoverMark(page: HTMLElement, title: string): HTMLButtonElement {
   return press;
 }
 
-test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, the item standing chosen first among them, your unread answered thread leading the list among what it reaches", async () => {
+test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, and the Inbox opening, choosing nothing, marks none", async () => {
   world.inboxes.set(BILLING.id, [
     { ...THRESHOLD, unread: true },
     { ...RETRY, unread: true },
@@ -1410,23 +1411,22 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   world.inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
   const { page } = mount();
   await settle();
-  // The item standing chosen is shown, and so opened, as the Inbox opens.
-  assert.deepEqual(world.readMarks, [`read:${RETRY.id}`]);
-  assert.equal(unreadOf(page, "How is a failed email retried?"), false);
+  assert.deepEqual(world.readMarks, []);
+  assert.equal(unreadOf(page, "How is a failed email retried?"), true);
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
   assert.equal(unreadOf(page, "Expire after 7 days?"), true);
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  assert.deepEqual(world.readMarks, [`read:${RETRY.id}`, `read:${EXPIRY.id}`]);
+  assert.deepEqual(world.readMarks, [`read:${EXPIRY.id}`]);
   assert.equal(unreadOf(page, "Expire after 7 days?"), false);
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
-test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U above Copy link", async () => {
+test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, after Copy link", async () => {
   world.listedWorkspace = ACME;
   const keys = standKeymap();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const retry = "How is a failed email retried?";
   assert.equal(hoverMark(page, retry).getAttribute("aria-label"), "Mark as unread");
@@ -1441,14 +1441,14 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
   );
 
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Mark as read", "—", "Show details⌥↓", "—", "Copy link"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Show details⌥↓", "—", "Mark as read"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
   assert.deepEqual(rowMenu(page, "Alert at 80%?"), [
-    "Mark as unreadU",
-    "—",
     "Copy link",
+    "—",
+    "Mark as unreadU",
     "—",
     "Show details⌥↓",
     "—",
@@ -1472,7 +1472,7 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
 
 test("an item marked unread while it is shown stays unread until it is opened again, as a mail app keeps it", async () => {
   const keys = standKeymap();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   pressKey("u");
   await settle();
@@ -1502,7 +1502,7 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
   // Note that the unread answered item is a teammate's, so the item standing chosen is the one that needs you, and nothing is read before the mark.
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
   world.inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const openOptions = () => {
     const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
@@ -1568,7 +1568,7 @@ test("Mark all as read sends one write and asks no task or agent again, since ea
 test("a row swiped right marks its item: a long swipe marks an unread item read as it is let go, a short one leaves the row open on an Unread button for a read one, and neither opens the item", async () => {
   // Note that the unread item is a teammate's, so it is not the item standing chosen, which would read it as it opens.
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   world.readMarks = [];
   const retry = "How is a failed email retried?";
@@ -1760,7 +1760,7 @@ test("a teammate chosen in Whose with nothing in the scope shown says so, and of
 
 test("grouped by status, what needs you stands under the attention mark, then what waits on a teammate, then what is answered, each folding as a task's group does, a folded group counting what in it needs you and its rows passed over by K and J", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   chooseView(page, "Group by", "Status");
   assert.deepEqual(listed(page), [
@@ -1848,7 +1848,7 @@ test("grouped by status, an item its agent withdrew stands under Closed, apart f
 
 test("an item marked read as it opened stays read once another plan's item is chosen, though the list's read of its plan, which a mark never moves, still holds it unread", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`]);
   assert.equal(unreadOf(page, "Alert at 80%?"), false);
@@ -1870,7 +1870,7 @@ test("an item marked read as it opened stays read once another plan's item is ch
 
 test("a mark another window makes later on the same item stands once the plan's push holds it, over the window's own earlier mark", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.equal(unreadOf(page, "Alert at 80%?"), false);
   // The plan's inbox is pushed as the test says: its own mark heard, then another window's.
@@ -1999,7 +1999,7 @@ function paneTitle(page: HTMLElement): string | null | undefined {
 }
 
 test("the list's search stands under the Inbox's head, its name and buttons never giving way, and narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties it", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const title = headTitle(page);
   const buttons = () =>

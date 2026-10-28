@@ -24,13 +24,14 @@ import {
   type ConnectionDoorServices,
   nativeAgentConnections,
 } from "../../integrations/connection-door.js";
-import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
+import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
 import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import type { SandboxRunner } from "../machine/vercel-machine.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
+import { RUNNER_LINES_PATH } from "../native-events/runner-lines-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { workspaceStepOf } from "../written-mentions.js";
@@ -113,6 +114,7 @@ export function nativeAgentSessionsLayer(
       ): RunnerSessionsOptions => ({
         userId: account,
         eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
+        linesUrl: new URL(RUNNER_LINES_PATH, origin).href,
         mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
         integrations: (agent) =>
           nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),

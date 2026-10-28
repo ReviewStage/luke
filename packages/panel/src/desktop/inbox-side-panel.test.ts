@@ -214,9 +214,11 @@ async function inbox(
   fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(NO_EXPERIMENTS);
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    // Whether the list was asked for, which the window keeps as the Tasks tab does.
-    const [listed, setListed] = useState(false);
+    // Note that the item stands chosen, as a press on its row chooses it.
+    const [chosen, setChosen] = useState<InboxChoice | undefined>({
+      taskId: TASK.id,
+      itemId: ITEM.id,
+    });
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     // The task's agents as the Inbox read them, which the window's own hook holds its panel to (`use-tasks-tab.ts`).
     const taskAgents = useInboxTaskAgents(panelFor);
@@ -251,8 +253,7 @@ async function inbox(
             onChoose: setChosen,
             onOpenItem: () => undefined,
             onOpenChannel: () => undefined,
-            listed,
-            onListed: setListed,
+            onClear: () => setChosen(undefined),
             pages,
             onTaskAgents: taskAgents.onRead,
           },
@@ -466,4 +467,71 @@ test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the 
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
+});
+
+test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its right-click, whose Open in task, as ⌘O while the panel holds the keys, opens it in its task", async () => {
+  const { container, left } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  const aside = container.querySelector<HTMLElement>('aside[aria-label="Panel"]');
+  assert.ok(aside, "the panel stands beside the Inbox");
+  /** What the open menu offers, by each item's words, the menu left open. */
+  const offered = () => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+    assert.ok(menu, "a menu stands open");
+    const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    return { menu, items, words: items.map((item) => item.textContent ?? "") };
+  };
+  const closeMenu = (menu: HTMLElement) =>
+    act(() => {
+      menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+  const more = aside.querySelector<HTMLButtonElement>(
+    'button[aria-label="Batch the invitations actions"]',
+  );
+  assert.ok(more, "the agent's tab puts a ⋯ in the panel's bar");
+  act(() => more.click());
+  const fromMore = offered();
+  const agentMenu = [
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Rename",
+    "Show terminal",
+    "Open in task",
+    "Archive",
+    "Permanently delete",
+  ];
+  assert.deepEqual(
+    fromMore.words.map((words) => agentMenu.find((item) => words.startsWith(item))),
+    agentMenu,
+  );
+  closeMenu(fromMore.menu);
+
+  const tab = aside.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  assert.ok(tab);
+  act(() => {
+    tab.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 }),
+    );
+  });
+  const fromRightClick = offered();
+  assert.ok(fromRightClick.words[0]?.startsWith("Close"), "its tab's keeping leads");
+  assert.deepEqual(
+    agentMenu.filter((item) => fromRightClick.words.some((words) => words.startsWith(item))),
+    agentMenu,
+    "then the agent's own menu",
+  );
+  const inTask = fromRightClick.items.find((item) => item.textContent?.startsWith("Open in task"));
+  assert.ok(inTask);
+  await act(async () => inTask.click());
+  assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`]);
+
+  act(() => tab.focus());
+  act(() => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "o", code: "KeyO", metaKey: true, bubbles: true }),
+    );
+  });
+  assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`, `${TASK.id} agent ${AGENT.id}`]);
 });

@@ -64,7 +64,6 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
@@ -121,7 +120,6 @@ import {
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
-  codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDeleteAnswerViewSchema,
@@ -256,8 +254,6 @@ import {
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksIssueParams,
-  type TasksLinearIssuesAnswer,
-  type TasksLinearIssuesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -326,7 +322,6 @@ import {
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
-  tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
   tasksPagesAnswerSchema,
@@ -375,16 +370,7 @@ import {
   type GatewayClient,
   type GatewayMethod,
   gatewayEventReader,
-  type VoiceCreateLiveSessionResult,
-  type VoiceEndLiveSessionParams,
-  type VoiceLiveSessionChanged,
-  type VoiceReportLiveTransportParams,
-  voiceCreateLiveSessionResultSchema,
-  voiceLiveSessionChangedSchema,
-  voiceStopSpeakingResultSchema,
 } from "@luke/gateway";
-import type { AgentWireTrace } from "@luke/gateway/devtrace";
-import type { LiveDiagnostics } from "@luke/live";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -392,7 +378,6 @@ import type {
   SettingsResetScope,
 } from "@luke/settings";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -414,7 +399,7 @@ import {
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
- * voice, task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
+ * task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
  * act procedure that asked yields it, and the act port runs it once on the launch's
  * own runtime. The host is this same process, so an answer that is not the
@@ -429,8 +414,6 @@ export interface HostBootstrap {
   sessionReplay: { permitted: boolean; accountId?: string };
   /** What the signed-in account may open in the app, as the host last read it. */
   access: AppAccessSlice;
-  voiceAvailable: boolean;
-  agentTraceEnabled: boolean;
 }
 
 interface HostSettingsChange {
@@ -482,26 +465,6 @@ export interface HostOperator {
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
-  /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
-  liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
-  /**
-   * The peer's SDP offer, and the agent the call speaks into with its task where it has one,
-   * answered with the session the host created; a host that creates none
-   * answers nothing.
-   */
-  createLiveSession(
-    sdp: string,
-    about: VoiceCallAbout,
-  ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
-  /** The peer's hang-up of the session it names; one the host no longer holds is left alone. */
-  endLiveSession(request: VoiceEndLiveSessionParams): Effect.Effect<void>;
-  reportLiveTransport(report: VoiceReportLiveTransportParams): Effect.Effect<void>;
-  /** The peer's own idle decision, from its local signals alone; the host decides the close. */
-  reportLiveActivity(idle: boolean): Effect.Effect<void>;
-  /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
-  stopSpeaking(): Effect.Effect<boolean>;
-  /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
-  recordAgentTrace(trace: AgentWireTrace): Effect.Effect<void>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -620,14 +583,6 @@ export interface HostOperator {
   ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
   /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
   workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's Linear connection begun; Vercel Connect's sign-in address to open, or why there is none. */
-  workspaceLinearConnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** A workspace's Linear disconnected; the workspace as it then stands, or why it is not. */
-  workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** The Linear issues a workspace's connection reaches; or why there are none. */
-  workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it; or why there is no answer. */
   workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
@@ -739,8 +694,6 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
-  /** The calls into one agent, each with its lines and its record; or why there is no answer. */
-  codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
@@ -946,7 +899,6 @@ export interface HostOperator {
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
-  onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
@@ -1273,43 +1225,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
     deleteAccount: () =>
       accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
-    liveDiagnostics: () =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
-        Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
-      ),
-    createLiveSession: (sdp, { taskId, agentId }) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
-          sdp,
-          agentId,
-          ...(taskId === undefined ? undefined : { taskId }),
-        }),
-        (answer) =>
-          answer.ok
-            ? Result.getSuccess(
-                readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : Option.none(),
-      ),
-    endLiveSession: (request) => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION, request)),
-    reportLiveTransport: (report) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, report)),
-    reportLiveActivity: (idle) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
-    stopSpeaking: () =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING), (answer) =>
-        answer.ok
-          ? (Result.getOrUndefined(
-              readEither(voiceStopSpeakingResultSchema, { excess: EXCESS_KEYS.DROP })(
-                answer.result,
-              ),
-            )?.stopped ?? false)
-          : false,
-      ),
-    recordAgentTrace: (trace) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) })),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
@@ -1376,7 +1291,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     tasksFile: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_FILE, {
-          taskId: params.taskId,
+          ...("taskId" in params
+            ? { taskId: params.taskId }
+            : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           firstLine: params.firstLine,
           lastLine: params.lastLine,
@@ -1610,27 +1527,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
         }),
         answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLinearConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLinearDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLinearIssues: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES, {
-          workspaceId: params.workspaceId,
-          ...("query" in params ? { query: params.query } : undefined),
-          ...("identifier" in params ? { identifier: params.identifier } : undefined),
-        }),
-        answerOf(tasksLinearIssuesAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceSentry: (params) =>
       Effect.map(
@@ -1946,11 +1842,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(codingAgentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    codingAgentCalls: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
-        answerOf(codingAgentCallsAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     channelsList: (params) =>
       Effect.map(
@@ -2417,15 +2308,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ...(payload.pending === true ? { pending: true } : undefined),
               }
             : undefined,
-        listener,
-      ),
-    onVoiceLiveSessionChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
         listener,
       ),
     onTasksChanged: (listener) =>

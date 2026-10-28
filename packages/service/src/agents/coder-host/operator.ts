@@ -73,7 +73,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import type { AgentSessions, EveTypedTurn } from "../brain-host/eve-sessions.js";
+import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT, OPERATOR_OPENING } from "./instructions.js";
 import {
   acceptedAgentChoice,
@@ -144,7 +144,6 @@ const aimedItsHeartbeat = (
       operatorId: operator.id,
       workspaceId,
       heartbeat: {
-        taskId: null,
         organizationId: workspaceId,
         repositories: [],
         name: OPERATOR_HEARTBEAT_SCHEDULE.NAME,

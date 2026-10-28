@@ -243,6 +243,7 @@ function entryAttributes(props: TextEntryProps) {
           ? true
           : undefined
         : props.field["aria-invalid"],
+    "aria-required": props.field?.["aria-required"],
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,

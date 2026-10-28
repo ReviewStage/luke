@@ -21,7 +21,7 @@ import {
   type ConversationAdmission,
   claimRuntimeSession,
   SESSION_STANDING,
-} from "../brain-host/conversation.js";
+} from "../eve-host/conversation.js";
 
 type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 

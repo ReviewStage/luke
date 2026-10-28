@@ -40,11 +40,12 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  *
  * Drawn along the composer card's foot for a task about to start, the way a
  * branch or model chip is: the owner's picture and `owner/name`, or the
- * GitHub mark and the pick it is waiting on. In the open task's toolbar it stands in the actions row,
- * reading `Choose a repository` while the task has none; once the task names
- * one, the sidebar's row says which and the toolbar draws no chip, and the
- * menu alone is left, opened by the task menu's Change repository and
- * hung from the toolbar. Its menu is the shared searchable one: a search over every
+ * GitHub mark and the pick it is waiting on. In the open plan it stands in
+ * the chip row under the title, beside the status, priority, and assignee
+ * chips (`task-standing.tsx`), as a Settings picker's chip is drawn,
+ * reading `Choose a repository` while the task has none and the repository
+ * once the task names one; ⌘K's Change repository opens its menu from
+ * there. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
  * repositories the account's tasks were about lately first and the rest as
  * GitHub last saw them change, each under its owner's picture, one the
@@ -94,17 +95,15 @@ export interface RepositoryChooser {
 /** Where the chip stands, which is how it is sized. */
 export const CHIP_PLACE = {
   COMPOSER: "composer",
-  TOOLBAR: "toolbar",
-  /** A form row's value, as a Settings picker's chip is drawn. */
+  /** A form row's value, or the plan's chip row, as a Settings picker's chip is drawn. */
   FIELD: "field",
 } as const;
 
 export type ChipPlace = (typeof CHIP_PLACE)[keyof typeof CHIP_PLACE];
 
-/** The chip's look in each place: the composer's pill, the toolbar chip the toolbar's buttons beside it are drawn as, or a form row's field. */
+/** The chip's look in each place: the composer's pill, or a form row's field. */
 const PLACE_LOOK = {
   [CHIP_PLACE.COMPOSER]: CHIP_LOOK.PILL,
-  [CHIP_PLACE.TOOLBAR]: CHIP_LOOK.TOOLBAR,
   [CHIP_PLACE.FIELD]: CHIP_LOOK.FIELD,
 } as const satisfies Record<ChipPlace, ChipLook>;
 
@@ -239,6 +238,8 @@ export function RepositoryChip(props: {
   onListed?: ((repositories: readonly string[]) => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
+  /** Hears each ask the chip opened its menu for, so the asker can let it go. */
+  onAsked?: ((request: number) => void) | undefined;
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
   align?: PopoverAlign | undefined;
@@ -249,7 +250,7 @@ export function RepositoryChip(props: {
   /** A form row's chip: whether the row says its value is refused. */
   invalid?: true | undefined;
 }): React.JSX.Element {
-  const { chooser, openRequest, onUnreached, onListed, value } = props;
+  const { chooser, openRequest, onAsked, onUnreached, onListed, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -285,12 +286,15 @@ export function RepositoryChip(props: {
     return () => window.removeEventListener("focus", read);
   }, [read]);
 
-  // Each ask from elsewhere, such as the task menu's Change repository, opens the menu.
+  // Each ask from elsewhere, ⌘K's Change repository, opens the menu once, and is answered.
+  const answered = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (openRequest === undefined || openRequest === 0) return;
+    if (openRequest === undefined || openRequest === 0 || openRequest === answered.current) return;
+    answered.current = openRequest;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setOpen(true);
-  }, [openRequest]);
+    onAsked?.(openRequest);
+  }, [openRequest, onAsked]);
 
   // Note that we hand focus back to where it came from, the chip or the task
   // menu's button, as a native menu returns it to its trigger, because
@@ -324,9 +328,6 @@ export function RepositoryChip(props: {
     opener.current = trigger.current;
     setOpen(!open);
   };
-  // The toolbar's chip is drawn only while the task has no repository; the sidebar names one it has.
-  const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
-
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   const label =
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
@@ -371,45 +372,39 @@ export function RepositoryChip(props: {
     ) : undefined;
 
   return (
-    <div
-      className="repository-chip relative min-w-0 data-[place=toolbar]:flex data-[place=toolbar]:empty:hidden"
-      data-place={props.place}
-      ref={chip}
-    >
-      {triggerDrawn ? (
-        <Tooltip
-          label={open ? undefined : (props.value ?? undefined)}
-          card={
-            props.value === null || open ? undefined : (
-              <RepositoryCard repository={props.value} pictures={chooser.pictures} />
-            )
-          }
+    <div className="repository-chip relative min-w-0" data-place={props.place} ref={chip}>
+      <Tooltip
+        label={open ? undefined : (props.value ?? undefined)}
+        card={
+          props.value === null || open ? undefined : (
+            <RepositoryCard repository={props.value} pictures={chooser.pictures} />
+          )
+        }
+      >
+        <Chip
+          ref={trigger}
+          look={PLACE_LOOK[props.place]}
+          width={props.width}
+          chevron={props.place === CHIP_PLACE.FIELD}
+          aria-describedby={props.describedBy}
+          aria-invalid={props.invalid}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={press}
         >
-          <Chip
-            ref={trigger}
-            look={PLACE_LOOK[props.place]}
-            width={props.width}
-            chevron={props.place === CHIP_PLACE.FIELD}
-            aria-describedby={props.describedBy}
-            aria-invalid={props.invalid}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            aria-controls={open ? menuId : undefined}
-            onClick={press}
-          >
-            {props.value === null ? (
-              <GLYPH.REPOSITORY />
-            ) : (
-              <RepositoryPicture
-                repository={props.value}
-                pictures={chooser.pictures}
-                size={AVATAR_SIZE.GLYPH}
-              />
-            )}
-            <ChipName>{label}</ChipName>
-          </Chip>
-        </Tooltip>
-      ) : null}
+          {props.value === null ? (
+            <GLYPH.REPOSITORY />
+          ) : (
+            <RepositoryPicture
+              repository={props.value}
+              pictures={chooser.pictures}
+              size={AVATAR_SIZE.GLYPH}
+            />
+          )}
+          <ChipName>{label}</ChipName>
+        </Chip>
+      </Tooltip>
       {drawn.mounted ? (
         <SearchableMenu
           leaving={drawn.leaving}

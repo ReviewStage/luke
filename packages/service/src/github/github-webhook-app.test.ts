@@ -38,7 +38,7 @@ import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { afterEach, vi } from "vitest";
-import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/bounds.js";
+import { EVE_HOST_ENVIRONMENT, EVE_HOST_HEADER } from "../agents/eve-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
@@ -491,7 +491,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         };
         const made = Option.getOrThrow(
           yield* createAutomation(owner, {
-            taskId: task.id,
+            organizationId: task.workspaceId,
+            repositories: task.repository === null ? [] : [task.repository],
             name: "Fix reported bugs",
             trigger,
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the reported bug." },
@@ -566,7 +567,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const onWorkspace = (event: GitHubTriggerEvent, name: string) =>
           Effect.map(
             createAutomation(owner, {
-              taskId: null,
               organizationId: task.workspaceId,
               repositories: ["Acme/elsewhere", repositoryName],
               name,
@@ -642,7 +642,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const listening = (trigger: AutomationTrigger) =>
           Effect.map(
             createAutomation(owner, {
-              taskId: null,
               organizationId: task.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
@@ -732,7 +731,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const hearing = (senders: readonly GitHubSender[]) =>
           Effect.map(
             createAutomation(owner, {
-              taskId: null,
               organizationId: task.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
@@ -808,7 +806,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       const task = yield* startTask(owner, { name: "CI", repository: repositoryName });
       const made = Option.getOrThrow(
         yield* createAutomation(owner, {
-          taskId: task.id,
+          organizationId: task.workspaceId,
+          repositories: task.repository === null ? [] : [task.repository],
           name: "Fix main",
           trigger: {
             kind: AUTOMATION_TRIGGER.GITHUB,
@@ -871,7 +870,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     "a person's review on an agent's branch wakes the agent through eve as the deployment acting for its owner, under the deployment's own secret and never the cron's",
     () =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
+        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const pull = { state: "open", merged: false, conclusion: "success" } as const;
         const { github, ref, owner, agent } = yield* openAgent({ ...pull });
         yield* claimRuntimeSession(
@@ -905,7 +904,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             .map((sent) => ({
               method: sent.method,
               authorization: sent.headers.get("authorization"),
-              account: sent.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+              account: sent.headers.get(EVE_HOST_HEADER.ACCOUNT),
             })),
           [{ method: "POST", authorization: "Bearer eve-deployment-secret-1", account: owner }],
         );
@@ -915,7 +914,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     "a check suite completing on the head of an agent at work reads its pull request again, then wakes the agent once every check on that head finished",
     () =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
+        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const pull = { state: "open", merged: false, conclusion: "success" } as const;
         const { github, ref, owner, agent } = yield* openAgent({ ...pull });
         const now = yield* DateTime.nowAsDate;

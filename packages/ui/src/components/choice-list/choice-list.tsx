@@ -238,6 +238,8 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   describedBy?: string | undefined;
   /** Whether the group's last write was refused. */
   invalid?: boolean | undefined;
+  /** Whether a pick is to be made, as a form's field that is not optional asks (`FormField`'s `aria-required`). */
+  required?: boolean | undefined;
   /** Whether a write is in flight, which rests the group without disabling it. */
   busy?: boolean | undefined;
   /** Whether it records a choice made, drawn as it was open and taking nothing. */
@@ -580,6 +582,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     readOnly = false,
     describedBy,
     invalid,
+    required,
     busy,
     focusRef,
     select = CHOICE_SELECT.ONE,
@@ -640,6 +643,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     "aria-label": legend,
     "aria-describedby": describedBy,
     "aria-invalid": invalid,
+    "aria-required": required,
     "aria-busy": busy,
     className: listClass(look, flow),
     "data-flow": flow,

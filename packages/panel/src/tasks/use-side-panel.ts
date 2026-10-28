@@ -101,10 +101,9 @@ plan); an item has not
  * stands once per agent, whose sandbox its shells run in, never once per
  * task: it is held to the task's agents as a Changes tab is, and kept
  * nowhere, since what it shows is a connection the next launch makes
- * afresh. A Browser tab, while the Browser tab experiment is on, stands
- * once per tab the service lists in the task's agents' cloud browsers, and
- * is kept nowhere here, since the service keeps the tab; one closed in this
- * window is left out of its strip (`cloud-browser-tabs.ts`). Opening a file
+ * afresh. A Browser tab stands once per tab the service lists in the
+ * task's agents' cloud browsers, and is kept nowhere here, since the
+ * service keeps the tab; one closed in this window is left out of its strip (`cloud-browser-tabs.ts`). Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * lines opened. A file browsed to from a File tab's tree or breadcrumbs
  * takes the place of the File tab it was
@@ -352,7 +351,10 @@ const PINS_KEPT = 100;
 /**
  * The tab a pin opens: a fixed one, an agent's, a file's, or an agent's
  * Changes. Note that a pin of the task's Call, which is gone, reads as the
- * retired fixed kind it is and is let go.
+ * retired fixed kind it is and is let go, and that a pin of the Plan tab,
+ * which an earlier version offered, reads and is then made the task's own
+ * pin on the account (`use-tasks-tab.ts`), since the Plan tab's Pin is the
+ * task's.
  */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,

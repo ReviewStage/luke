@@ -1,5 +1,5 @@
 /**
- * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, and a run taken from a Mac quiet past its lease.
+ * device-machine.test.ts -- a local agent's machine over a real dialect: its launch's secrets sealed in the row and handed over open once, a read that waits for its Mac's answer or is unavailable while the Mac is away, a launch or a message refused while it is away, a turn whose runner the Mac settled as gone settled lost, a run taken from a Mac quiet past its lease, and, on Luke Sync, every write to the agent's lines and requests notifying its account, which wakes the Mac's held reads and the machine's waits within a coalesce window.
  *
  * Synthetic accounts, agents, Macs, bearers, and keys throughout.
  */
@@ -20,6 +20,10 @@ import {
   deviceAgentLineStanding,
   deviceAgentLinesWaiting,
   deviceAgentRequestsWaiting,
+  queueDeviceAgentRequest,
+  settleDeviceAgentLine,
+  withdrawDeviceAgentRequest,
+  withdrawExpiredDeviceAgentRows,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
@@ -28,7 +32,8 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
-import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import { DEVICE_LAYOUT, expectTopicsFire, getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -53,9 +58,15 @@ import {
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { wokenOnHub } from "../../testing/sync-woken.js";
 import { checkOutAgentRepository, deepenAgentCheckout } from "../coder-host/checkout.js";
 import { ranDirectlyFolderOf } from "../coder-host/status.js";
-import { claimedDeviceAgentLine, settledDeviceAgentLine } from "../device-agent.js";
+import {
+  claimedDeviceAgentLine,
+  deviceAgentLinesFor,
+  deviceAgentRequestsFor,
+  settledDeviceAgentLine,
+} from "../device-agent.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { LaunchRefused } from "./agent-machine.js";
 import { deviceMachine } from "./device-machine.js";
@@ -285,6 +296,103 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           "nothing was asked of it",
         );
       }),
+    );
+
+    it.effect(
+      "a line queued, claimed, settled, and withdrawn, and a request queued, claimed, answered, and withdrawn, each notify the agent's account",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgent;
+          const { userId, deviceId, agent } = opened;
+          const account: readonly SyncTopic[] = [[TOPIC.ACCOUNT, userId]];
+          const id = randomUUID();
+          const request = {
+            id,
+            agentId: agent.id,
+            kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+            args: { path: "/tmp/shot.png", maxBytes: 1_025 },
+          };
+
+          const { value: runner } = yield* expectTopicsFire(launched(opened), account);
+          const line = runner.handle.command;
+          yield* expectTopicsFire(claimedDeviceAgentLine(userId, deviceId, line), account);
+          yield* expectTopicsFire(settleDeviceAgentLine(userId, deviceId, line, 0), account);
+          yield* expectTopicsFire(queueDeviceAgentRequest(userId, request), account);
+          yield* expectTopicsFire(claimDeviceAgentRequest(userId, deviceId, id), account);
+          yield* expectTopicsFire(
+            answerDeviceAgentRequest(userId, deviceId, id, {
+              kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+              bytes: new Uint8Array([137, 80, 78, 71]),
+            }),
+            account,
+          );
+          yield* expectTopicsFire(withdrawDeviceAgentRequest(userId, id), account);
+          const later = new Date((yield* Clock.currentTimeMillis) + 1);
+          yield* expectTopicsFire(withdrawExpiredDeviceAgentRows(userId, later), account);
+          assert.ok(
+            Option.isNone(yield* deviceAgentLineStanding(userId, line)),
+            "the settled line was withdrawn",
+          );
+        }),
+    );
+
+    it.effect(
+      "on Luke Sync, the Mac's held reads, a read's wait for its answer, and a wait for a runner's exit each answer within a coalesce window of the write that settles them",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const opened = yield* openLocalAgent;
+            const { userId, deviceId, agent, session } = opened;
+            const machine = yield* deviceMachine;
+            const bytes = new Uint8Array([137, 80, 78, 71]);
+
+            const lines = yield* wokenOnHub(
+              deviceAgentLinesFor(userId, deviceId),
+              launched(opened),
+            );
+            const line = lines.written.handle.command;
+            const read = yield* wokenOnHub(
+              machine.readFile(session, "/tmp/shot.png", 1_024),
+              Effect.gen(function* () {
+                const [asked] = yield* deviceAgentRequestsWaiting(userId, deviceId);
+                assert.ok(asked !== undefined, "the read asked its Mac");
+                yield* claimDeviceAgentRequest(userId, deviceId, asked.id);
+                yield* answerDeviceAgentRequest(userId, deviceId, asked.id, {
+                  kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+                  bytes,
+                });
+              }),
+            );
+            const id = randomUUID();
+            const requests = yield* wokenOnHub(
+              deviceAgentRequestsFor(userId, deviceId),
+              queueDeviceAgentRequest(userId, {
+                id,
+                agentId: agent.id,
+                kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+                args: { path: "/tmp/notes.md", maxBytes: 1_025 },
+              }),
+            );
+            const exit = yield* wokenOnHub(
+              machine.runnerExit(lines.written.handle),
+              Effect.andThen(
+                claimedDeviceAgentLine(userId, deviceId, line),
+                settleDeviceAgentLine(userId, deviceId, line, 0),
+              ),
+            );
+
+            assert.deepEqual(
+              lines.answered.map((each) => each.id),
+              [line],
+            );
+            assert.deepEqual(read.answered, bytes);
+            assert.deepEqual(
+              requests.answered.map((each) => each.id),
+              [id],
+            );
+            assert.equal(exit.answered, 0);
+          }),
+        ),
     );
 
     it.effect(

@@ -12,10 +12,10 @@
 import { storeWriter } from "@luke/database/models/writer";
 import { Effect } from "effect";
 import { HostedEnvironment } from "../../environment.js";
-import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
 import type { AgentDoorSeams } from "../coder-host/agent-doors.js";
 import { productionSummaryModel } from "../coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 
 /** The doors' seams over the deployment's environment. */
 export const lukeMcpDoorSeams: Effect.Effect<AgentDoorSeams, never, HostedEnvironment> = Effect.gen(

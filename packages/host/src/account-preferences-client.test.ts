@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 
 const PREFERENCES_ANSWER = {
-  preferences: { voice: "marin" },
+  preferences: {},
   updatedAt: 1_800_000_000_000,
 };
 
@@ -48,9 +48,9 @@ it.effect("writes account preferences as a full snapshot", () =>
         }),
     ]);
 
-    const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
-      voice: "marin",
-    });
+    const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences(
+      {},
+    );
     assert.deepEqual(answer, {
       preferences: PREFERENCES_ANSWER.preferences,
       hasStoredSnapshot: true,
@@ -62,20 +62,18 @@ it.effect("writes account preferences as a full snapshot", () =>
     assert.equal(request?.url, "https://tryluke.dev/api/account/preferences");
     assert.equal(request?.init?.method, "PUT");
     assert.equal(new Headers(request?.init?.headers).get("content-type"), "application/json");
-    assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-      preferences: { voice: "marin" },
-    });
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), { preferences: {} });
   }),
 );
 
-it.effect("reads the experiments part past a key it does not know, beside the voice", () =>
+it.effect("reads the experiments part past a key it does not know", () =>
   Effect.gen(function* () {
     const { fetchLike } = service([
       () =>
         new Response(
           JSON.stringify({
             ...PREFERENCES_ANSWER,
-            experiments: { [EXPERIMENT.BROWSER]: true, newer: true },
+            experiments: { [EXPERIMENT.MEMORY]: true, newer: true },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
@@ -85,7 +83,7 @@ it.effect("reads the experiments part past a key it does not know, beside the vo
     assert.deepEqual(answer, {
       preferences: PREFERENCES_ANSWER.preferences,
       hasStoredSnapshot: true,
-      experiments: { [EXPERIMENT.BROWSER]: true },
+      experiments: { [EXPERIMENT.MEMORY]: true },
     });
   }),
 );
@@ -97,27 +95,27 @@ it.effect("writes an experiment's switch as a patch of that experiment alone", (
         new Response(
           JSON.stringify({
             ...PREFERENCES_ANSWER,
-            experiments: { [EXPERIMENT.BROWSER]: true },
+            experiments: { [EXPERIMENT.MEMORY]: true },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
 
     const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writeExperiments({
-      [EXPERIMENT.BROWSER]: true,
+      [EXPERIMENT.MEMORY]: true,
     });
-    assert.deepEqual(answer?.experiments, { [EXPERIMENT.BROWSER]: true });
+    assert.deepEqual(answer?.experiments, { [EXPERIMENT.MEMORY]: true });
 
     const [request] = requests;
     assert.equal(request?.init?.method, "PUT");
     assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-      experiments: { [EXPERIMENT.BROWSER]: true },
+      experiments: { [EXPERIMENT.MEMORY]: true },
     });
   }),
 );
 
 it.effect(
-  "writes the link choice as a part of its own beside the voice, and reads it back from there",
+  "writes the link choice as a part of its own beside the shared part, and reads it back from there",
   () =>
     Effect.gen(function* () {
       const { requests, fetchLike } = service([
@@ -129,24 +127,21 @@ it.effect(
       ]);
 
       const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences(
-        {
-          voice: "marin",
-          linkOpen: LINK_OPEN.MAC_APP,
-        },
+        { linkOpen: LINK_OPEN.MAC_APP },
       );
-      assert.deepEqual(answer?.preferences, { voice: "marin", linkOpen: LINK_OPEN.MAC_APP });
+      assert.deepEqual(answer?.preferences, { linkOpen: LINK_OPEN.MAC_APP });
 
       // Note that the shared part a build from before the choice writes back whole carries none of it.
       const [request] = requests;
       assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-        preferences: { voice: "marin" },
+        preferences: {},
         linkOpen: LINK_OPEN.MAC_APP,
       });
     }),
 );
 
 it.effect(
-  "reads the voice past a preference it does not know, in the shared part or a part of its own",
+  "reads an earlier service's voice, and a preference it does not know, as nothing, in the shared part or a part of its own",
   () =>
     Effect.gen(function* () {
       const { fetchLike } = service([
@@ -164,7 +159,7 @@ it.effect(
       const answer = yield* client({
         httpClient: fakeHttpClientLayer(fetchLike),
       }).readPreferences();
-      assert.deepEqual(answer?.preferences, { voice: "marin" });
+      assert.deepEqual(answer?.preferences, {});
       assert.equal(answer?.hasStoredSnapshot, true);
     }),
 );

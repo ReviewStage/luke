@@ -160,8 +160,6 @@ export const AGENT_ACT_KIND = {
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   CODING_AGENTS_SEEN: "codingAgents.seen",
   CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -280,9 +278,9 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, and a call about the open task. And
+ * GitHub connected or disconnected. And
  * what one task holds, read as its tabs draw it: its
- * earlier work and conversation, a call's messages, its repository's files,
+ * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
  * status and priority.
@@ -486,9 +484,6 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
-  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
-  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
-  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
   WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",

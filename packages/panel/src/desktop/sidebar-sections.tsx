@@ -6,6 +6,12 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import {
+  applySectionWrite,
+  memberOf,
+  type SectionEntry,
+  type SectionMember,
+} from "@luke/features/task-section-writes";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
@@ -35,13 +41,9 @@ import {
 import { FolderOutputIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
 import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
-  applySectionWrite,
-  memberOf,
   memberSection,
   placeAllWrites,
   placeWrites,
-  type SectionEntry,
-  type SectionMember,
   sectionMoveWrites,
   sectionOrder,
   unplaceAllWrites,

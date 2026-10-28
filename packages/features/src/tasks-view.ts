@@ -19,7 +19,6 @@ import {
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
   pagePlaceSchema,
@@ -73,7 +72,6 @@ import {
 } from "./workspace-invitation-wire.js";
 import {
   formerMemberSchema,
-  linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -94,9 +92,8 @@ import {
  * The host reads the service for these and tells the desktop the whole view
  * whenever it moves; the desktop writes it into the document the tasks
  * window draws from. Exactly one task is ever active, the one the window has
- * open, and it is the task a voice session binds to. The view carries task
- * names, documents, and what was said on the active task's calls from the
- * service, and nothing of this Mac's own: a task's repository is the
+ * open. The view carries task names and documents from the service, and
+ * nothing of this Mac's own: a task's repository is the
  * service's, named on the task itself. Beside the tasks it carries the
  * workspaces the account is a member of, and the shapes the window asks a
  * workspace made, a GitHub organization connected or disconnected, a
@@ -244,19 +241,10 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
-  /** What each part of Luke is doing on the call about the active task, as last told; absent with no task open or no word yet. */
-  activity: EffectSchema.optionalKey(taskActivitySchema),
-  /**
-   * What each part of Luke is doing on the standing call, whichever task it
-   * is about, as last told: what the floating call window draws while the
-   * call's task is not the one open. Absent before the first word and once
-   * the call has ended.
-   */
-  callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
-   * none, and cleared with the activity. Their HTML is never held here: the
+   * none, and cleared as the task is left. Their HTML is never held here: the
    * frame that draws a page reads it alone (`brain.page`).
    */
   pages: EffectSchema.optionalKey(EffectSchema.Array(pageLineSchema)),
@@ -316,8 +304,14 @@ export const tasksPinRepositoryParamsSchema = repositoryPinRequestSchema;
 
 export type TasksPinRepositoryParams = typeof tasksPinRepositoryParamsSchema.Type;
 
-/** One change to the account's sidebar sections, as the window asks it; the service keeps them on the account. */
-export const tasksWriteSectionParamsSchema = taskSectionWriteSchema;
+/**
+ * The changes one drag or menu makes to the account's sidebar sections, as
+ * the window asks them: drawn together and written to the service in the
+ * order given, which keeps them on the account.
+ */
+export const tasksWriteSectionParamsSchema = EffectSchema.Struct({
+  writes: EffectSchema.NonEmptyArray(taskSectionWriteSchema),
+});
 
 export type TasksWriteSectionParams = typeof tasksWriteSectionParamsSchema.Type;
 
@@ -468,11 +462,25 @@ export const tasksEditAnswerSchema = EffectSchema.Union([
 
 export type TasksEditAnswer = typeof tasksEditAnswerSchema.Type;
 
-/** A window of a file of a task's repository, as the File tab asks the host for it: the task, the path, and the window's first and last line. */
-export const tasksFileParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  ...taskFileRequestSchema.fields,
-});
+/**
+ * A repository as a read with no plan names it, as an agent an automation
+ * started names its own: the workspace whose installation reaches it, and
+ * the repository.
+ */
+const repositoryPlaceFields = {
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+};
+
+/**
+ * A window of a file of a repository, as the File tab asks the host for it:
+ * the task whose repository it is, or the workspace and the repository
+ * where no task names it, the path, and the window's first and last line.
+ */
+export const tasksFileParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, ...taskFileRequestSchema.fields }),
+  EffectSchema.Struct({ ...repositoryPlaceFields, ...taskFileRequestSchema.fields }),
+]);
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
@@ -485,16 +493,6 @@ export const tasksFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksFileAnswer = typeof tasksFileAnswerSchema.Type;
-
-/**
- * A repository as a read with no plan names it, as an agent an automation
- * started names its own: the workspace whose installation reaches it, and
- * the repository.
- */
-const repositoryPlaceFields = {
-  workspaceId: workspaceIdSchema,
-  repository: githubRepositoryFullNameSchema,
-};
 
 /**
  * One folder of a repository, as the File tab's tree or an `@` list asks
@@ -862,19 +860,6 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
-
-/** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
-export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;
-
-export type TasksLinearIssuesParams = typeof tasksLinearIssuesParamsSchema.Type;
-
-/** The Linear issues as the window hears them: the issues the workspace's connection reaches, or why there are none. */
-export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ issues: EffectSchema.Array(linearIssueSummarySchema) }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

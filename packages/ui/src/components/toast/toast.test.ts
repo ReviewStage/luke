@@ -6,7 +6,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { STATUS_TONE } from "../../status-tone.js";
-import { TOAST_LOOK, Toast, type ToastLook } from "./toast.js";
+import { Toast } from "./toast.js";
 import { ToastActions } from "./toast-actions.js";
 import { ToastStack } from "./toast-stack.js";
 
@@ -15,8 +15,7 @@ import { ToastStack } from "./toast-stack.js";
  * apart, dismisses on Escape and on its ×, and presses its action after
  * dismissing; one without takes no press; a turn of tone changes its words
  * in place; a drag or a trackpad sweep past the threshold sends it away and
- * one short of it does not; a compact one leaves its second line to the
- * announcer; the stack names itself and says the newest words through the
+ * one short of it does not; the stack names itself and says the newest words through the
  * window's announcer.
  */
 
@@ -263,37 +262,6 @@ test("a trackpad's sideways sweep sends the toast away once it passes the thresh
 
   assert.deepEqual(before, []);
   assert.deepEqual(dismissed, ["dismiss"]);
-});
-
-test("a toast drawn compact shows its words alone", () => {
-  const drawn = (look: ToastLook) =>
-    render(
-      createElement(ToastStack, {
-        label: "Notifications",
-        polite: "",
-        alert: "Couldn't end the call",
-        look,
-        children: createElement(Toast, {
-          tone: STATUS_TONE.DANGER,
-          words: "Couldn't end the call",
-          detail: "The voice window is not answering.",
-          look,
-        }),
-      }),
-    );
-  drawn(TOAST_LOOK.CARD);
-  drawn(TOAST_LOOK.COMPACT);
-  const stacks = [...document.querySelectorAll<HTMLElement>("section.luke-toast-stack")];
-  assert.deepEqual(
-    stacks.map((stack) => [
-      stack.querySelector(".luke-toast-words")?.textContent,
-      stack.querySelector(".luke-toast-detail")?.textContent ?? null,
-    ]),
-    [
-      ["Couldn't end the call", "The voice window is not answering."],
-      ["Couldn't end the call", null],
-    ],
-  );
 });
 
 /** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */

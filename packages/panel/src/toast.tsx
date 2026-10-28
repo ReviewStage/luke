@@ -6,10 +6,9 @@
  * that closed with the send, a task archived from a menu, or a change
  * refused where nothing beside it is left to say so. Beside those it says
  * only what is rare enough to be worth the interruption, as Luke updated to
- * a new version (`update-toast.ts`), or what the voice says still stands;
- * what happened elsewhere, an agent's turn ended, an Inbox item posted, or
- * an automation's run that failed, is said by the
- * window's own marks and counts instead. Each is a
+ * a new version (`update-toast.ts`); what happened elsewhere, an agent's
+ * turn ended, an Inbox item posted, or an automation's run that failed, is
+ * said by the window's own marks and counts instead. Each is a
  * card of its words, an optional second line under them, each cut at two
  * lines, and at most one action, such as Undo, at its end. Up to three stand at once, newest at the
  * bottom, or two in a window too short for three to leave the rest of it in
@@ -25,8 +24,7 @@
  * whose action is the one way back to something the developer would
  * otherwise lose, such as words a save left unsaved, persists until it is
  * dismissed, and one with no action persists only while what it says still
- * stands, until whoever showed it withdraws it, as the voice's notices are
- * (`voice-notice-toast.ts`). One whose hold runs down by itself with an action drains a bar
+ * stands, until whoever showed it withdraws it. One whose hold runs down by itself with an action drains a bar
  * along its foot over that hold, paused with it. One saying work is under
  * way (`useWorkingToast`) stands until the work settles, then turns in
  * place into what came of it, done or failed, and stands for that one's
@@ -51,16 +49,7 @@
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import {
-  STATUS_TONE,
-  TOAST_HOLD,
-  TOAST_LOOK,
-  Toast,
-  ToastActions,
-  type ToastLook,
-  ToastStack,
-  type ToastTone,
-} from "@luke/ui";
+import { STATUS_TONE, TOAST_HOLD, Toast, ToastActions, ToastStack, type ToastTone } from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -131,11 +120,10 @@ export type ToastNotice = {
 /** How long a toast takes to leave, as `--luke-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
 
-/** How many toasts stand at once: three, two in a window no taller than `SHORT_WINDOW`, or one where they are drawn compact (the floating call window). */
+/** How many toasts stand at once: three, or two in a window no taller than `SHORT_WINDOW`. */
 const TOAST_ROOM = {
   TALL: 3,
   SHORT: 2,
-  COMPACT: 1,
 } as const;
 
 /** The tallest window, in CSS pixels, that leaves room for two toasts rather than three: three cards of two lines each stand 300px tall. */
@@ -465,19 +453,18 @@ function newestSaying(shown: readonly ToastShown[], tones: ReadonlySet<ToastTone
   return newest === undefined ? "" : spoken(newest.notice);
 }
 
-/** How many toasts the window has room for at the height of what can be seen of it now, the keyboard's left out: one alone where they are drawn compact. */
-function roomNow(look: ToastLook): number {
-  if (look === TOAST_LOOK.COMPACT) return TOAST_ROOM.COMPACT;
+/** How many toasts the window has room for at the height of what can be seen of it now, the keyboard's left out. */
+function roomNow(): number {
   const seen = visibleViewport();
   return seen.bottom - seen.top <= SHORT_WINDOW ? TOAST_ROOM.SHORT : TOAST_ROOM.TALL;
 }
 
 /** Tells the stack how many toasts the window has room for, as the host mounts and whenever its height crosses `SHORT_WINDOW`. */
-function useWindowRoom(step: (step: ToastStep) => void, look: ToastLook): void {
+function useWindowRoom(step: (step: ToastStep) => void): void {
   useLayoutEffect(() => {
     let told: number | undefined;
     const tell = () => {
-      const room = roomNow(look);
+      const room = roomNow();
       if (room === told) return;
       told = room;
       step({ kind: TOAST_STEP.ROOM, room });
@@ -491,17 +478,15 @@ function useWindowRoom(step: (step: ToastStep) => void, look: ToastLook): void {
       window.removeEventListener("resize", tell);
       viewport?.removeEventListener("resize", tell);
     };
-  }, [step, look]);
+  }, [step]);
 }
 
 /** One toast, drawn anew for each shown: the ui card, its hold paused while the pointer is over it or focus is in it. */
 function ToastCard({
   shown,
-  look,
   step,
 }: {
   shown: ToastShown;
-  look: ToastLook;
   step: (step: ToastStep) => void;
 }): React.JSX.Element {
   const { id, notice, leaving } = shown;
@@ -514,7 +499,6 @@ function ToastCard({
       glyph={notice.glyph}
       words={notice.words}
       detail={notice.detail}
-      look={look}
       leaving={leaving}
       countdown={action === undefined || hold === undefined ? undefined : Duration.toMillis(hold)}
       actions={
@@ -536,23 +520,20 @@ function ToastCard({
 
 /**
  * The toasts standing, in the window's bottom-right corner, and the regions
- * that say them. Mounted once, by the window's root: the panel's as cards,
- * and the floating call window's, too small for a card, compact, one at a
- * time across its foot.
+ * that say them. Mounted once, by the window's root.
  */
-export function ToastHost({ look = TOAST_LOOK.CARD }: { look?: ToastLook }): React.JSX.Element {
+export function ToastHost(): React.JSX.Element {
   const { shown } = useAtomValue(toastStackAtom);
   const step = useAtomSet(toastLifeAtom);
-  useWindowRoom(step, look);
+  useWindowRoom(step);
   return createPortal(
     <ToastStack
       label={STACK_LABEL}
       polite={newestSaying(shown, POLITE_TONES)}
       alert={newestSaying(shown, ALERT_TONES)}
-      look={look}
     >
       {shown.map((toast) => (
-        <ToastCard key={toast.id} shown={toast} look={look} step={step} />
+        <ToastCard key={toast.id} shown={toast} step={step} />
       ))}
     </ToastStack>,
     document.body,

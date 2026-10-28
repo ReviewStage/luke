@@ -204,8 +204,18 @@ function drawn(text: string, workspace: Workspace, asDocument = false, page = PA
   return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace, page);
 }
 
-/** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
-async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAGE) {
+/** How GitHub answers a window's reads of pull requests: as it holds them, never, or that none is there. */
+const PULL_READS = { ANSWERED: "answered", UNANSWERED: "unanswered", GONE: "gone" } as const;
+
+type PullReads = (typeof PULL_READS)[keyof typeof PULL_READS];
+
+/** `children` drawn on the plan's page in a window holding `workspace`, its pull requests read as `pulls` says, and every act the window asked. */
+async function drawnOnPage(
+  children: ReactNode,
+  workspace: Workspace,
+  page = PAGE,
+  pulls: PullReads = PULL_READS.ANSWERED,
+) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -213,6 +223,11 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAG
     requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
+      if (pulls !== PULL_READS.ANSWERED && request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+        return pulls === PULL_READS.GONE
+          ? Promise.resolve({ status: FAKE_ANSWER.DONE, value: null })
+          : new Promise(() => undefined);
+      }
       if (request.kind === ACT_KIND.TASKS_ISSUE) {
         const { repository, number } = request.payload;
         const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
@@ -295,6 +310,40 @@ test("a pull request's link says its number, live title, and state, wearing its 
       { workspaceId: "workspace-acme", repository: "acme/secret", number: 7 },
     ],
   );
+});
+
+test("a pull request's chip drawn again, as a plan's section opening in its editor draws it, says its number and title at once rather than its address while GitHub is asked again", async () => {
+  await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawnOnPage(
+    createElement(TranscriptWords, { text: `Lands after ${MERGED}.`, asDocument: false }),
+    ACME_WITH_GITHUB,
+    PAGE,
+    PULL_READS.UNANSWERED,
+  );
+
+  assert.deepEqual(chips(container), [
+    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+  ]);
+});
+
+test("a pull request's chip drawn again once GitHub answers it is gone says its address, not the title it answered before", async () => {
+  await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawnOnPage(
+    createElement(TranscriptWords, { text: `Lands after ${MERGED}.`, asDocument: false }),
+    ACME_WITH_GITHUB,
+    PAGE,
+    PULL_READS.GONE,
+  );
+
+  assert.deepEqual(chips(container), [["#42", null, undefined]]);
 });
 
 test("an open pull request GitHub's merge queue holds says Queued and wears the queued mark, as a chip and as a row standing alone", async () => {

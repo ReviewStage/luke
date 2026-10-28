@@ -13,7 +13,7 @@ import { handleProviderKeyRewrap } from "./provider-key-rewrap.js";
  * The rewrap (`accounts/provider-key-rewrap.ts`) is a group of its own,
  * asked under the deployment's `CRON_SECRET` rather than any account's
  * bearer, and kept out of the maintenance group so its function carries
- * none of the voice socket the sweep reaches. The account's own keys are
+ * none of what the sweep reaches. The account's own keys are
  * `provider-keys-procedures.ts`'s.
  */
 

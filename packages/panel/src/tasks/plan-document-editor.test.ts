@@ -1068,7 +1068,7 @@ test("Keep mine in the open editor over a teammate's change to another section l
 
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Luke's", async () => {
   const lukes = `${BODY}Luke's.\n`;
-  const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: true };
+  const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: false };
   const lukesNote = "Luke changed this section while you were editing.";
   const { container, sent, render } = mount([{ conflict: { current: lukes, by } }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
@@ -1165,6 +1165,34 @@ test("a click hands the editor the words it landed on, so the caret finds them h
     x: 60,
     y: 310,
     words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 300 },
+  });
+});
+
+test("a click whose press selected words in a section hands the editor where they start and end, so it opens with them selected", () => {
+  const body = "## Goal\n\nShip it.\n\nShip the invite flow.\n";
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  const goal = block(container, "Goal");
+  window
+    .getSelection()
+    ?.setBaseAndExtent(wordsNode(goal, "Ship it."), 5, wordsNode(goal, "Ship the invite flow."), 8);
+
+  act(() => {
+    goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+  });
+
+  assert.deepEqual(open().placement, {
+    x: 60,
+    y: 310,
+    from: { section: 0, text: "Ship it.", occurrence: 0, offset: 5, code: false, top: 0 },
+    words: {
+      section: 0,
+      text: "Ship the invite flow.",
+      occurrence: 0,
+      offset: 8,
+      code: false,
+      top: 0,
+    },
   });
 });
 

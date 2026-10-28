@@ -68,9 +68,13 @@ function base64(text: string): string {
   return btoa(binary);
 }
 
-/** An SVG Mermaid drew, parsed. */
+/**
+ * An SVG Mermaid drew, parsed. Note that it is parsed as HTML, because
+ * Mermaid writes its SVG as the page's markup, where a label's line break is
+ * an unclosed `<br>` that an XML parser refuses; serialized again, it is XML.
+ */
 function parsedSvg(svg: string): SVGSVGElement | undefined {
-  const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+  const root = new DOMParser().parseFromString(svg, "text/html").body.firstElementChild;
   return root instanceof SVGSVGElement ? root : undefined;
 }
 

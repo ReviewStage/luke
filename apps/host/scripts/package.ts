@@ -162,7 +162,10 @@ async function packageLinux(arch: DeviceArch, version: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Note that `pnpm <script> -- --arch x64`, as the release workflow runs it, hands the `--` on, which parseArgs would read as the end of the options.
+  const given = process.argv.slice(2);
   const { values } = parseArgs({
+    args: given[0] === "--" ? given.slice(1) : given,
     options: { arch: { type: "string" }, os: { type: "string" }, into: { type: "string" } },
   });
   if (values.os === DEVICE_PLATFORM.DARWIN) {

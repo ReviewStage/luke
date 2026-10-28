@@ -3,7 +3,6 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentDeleteAnswerView,
@@ -79,7 +78,6 @@ import {
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
   type ChaptersModelAnswerView,
@@ -173,7 +171,6 @@ export type CodingAgentClient = Pick<
   | "rewind"
   | "delete"
   | "agent"
-  | "calls"
   | "pullRequest"
   | "changes"
   | "overviewPullRequest"
@@ -214,12 +211,6 @@ export interface CodingAgentsDependencies {
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
   /**
-   * Hands a line typed to an agent to the call standing on that agent, where
-   * one does (`LiveSessionHolder.typeLine`); answers whether the call took
-   * it. None where this Mac holds no calls, and every line steers.
-   */
-  typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
-  /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every agent's row (`TasksComposer.listed`), so a
    * Start, a rename, an archive, or a pin is confirmed once the list
@@ -231,14 +222,6 @@ export interface CodingAgentsDependencies {
 export interface CodingAgentsComposer extends Composer {
   /** Every transcript's, every plan's and agent's inbox's, and the account inbox's subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
-  /**
-   * The task an agent a call may go into is on, as the service reads it now,
-   * which a call into the agent is checked against: null for an agent on no
-   * task, and none for one no call goes into: archived, on a provider's own
-   * harness rather than eve, or that the account does not reach or could
-   * not read.
-   */
-  readonly callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -265,9 +248,16 @@ export function composeCodingAgents(
     const asked = askedOf(dependencies, http);
     const { client } = dependencies;
     const transcripts = yield* transcriptFollows({
-      seal: (key, poll, userId, after) =>
+      seal: (key, poll, userId, after, cursor) =>
         asked(
-          dependencies.client.agentTranscriptLive(key.agentId, userId, key.callId, poll, after),
+          dependencies.client.agentTranscriptLive(
+            key.agentId,
+            userId,
+            key.callId,
+            poll,
+            after,
+            cursor,
+          ),
         ),
       accountId: dependencies.accountId,
     });
@@ -364,26 +354,6 @@ function composed(
         "txid" in written && typeof written.txid === "string" ? written.txid : undefined,
       ),
     );
-
-  /**
-   * The agent as a line handed to its call leaves it, as a message's answer
-   * carries it: read whole and answered as its summary, running, as a steer's
-   * answer is read after the message was taken. The call writes and asks the
-   * line a moment after the frame leaves, so a read now could still say the
-   * agent is idle; the transcript's follow settles the status from there.
-   */
-  const agentAsItStands = (agentId: string): Effect.Effect<CodingAgentAgentAnswer> =>
-    Effect.map(asked(client.agent(agentId)), (answer) => {
-      if ("failure" in answer) return answer;
-      const {
-        automationId: _automation,
-        origin: _origin,
-        workspaceId: _workspace,
-        repository: _repository,
-        ...agent
-      } = answer.agent;
-      return { agent: { ...agent, status: CODING_AGENT_STATUS.RUNNING } };
-    });
 
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
   const agentTranscriptOf = (
@@ -621,18 +591,6 @@ function composed(
           params,
           "messaging an agent names the agent, its words, and the send's key",
         );
-        // A line of words alone, typed while this Mac's call is up on the agent, is the call's: the
-        // service answers it aloud and writes it down as typed. Note that a line carrying files
-        // steers as it would with no call up, because the call hands on words alone and its files
-        // would otherwise be lost.
-        const files = request.attachments ?? [];
-        if (
-          request.text !== "" &&
-          files.length === 0 &&
-          dependencies.typeIntoCall?.(agentId, request.text, request.clientKey) === true
-        ) {
-          return carried<CodingAgentAgentAnswer>(yield* agentAsItStands(agentId));
-        }
         const answer = yield* asked(client.message(agentId, request));
         if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
         // Note that a send answers at once rather than once its row reaches the followed transcript,
@@ -747,16 +705,6 @@ function composed(
         );
         const answer = yield* asked(client.agent(agentId));
         return carried<CodingAgentPageAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CALLS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          codingAgentPageParamsSchema,
-          params,
-          "reading an agent's calls names one agent",
-        );
-        const answer = yield* asked(client.calls(agentId));
-        return carried<CodingAgentCallsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
@@ -1024,14 +972,5 @@ function composed(
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
   });
 
-  // Note that an agent naming a runtime runs on Claude Code or Codex, which takes no call: calls run on eve alone.
-  const callTaskOf = (agentId: string) =>
-    Effect.map(asked(client.agent(agentId)), (answer) =>
-      "agent" in answer &&
-      answer.agent.archivedAt === undefined &&
-      answer.agent.runtime === undefined
-        ? answer.agent.planId
-        : undefined,
-    );
-  return { methods, lifetime: Effect.void, reset, callTaskOf };
+  return { methods, lifetime: Effect.void, reset };
 }

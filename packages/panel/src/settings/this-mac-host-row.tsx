@@ -7,16 +7,13 @@ import {
   SettingsRow,
   type SettingsRowState,
   SettingsRowStateLine,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   useSecond,
 } from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Agents › Machines draws it: getting ready, running, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
+ * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Agents › Machines draws it: nothing beyond the machine's own line while it runs, and otherwise getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
  *
  * The host keeps where it stands (`@luke/host`'s `compose-this-mac-host.ts`)
  * and Machines reads it every `READ_EVERY_MS` while it is drawn, so a Mac
@@ -30,12 +27,6 @@ import { useAct } from "../act.js";
 /** How often Machines reads where `luke-host` stands while it is drawn. */
 const READ_EVERY_MS = 5_000;
 
-/** What a This Mac row says of what runs here, under its line. */
-const THIS_MAC_DETAIL =
-  "Coding agents on tasks that run on this Mac run here, each in a Linux VM of its own that sees " +
-  "only its folder under ~/.luke, signed in through Luke. Their transcript and the files their " +
-  "tools read still reach Luke.";
-
 /** What a row says for each standing, its tint, and the act it offers where it offers one. */
 export interface ThisMacLine {
   readonly words: string;
@@ -43,33 +34,26 @@ export interface ThisMacLine {
   readonly act?: string;
 }
 
-/** What This Mac's row says for a standing; nothing where there is nothing to draw. */
+/** What This Mac's row says for a standing; nothing where there is nothing to draw, a running Mac among them, whose machine line already reads online. */
 function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
   switch (standing.standing) {
     case THIS_MAC_HOST_STANDING.OFF:
+    case THIS_MAC_HOST_STANDING.RUNNING:
       return null;
     case THIS_MAC_HOST_STANDING.TURNING_ON:
       return { words: "Turning on…", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.GETTING_READY:
-      return {
-        words: "Getting ready… Downloading what agents run on here.",
-        state: SETTINGS_ROW_STATE.PLAIN,
-      };
-    case THIS_MAC_HOST_STANDING.RUNNING:
-      return {
-        words: "Running. Agents keep running when you quit Luke.",
-        state: SETTINGS_ROW_STATE.CONNECTED,
-      };
+      return { words: "Getting ready…", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.NOT_RUNNING:
       return { words: "Not running yet.", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.REQUIRES_APPROVAL:
       return {
-        words: "Waiting for you to allow Luke in System Settings › General › Login Items.",
+        words: "Allow Luke in System Settings › General › Login Items.",
         state: SETTINGS_ROW_STATE.ATTENTION,
       };
     case THIS_MAC_HOST_STANDING.REMOVED:
       return {
-        words: "This Mac was removed from Luke, so it runs no agents.",
+        words: "Removed from Luke.",
         state: SETTINGS_ROW_STATE.ATTENTION,
         act: "Turn on again",
       };
@@ -77,15 +61,12 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
       return { words: standing.reason, state: SETTINGS_ROW_STATE.ATTENTION, act: "Retry" };
     case THIS_MAC_HOST_STANDING.SETUP_FAILED:
       return {
-        words: `Couldn't set up agents here: ${standing.reason}`,
+        words: `Setup failed: ${standing.reason}`,
         state: SETTINGS_ROW_STATE.ATTENTION,
         act: "Retry",
       };
     case THIS_MAC_HOST_STANDING.OTHER_ACCOUNT:
-      return {
-        words: "This Mac runs agents for another Luke account that turned them on here.",
-        state: SETTINGS_ROW_STATE.PLAIN,
-      };
+      return { words: "Used by another Luke account.", state: SETTINGS_ROW_STATE.PLAIN };
   }
 }
 
@@ -139,15 +120,6 @@ export function useThisMacHost(reading: boolean): ThisMacHost {
   };
 }
 
-/** What runs on this Mac, said under its row. */
-export function ThisMacDetail(): React.JSX.Element {
-  return (
-    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-      {THIS_MAC_DETAIL}
-    </Text>
-  );
-}
-
 /** The line under a This Mac row: where it stands, tinted. */
 export function ThisMacStateLine({ line }: { line: ThisMacLine }): React.JSX.Element {
   return (
@@ -182,11 +154,7 @@ export function ThisMacHostRow({
   line: ThisMacLine;
 }): React.JSX.Element {
   return (
-    <SettingsRow
-      label="This Mac"
-      description={<ThisMacStateLine line={line} />}
-      below={() => <ThisMacDetail />}
-    >
+    <SettingsRow label="This Mac" description={<ThisMacStateLine line={line} />}>
       {line.act === undefined ? undefined : () => <ThisMacAct thisMac={thisMac} />}
     </SettingsRow>
   );

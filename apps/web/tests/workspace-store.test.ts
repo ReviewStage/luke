@@ -7,7 +7,6 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
@@ -19,14 +18,12 @@ import {
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   WORKSPACE_ROLE,
 } from "@luke/database/testing";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { workspacesLiveRowsSchema, workspacesOfLiveRows } from "@luke/features/workspace-live";
 import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
 import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
@@ -234,7 +231,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
   );
 
   it.effect(
-    "the live statements deliver the workspaces the held read lists, photos, installations, and Linear among them, to each member and none of them to an outsider",
+    "the live statements deliver the workspaces the held read lists, photos and installations among them, to each member and none of them to an outsider",
     () =>
       Effect.gen(function* () {
         const seams = yield* fakeWorkspaceSeams;
@@ -252,13 +249,6 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         const later = new Date(now.getTime() + 1000);
         yield* connectInstallation(acme.id, 902, GITHUB_INSTALLATION_STATUS.ACTIVE, later);
         yield* connectInstallation(acme.id, 901, GITHUB_INSTALLATION_STATUS.SUSPENDED, now);
-        yield* Database.use((db) =>
-          db.insert(workspaceIntegrationConnection).values({
-            organizationId: beta.id,
-            provider: INTEGRATION_PROVIDER.LINEAR,
-            status: INTEGRATION_ROW_STATUS.EXPIRED,
-          }),
-        );
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveWorkspacesOf(reader), yield* listWorkspaces(reader));

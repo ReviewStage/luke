@@ -12,7 +12,9 @@ import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxStartParams,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
@@ -20,7 +22,7 @@ import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -65,6 +67,7 @@ import {
   menuItem,
   mount,
   noticeOf,
+  ON_THRESHOLD,
   openings,
   pagerOf,
   pressKey,
@@ -80,6 +83,7 @@ import {
   saying,
   settle,
   showScope,
+  skillReads,
   standKeymap,
   TEAMMATE,
   THRESHOLD,
@@ -91,7 +95,7 @@ import {
 } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
@@ -99,6 +103,43 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
+  const { page } = mount([], { windowRoot: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the rows are pushed and drawn",
+  );
+
+  act(() => world.setInboxOpen(false));
+  await settle();
+  act(() => world.setInboxOpen(true));
+  assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
+});
+
+test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
+  const { page } = mount([], { windowRoot: true });
+  await settle();
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  );
+  act(() => world.setInboxOpen(false));
+  await settle();
+
+  act(() => world.setInboxOpen(true));
+  await settle();
+  assert.ok(
+    world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }),
+    "the failed task is followed anew",
+  );
+  assert.ok(
+    listed(page).some((row) => row.endsWith(EXPIRY.title)),
+    "its items are drawn again",
+  );
+});
 
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
   const { page } = mount([], { listUnread: true });
@@ -119,7 +160,7 @@ test("an item a link names before the account's task list is read says no Not fo
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
-  const { page, asked } = mount();
+  const { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
@@ -154,8 +195,8 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
-test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it keeps the list asked for, so narrowed it lands on its list", async () => {
-  const { page } = mount();
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again with nothing chosen, narrowed it lands on its list", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
@@ -181,7 +222,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
 });
 
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const keys = standKeymap();
   layOut(page, 800);
@@ -203,8 +244,8 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   act(() => keys.unmount());
 });
 
-test("a chosen item whose plan leaves the account's list, deleted on another Mac, gives way to the first item still waiting", async () => {
-  const { page } = mount();
+test("a chosen item whose plan leaves the account's list, deleted on another Mac, leaves the pane beside the list empty rather than choosing another", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
@@ -215,11 +256,9 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
     world.setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
-  assert.deepEqual(listed(page), ["# Invites", "▸ *Expire after 7 days?"]);
-  assert.equal(
-    page.querySelector(".inbox-view-items [data-inbox-title]")?.textContent,
-    "Expire after 7 days?",
-  );
+  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
+  assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
+  assert.equal(page.querySelector(".inbox-view-items")?.textContent, "1 thread");
 });
 
 test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
@@ -244,7 +283,7 @@ test("an item of an agent with no plan stands under the automation that started 
   );
   const rows = listed(page);
   assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
-  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "▸ *Quarantine the flaky test?");
+  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "*Quarantine the flaky test?");
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
   await settle();
@@ -348,7 +387,30 @@ test("a task's group header hangs the task's card, as the automation's does its 
   assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
 });
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+const LUKE_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
+const DOMAIN: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000d", "Name a domain?", 1_200),
+  agentId: LUKE_AGENT,
+};
+
+/** An item of the reader's operator, Luke, as main lists it: no task, no automation, and no repository. */
+function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
+  return {
+    id: asked.id,
+    agentId: asked.agentId,
+    agentKind: CODING_AGENT_KIND.OPERATOR,
+    title: asked.title,
+    postedAt: asked.postedAt,
+    agentTitle: "Luke",
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: null,
+    automationName: null,
+    repository: null,
+    ...(asked.channelId === undefined ? undefined : { channelId: asked.channelId }),
+  };
+}
+
+test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
   handState({});
   world.listedWorkspace = {
     id: "workspace-acme",
@@ -360,10 +422,12 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   world.agentInboxes = new Map([
     [SWEEP_AGENT, [QUARANTINE]],
     [STRAY_AGENT, [BUMP]],
+    [LUKE_AGENT, [DOMAIN]],
   ]);
   const { page, asked } = mount([
     { ...waitingTaskless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
     { ...waitingTaskless(BUMP), automationId: null, automationName: null },
+    lukeTaskless(DOMAIN),
   ]);
   await settle();
 
@@ -431,6 +495,16 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     stray?.querySelector(".lucide-zap"),
     "it wears the automation glyph, as its group does",
   );
+
+  const luke = headerNamed(page, "Luke");
+  assert.ok(luke.querySelector(".luke-face"), "Luke's group wears his face");
+  assert.ok(luke.querySelector(".lucide-zap") === null, "and no automation glyph");
+  act(() => rowNamed(page, "Name a domain?").click());
+  await settle();
+  // Note that the title joins the path only once the heading scrolls away, so his own crumb stands alone.
+  const path = [...page.querySelectorAll<HTMLElement>('nav[aria-label="Path"] li')];
+  assert.equal(path.length, 1, "his path names him once, under no group");
+  assert.ok(path[0]?.querySelector(".luke-face"), "his crumb wears his face");
 });
 
 test("an item's card names the automation that holds it by a chip that hangs the automation's card, read as it is hung where the Inbox has read no automations", async () => {
@@ -548,7 +622,9 @@ test("a read of an agent with no plan that fails is said with Retry, which reads
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless), {
+    chosen: ON_THRESHOLD,
+  });
   await settle();
   layOut(page, 700);
   await settle();
@@ -984,7 +1060,7 @@ function heldStarts(): CodingAgentInboxStartParams[] {
   return sent;
 }
 
-test("on a phone an item is headed by its way back's glyph, its title centred, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
+test("on a phone an item is headed by its way back's glyph, its task centred, which opens it as its crumb does, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   layOut(page, 390);
@@ -996,13 +1072,23 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
     ),
-    ["Inbox", "Item actions"],
-    "one control a corner",
+    ["Inbox", INVITES.name, "Inbox item actions"],
+    "one control a corner, the item's task between them",
   );
-  assert.equal(head.querySelector("h1")?.textContent, "Expire after 7 days?");
-  assert.equal(page.querySelector('nav[aria-label="Path"]'), null, "no crumbs under it");
+  assert.equal(
+    head.querySelector(".luke-toolbar-heading")?.textContent,
+    INVITES.name,
+    "the bar names the item's task, not the title its thread is headed by under it",
+  );
+  assert.deepEqual(
+    [...page.querySelectorAll("h1")]
+      .filter((each) => each.closest("[hidden]") === null)
+      .map((each) => each.textContent),
+    ["Expire after 7 days?"],
+    "the thread's title is the page's one top heading",
+  );
 
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Item actions"]')?.click());
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Inbox item actions"]')?.click());
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "the ⋯ opens");
   assert.match(menu.textContent ?? "", /\d of \d/, "it says where the item stands");
@@ -1010,8 +1096,8 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     (each) => each.textContent,
   );
   for (const offered of [
-    "Previous item",
-    "Next item",
+    "Previous inbox item",
+    "Next inbox item",
     "Open task",
     "Open agent",
     "Show panel",
@@ -1028,6 +1114,11 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     [INVITES.id],
     "Open task opens the item's task, as its crumb did",
   );
+  const task = [...head.querySelectorAll("button")].find(
+    (each) => each.textContent?.trim() === INVITES.name,
+  );
+  act(() => task?.click());
+  assert.deepEqual(asked.shownTasks, [INVITES.id, INVITES.id], "the task's name opens it too");
 
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(columnsShown(page), ["list"], "the way back stands the list");
@@ -1276,7 +1367,7 @@ test("ticking the box's checkbox sends its words as a new thread to the item's a
   // Note that the item asks nothing, since a question's controls standing in the box leave no checkbox under it.
   world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
   const starts = heldStarts();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
 
   const box = () =>
@@ -1320,7 +1411,7 @@ test("words written in the box while its new thread starts stay in it once the t
     act: (request: AnyAct): Promise<FakeActAnswer> =>
       request.kind === ACT_KIND.CODING_AGENTS_INBOX_START ? answer.promise : previous(request),
   });
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
 
   const pane = itemPane(page);
@@ -1362,7 +1453,7 @@ test("a thread started from an item of an archived channel lands in #general, an
   answerChannels({ archived: () => [old] });
   world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: old.id }]]]);
   heldStarts();
-  const { page } = mount([], { channels: true });
+  const { page } = mount([], { channels: true, chosen: ON_THRESHOLD });
   await settle();
   act(() => chooseChannel(old.id));
   await settle();
@@ -1422,8 +1513,13 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
     name: "launch",
     project: true,
   };
-  answerChannels({ channels: () => [project, { ...GENERAL, waiting: 2 }, APP_CHANNEL] });
-  const { page } = mount([], { withSidebar: true });
+  answerChannels({ channels: () => [project, GENERAL, APP_CHANNEL] });
+  // Note that a row counts the questions main lists in its channel, as the Inbox's row counts them.
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
+    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: GENERAL.id })] },
+  ];
+  const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
   assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
@@ -1594,4 +1690,105 @@ test("an item opened whose agent's inbox could not be read says so in the pane, 
     THRESHOLD.title,
     "the item is read again",
   );
+});
+
+/** The count a sidebar row wears, by the row's name; none where it wears none. */
+function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
+  const row =
+    [...page.querySelectorAll<HTMLElement>(".luke-nav-item")].find(
+      (each) => each.querySelector(".luke-nav-item-name")?.textContent === name,
+    ) ?? assert.fail(`the sidebar draws the row ${name}`);
+  const count = row.textContent?.match(/\d+/u)?.[0];
+  return count === undefined ? undefined : Number(count);
+}
+
+test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.CHANNELS_LIST
+        ? // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
+          Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { channels: [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })) },
+          } as FakeActAnswer)
+        : previous(request),
+  });
+  world.agentInboxes = new Map([[LUKE_AGENT, [DOMAIN]]]);
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
+    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: APP_CHANNEL.id })] },
+  ];
+  const archived = "c0ffee00-0000-4000-8000-000000000009";
+  const { page } = mount(
+    [
+      { ...lukeTaskless({ ...DOMAIN, channelId: APP_CHANNEL.id }), workspaceId: ACME.id },
+      {
+        ...lukeTaskless({ ...BUMP, agentId: LUKE_AGENT, channelId: archived }),
+        workspaceId: ACME.id,
+      },
+      // Note that another workspace's question is set in #general's place, so it would show on that row were it counted.
+      {
+        ...lukeTaskless({
+          ...item("a1b2c3d4-0000-4000-8000-00000000000e", "Rotate the beta key?", 1_100),
+          agentId: LUKE_AGENT,
+          channelId: GENERAL.id,
+        }),
+        workspaceId: "workspace-beta",
+      },
+    ],
+    { withSidebar: true, waiting },
+  );
+  await settle();
+  assert.equal(sidebarRowCount(page, "Inbox"), 4, "both tasks' questions and Luke's two");
+  assert.deepEqual(
+    [sidebarRowCount(page, "general"), sidebarRowCount(page, "app")],
+    [1, 2],
+    "the channels count three of them, Luke's in #app among them, the archived channel's on no row",
+  );
+});
+
+test("an item of an agent with no task reads the lines its code names through the agent's workspace and repository, and a file its words name opens beside the Inbox rather than on GitHub", async () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const words = [
+    `https://github.com/acme/relay/blob/${commit}/src/flaky.test.ts#L3-L5`,
+    "The retry is in [@flaky.test.ts](https://github.com/acme/relay/blob/HEAD/src/flaky.test.ts).",
+  ].join("\n\n");
+  world.agentInboxes = new Map([[SWEEP_AGENT, [saying(QUARANTINE, words)]]]);
+  const openedOnGitHub = skillReads();
+  const previewed: string[] = [];
+  const panel: SidePanelControl = {
+    ...tasksControl().sidePanel,
+    onPreviewFile: (ref, at) => previewed.push(`${JSON.stringify(ref)} ${at}`),
+  };
+  const { page } = mount([{ ...waitingTaskless(QUARANTINE), workspaceId: "workspace-acme" }], {
+    panel,
+  });
+  await settle();
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  assert.deepEqual(
+    world.fileReads.map(({ firstLine: _first, lastLine: _last, ...place }) => place),
+    [
+      {
+        path: "src/flaky.test.ts",
+        workspaceId: "workspace-acme",
+        repository: "acme/relay",
+        ref: commit,
+      },
+    ],
+    "the code reads its lines by the agent's workspace and repository, naming no task",
+  );
+
+  const chip = [
+    ...page.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
+  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent === "flaky.test.ts");
+  assert.ok(chip, "the file is its chip");
+  act(() => chip.click());
+  assert.deepEqual(previewed, [`${JSON.stringify({ path: "src/flaky.test.ts" })} undefined`]);
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });

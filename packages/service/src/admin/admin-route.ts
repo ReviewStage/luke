@@ -9,7 +9,6 @@ import {
 } from "../auth/auth-deployment.js";
 import { sessionCredential } from "../auth/session-credential.js";
 import { eveDeploymentSecretIn } from "../environment.js";
-import { WORKSPACE_LINEAR_CONNECTOR_VARIABLE } from "../integrations/integration-connect.js";
 import { INTEGRATION, type IntegrationDefinition } from "../integrations/integrations.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import { SENTRY_ENVIRONMENT } from "../observability/sentry.js";
@@ -122,7 +121,6 @@ export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
     // Read by the rule every reader of the eve secret shares, so one that is blank or the cron's own shows as unset.
     eveDeployment: eveDeploymentSecretIn(process.env) !== undefined,
     ownKeys: configured(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
-    workspaceLinear: configured(WORKSPACE_LINEAR_CONNECTOR_VARIABLE),
     connectors: connectorPresence(),
   });
 

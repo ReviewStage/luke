@@ -82,6 +82,7 @@ import {
   eq,
   exists,
   getTableName,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -1090,6 +1091,17 @@ function tasklessWaiting(userId: string) {
   );
 }
 
+/**
+ * The condition that the agent of an item with no task works in a
+ * repository, unless the reader asked to be carried those of agents that
+ * work in none (`ACCOUNT_INBOX_REPOSITORYLESS`), the member's operator above
+ * all. Note that a build from before it reads the repository as a string,
+ * so one null would fail its whole read.
+ */
+function repositoryCarried(repositoryless: boolean): SQL | undefined {
+  return repositoryless ? undefined : isNotNull(codingAgent.repository);
+}
+
 /** How many of a group's items are questions waiting on the reader (`askingReader`), as a number rather than a `bigint`. */
 function toDoCount(userId: string): SQL<number> {
   return sql<number>`(count(*) filter (where ${askingReader(userId)}))::int`;
@@ -1138,6 +1150,7 @@ const WaitingRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   asking: Schema.Boolean,
+  channelId: Schema.String,
 });
 
 const findWaitingItems = SqlSchema.findAll({
@@ -1164,6 +1177,7 @@ const findWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
           asking: ASKING,
+          channelId: inboxItem.channelId,
         })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
@@ -1173,17 +1187,18 @@ const findWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task. */
+/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task, and its agent's kind, which sets the member's operator apart. */
 const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
+  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   startedBy: Schema.String,
   waitsOn: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationName: Schema.NullOr(Schema.String),
-  repository: Schema.String,
+  repository: Schema.NullOr(Schema.String),
   workspaceId: Schema.NullOr(Schema.String),
   title: Schema.String,
   revision: Schema.Number,
@@ -1192,17 +1207,19 @@ const TasklessRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   asking: Schema.Boolean,
+  channelId: Schema.String,
 });
 
 const findTasklessWaitingItems = SqlSchema.findAll({
-  Request: AccountRequestSchema,
+  Request: Schema.Struct({ userId: Schema.String, repositoryless: Schema.Boolean }),
   Result: TasklessRowSchema,
-  execute: ({ userId }) =>
+  execute: ({ userId, repositoryless }) =>
     Database.use((db) =>
       db
         .select({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
+          agentKind: codingAgent.kind,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
@@ -1221,6 +1238,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
           asking: ASKING,
+          channelId: inboxItem.channelId,
         })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
@@ -1229,8 +1247,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        // Note that the repository stands where a task would, so an agent with neither has no place here yet.
-        .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)))
+        .where(and(tasklessWaiting(userId), repositoryCarried(repositoryless)))
         .orderBy(...LATEST_FIRST),
     ),
 });
@@ -1281,7 +1298,7 @@ const findTasksWithItems = SqlSchema.findAll({
         })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
-        .where(taskReachableBy(userId))
+        .where(and(taskReachableBy(userId), itemAgentSeenBy(userId)))
         .groupBy(inboxItem.taskId)
         .orderBy(desc(LATEST_ITEM), desc(inboxItem.taskId)),
     ),
@@ -1340,6 +1357,7 @@ export interface AccountInboxLiveStatements {
  */
 export function accountInboxLiveStatements(
   userId: string,
+  repositoryless: boolean,
 ): Option.Option<AccountInboxLiveStatements> {
   const items = queryBuilder
     .select(
@@ -1359,6 +1377,7 @@ export function accountInboxLiveStatements(
           revision: inboxItem.revision,
           unread: unreadFor(userId),
           asking: ASKING,
+          channelId: inboxItem.channelId,
         },
         { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
       ),
@@ -1373,6 +1392,7 @@ export function accountInboxLiveStatements(
         {
           id: inboxItem.id,
           agentId: inboxItem.agentId,
+          agentKind: codingAgent.kind,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
@@ -1388,6 +1408,7 @@ export function accountInboxLiveStatements(
           revision: inboxItem.revision,
           unread: unreadFor(userId),
           asking: ASKING,
+          channelId: inboxItem.channelId,
         },
         { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
       ),
@@ -1398,8 +1419,7 @@ export function accountInboxLiveStatements(
       automation,
       and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
     )
-    // An agent with neither a task nor a repository has no place here yet, as in the read above.
-    .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)));
+    .where(and(tasklessWaiting(userId), repositoryCarried(repositoryless)));
   const plans = queryBuilder
     .select({
       ...liveSelection({ planId: inboxItem.taskId }),
@@ -1409,7 +1429,7 @@ export function accountInboxLiveStatements(
     })
     .from(inboxItem)
     .innerJoin(task, eq(task.id, inboxItem.taskId))
-    .where(taskReachableBy(userId))
+    .where(and(taskReachableBy(userId), itemAgentSeenBy(userId)))
     .groupBy(inboxItem.taskId);
   const automations = queryBuilder
     .select({
@@ -1471,10 +1491,20 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
     .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
     .orderBy(...LATEST_FIRST)
     .limit(INBOX_BOUNDS.MAX_ITEMS_READ);
-  const read = and(
-    inScope(scope),
-    or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+  return itemsLiveStatements(
+    scope.userId,
+    and(
+      inScope(scope),
+      or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+    ),
   );
+}
+
+/** The items `read` names, whole as a scope's inbox carries them, with their threads and files, each unread or not for the reader (`scopeLiveStatements`). */
+function itemsLiveStatements(
+  readerId: string,
+  read: SQL | undefined,
+): Option.Option<ScopeInboxLiveStatements> {
   const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
   const ofItem = eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId));
   const latest = queryBuilder
@@ -1525,7 +1555,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             closedBy: inboxItem.closedBy,
             closedByName: INBOX_ITEM_COLUMNS.closedByName,
             openAskMessageId: inboxItem.openAskMessageId,
-            unread: unreadFor(scope.userId),
+            unread: unreadFor(readerId),
             channelId: inboxItem.channelId,
           },
           {
@@ -1579,6 +1609,84 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
       ),
   );
   return Option.all({ items, messages, files });
+}
+
+/** The statements the account's inbox items are subscribed to live: where each item stands, and those changed since the reader's instant whole. */
+export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
+  readonly stamps: LiveStatement;
+}
+
+/**
+ * The condition that the account reaches the item a statement reads, as
+ * its read of what waits names them (`accountWaiting`, `tasklessWaiting`):
+ * one on a task it reaches whose agent it sees, or one of an agent with no
+ * task in its workspaces. Note that the task is read by its own subquery
+ * rather than a join, because the items statement it shares with a scope's
+ * inbox joins nothing.
+ */
+function accountItemReach(userId: string): SQL | undefined {
+  const onTask = exists(
+    queryBuilder
+      .select({ one: task.id })
+      .from(task)
+      .where(and(eq(task.id, inboxItem.taskId), taskReachableBy(userId))),
+  );
+  return or(
+    and(onTask, itemAgentSeenBy(userId)),
+    and(isNull(inboxItem.taskId), itemReachableBy(userId)),
+  );
+}
+
+/**
+ * Every inbox item the account reaches written for Neon Realtime: where
+ * each stands (`stamps`), every open item and every settled one changed at
+ * or after `settledSince`, and the items among those changed at or after
+ * `since` whole, with their threads and files, as a scope's inbox carries
+ * them (`itemsLiveStatements`). A stamp carries what moves an item without
+ * moving its last change: whether it is unread for the reader, who it waits
+ * on, the channel it lives in, which a move between channels changes, and
+ * how many messages its thread holds, which a withdrawn message moves. Note that the instants are bound rather than read from the clock,
+ * because a live read measures nothing from it. None where a statement
+ * names a value Realtime cannot carry.
+ */
+export function accountItemsLiveStatements(
+  userId: string,
+  since: Date,
+  settledSince: Date,
+): Option.Option<AccountItemsLiveStatements> {
+  const carried = and(
+    accountItemReach(userId),
+    or(eq(inboxItem.status, INBOX_STATUS.OPEN), gte(inboxItem.updatedAt, settledSince)),
+  );
+  const stamps = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: inboxItem.id,
+            planId: inboxItem.taskId,
+            agentId: inboxItem.agentId,
+            revision: inboxItem.revision,
+            version: inboxItem.version,
+            status: inboxItem.status,
+            unread: unreadFor(userId),
+            waitsOn: WAITS_ON,
+            channelId: inboxItem.channelId,
+            messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
+          },
+          { updatedAt: inboxItem.updatedAt },
+        ),
+      )
+      .from(inboxItem)
+      .where(carried),
+  );
+  return Option.map(
+    Option.all({
+      stamps,
+      changed: itemsLiveStatements(userId, and(carried, gte(inboxItem.updatedAt, since))),
+    }),
+    ({ stamps, changed }) => ({ stamps, ...changed }),
+  );
 }
 
 /** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
@@ -3968,12 +4076,14 @@ type AccountTasklessRow = AccountTasklessEntry & Pick<InboxStamp, "status">;
  * Every item that waits on the developer from an agent with no task in the
  * account's workspaces, the latest changed first, with the automation and
  * repository that stand in a task's place; none is left out for being old,
- * as `accountWaitingItems` leaves none out.
+ * as `accountWaitingItems` leaves none out, and those of agents with no
+ * repository only where `repositoryless` asks (`repositoryCarried`).
  */
 export function accountTasklessItems(
   userId: string,
+  repositoryless: boolean,
 ): InboxStoreEffect<readonly AccountTasklessRow[]> {
-  return Effect.map(findTasklessWaitingItems({ userId }), (rows) =>
+  return Effect.map(findTasklessWaitingItems({ userId, repositoryless }), (rows) =>
     rows.map(({ workspaceId, ...row }) => ({
       ...row,
       ...(workspaceId === null ? undefined : { workspaceId }),

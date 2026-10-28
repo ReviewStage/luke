@@ -12,7 +12,7 @@
  * `EVE_DEPLOYMENT_SECRET`, compared in constant time, never the cron's; a
  * deployment that names none answers unavailable and runs nothing. The
  * call acts for the account it names, as eve's door acts for the account a
- * deployment call names (`../brain-host/auth.ts`'s `deploymentActor`), and
+ * deployment call names (`../eve-host/auth.ts`'s `deploymentActor`), and
  * the harness reaches only what that account reaches. A message is also
  * held to the conversation's own agent: one the account reaches, on the
  * harness named, and one it may write to (`admitsPlanWriter`, under
@@ -44,7 +44,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { admitsPlanWriter } from "../agent-reach.js";
-import type { EveUnreachable } from "../brain-host/eve-sessions.js";
+import type { EveUnreachable } from "../eve-host/eve-sessions.js";
 import {
   NATIVE_RELAY_CALL,
   NATIVE_RELAY_PATH,

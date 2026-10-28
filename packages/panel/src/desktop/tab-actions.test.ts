@@ -33,12 +33,15 @@ import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
  * tab-actions.test.ts -- a column's bar holds a ⋯ for its chosen tab's
- * content actions: the task's own menu on the task's tab, and on an agent's
- * or a subagent's tab the actions its right-click offers on what it shows,
- * without the tab's own keeping (Close, Close others, Pin), which stays
- * on the right-click alone. A tab with no content action shows no ⋯, and no
- * tab wears one of its own. A Pull request tab's ⋯ also offers what its body
- * hands up, Open on GitHub and Refresh, which no other tab's offers.
+ * content actions: on an agent's or a subagent's tab the actions its
+ * right-click offers on what it shows, the one agent menu, without the
+ * tab's own keeping (Close, Close others, Pin), which stays on the
+ * right-click alone; the task's column draws no ⋯ of the task's, whose own
+ * document menu the Plan tab's ⋯ and right-click offer instead, pinning
+ * the task rather than the tab. A tab with no content action shows no ⋯,
+ * and no tab wears one of its own. A Pull request tab's ⋯ also offers what
+ * its body hands up, Open on GitHub and Refresh, which no other tab's offers
+ * but the Plan tab's, the task's own.
  */
 
 const TASK: Task = {
@@ -222,7 +225,7 @@ function pressBarMore(bar: HTMLElement): string[] {
   return items;
 }
 
-test("a subagent's tab puts its right-click's content actions, and none of the tab's keeping, behind its bar's ⋯, while an agent's tab keeps every action on its right-click and the column's toolbar draws no ⋯ of its own", async () => {
+test("a subagent's tab puts its right-click's content actions, and none of the tab's keeping, behind its bar's ⋯, and so does an agent's tab in the column's toolbar, whose right-click leads with the tab's keeping and then the agent's one menu", async () => {
   const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
   const { main, side } = bars(container);
   const fromRightClick = rightClickChosen(side);
@@ -237,40 +240,77 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
     fromRightClick.includes("Close others") || fromRightClick.includes("Close others (off)"),
   );
 
-  assert.equal(
-    main.querySelector(".toolbar-tab-actions"),
-    null,
-    "the column keeps no tab's ⋯ slot",
-  );
   const agentItems = rightClickChosen(main);
-  for (const item of [
-    "Rename",
-    "Show terminal",
+  assert.deepEqual(agentItems, [
+    "Move right",
+    "Close",
+    "Close others",
+    "Pin",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
+    "Rename",
+    "Show terminal",
     "Archive",
     "Permanently delete",
-  ]) {
-    assert.ok(agentItems.includes(item), `the agent's right-click offers ${item}`);
-  }
-  assert.equal(agentItems.at(-1), "Permanently delete", "the delete stands last");
+  ]);
+  const agentMore = pressBarMore(main);
+  assert.deepEqual(
+    agentMore,
+    agentItems.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", ""))),
+    "the column's ⋯ offers the agent's items, not the task's",
+  );
+  assert.ok(!agentMore.includes("Mark done"), "none of the task's");
 });
 
-test("the column's toolbar draws one ⋯, the task's own, on every tab", async () => {
-  for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
+test("the column's toolbar draws the chosen agent's ⋯ alone, no ⋯ of the task's beside it, and none on the draft's tab", async () => {
+  const cases = [
+    [{ agent: AGENT.id }, [`${AGENT.title} actions`]],
+    [{ draft: "draft-1" }, []],
+  ] as const;
+  for (const [main, labels] of cases) {
     const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.INBOX });
     const toolbar = bars(container).main;
     assert.deepEqual(
       [...toolbar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
         button.getAttribute("aria-label"),
       ),
-      ["Task actions"],
-      `one ⋯ beside ${JSON.stringify(main)}, the task's`,
+      labels,
+      `the ⋯ beside ${JSON.stringify(main)}`,
     );
     act(() => roots.pop()?.unmount());
     container.remove();
   }
+});
+
+test("the Plan tab's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab and leaves out Mark done, Cancel task, and Change repository, while the column's ⋯ stays the agent's", async () => {
+  const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.PLAN });
+  const { main, side } = bars(container);
+  const fromMore = pressBarMore(side);
+  assert.deepEqual(fromMore, [
+    "Copy plan",
+    "Copy link",
+    "Rename",
+    "Version history",
+    "Mark as unread",
+    "Pin",
+    "Move to section",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
+  // The right-click leads with the tab's keeping, which holds no Pin tab: the one Pin is the task's, among its own.
+  const fromRightClick = rightClickChosen(side);
+  const keeping = fromRightClick.slice(0, fromRightClick.indexOf("Copy plan"));
+  assert.ok(
+    keeping.includes("Close") && !keeping.includes("Pin"),
+    `keeping: ${keeping.join(", ")}`,
+  );
+  assert.deepEqual(fromRightClick.slice(keeping.length), fromMore);
+  const agentMore = pressBarMore(main);
+  assert.ok(
+    !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
+    "the column's ⋯ offers none of the task's items",
+  );
 });
 
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
@@ -282,10 +322,9 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
   for (const chosen of without) {
     const container = await mountEveryTab(chosen);
     const { main, side } = bars(container);
-    assert.equal(main.querySelector(".toolbar-tab-actions"), null, "the column keeps no tab's ⋯");
     for (const bar of [main, side]) {
       const label = bar.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
-      if (bar === side) assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
+      assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
       assert.ok(rightClickChosen(bar).length > 0, `the ${label} tab answers a right-click`);
     }
     assert.equal(container.querySelector(".luke-tab [aria-haspopup]"), null, "no tab wears a ⋯");
@@ -306,7 +345,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers but the Plan tab's, the task's own, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -340,9 +379,11 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
   for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
     const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
     const items = pressBarMore(bars(each).side);
+    // The Plan tab's Open on GitHub is the task's repository's, not the pull request's.
     assert.ok(
-      !items.includes("Open on GitHub") && !items.includes("Refresh"),
-      `the ${JSON.stringify(other)} tab offers neither`,
+      (other === SIDE_PANEL_TAB.PLAN || !items.includes("Open on GitHub")) &&
+        !items.includes("Refresh"),
+      `the ${JSON.stringify(other)} tab offers no Refresh`,
     );
     act(() => roots.pop()?.unmount());
     each.remove();

@@ -8,7 +8,7 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
 import type { HttpClient } from "effect/http";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 

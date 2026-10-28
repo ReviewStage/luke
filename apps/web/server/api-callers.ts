@@ -416,7 +416,7 @@ interface EvaluatedModule {
  * The paths module's exports, evaluated: each exported string and table of
  * strings is a path, and each exported function is called with one probe
  * segment per parameter and must answer one. Text alone cannot see a builder
- * that composes another (`${brainTurnPath(id)}/cancel` spells no `/api/`), so
+ * that composes another (`${turnPath(id)}/cancel` spells no `/api/`), so
  * the module is imported and asked.
  */
 async function evaluatePathsModule(

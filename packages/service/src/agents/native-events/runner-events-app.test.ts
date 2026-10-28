@@ -51,7 +51,6 @@ import { TestClock } from "effect/testing";
 import { type AfterResponse, keptAfterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
-import { EVE_CANCEL_OUTCOME } from "../brain-host/eve-sessions.js";
 import { CODER } from "../coder-host/bounds.js";
 import { NATIVE_SESSION_PREFIX } from "../coder-host/native-runtime.js";
 import { NativeAgentSessions, RUNNER_CHOICE } from "../coder-host/runtime-sessions.js";
@@ -59,6 +58,7 @@ import { titleCodingAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { readNativeTurnHanded, recordNativeTurnHanded } from "../coder-host/turn-message.js";
+import { EVE_CANCEL_OUTCOME } from "../eve-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   RUNNER_EVENTS_PATH,
@@ -383,6 +383,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
                 reset: () => Effect.die(new Error("this test resets nothing")),
                 stream: () => Stream.empty,
                 retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+                deliverWaiting: () => Effect.succeed(false),
                 halt: () => Effect.succeed(true),
               }),
             ),

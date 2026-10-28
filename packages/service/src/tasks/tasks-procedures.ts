@@ -69,7 +69,6 @@ import type {
 } from "@luke/features/task-wire";
 import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { LocalAgentRefused, taskRunsOnChoice } from "../agents/coder-host/agent-runtime-choice.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
@@ -80,6 +79,7 @@ import {
   summaryOf,
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
 import type { SandboxStopReach } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";

@@ -156,6 +156,7 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
     automationId: null,
     automationName: null,
     startedFrom: null,
+    startedByAgentId: null,
     conversationId: "conversation-1",
     model: "anthropic/claude-opus-5.5",
     effort: "high",

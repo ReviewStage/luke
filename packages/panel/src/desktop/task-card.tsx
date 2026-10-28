@@ -93,20 +93,13 @@ export const TASK_MARK_GLYPH =
 
 /**
  * The one icon at a task row's end, before its time: how its agents stand
- * and whether a question waits on the reader (`TaskAgentsMark`). Note that
+ * (`TaskAgentsMark`). Note that
  * a task whose repository belongs to another of the account's workspaces
  * wears no mark of its own here, because its card and its banner name that
  * workspace, and the row's one icon stays how its agents stand.
  */
-export function TaskRowStatus({
-  task,
-  waiting,
-}: {
-  task: TaskSummary;
-  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
-  waiting: number;
-}): React.JSX.Element | null {
-  return <TaskAgentsMark agents={task.agents} waiting={waiting} />;
+export function TaskRowStatus({ task }: { task: TaskSummary }): React.JSX.Element | null {
+  return <TaskAgentsMark agents={task.agents} />;
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */

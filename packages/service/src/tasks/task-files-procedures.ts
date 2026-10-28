@@ -69,7 +69,7 @@ const found = <A>(read: Option.Option<A>): Effect.Effect<A, HostedRefusal> =>
   });
 
 /** The window a File tab's query names, or the invalid-request refusal where it does not read as one. */
-function fileWindowOf(query: {
+export function fileWindowOf(query: {
   readonly path?: string;
   readonly first?: string;
   readonly last?: string;

@@ -105,7 +105,7 @@ import {
  * on the thread, since replying never answers: a member's message on the
  * thread reaches the agent as one of the developer's messages, and so does
  * an answer it waits on. No call holds the turn, since a coder session
- * takes no input mid-turn (`brain-host/eve-sessions.ts`'s `requestInput`).
+ * takes no input mid-turn (`eve-host/eve-sessions.ts`'s `requestInput`).
  * Every call answers with the agent's whole inbox as it stands, each
  * thread's messages in order with their asks and answers, so the model
  * holds its threads whatever its context has lost to compaction. A worker

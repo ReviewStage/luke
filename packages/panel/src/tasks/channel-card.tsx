@@ -10,12 +10,11 @@ import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { askAct } from "../act.js";
 import { CreatedByRow } from "../actor-ref.js";
-import type { CountNoun } from "../desktop/sidebar-fold.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { ChipCardSkeleton, useLinkWorkspace, WorkspaceDirectory } from "./chip-cards.js";
-import { needsYouWords } from "./inbox-model.js";
+import { needsYouWords, threadsWords } from "./inbox-model.js";
 import { useHeldChannel } from "./use-channels.js";
 
 /**
@@ -41,9 +40,6 @@ import { useHeldChannel } from "./use-channels.js";
 
 /** What a channel is called by its kind, in its card's sub. */
 const CHANNEL_KIND_WORDS = { CHANNEL: "Channel", PROJECT: "Project" } as const;
-
-/** What a count of a channel's threads is said with. */
-const THREAD_NOUN: CountNoun = { one: "thread", many: "threads" };
 
 /** What parts the kind from the size in a card's sub. */
 const PART = " · ";
@@ -80,7 +76,7 @@ function channelSub(channel: Channel | ArchivedChannel, now: number): string {
     return `${kind}${PART}archived ${dateOfText(channel.archivedAt, now)}`;
   const { threads } = channel;
   if (threads === undefined) return kind;
-  return `${kind}${PART}${threads} ${threads === 1 ? THREAD_NOUN.one : THREAD_NOUN.many}`;
+  return `${kind}${PART}${threadsWords(threads)}`;
 }
 
 /** What stands in a channel's card's corner: how many of its asks wait on the reader, else how long since its latest post, else nothing. */

@@ -15,17 +15,17 @@ import { serializeModelInputSchema } from "eve/tools";
 import { test } from "vitest";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
-import { lukeAccount } from "../brain-host/auth.js";
+import { lukeAccount } from "../eve-host/auth.js";
 import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_AUTHENTICATOR,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN,
-} from "../brain-host/bounds.js";
-import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_AUTHENTICATOR,
+  EVE_HOST_DEPLOYMENT_PRINCIPAL,
+  EVE_HOST_HEADER,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_REFUSAL,
+  EVE_HOST_TURN,
+} from "../eve-host/bounds.js";
+import { EVE_HOST_TURN_POLICY } from "../eve-host/channel.js";
 import { CODER } from "./bounds.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
@@ -58,9 +58,9 @@ function deploymentRequest(sessionId: string, turn: string | undefined, method =
     method,
     headers: {
       authorization: `Bearer ${SECRET}`,
-      [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT,
-      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION,
-      ...(turn === undefined ? undefined : { [BRAIN_HOST_HEADER.TURN]: turn }),
+      [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT,
+      [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
+      ...(turn === undefined ? undefined : { [EVE_HOST_HEADER.TURN]: turn }),
     },
   });
 }
@@ -71,9 +71,9 @@ function deploymentOpening(turn: string): Request {
     method: "POST",
     headers: {
       authorization: `Bearer ${SECRET}`,
-      [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT,
-      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION,
-      [BRAIN_HOST_HEADER.TURN]: turn,
+      [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT,
+      [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
+      [EVE_HOST_HEADER.TURN]: turn,
     },
   });
 }
@@ -104,15 +104,15 @@ function asCarriedAccount(admitted: SessionAuthContext | undefined) {
     admitted.authenticator,
     admitted.principalType,
     admitted.principalId,
-    admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
+    admitted.attributes[EVE_HOST_ATTRIBUTE.CARRIER],
   ];
 }
 
 const CARRIED_ACCOUNT = [
-  BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
-  BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+  EVE_HOST_AUTHENTICATOR.ACCOUNT,
+  EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
   ACCOUNT,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  EVE_HOST_DEPLOYMENT_PRINCIPAL,
 ];
 
 /** The channel's door as a request meets it: the principal admitted, or the word refused with. */
@@ -128,7 +128,7 @@ function doorOf(channel: ReturnType<typeof coderChannelInput>) {
 
 test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session and its typed opening of the account's own conversation are both minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; another account's session is refused", async () => {
   const channel = coderChannel();
-  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
+  assert.equal(channel.turnPolicy, EVE_HOST_TURN_POLICY.STEER);
   const door = doorOf(channel);
 
   // The developer's own follow-up on the same session, as the agent's turn runs under it.
@@ -137,12 +137,12 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
       method: "POST",
       headers: {
         authorization: "Bearer developer-token",
-        [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION,
-        [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+        [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
+        [EVE_HOST_HEADER.TURN]: EVE_HOST_TURN.TYPED,
       },
     }),
   );
-  const { admitted: carried } = await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.TYPED));
+  const { admitted: carried } = await door(deploymentRequest(OWN_SESSION, EVE_HOST_TURN.TYPED));
   assert.ok(developer);
   assert.ok(carried);
   assert.deepEqual(
@@ -151,19 +151,19 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   );
   assert.deepEqual(carried.attributes, {
     ...developer.attributes,
-    [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+    [EVE_HOST_ATTRIBUTE.CARRIER]: EVE_HOST_DEPLOYMENT_PRINCIPAL,
   });
 
   // The start of an agent: the deployment opens the account's own conversation as the developer too.
-  const { admitted: opened } = await door(deploymentOpening(BRAIN_HOST_TURN.TYPED));
+  const { admitted: opened } = await door(deploymentOpening(EVE_HOST_TURN.TYPED));
   assert.ok(opened);
   assert.deepEqual(
     [opened.authenticator, opened.principalType, opened.principalId, opened.attributes],
     [developer.authenticator, developer.principalType, developer.principalId, carried.attributes],
   );
 
-  assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
-    refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
+  assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, EVE_HOST_TURN.TYPED)), {
+    refused: EVE_HOST_REFUSAL.NOT_OWNER,
   });
 });
 
@@ -172,12 +172,12 @@ test("the deployment's cancel of a turn, which a continue started through start_
   const cancel = (sessionId: string) =>
     new Request(`https://luke.test/eve/v1/session/${sessionId}/cancel`, {
       method: "POST",
-      headers: { authorization: `Bearer ${SECRET}`, [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT },
+      headers: { authorization: `Bearer ${SECRET}`, [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT },
     });
 
   const { admitted } = await door(cancel(OWN_SESSION));
   assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
-  assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
+  assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: EVE_HOST_REFUSAL.NOT_OWNER });
 });
 
 test("the deployment's retire of a session, which a delete a browser asked for ends an agent's session with, is admitted on the named account's own session as the developer's own principal, with no row of the table; another account's session, a read, and eve's other session controls are refused", async () => {
@@ -185,13 +185,13 @@ test("the deployment's retire of a session, which a delete a browser asked for e
   const control = (sessionId: string, route: string, method = "POST") =>
     new Request(`https://luke.test/eve/v1/session/${sessionId}/${route}`, {
       method,
-      headers: { authorization: `Bearer ${SECRET}`, [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT },
+      headers: { authorization: `Bearer ${SECRET}`, [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT },
     });
 
   const { admitted } = await door(control(OWN_SESSION, "reset"));
   assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(control(OTHER_SESSION, "reset")), {
-    refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
+    refused: EVE_HOST_REFUSAL.NOT_OWNER,
   });
   for (const [route, method] of [
     ["reset", "GET"],
@@ -200,7 +200,7 @@ test("the deployment's retire of a session, which a delete a browser asked for e
   ] as const) {
     assert.deepEqual(
       await door(control(OWN_SESSION, route, method)),
-      { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
+      { refused: EVE_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
       `${method} ${route}`,
     );
   }
@@ -479,9 +479,9 @@ test("an agent on a task is told of the task's links, pages, and comments, and o
   }
 });
 
-test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, names a task for them", () => {
+test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, starts them beside itself", () => {
   const OWN_TASK = "Start it on your own task";
-  const NO_TASK = "You work on no task, so name the task to start it on";
+  const NO_TASK = "You work on no task, so leave its taskId out to start it beside you";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     const taskless = coderInstructions("Acme/Relay", brief, true, null);

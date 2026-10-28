@@ -14,7 +14,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
  */
 
 /** The one namespace every host-minted id hashes under; a fixed uuid, never derived from data. */
-const BRAIN_HOST_ID_NAMESPACE = "3c9b1f8e-4a52-4d6b-9e0f-7b2c5a1d8e43";
+const HOST_MINTED_ID_NAMESPACE = "3c9b1f8e-4a52-4d6b-9e0f-7b2c5a1d8e43";
 
 const UUID_VERSION_8 = 0x80;
 const UUID_VARIANT_RFC_4122 = 0x80;
@@ -46,11 +46,11 @@ function nameBasedUuid(namespace: string, name: string): string {
 }
 
 /** The host's id for a coordinate, its parts joined so no part can run into the next. */
-export function brainHostId(parts: readonly string[]): string {
-  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, JSON.stringify(parts));
+export function hostMintedId(parts: readonly string[]): string {
+  return nameBasedUuid(HOST_MINTED_ID_NAMESPACE, JSON.stringify(parts));
 }
 
 /** The developer's line sent to a coding agent, under the key the client made for the send, which is how a send repeated after a lost answer finds the row it already wrote, and how the window that sent it knows that row as it lands. */
 export function sentLineId(clientKey: string): string {
-  return brainHostId([SENT_KIND, clientKey]);
+  return hostMintedId([SENT_KIND, clientKey]);
 }

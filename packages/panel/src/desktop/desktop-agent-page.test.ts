@@ -1134,7 +1134,7 @@ test("the agent's pull request is a row pinned over its box while it still works
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });
 
-test("a skill a message names is its chip, which opens the skill's SKILL.md on GitHub, there being no File tab for a repository no plan names", async () => {
+test("a skill a message names is its chip, which opens the skill's SKILL.md in a File tab beside the page, read through the agent's workspace and repository, there being no task", async () => {
   transcript = {
     messages: [
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
@@ -1149,7 +1149,12 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
     status: CODING_AGENT_STATUS.COMPLETED,
     title: null,
   };
-  const page = mount();
+  localStorage.clear();
+  installScrollIntoView();
+  const page = document.createElement("div");
+  document.body.append(page);
+  root = createRoot(page);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
   await settle();
 
   // The skills are read once a sent message first asks for them, a settle after the transcript lands.
@@ -1157,11 +1162,17 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
   const chip = page.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
+  await settle();
 
-  assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
-    [{ url: "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md" }],
-  );
+  const reads = told.flatMap((each) => (each.kind === ACT_KIND.TASKS_FILE ? [each.payload] : []));
+  assert.ok(reads.length > 0, "the File tab reads the skill's file");
+  for (const payload of reads) {
+    assert.ok(!("taskId" in payload), "the read names no task");
+    assert.equal(payload.path, ".agents/skills/release/SKILL.md");
+    assert.ok("workspaceId" in payload && payload.workspaceId === "workspace-1");
+    assert.ok("repository" in payload && payload.repository === "acme/relay");
+  }
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });
 
 test("until the agent is read, the page stands in an agent tab's own shape saying Reading, and gives way to the agent once read", async () => {
@@ -1553,7 +1564,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show terminal, Copy link, the transcript's two copies, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1564,11 +1575,51 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show ter
     (each) => each.textContent,
   );
   assert.deepEqual(offered, [
-    "Rename",
-    "Show terminal⌘J",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
+    "Rename",
+    "Show terminal⌘J",
+    "Archive",
+    "Permanently delete",
+  ]);
+});
+
+test("a taskless agent the sidebar lists gains its row's own items on its page's ⋯: Mark as unread beside Rename, then Pin and Move to section, and Pin pins it", async () => {
+  const pins: { agentId: string; pinned: boolean }[] = [];
+  const listed = {
+    ...PAGE,
+    automationName: "Flaky sweep",
+    activityAt: 2,
+  };
+  const page = mount(
+    tasksControl({
+      listedAgents: { standing: [listed], archived: [] },
+      onPinAgent: (agentId, pinned) => {
+        pins.push({ agentId, pinned });
+      },
+    }),
+  );
+  await settle();
+  const offered = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+  const pin = pageMenuItem(page, "Pin");
+  act(() => pin.click());
+  assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
+
+  const mark = pageMenuItem(page, "Mark as unread");
+  act(() => mark.click());
+  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  assert.deepEqual(offered(), [
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Rename",
+    "Mark as read",
+    "Pin",
+    "Move to section",
+    "Show terminal⌘J",
     "Archive",
     "Permanently delete",
   ]);
@@ -1591,7 +1642,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Copy link", "Copy concise transcript", "Copy full transcript", "Show terminal⌘J"],
   );
 });
 

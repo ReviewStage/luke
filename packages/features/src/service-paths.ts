@@ -79,6 +79,12 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
+  /**
+   * Every inbox item the account reaches, sealed for following over Neon
+   * Realtime (GET): where each stands, and those changed since `?since=`
+   * whole, or `unavailable`. `live-wire.ts` declares the answer.
+   */
+  LIVE_INBOX_ITEMS: "/api/live/inbox-items",
   /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_TASK_RECORD: "/api/live/task-record",
   /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
@@ -243,6 +249,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
   /**
+   * A window of one file of a repository a workspace's installation
+   * reaches, as GitHub holds it now or at a commit (GET), named as
+   * `GITHUB_REPOSITORY_TREE` names it, its window queried as a plan's File
+   * tab queries its own; the answer is a plan's file's (`task-wire.ts`).
+   */
+  GITHUB_REPOSITORY_FILE: "/api/github/repositories/file",
+  /**
    * The skills a developer may choose of a repository a workspace's
    * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
    * the answer is a plan's skills' (`plan-wire.ts`).
@@ -334,18 +347,6 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
-  /**
-   * Where an owner or admin connects Linear for a whole workspace (POST):
-   * answers Vercel Connect's sign-in address, which returns the browser to
-   * `/api/workspaces/linear/connected` (`linear-wire.ts`).
-   */
-  WORKSPACE_LINEAR_CONNECT: "/api/workspaces/linear/connect",
-  /** Where Vercel Connect returns the browser from a workspace's Linear sign-in (GET), which lands it on the integrations landing page. */
-  WORKSPACE_LINEAR_CONNECTED: "/api/workspaces/linear/connected",
-  /** A workspace's Linear disconnected by an owner or admin (POST), answering the workspace. */
-  WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
-  /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
-  WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
   /**
    * Where an owner or admin installs Luke's Sentry integration for a
    * workspace (POST): answers Sentry's install address, carrying a

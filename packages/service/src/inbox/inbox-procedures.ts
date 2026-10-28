@@ -20,6 +20,7 @@ import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK_STATUS,
@@ -43,7 +44,6 @@ import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@lu
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { ownKeyOf } from "../agents/coder-host/account-keys.js";
 import {
   accountInboxPast,
@@ -55,6 +55,7 @@ import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
@@ -610,7 +611,11 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     // Note that the query's `archived=include`, which an older build still sends, is taken and changes nothing: no task is archived any more, so there is none to list.
     account: signedIn.account.effect(function* ({ input, context }) {
       const after = input.after ?? INBOX_CURSOR_START;
-      return yield* hostedStoreOrUnavailable(accountInboxPast(context.userId, after));
+      const repositoryless =
+        input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE;
+      return yield* hostedStoreOrUnavailable(
+        accountInboxPast(context.userId, after, repositoryless),
+      );
     }),
     task: signedIn.task.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);

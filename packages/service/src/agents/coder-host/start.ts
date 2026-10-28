@@ -23,8 +23,8 @@ import {
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import {
-  AUTOMATION_LINE_METADATA,
   type AwaitingLineMetadata,
+  automationLineMetadata,
   type LineSender,
   storeWriter,
 } from "@luke/database/models/writer";
@@ -92,13 +92,13 @@ import {
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
@@ -204,7 +204,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * The member's operator is the one blank Start with no task: in a workspace
  * the account is a member of, on no repository, from no other agent and
  * with no prompt or note, and no other Start is an operator's. Every other
- * Start with no task still names a repository and a prompt. The store
+ * Start with no task still names a prompt, and a repository where it works
+ * in one; one that names none works in none, as the operator does. The store
  * answers the operator already standing where there is one
  * (`createCodingAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
@@ -251,7 +252,7 @@ export type StartAsk = StartPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
-  /** The coding agent whose `start_agent` asks, which the first line names as its sender; none for a Start by a member or an automation. */
+  /** The coding agent whose `start_agent` asks, which the first line names as its sender and the agent's row keeps as its starter; none for a Start by a member or an automation. */
   readonly startedBy?: CodingAgent | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
@@ -505,11 +506,9 @@ const landingOf = Effect.fnUntraced(function* (
         startedFrom: undefined,
       };
     }
-    // An agent with no plan has only words to be handed, and a repository to work them in, so a
-    // Start that names either none starts nothing.
-    if (brief === undefined || place.repository === null) {
-      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    }
+    // An agent with no plan has only words to be handed, so a Start that names none starts
+    // nothing; one that names no repository works in none, as a blank agent on a task with none does.
+    if (brief === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     const handed = yield* handedOf(brief, place, fitter, noteFiles);
     return {
       workspaceId: place.organizationId,
@@ -713,8 +712,10 @@ const stoppedSource = (
     HttpClient.HttpClient | DatabaseServices
   >,
   source: CodingAgent,
+  /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
+  by: string | undefined,
 ) =>
-  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
+  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source, undefined, by).pipe(
     Effect.catch((refusal) =>
       Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
     ),
@@ -865,7 +866,7 @@ function openingOf(
   if (automationOrigin !== undefined) {
     return {
       sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
-      metadata: AUTOMATION_LINE_METADATA,
+      metadata: automationLineMetadata(automationOrigin.firing),
     };
   }
   const sender: LineSender =
@@ -1101,6 +1102,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
+      startedByAgentId: ask.startedBy?.id,
       title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
@@ -1161,7 +1163,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
-        turn: BRAIN_HOST_TURN.TYPED,
+        turn: EVE_HOST_TURN.TYPED,
         message: eveContent(handed, files, mentioned),
         lineId: line,
       })
@@ -1184,7 +1186,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     }
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
-  if (continued) yield* stoppedSource(eve, from.source);
+  if (continued) yield* stoppedSource(eve, from.source, ask.startedBy?.id);
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.

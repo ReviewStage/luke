@@ -41,6 +41,7 @@ import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { MarkdownMessage } from "../markdown-message.js";
+import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -340,6 +341,7 @@ function InboxFormField({
               <ChoiceList
                 legend={field.label}
                 describedBy={control["aria-describedby"]}
+                required={control["aria-required"]}
                 options={(field.options ?? []).map((option) => ({
                   value: option,
                   label: option,
@@ -433,6 +435,41 @@ export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
 }
 
+/** What a field's own control matches, which takes the keyboard where the field is missing. */
+const FIELD_CONTROL = 'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)';
+
+/**
+ * Takes the keyboard, in the answer box `box`, to what its unfinished
+ * answer lacks: the option a reader's Tab lands on, or the first of an
+ * ask's two presses; the missing field's first control; or the note line
+ * the box's words are written on, which stands outside the question's own.
+ */
+export function focusMissing(box: HTMLElement | null, missing: InboxMissing): void {
+  if (box === null) return;
+  switch (missing.kind) {
+    case INBOX_MISSING.OPTION: {
+      const rows = optionRows(box);
+      const option =
+        rows.find((row) => row.tabIndex === 0) ??
+        rows[0] ??
+        box.querySelector<HTMLElement>(`[${OPTIONS_ATTRIBUTE}] button`);
+      option?.focus();
+      return;
+    }
+    case INBOX_MISSING.FIELD: {
+      const field = [...box.querySelectorAll<HTMLElement>("[data-inbox-field-label]")].find(
+        (each) => each.dataset.inboxFieldLabel === missing.label,
+      );
+      field?.querySelector<HTMLElement>(FIELD_CONTROL)?.focus();
+      return;
+    }
+    case INBOX_MISSING.WORDS:
+      [...box.querySelectorAll<HTMLElement>('form.inbox-answer [contenteditable="true"]')]
+        .find((editor) => editor.closest("[data-inbox-draft-ask]") === null)
+        ?.focus();
+  }
+}
+
 /** Whether a key goes to a link, a step's say, whose own Enter opens it. */
 function opensLink(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.matches("a[href]");
@@ -472,22 +509,31 @@ interface AskDoors {
   readonly onDraft: (draft: InboxDraft) => void;
 }
 
-/** A press closing an open ask, which attaches its answer to the reply while pressed, and takes it off pressed again. */
+/**
+ * A press of a two-press ask, open or as an answer left it, wearing the
+ * glyph of the way it goes (`ToneGlyph`) either way, so a press reads the
+ * same before and after it is given. Open, it attaches its answer to the
+ * reply while pressed and takes it off pressed again; with no `onPress`, it
+ * records the press given and takes none.
+ */
 function AskPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
   recommended = false,
+  tone,
   pressed,
-  disabled,
+  disabled = false,
   onPress,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
   /** Whether the agent recommends it, which its badge says. */
   recommended?: boolean;
+  tone: AnswerTone;
   pressed: boolean;
-  disabled: boolean;
-  onPress: () => void;
+  disabled?: boolean;
+  /** Attaches or takes off its answer; none where it records an answer already given. */
+  onPress?: (() => void) | undefined;
 }): React.JSX.Element {
   return (
     <Button
@@ -496,6 +542,8 @@ function AskPress({
       badge={recommended ? RECOMMENDED : undefined}
       pressed={pressed}
       disabled={disabled}
+      readOnly={onPress === undefined}
+      icon={<ToneGlyph tone={tone} pressed={pressed} />}
       onClick={onPress}
     >
       {label}
@@ -558,14 +606,15 @@ function OpenControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className={INBOX_ASK_PRESSES} data-inbox-options="">
-          {ask.options.map((option) => {
+        <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+          {ask.options.map((option, at) => {
             const picked = draft.choices.includes(option.label);
             return (
               <AskPress
                 key={option.label}
                 label={option.label}
                 recommended={recommendedLabels(ask).includes(option.label)}
+                tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
                 pressed={picked}
                 disabled={disabled}
                 onPress={() => onDraft({ ...draft, choices: picked ? [] : [option.label] })}
@@ -606,9 +655,11 @@ function OpenControls({
               ))}
             </Stack>
           )}
-          <div className={INBOX_ASK_PRESSES}>
+          {/* Note that the two presses are the to-do's options, which Enter's way to what is missing finds. */}
+          <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
             <AskPress
               label={ASK_PRESS.DONE}
+              tone={ANSWER_TONE.AHEAD}
               pressed={decision === INBOX_REPLY.DONE}
               disabled={disabled}
               onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.DONE))}
@@ -616,6 +667,7 @@ function OpenControls({
             <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
+              tone={ANSWER_TONE.BACK}
               pressed={decision === INBOX_REPLY.NOT_DONE}
               disabled={disabled}
               onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.NOT_DONE))}
@@ -640,12 +692,17 @@ function OpenControls({
   }
 }
 
-/** The glyph a press given wears in its answer's tone (`ANSWER_STATUS_TONE`): a check in green going ahead, a turn back in grey holding back. */
-function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
+/**
+ * The glyph a press wears for the way it goes, as the answer's stamp does:
+ * a check going ahead, a turn back holding back. Only the press given spends
+ * its answer's tone (`ANSWER_STATUS_TONE`), green or grey; the rest wear
+ * their words' ink.
+ */
+function ToneGlyph({ tone, pressed }: { tone: AnswerTone; pressed: boolean }): React.JSX.Element {
   return (
     <span
       className="inbox-ask-pressed inline-flex text-tone-ink"
-      data-tone={ANSWER_STATUS_TONE[tone]}
+      data-tone={pressed ? ANSWER_STATUS_TONE[tone] : undefined}
     >
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
@@ -653,39 +710,6 @@ function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
         <Undo2Icon aria-hidden="true" />
       )}
     </span>
-  );
-}
-
-/**
- * A press of an answered ask as it was left: its look and words as it was
- * offered, the one given pressed and wearing its glyph, none of them
- * taking a press.
- */
-function AnsweredPress({
-  label,
-  variant = BUTTON_VARIANT.OUTLINE,
-  recommended = false,
-  tone,
-  pressed,
-}: {
-  label: string;
-  variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
-  /** Whether the agent recommended it, which its badge goes on saying. */
-  recommended?: boolean;
-  tone: AnswerTone;
-  pressed: boolean;
-}): React.JSX.Element {
-  return (
-    <Button
-      variant={variant}
-      size={BUTTON_SIZE.COMPACT}
-      badge={recommended ? RECOMMENDED : undefined}
-      pressed={pressed}
-      readOnly
-      icon={pressed ? <ToneGlyph tone={tone} /> : undefined}
-    >
-      {label}
-    </Button>
   );
 }
 
@@ -725,7 +749,7 @@ function LeftControls({
       return decideButtons(ask) ? (
         <div className={INBOX_ASK_PRESSES}>
           {ask.options.map((option, at) => (
-            <AnsweredPress
+            <AskPress
               key={option.label}
               label={option.label}
               recommended={recommendedLabels(ask).includes(option.label)}
@@ -755,12 +779,12 @@ function LeftControls({
             </Stack>
           )}
           <div className={INBOX_ASK_PRESSES}>
-            <AnsweredPress
+            <AskPress
               label={ASK_PRESS.DONE}
               tone={ANSWER_TONE.AHEAD}
               pressed={draft.press === INBOX_REPLY.DONE}
             />
-            <AnsweredPress
+            <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
               tone={ANSWER_TONE.BACK}

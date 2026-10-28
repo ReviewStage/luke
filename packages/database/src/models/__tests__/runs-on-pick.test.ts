@@ -29,7 +29,7 @@ it.layer(getTestDB())("an account's last Runs on pick", (it) => {
   it.effect("is none until kept, then the last one kept, leaving the snapshot as it stood", () =>
     Effect.gen(function* () {
       const userId = yield* openAccount;
-      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      yield* writeAccountPreferences(userId, { preferences: {} });
       const before = yield* readAccountPreferences(userId);
       assert.deepEqual(yield* readRunsOnPick(userId), Option.none());
 

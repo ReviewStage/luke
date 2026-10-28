@@ -28,7 +28,7 @@ import type { AdminMetrics } from "@luke/features/admin-answer-wire";
 import { ADMIN_ERROR, ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
 import { type Context, Effect } from "effect";
 import { afterEach, vi } from "vitest";
-import { BRAIN_HOST_ENVIRONMENT } from "../agents/brain-host/bounds.js";
+import { EVE_HOST_ENVIRONMENT } from "../agents/eve-host/bounds.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -113,7 +113,7 @@ afterEach(() => {
 const eveRowUnder = (eve: string | undefined, cron: string | undefined) =>
   Effect.gen(function* () {
     yield* Effect.sync(() => {
-      vi.stubEnv(BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET, eve);
+      vi.stubEnv(EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET, eve);
       vi.stubEnv(CRON_ENVIRONMENT.CRON_SECRET, cron);
     });
     const reliability = yield* hostedAdminSeams(NO_SESSION).readReliability(

@@ -1,7 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
-  type AskTurn,
-  askTurnsOf,
   awaitingLinesOf,
   type CodingAgent,
   type CodingAgentDelegation,
@@ -35,6 +33,7 @@ import {
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -54,7 +53,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
-import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
+import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -64,6 +63,7 @@ import {
   storedToolName,
   TURN_STATUS,
 } from "../../core.js";
+import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
@@ -91,10 +91,12 @@ import { usageOfTurns } from "./usage.js";
  * sequence it has and the journal revision it last read at, so a row added
  * past the first or amended past the second is new to it. A read with
  * nothing new is held open while the agent is starting or its newest turn
- * still runs, looked at again every `MESSAGES_POLL` and let go at
- * `MESSAGES_HOLD`, so a tab hears each message as it lands without asking
- * every half second and a tab on an agent whose first turn has not landed
- * costs one held read per hold rather than a spin; an agent that has ended
+ * still runs, looked at again as each write to the conversation lands
+ * (`transcriptTopics`), every `MESSAGES_POLL` where Luke Sync cannot wake
+ * it, and let go at `MESSAGES_HOLD`, so a tab hears each message as it
+ * lands without asking every half second and a tab on an agent whose
+ * first turn has not landed costs one held read per hold rather than a
+ * spin; an agent that has ended
  * answers at once, unless a message of the developer's awaits the turn it
  * will open, which reads as running and is held for. Every page carries the agent's status as it stood when
  * the page was read, and why where the newest turn failed, so the reader
@@ -148,8 +150,6 @@ type TranscriptMessage = StoredUIMessage &
     readonly sentBy?: CodingAgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
-    readonly turnId?: string;
-    readonly readFrom?: AskTurn;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -325,30 +325,10 @@ function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[
     .map((record) => record.id);
 }
 
-/** The asks the voice's lines among the rows followed, by their delegation, each the ask's client id. */
-function delegationsAmong(records: readonly StoredMessageRecord[]): readonly string[] {
-  return [
-    ...new Set(
-      records.flatMap((record) => {
-        const delegation = spokenDelegationOf(record.message);
-        return delegation === undefined ? [] : [delegation];
-      }),
-    ),
-  ];
-}
-
-/** The ask a line the agent said on a call followed, where the voice handed one on before it; none for any other row. */
-function spokenDelegationOf(message: StoredUIMessage): string | undefined {
-  if (message.role !== MESSAGE_ROLE.ASSISTANT || !spokenOnCall(message)) return undefined;
-  const { metadata } = message;
-  return "delegation_id" in metadata ? metadata.delegation_id : undefined;
-}
-
-/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in; and of the agent's own lines on a call, the turn each one's ask ran in, by the ask. */
+/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in. */
 interface LinesRead {
   readonly senders: ReadonlyMap<string, LineSent>;
   readonly places: ReadonlyMap<string, LinePlace>;
-  readonly asked: ReadonlyMap<string, AskTurn>;
 }
 
 /** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
@@ -360,22 +340,16 @@ function spokenOnCall(message: StoredUIMessage): boolean {
 
 /**
  * A row as the page carries it: its message, for a developer's line when
- * and what sent it and where in a turn under way it arrived, for a line the
- * agent said on a call when its words began, and for a turn's journal when
- * the turn began and what it ran on and, once the journal closed, when it
- * did and what it spent, and the turn it is the journal of. Note that a
- * spoken line of the agent's carries no turn's record, because the line is
- * what was said and the turn's journal is its own row; it names instead the
- * turn whose work it answers (`readFrom`), the one the ask it followed ran
- * in, read from the ask's binding at every page rather than stamped on the
- * row as it was said, so a line said while that turn ran, or long after it
- * settled, or before the ask learned its turn, names it all the same, and
- * where the ask joined a typed turn under way, the steps begun before it.
+ * and what sent it and where in a turn under way it arrived, for a line
+ * said on a call when its words began, and for a turn's journal when the
+ * turn began and what it ran on and, once the journal closed, when it did
+ * and what it spent. Note that a spoken line carries no turn's record,
+ * because the line is what was said and the turn's journal is its own row.
  */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
-  { senders, places, asked }: LinesRead,
+  { senders, places }: LinesRead,
 ): TranscriptMessage {
   if (record.message.role === MESSAGE_ROLE.USER) {
     const sent = senders.get(record.id);
@@ -389,20 +363,12 @@ function transcriptMessageOf(
     };
   }
   if (spokenOnCall(record.message)) {
-    const delegation = spokenDelegationOf(record.message);
-    const readFrom = delegation === undefined ? undefined : asked.get(delegation);
-    return {
-      ...record.message,
-      sentAt: record.placedAt.getTime(),
-      ...(readFrom === undefined ? undefined : { readFrom }),
-    };
+    return { ...record.message, sentAt: record.placedAt.getTime() };
   }
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
     ...record.message,
-    // Note that a turn's journal shares the turn's id as its client id, which no other row of the turn does.
-    ...(record.clientId === record.turnId ? { turnId: record.turnId } : undefined),
     startedAt: turn.startedAt,
     ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
     ...turn.record,
@@ -544,7 +510,7 @@ const withUsage = (
     };
   });
 
-/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines, where it arrived, and the turn each of the agent's spoken lines answers. */
+/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines and where it arrived. */
 const transcriptMessagesOf = (
   target: ConversationTarget,
   records: readonly StoredMessageRecord[],
@@ -556,7 +522,6 @@ const transcriptMessagesOf = (
         journalTurns: journalTurnsOf(target.userId, records),
         senders: lineSendersOf(target, lines),
         places: linePlacesOf(target, lines),
-        asked: askTurnsOf(target, delegationsAmong(records)),
       },
       { concurrency: CODER.READ_CONCURRENCY },
     );
@@ -610,45 +575,63 @@ export type DelegationPast =
   | { readonly delegation: CodingAgentDelegation }
   | { readonly delegation: undefined; readonly agentRuns: boolean };
 
+/** A delegation as it stands, and, where none does while the agent runs, the instant the clock alone may end its run, past its grace. */
+interface DelegationStanding {
+  readonly read: DelegationPast;
+  readonly graceEdge: number | undefined;
+}
+
+/** The delegation a call recorded as it stands now, with the instant the clock alone may end the agent's run where none stands. */
+function delegationStanding(
+  parent: ConversationTarget,
+  childConversationId: string,
+  agent: Pick<AgentStanding, "createdAt">,
+): TranscriptEffect<DelegationStanding> {
+  return Effect.gen(function* () {
+    const found = yield* readDelegation(parent, childConversationId);
+    if (Option.isSome(found)) return { read: { delegation: found.value }, graceEdge: undefined };
+    const { status, graceEdge } = yield* statusNow(parent, agent);
+    return { read: { delegation: undefined, agentRuns: WAITING_STATUSES.has(status) }, graceEdge };
+  });
+}
+
 /** The delegation a call recorded as it stands now: the record, or none with whether the agent it was asked of still runs, which is when it may still land. */
 export function delegationNow(
   parent: ConversationTarget,
   childConversationId: string,
   agent: Pick<AgentStanding, "createdAt">,
 ): TranscriptEffect<DelegationPast> {
-  return Effect.gen(function* () {
-    const found = yield* readDelegation(parent, childConversationId);
-    if (Option.isSome(found)) return { delegation: found.value };
-    const { status } = yield* statusNow(parent, agent);
-    return { delegation: undefined, agentRuns: WAITING_STATUSES.has(status) };
-  });
+  return Effect.map(delegationStanding(parent, childConversationId, agent), ({ read }) => read);
 }
 
 /**
  * The delegation a call recorded, waited for. A worker's tab opens from
  * the moment its call is requested, which is a step ahead of the record the
  * call's own step writes, so a read that finds none while the agent still
- * runs holds as a transcript read does, on the same poll and bound, and
- * answers the record once it lands; none past the hold says the agent still
- * runs, and none once the agent has ended is none for good.
+ * runs holds as a transcript read does, on the same topics, poll, and bound,
+ * and answers the record once it lands; none past the hold says the agent
+ * still runs, and none once the agent has ended is none for good. Note that
+ * the record notifies the parent's conversation, through the worker's own
+ * (`codingAgentDelegationSync`), as the agent's turns and lines do.
  */
 export function delegationPast(
   parent: ConversationTarget,
   childConversationId: string,
   agent: Pick<AgentStanding, "createdAt">,
 ): TranscriptEffect<DelegationPast> {
-  const once: TranscriptEffect<Option.Option<DelegationPast>> = Effect.map(
-    delegationNow(parent, childConversationId, agent),
-    (read) => (read.delegation === undefined && read.agentRuns ? Option.none() : Option.some(read)),
-  );
-  return once.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),
-    Effect.timeoutOption(CODER.MESSAGES_HOLD),
+  return heldUntil(
+    delegationStanding(parent, childConversationId, agent),
+    ({ read }) => read.delegation !== undefined || !read.agentRuns,
+    transcriptTopics(parent),
+    CODER.MESSAGES_POLL,
+    CODER.MESSAGES_HOLD,
+    ({ graceEdge }) => graceEdge,
+  ).pipe(
     Effect.map((held) =>
-      Option.getOrElse(
-        Option.flatten(held),
-        (): DelegationPast => ({ delegation: undefined, agentRuns: true }),
-      ),
+      Option.match(held, {
+        onNone: (): DelegationPast => ({ delegation: undefined, agentRuns: true }),
+        onSome: ({ read }) => read.read,
+      }),
     ),
   );
 }
@@ -747,6 +730,25 @@ const holdsFor = (page: TranscriptPage, titleAwaited: TitleAwaited): TranscriptE
   return titleAwaited;
 };
 
+/** The instant the clock alone may end a hold on a page: the agent passing the grace its turn had to land in while it waits, or else the window of a title it waits on closing. */
+const holdEdgeOf = (
+  page: TranscriptPage,
+  graceEdge: number | undefined,
+  titleEdge: TitleEdge,
+): TranscriptEffect<number | undefined> =>
+  WAITING_STATUSES.has(page.status) ? Effect.succeed(graceEdge) : titleEdge;
+
+/**
+ * The topics a held read of a transcript wakes on: its conversation's,
+ * which its messages, its turns, and its workers' conversations and
+ * delegations notify, a worker's title among them, and, on the agent's own
+ * transcript, the agent's, which its own title landing notifies.
+ */
+function transcriptTopics(target: ConversationTarget, own?: OwnAgent): readonly SyncTopic[] {
+  const conversation: SyncTopic = [TOPIC.CONVERSATION, target.conversationId];
+  return own === undefined ? [conversation] : [conversation, [TOPIC.AGENT, own.id]];
+}
+
 /**
  * The transcript past the cursor: the page as it stands, or, while the
  * agent is starting or runs and nothing new stands yet, the first page with
@@ -759,7 +761,11 @@ const holdsFor = (page: TranscriptPage, titleAwaited: TitleAwaited): TranscriptE
  * An ended agent's empty page is held too while `titleAwaited` says a
  * title may still land, because a reader stops at that page and the
  * agent's own title, or a short worker's, lands after its turn ended; the
- * page that ends that hold carries the title.
+ * page that ends that hold carries the title. Each look comes as a write
+ * to the transcript lands (`transcriptTopics`), and no later than the
+ * instant the clock alone may end the hold, the agent passing its grace or
+ * a title's window closing (`titleEdge`), so a hold Luke Sync wakes ends
+ * when a polled one would.
  */
 export function transcriptPast(
   target: ConversationTarget,
@@ -768,21 +774,27 @@ export function transcriptPast(
   agent: AgentStart,
   own?: OwnAgent,
   titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
-  poll: Duration.Input = CODER.MESSAGES_POLL,
+  titleEdge: TitleEdge = NO_TITLE_EDGE,
+  poll: Duration.Duration = CODER.MESSAGES_POLL,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
-  const once = Effect.gen(function* () {
+  const look = Effect.gen(function* () {
     const read = yield* pagePast(target, tools, after, agent);
-    return (yield* holdsFor(read.page, titleAwaited)) ? Option.none() : Option.some(read);
+    if (!(yield* holdsFor(read.page, titleAwaited))) return { read, holds: false, edge: undefined };
+    return { read, holds: true, edge: yield* holdEdgeOf(read.page, read.graceEdge, titleEdge) };
   });
-  return once.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(poll), until: Option.isSome }),
-    Effect.timeoutOption(CODER.MESSAGES_HOLD),
-    Effect.flatMap((held) => {
-      const read = Option.flatten(held);
-      return Option.isSome(read)
-        ? Effect.succeed(read.value)
-        : pagePast(target, tools, after, agent);
-    }),
+  return heldUntil(
+    look,
+    ({ holds }) => !holds,
+    transcriptTopics(target, own),
+    poll,
+    CODER.MESSAGES_HOLD,
+    ({ edge }) => edge,
+  ).pipe(
+    Effect.flatMap((held) =>
+      Option.isSome(held)
+        ? Effect.succeed(held.value.read.read)
+        : pagePast(target, tools, after, agent),
+    ),
     Effect.flatMap(({ page, turn }) => withUsage(target, tools, page, turn, own)),
   );
 }
@@ -818,13 +830,10 @@ export function transcriptNow(
     const holds = yield* holdsFor(page, titleAwaited);
     const read = { page: yield* withUsage(target, tools, page, turn, own), holds };
     if (!holds) return read;
-    const waiting = WAITING_STATUSES.has(page.status);
-    const edges = [waiting ? graceEdge : yield* titleEdge].filter(
-      (edge): edge is number => edge !== undefined,
-    );
-    if (edges.length === 0) return read;
+    const edge = yield* holdEdgeOf(page, graceEdge, titleEdge);
+    if (edge === undefined) return read;
     const now = yield* Clock.currentTimeMillis;
-    return { ...read, wakeIn: Math.max(1, Math.min(...edges) - now) };
+    return { ...read, wakeIn: Math.max(1, edge - now) };
   });
 }
 

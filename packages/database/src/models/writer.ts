@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { isWireUuid } from "@luke/features";
+import { type AutomationFiring, FIRING_HANDS_OUTSIDE_WORDS } from "@luke/features/automation-wire";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -59,7 +60,18 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
+import {
+  Cause,
+  DateTime,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Metric,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import {
   Database,
@@ -268,6 +280,8 @@ interface TurnCancelRequest {
   readonly at: Date;
   /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
   readonly key?: string;
+  /** The coding agent whose `stop_agent`, or whose Start continuing the turn's agent, made the Stop; none for the developer's or Luke's. */
+  readonly by?: string;
 }
 
 type TurnCancelResult = Result.Result<StoreWriteEffect, typeof NO_CONVERSATION | typeof NO_TURN>;
@@ -421,10 +435,17 @@ const TYPED_LINE_METADATA: TypedAskMetadata = {
 /** A line Luke sent the agent on its own. */
 export const LUKE_LINE_METADATA: LukeLineMetadata = { channel: MESSAGE_CHANNEL.LUKE };
 
-/** An automation's run's prompt. */
-export const AUTOMATION_LINE_METADATA: AutomationLineMetadata = {
-  channel: MESSAGE_CHANNEL.AUTOMATION,
-};
+/**
+ * An automation's run's prompt, saying whether what fired the run put words
+ * its owner did not write beside it, which the line keeps for the rest of
+ * the conversation's life, whatever becomes of the automation and its runs.
+ */
+export function automationLineMetadata(firing: AutomationFiring): AutomationLineMetadata {
+  return {
+    channel: MESSAGE_CHANNEL.AUTOMATION,
+    outside_words: FIRING_HANDS_OUTSIDE_WORDS[firing.kind],
+  };
+}
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
 type AwaitingLineWritten = Result.Result<
@@ -1347,6 +1368,26 @@ function holdJournal(context: WriterContext, turnId: string, row: MessageRow, di
   context.journals.set(turnId, { row, dirty });
 }
 
+/** The conversations whose journal is a transcript a coding agent's tab shows: its own and its workers'. */
+const TRANSCRIPT_KINDS: ReadonlySet<string> = new Set([
+  CONVERSATION_KIND.CODING_AGENT,
+  CONVERSATION_KIND.CHILD,
+]);
+
+/**
+ * What a transcript's journal growth costs to write: each amendment that
+ * lands rewrites the turn's whole journal row, so its bytes climb with the
+ * turn's length. Sentry's metrics layer sends it as the histogram's `.sum`,
+ * `.count`, `.min`, and `.max`. It carries a size and never a row, an id, or
+ * a txid.
+ */
+const JOURNAL_METRIC = {
+  REWRITE_BYTES: Metric.histogram("luke.transcript.journal_rewrite_bytes", {
+    description: "Bytes of parts a landed journal amendment wrote, as the row's whole parts",
+    boundaries: Metric.exponentialBoundaries({ start: 1024, factor: 2, count: 12 }),
+  }),
+} as const;
+
 /**
  * Lands every journal the write amended, each in one statement that moves
  * the conversation's journal revision once: the parts as the last amendment
@@ -1364,7 +1405,16 @@ function landJournals(context: WriterContext): Write<void> {
               conversationId: context.target.conversationId,
               parts: held.row.parts,
             }),
-            Effect.sync(() => holdJournal(context, turnId, held.row, false)),
+            Effect.andThen(
+              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation is only ever opened for a worker (`openChildConversation`).
+              TRANSCRIPT_KINDS.has(context.kind)
+                ? Metric.update(
+                    JOURNAL_METRIC.REWRITE_BYTES,
+                    Buffer.byteLength(JSON.stringify(held.row.parts)),
+                  )
+                : Effect.void,
+              Effect.sync(() => holdJournal(context, turnId, held.row, false)),
+            ),
           )
         : Effect.void,
     { discard: true },
@@ -2740,13 +2790,14 @@ const stampTurnCancel = SqlSchema.findAll({
     conversationId: Schema.String,
     at: Schema.Date,
     key: Schema.NullOr(Schema.String),
+    by: Schema.NullOr(Schema.String),
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
     Database.use((db) =>
       db
         .update(turns)
-        .set({ cancelRequestedAt: row.at, cancelRequestKey: row.key })
+        .set({ cancelRequestedAt: row.at, cancelRequestKey: row.key, cancelRequestedBy: row.by })
         .where(
           and(
             eq(turns.id, row.turnId),
@@ -2759,8 +2810,9 @@ const stampTurnCancel = SqlSchema.findAll({
 });
 
 /**
- * The Stop on a turn's row: the instant it was asked, and the key of the
- * tool call that asked it where one did, written once, so the record says a
+ * The Stop on a turn's row: the instant it was asked, the key of the
+ * tool call that asked it where one did, and the agent that asked it where
+ * one did, written once, so the record says a
  * Stop was asked whatever eve does with it. A second Stop finds the first
  * instant standing and writes nothing, its key included; a turn the
  * conversation does not hold is refused.
@@ -2775,6 +2827,7 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
     conversationId: context.target.conversationId,
     at: cancel.at,
     key: cancel.key ?? null,
+    by: cancel.by ?? null,
   });
   return Result.succeed(
     stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,

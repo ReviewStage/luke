@@ -197,7 +197,7 @@ function channelLinks(
   const { chosen } = tasks.inboxView;
   if (chosen === undefined) return [at(channel, LINK_THING.CHANNEL, true)];
   const item = inboxItemPlace(chosen);
-  if (alone && !tasks.inboxView.listed) {
+  if (alone) {
     return [at(item, LINK_THING.THREAD, true), at(channel, LINK_THING.CHANNEL, false)];
   }
   return [at(item, LINK_THING.THREAD, false), at(channel, LINK_THING.CHANNEL, true)];
@@ -318,7 +318,7 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (chosen === undefined) return [inbox];
     const item = inboxItemPlace(chosen);
     // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
-    if ((at.narrow === true || tasks.inboxView.single === true) && !tasks.inboxView.listed) {
+    if (at.narrow === true || tasks.inboxView.single === true) {
       return [
         at_(item, LINK_THING.INBOX_ITEM),
         within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),

@@ -9,16 +9,11 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import { applySectionWrite, memberOf } from "@luke/features/task-section-writes";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import {
-  applySectionWrite,
-  memberOf,
-  sectionOrder,
-  sectionTaskIds,
-  workspaceSections,
-} from "@luke/ui/task-sections-model";
+import { sectionOrder, sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -37,7 +32,8 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
  * sidebar-sections.test.ts -- the account's own sections in the sidebar:
- * each drawn over the tasks kept in it,
+ * each drawn over the tasks kept in it, its tasks chosen with those under
+ * Tasks by ⌘-click for one menu to act on them all,
  * which Tasks then leaves out, and reached from a task's menu, whose Move
  * to section writes the move and whose section's Delete acts at once with Undo; and
  * the dialog's icon picker, every Lucide glyph in a color and every emoji,
@@ -606,6 +602,33 @@ test("a section's Mark all done marks every task in it done at once, asking noth
   act(() => item("Mark all done").click());
 
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
+});
+
+test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Mark done for both", async () => {
+  const settled: [string[], string][] = [];
+  const opened: string[] = [];
+  const sidebar = await mountSidebar([], SECTIONS, {
+    onSelect: (taskId) => opened.push(taskId),
+    onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
+  });
+  const rowOf = (name: string) =>
+    [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find((each) =>
+      each.textContent?.includes(name),
+    ) ?? assert.fail(`no ${name} row`);
+  for (const name of [INVITES.name, RETRIES.name]) {
+    act(() => {
+      rowOf(name).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+      );
+    });
+  }
+  assert.deepEqual(opened, []);
+  assert.equal(rowOf(RETRIES.name).getAttribute("aria-description"), "Selected");
+
+  openRowMenu(sidebar, RETRIES.name);
+  assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
+  act(() => item("Mark done").click());
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
@@ -1482,7 +1505,7 @@ test("an agent kept in a section stands among its tasks in its order, which Task
   ]);
 });
 
-test("an agent's menu offers Move to section after Pin and Archive, as a task's does, and a section chosen writes it there", async () => {
+test("an agent's menu offers Move to section beside Pin, before Archive, as the one agent menu orders them, and a section chosen writes it there", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes, SECTIONS, WITH_SWEEP);
 
@@ -1490,8 +1513,8 @@ test("an agent's menu offers Move to section after Pin and Archive, as a task's 
   const labels = menuLabels();
   assert.deepEqual(labels.slice(labels.indexOf("Pin"), labels.indexOf("Pin") + 3), [
     "Pin",
-    "Archive",
     "Move to section",
+    "Archive",
   ]);
   act(() => item("Move to section").click());
   act(() => item("Launch").click());

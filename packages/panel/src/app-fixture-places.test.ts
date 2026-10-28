@@ -130,17 +130,14 @@ function drawn(): string {
   return document.body.textContent ?? "";
 }
 
-it.effect(
-  "the Settings workspace profile opens Settings on Acme signed in, its members read and its Linear's sign-in expired",
-  () =>
-    Effect.gen(function* () {
-      yield* drawWindow(RUN_PROFILE.SETTINGS_WORKSPACE);
+it.effect("the Settings workspace profile opens Settings on Acme signed in, its members read", () =>
+  Effect.gen(function* () {
+    yield* drawWindow(RUN_PROFILE.SETTINGS_WORKSPACE);
 
-      assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
-      assert.match(drawn(), /Maya Okafor/u);
-      assert.match(drawn(), /sam@example\.com/u);
-      assert.match(drawn(), /Sign-in expired/u);
-    }),
+    assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
+    assert.match(drawn(), /Maya Okafor/u);
+    assert.match(drawn(), /sam@example\.com/u);
+  }),
 );
 
 it.effect("the Admin profile opens Admin's Overview for the account, an admin", () =>

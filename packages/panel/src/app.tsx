@@ -52,14 +52,15 @@ import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
-import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
+import { HeldInboxesProvider } from "./tasks/held-inboxes.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
+import { forgetStandings } from "./tasks/use-link-standing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
@@ -180,14 +181,15 @@ export function App(): React.JSX.Element {
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
   const account = useAppSlice(APP_SLICE.ACCOUNT);
-  // Note that the account's key is read above the window, because every message box's Dictate reads it.
+  const accountKey =
+    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  // Note that the account's key is read above the window, because every message box's Dictate reads it,
+  // and the inboxes it holds for the session are that account's.
   return (
-    <OpenAiKeyProvider
-      account={
-        account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined
-      }
-    >
-      {landed ? <AppWindow /> : null}
+    <OpenAiKeyProvider account={accountKey}>
+      <HeldInboxesProvider account={accountKey}>
+        {landed ? <AppWindow /> : null}
+      </HeldInboxesProvider>
     </OpenAiKeyProvider>
   );
 }
@@ -204,11 +206,12 @@ function AppWindow(): React.JSX.Element {
   const inbox = useAppSlice(APP_SLICE.INBOX);
   const unseenAgents = useAppSlice(UNSEEN_AGENTS);
   const settingsHeld = useAppSlice(SETTINGS_HELD);
-  // A picture is read as the account signed in, so the window lets go of every one it read once that account changes.
+  // A picture, and a link's answer, is read as the account signed in, so the window lets go of every one it read once that account changes.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   useEffect(() => {
     forgetPictures();
+    forgetStandings();
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
@@ -417,7 +420,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
-    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW),
+    title: stepTitle(tab, tasks),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

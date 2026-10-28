@@ -50,7 +50,7 @@ import {
   planLimitReached,
 } from "../../http/http-effect.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -63,7 +63,7 @@ import {
   type PlanRefusal,
   RUNTIME_REFUSAL,
   type RuntimeRefusal,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { isNativeRuntime, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
 
 /** What a change of model or effort came to at a native agent's runner. */
@@ -78,11 +78,13 @@ export const RUNNER_CHOICE = {
 export type RunnerChoice = (typeof RUNNER_CHOICE)[keyof typeof RUNNER_CHOICE];
 
 /** A native harness's sessions: eve's interface, and the agent's model and effort as they stand handed to a running runner. */
-export interface NativeSessions<Turn extends BrainHostTurn = BrainHostTurn>
+export interface NativeSessions<Turn extends EveHostTurn = EveHostTurn>
   extends AgentSessions<Turn> {
   readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
   /** The session's runner ended, keeping its sandbox and the harness's session, so the next message relaunches it; whether no runner runs now. */
   readonly halt: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
+  /** The message lines an ended launch never took handed to a runner launched for them, where none runs (`runner-sessions.ts`'s `LINES_WAITING`); whether one was launched. */
+  readonly deliverWaiting: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
 }
 
 export interface NativeAgentSessionsService {
@@ -94,7 +96,7 @@ export interface NativeAgentSessionsService {
   readonly sessions: (
     runtime: NativeRuntime,
     account: string,
-  ) => Option.Option<Effect.Effect<NativeSessions<BrainHostTurn>>>;
+  ) => Option.Option<Effect.Effect<NativeSessions<EveHostTurn>>>;
 }
 
 /** The native harnesses a function can launch and write to: the harnesses in the web functions that ship the runner, a relay to them in the eve app. */
@@ -126,7 +128,7 @@ function preparingNamed<Outcome extends { readonly outcome: string }>(answered: 
 }
 
 /** The message as eve is handed it, as it always was: Luke's own id for its line is a native runner's alone. */
-function forEve<Turn extends BrainHostTurn>(message: EveMessage<Turn>): EveMessage<Turn> {
+function forEve<Turn extends EveHostTurn>(message: EveMessage<Turn>): EveMessage<Turn> {
   if (message.lineId === undefined) return message;
   const { lineId: _native, ...rest } = message;
   return rest;
@@ -144,14 +146,14 @@ const TO_EVE: Route = { runtime: CONVERSATION_RUNTIME.EVE };
  * runtime its conversation runs on, as above. The caller reads the
  * conversation's agent as it reads it everywhere, through its workspace.
  */
-export const routedSessions = <Turn extends BrainHostTurn>(
+export const routedSessions = <Turn extends EveHostTurn>(
   eve: AgentSessions<Turn>,
   account: string,
 ): Effect.Effect<AgentSessions<Turn>, never, DatabaseServices> =>
   Effect.map(sessionsRouter, (route) => route(eve, account));
 
 /** Wraps eve's client for one caller as `routedSessions` does. */
-export type SessionsRouter = <Turn extends BrainHostTurn>(
+export type SessionsRouter = <Turn extends EveHostTurn>(
   eve: AgentSessions<Turn>,
   account: string,
 ) => AgentSessions<Turn>;
@@ -165,12 +167,12 @@ export const sessionsRouter: Effect.Effect<SessionsRouter, never, DatabaseServic
   function* () {
     const store = yield* Effect.context<DatabaseServices>();
     const native = yield* Effect.serviceOption(NativeAgentSessions);
-    return <Turn extends BrainHostTurn>(eve: AgentSessions<Turn>, account: string) =>
+    return <Turn extends EveHostTurn>(eve: AgentSessions<Turn>, account: string) =>
       routed(eve, account, store, native);
   },
 );
 
-function routed<Turn extends BrainHostTurn>(
+function routed<Turn extends EveHostTurn>(
   eve: AgentSessions<Turn>,
   account: string,
   store: Context.Context<DatabaseServices>,

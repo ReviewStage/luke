@@ -73,6 +73,8 @@ import {
   mountThread,
   needsYouMark,
   noticeOf,
+  ON_EXPIRY,
+  ON_THRESHOLD,
   openOptions,
   pressKey,
   READER,
@@ -85,6 +87,7 @@ import {
   rowNamed,
   SHOW_KEY,
   SORT_KEY,
+  sendHeld,
   sendWords,
   settle,
   standKeymap,
@@ -152,19 +155,19 @@ function optionHeads(page: HTMLElement): (string | null)[] {
 
 test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
   world.listedWorkspace = ACME;
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Inbox item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
   assert.deepEqual(menuWords(), [
-    "Mark as unreadU",
-    "—",
     "Copy link",
+    "—",
+    "Mark as unreadU",
     "—",
     "Resolve without answering",
   ]);
@@ -197,7 +200,7 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   act(() => ellipsis().click());
   assert.deepEqual(
     menuWords(),
-    ["Mark as unreadU", "—", "Copy link"],
+    ["Copy link", "—", "Mark as unreadU"],
     "a settled item offers no Close",
   );
 });
@@ -263,7 +266,7 @@ function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: bo
 async function closeFromPane(page: HTMLElement): Promise<void> {
   const ellipsis =
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Inbox item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
   act(() => ellipsis.click());
   act(() => menuItem("Resolve without answering").click());
@@ -272,7 +275,7 @@ async function closeFromPane(page: HTMLElement): Promise<void> {
 }
 
 test("a close taken lets go of the item's draft, though another item is chosen", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   typeInComposer(itemPane(page), "Use 90% instead");
   await settle();
@@ -294,7 +297,7 @@ test("a close taken lets go of the item's draft, though another item is chosen",
 });
 
 test("a close the agent changed its item before is not taken: the item stands as the agent now asks it, though no read holds the newer revision yet", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const changed = { ...THRESHOLD, revision: 2, title: "Alert at 85%?", updatedAt: 6_000 };
   const sent = answeredCloses(() => ({ item: changed, taken: false }));
@@ -310,7 +313,7 @@ test("a close the agent changed its item before is not taken: the item stands as
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(optionHeads(page), [
     "Retry 3 times over an hourRecommended1Backs off 5, 15, then 40 minutes.",
@@ -324,14 +327,14 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
     options: [{ label: "Retry 3 times over an hour" }, { label: "Retry once" }],
   };
   world.inboxes.set(BILLING.id, [asking(THRESHOLD, ask), RETRY]);
-  const again = mount();
+  const again = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour1", "Retry once2"]);
 });
 
 test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and J still steps the list", async () => {
   const keys = standKeymap();
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const pane = itemPane(page);
   assert.deepEqual(
@@ -371,14 +374,14 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   act(() => keys.unmount());
 });
 
-test("Enter on a focused option sends the reply carrying the pick and never presses the option; with nothing picked, Send stands held and Enter sends nothing", async () => {
-  const { page } = mount();
+test("Enter on a focused option sends the reply carrying the pick and never presses the option; with nothing picked, Send stands held, and Enter sends nothing and says an option is missing", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const sent = heldMessages(repliedOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000090"));
   const pane = itemPane(page);
 
-  assert.equal(footWords(pane), "", "the box says nothing of what is missing");
-  assert.equal(answerSend(pane).disabled, true, "Send stands held");
+  assert.equal(footWords(pane), "", "the box says nothing of what is missing before a send");
+  assert.equal(sendHeld(pane), true, "Send stands held");
   assert.deepEqual(
     boxParts(pane),
     ["controls", "line: Add a note", "row: Attach files, Dictate, Send"],
@@ -388,6 +391,7 @@ test("Enter on a focused option sends the reply carrying the pick and never pres
   await settle();
   assert.deepEqual(sent, [], "a reply holding nothing goes nowhere");
   assert.deepEqual(checkedOptions(pane), [], "and Enter picked nothing");
+  assert.equal(footWords(pane), "Pick an option.");
 
   const once = openOptions(pane)[1] ?? assert.fail("no second option");
   act(() => once.click());
@@ -409,7 +413,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
     options: [{ label: "Email" }, { label: "Slack" }, { label: "Pager" }],
   });
   world.inboxes.set(BILLING.id, [several, RETRY]);
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const sent = heldMessages(repliedOn(several, "c1b2c3d4-0000-4000-8000-000000000091"));
   const pane = itemPane(page);
@@ -447,7 +451,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form of several fields, in its number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled sends nothing, the box naming nothing; Shift+Enter in a text field is a new line, an @ there picks a mention written in as its link, and an input method's Enter sends nothing", async () => {
+test("Enter anywhere in a form of several fields, in its number field or its text field's composer, sends what is filled, a required field left empty absent from it; with nothing filled it sends nothing, takes the keyboard to the first required field, and names it until something is filled; Shift+Enter in a text field is a new line, an @ there picks a mention written in as its link, and an input method's Enter sends nothing", async () => {
   const form = asking(EXPIRY, {
     type: INBOX_ASK.ANSWER,
     fields: [
@@ -474,11 +478,17 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
   keyOn(retries, "Enter");
   await settle();
   assert.deepEqual(sent, []);
-  assert.equal(footWords(pane), "");
+  assert.equal(footWords(pane), "Fill in Severity.");
+  assert.equal(
+    field("Severity").contains(document.activeElement),
+    true,
+    "the keyboard is taken to the field missing",
+  );
 
   // Note that the composer types each newline as Shift+Enter, so the line in the value sent is Shift+Enter's.
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
+  assert.equal(footWords(pane), "", "a field filled lets the line go");
   pressInComposer(field("Reason"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");
@@ -713,7 +723,7 @@ const THRESHOLD_ANSWERED: InboxItem = {
 };
 
 test("an answer leaves Needs you the moment it is sent, its plan's count dropping with it, and no stale read brings it back: not its plan's own held read, nor the list's once another plan's item is chosen, nor main's word before it caught up", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { sent, answer } = gatedAnswers();
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
@@ -778,7 +788,7 @@ function placesOf(page: HTMLElement): string[] {
 test("on To do, answering the chosen item draws its row gray where it stood, and choosing another row clears it", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
@@ -815,7 +825,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
 
@@ -871,7 +881,7 @@ test.for(ANSWER_VIEWS)(
 );
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { answer } = gatedAnswers();
   answerWithNote(page, "Use 90%");
@@ -924,7 +934,7 @@ test("a nod on a notice the agent posted over first is not taken: the notice sta
 });
 
 test("an item its agent posts again after it was answered needs you again once a read holds the newer revision, though the list's older read still stands for it elsewhere", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { answer } = gatedAnswers();
   answerWithNote(page, "Use 90%");
@@ -989,7 +999,7 @@ test("picking an option in the draft reply stands it picked and lights Send, the
 
   act(() => openOptions(pane)[1]?.click());
   assert.deepEqual(checkedOptions(pane), [], "pressed again, the pick is let go");
-  assert.equal(answerSend(pane).disabled, true, "and Send stands held again");
+  assert.equal(sendHeld(pane), true, "and Send stands held again");
   assert.equal(footWords(pane), "", "nothing says the ask stays open");
 
   // The number keys still pick, from wherever in the Inbox the reader stands.
@@ -1090,7 +1100,7 @@ test("an ask of words alone is a plain box with no controls, its line asking for
   assert.deepEqual(draftReply(pane), ["You"], "no controls stand in the box");
   assert.equal(pane.querySelector("[data-inbox-draft-ask]"), null, "and no Answer press");
   assert.deepEqual(boxParts(pane), ["line: Reply", "row: Attach files, Dictate, Send"]);
-  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(sendHeld(pane), true, "an empty box sends nothing");
   assert.equal(footWords(pane), "");
 
   typeInComposer(pane, "Nothing needs you right now.");
@@ -1207,7 +1217,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
   assert.equal(askMarker(pane), null);
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
-  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
+  assert.equal(sendHeld(pane), true, "nothing ticked, nothing to send");
 
   act(() => steps()[0]?.click());
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
@@ -1306,7 +1316,7 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   assert.equal(markDone(), "false", "letting a step go takes Mark done back off");
   assert.equal(answerSend(pane).disabled, false, "the step still ticked goes with the reply");
   act(() => steps()[0]?.click());
-  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
+  assert.equal(sendHeld(pane), true, "nothing ticked, nothing to send");
   assert.equal(footWords(pane), "");
   act(() => steps()[0]?.click());
   act(() => steps()[1]?.click());

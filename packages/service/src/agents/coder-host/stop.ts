@@ -26,7 +26,8 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { admitsPlanWriter } from "../agent-reach.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
+import { deploymentEve } from "../deployment-eve.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
@@ -34,8 +35,7 @@ import {
   EVE_MOUNT,
   type EveMount,
   eveSessions,
-} from "../brain-host/eve-sessions.js";
-import { deploymentEve } from "../deployment-eve.js";
+} from "../eve-host/eve-sessions.js";
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
@@ -86,7 +86,7 @@ export interface EveReach {
  * asks too), which eve's channels never read, so it reaches eve as the
  * deployment acting for the account, under the deployment's own secret
  * (`../deployment-eve.ts`): the channel's door admits that caller only for
- * what its actor admits (`brain-host/auth.ts`), and only on a session or a
+ * what its actor admits (`eve-host/auth.ts`), and only on a session or a
  * conversation the account reaches, as it holds every caller. `account` is
  * the one the route resolved from this request (`resolveUserId`), never one
  * a request or a row names, so the cookie names the account eve acts for
@@ -98,7 +98,7 @@ export interface EveReach {
  * cannot open or steer one: a route that sends the account's words asks for
  * `EveTypedTurn` by name.
  */
-export function eveFor<Turn extends BrainHostTurn = never>(
+export function eveFor<Turn extends EveHostTurn = never>(
   reach: EveReach,
   request: Request,
   account: string,
@@ -238,6 +238,8 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,
+  /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or Luke's. */
+  by?: string,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
@@ -274,6 +276,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
         turnId: turn.id,
         at,
         ...(key === undefined || !accepted ? undefined : { key }),
+        ...(by === undefined ? undefined : { by }),
       }),
     ),
   );

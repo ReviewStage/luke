@@ -4,6 +4,7 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
+import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { inboxWaitsOn } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -18,6 +19,7 @@ import {
   ErrorState,
   Fill,
   GAP,
+  InlineEdit,
   List,
   ListRow,
   MoreButton,
@@ -64,16 +66,12 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCopyToast } from "../copy-feedback.js";
-import {
-  agentPlace,
-  copyLinkItem,
-  LinkWorkspaceProvider,
-  useCopyLinkItem,
-} from "../copy-link-item.js";
+import { copyLinkItem, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
+import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
@@ -84,8 +82,9 @@ import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { useExperiment } from "../use-app-state.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
-import { useAgentArchive } from "./agent-archive.js";
+import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import { automationNextText } from "./automation-words.js";
 import {
@@ -101,7 +100,6 @@ import {
   SectionSkeleton,
 } from "./person-frame.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
-import { useTasksWaiting } from "./places-waiting.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
@@ -186,9 +184,11 @@ const AUTOMATION_THING = "Automation";
 /**
  * One of their agents as a row: its tile, its name, the task it works on,
  * and when it last moved; a press opens its tab, and its ⋯, right-click and
- * menu key offer Copy link and Archive, as a task's summary offers them,
- * asking first while a teammate's agent still works, read again by its own
- * id wherever it stands.
+ * menu key offer the agent's one menu over the doors a row has
+ * (`agent-actions.tsx`), as a task's summary offers it: Copy link, Rename,
+ * which turns the row into its name's field, Archive, asking first while a
+ * teammate's agent still works, read again by its own id wherever it
+ * stands, and Permanently delete, asked first.
  */
 function AgentRow({
   each,
@@ -205,38 +205,67 @@ function AgentRow({
   const { act } = useAct();
   // Note that the agent is read again by its own id before a teammate's is archived, because the agents control reads only the open task's.
   const control = { ...tasks.agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
-  const archive = useAgentArchive(agent, control, tasks.shown);
-  const copyLink = useCopyLinkItem()(agentPlace({ id: agent.id, planId: task.id }));
+  const actions = useAgentActions({ ...agent, planId: task.id }, control, {
+    label: subject.name,
+    shown: tasks.shown,
+    terminals: { onOpenTerminal: undefined },
+  });
+  const row = useRef<HTMLElement | null>(null);
+  const hold = useCallback((element: HTMLElement | null) => {
+    row.current = element;
+  }, []);
+  const { rename } = actions;
+  const editing = rename?.editing === true;
+  const endedByKey = useRefocusAfterEdit(editing, row);
   return (
     <>
       <RowHintOptions card={card} cardBeside>
         <ListRow
+          ref={hold}
           motionKey={agent.id}
           leading={
             <span className={HOME_ROW_PICTURE}>
               <ActorMark actor={subject.tile} />
             </span>
           }
-          title={subject.name}
-          hint={{ Hint: RowHint, label: subject.name }}
-          meta={
-            <span className={HOME_ROW_META}>
-              <OneLine className={HOME_ROW_CONTEXT} words={task.name}>
-                {task.name}
-              </OneLine>
-              {agentEndMark(agent, false)}
-              {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
-            </span>
+          title={
+            editing && rename !== undefined ? (
+              <InlineEdit
+                value={rename.asked ?? subject.name}
+                label="Agent name"
+                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                editing
+                onEnd={(edit) => {
+                  endedByKey(edit.byKey);
+                  rename.end(edit.value);
+                }}
+              />
+            ) : (
+              subject.name
+            )
           }
-          onPress={() => tasks.onShowAgent(task.id, agent.id)}
-          menu={rowMenu(
-            AGENT_THING,
-            copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]],
-            tasks.shown,
-          )}
+          description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
+          hint={editing ? undefined : { Hint: RowHint, label: subject.name }}
+          meta={
+            editing ? null : (
+              <span className={HOME_ROW_META}>
+                <OneLine className={HOME_ROW_CONTEXT} words={task.name}>
+                  {task.name}
+                </OneLine>
+                {agentEndMark(agent, false)}
+                {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
+              </span>
+            )
+          }
+          onPress={editing ? undefined : () => tasks.onShowAgent(task.id, agent.id)}
+          menu={
+            editing
+              ? undefined
+              : rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), tasks.shown)
+          }
         />
       </RowHintOptions>
-      {archive.dialog}
+      {actions.dialog}
     </>
   );
 }
@@ -581,7 +610,6 @@ function TaskRows({
 }): React.JSX.Element {
   const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
   const drawn = useLeaving(shown, taskKey);
-  const waitingOn = useTasksWaiting(tasks);
   return (
     <>
       {drawn.map(({ key, value: task }) => (
@@ -592,7 +620,6 @@ function TaskRows({
           now={now}
           face={false}
           unread={unread(task)}
-          waiting={waitingOn.get(task.id) ?? 0}
           onOpen={() => tasks.onSelect(task.id)}
         />
       ))}

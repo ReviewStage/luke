@@ -24,7 +24,6 @@ import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   COMMENT_TOOL_REFUSAL,
@@ -47,8 +46,6 @@ import {
   runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
@@ -63,6 +60,8 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
 import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";
@@ -309,12 +308,7 @@ export function runAgentTools(
 ): Effect.Effect<
   WireRecord,
   never,
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog
-  | WorkspaceLinearConnect
-  | SentryApp
+  DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | SentryApp
 > {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);

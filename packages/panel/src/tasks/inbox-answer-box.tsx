@@ -7,7 +7,14 @@ import {
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
 import { EXPERIMENT } from "@luke/settings";
-import { Checkbox, ComposerBody, ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
+import {
+  Checkbox,
+  ComposerBody,
+  ComposerFoot,
+  type ComposerNote,
+  type ComposerRefusal,
+  STATUS_TONE,
+} from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -30,10 +37,13 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
 import { type ComposerPickers, useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { focusMissing } from "./inbox-ask-controls.js";
+import { type InboxMissing, missingWords } from "./inbox-ask-words.js";
 import {
   acknowledgedOnOpen,
   asksNod,
   type InboxDraft,
+  inboxMissing,
   inboxNoteReading,
   inboxThreadSend,
 } from "./inbox-model.js";
@@ -69,7 +79,11 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  *
  * The box says nothing of its own about what a send does: Send stands held
  * until the box holds something to send, a pick, a tick, a field filled,
- * words, or files, and that is all it says. Enter sends what Send would,
+ * words, or files, and that is all it says. While a question's answer is
+ * unfinished, Send still stands held but takes a press (`aria-disabled`),
+ * and a press or Enter takes the keyboard to what the answer lacks, the
+ * option, the field, or the line, and says what that is under the foot's
+ * bar ("Fill in Host."), until it is filled. Enter sends what Send would,
  * Shift+Enter is a new line, and Escape leaves the box, as in the agent's
  * box. The one exception is a notice waiting on the reader's nod, where
  * Send reads "Got it" while the box is empty, which settles it without
@@ -271,6 +285,8 @@ interface AnswerFormProps {
   readonly held: boolean;
   /** Whether the box holds something to send, which lights its Send. */
   readonly sendable: boolean;
+  /** Why an empty Send sends nothing, where the box can say: told on its press, said under the bar; nothing where it cannot. */
+  readonly refuses?: ComposerRefusal | undefined;
   readonly onSubmit: () => void;
   /** Whether files are dragged over the box, which brightens its edge. */
   readonly dropping?: boolean | undefined;
@@ -304,6 +320,7 @@ function AnswerForm({
   sending,
   held,
   sendable,
+  refuses,
   onSubmit,
   dropping,
 }: AnswerFormProps): React.JSX.Element {
@@ -350,6 +367,7 @@ function AnswerForm({
           held,
           busy: sending,
           busyLabel: SENDING,
+          refuses,
         }}
         note={says}
       />
@@ -479,6 +497,15 @@ function AnswerCard({
   const sendable = starts
     ? !emptyBox(draft) && draft.note.trim().length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS
     : nod || inboxThreadSend(thread, draft) !== undefined;
+  // Note that what an unfinished answer lacks is said only once a send was refused, and goes once it is filled.
+  const missing = starts || nod ? undefined : inboxMissing(thread, draft);
+  const [wanting, setWanting] = useState(false);
+  if (wanting && missing === undefined) setWanting(false);
+  const box = useRef<HTMLDivElement>(null);
+  const refuse = (lacks: InboxMissing) => {
+    setWanting(true);
+    focusMissing(box.current, lacks);
+  };
   const placeholder = starts ? NEW_THREAD_PLACEHOLDER : answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
@@ -543,7 +570,7 @@ function AnswerCard({
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
   return (
-    <div className={COMPOSER_ROOM_CLASS} {...files.drop.target}>
+    <div ref={box} className={COMPOSER_ROOM_CLASS} {...files.drop.target}>
       <AnswerForm
         dropping={files.drop.dropping}
         field={field}
@@ -583,10 +610,19 @@ function AnswerCard({
         sending={sending}
         held={held}
         sendable={sendable}
+        refuses={
+          missing === undefined
+            ? undefined
+            : {
+                onRefused: () => refuse(missing),
+                words: wanting ? missingWords(missing) : undefined,
+              }
+        }
         onSubmit={() => {
           if (files.reading) return;
           if (starts) start(newThread);
           else if (nod) acknowledge();
+          else if (missing !== undefined) refuse(missing);
           else message();
         }}
       />

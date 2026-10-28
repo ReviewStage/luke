@@ -48,7 +48,6 @@ const signedInStore = Effect.gen(function* () {
   const store = new SettingsStore({
     directory: () => directory,
     cipher: CIPHER,
-    overrides: { voice: undefined },
     fileSystem: yield* FileSystem.FileSystem,
     path: yield* Path.Path,
   });
@@ -120,16 +119,14 @@ const writerOver = (
 it.effect("the service's answer is what the store keeps and the settings carry", () =>
   Effect.gen(function* () {
     const store = yield* signedInStore;
-    const { client, bodies } = serviceAnswering(async () =>
-      holding({ [EXPERIMENT.BROWSER]: true }),
-    );
+    const { client, bodies } = serviceAnswering(async () => holding({ [EXPERIMENT.MEMORY]: true }));
 
-    const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.BROWSER, true);
+    const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.MEMORY, true);
 
     assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
-    assert.deepEqual(written.settings.experiments, { [EXPERIMENT.BROWSER]: true });
-    assert.deepEqual(bodies, [{ experiments: { [EXPERIMENT.BROWSER]: true } }]);
-    assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.BROWSER]: true });
+    assert.deepEqual(written.settings.experiments, { [EXPERIMENT.MEMORY]: true });
+    assert.deepEqual(bodies, [{ experiments: { [EXPERIMENT.MEMORY]: true } }]);
+    assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.MEMORY]: true });
   }).pipe(onDisk),
 );
 
@@ -148,10 +145,10 @@ it.effect(
       const writer = writerOver(client, store);
 
       const turnedOn = yield* Effect.forkChild(
-        writer.write(ACCOUNT.email, EXPERIMENT.BROWSER, true),
+        writer.write(ACCOUNT.email, EXPERIMENT.MEMORY, true),
       );
       const turnedOff = yield* Effect.forkChild(
-        writer.write(ACCOUNT.email, EXPERIMENT.BROWSER, false),
+        writer.write(ACCOUNT.email, EXPERIMENT.MEMORY, false),
       );
       yield* until(() => bodies.length > 0);
       yield* until(() => bodies.length > 1);
@@ -161,10 +158,10 @@ it.effect(
       yield* Fiber.join(turnedOff);
 
       assert.deepEqual(bodies, [
-        { experiments: { [EXPERIMENT.BROWSER]: true } },
-        { experiments: { [EXPERIMENT.BROWSER]: false } },
+        { experiments: { [EXPERIMENT.MEMORY]: true } },
+        { experiments: { [EXPERIMENT.MEMORY]: false } },
       ]);
-      assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.BROWSER]: false });
+      assert.deepEqual((yield* store.snapshot()).experiments, { [EXPERIMENT.MEMORY]: false });
     }).pipe(onDisk),
 );
 
@@ -173,7 +170,7 @@ it.effect("a write the service did not answer leaves the switch where it stood",
     const store = yield* signedInStore;
     const { client } = serviceAnswering(async () => new Response("unavailable", { status: 503 }));
 
-    const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.BROWSER, true);
+    const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.MEMORY, true);
 
     assert.equal(written.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(written.reason, EXPERIMENT_UNANSWERED);
@@ -189,11 +186,11 @@ it.effect(
       const signedOut = gate();
       const { client, bodies } = serviceAnswering(async () => {
         await signedOut.opened;
-        return holding({ [EXPERIMENT.BROWSER]: true });
+        return holding({ [EXPERIMENT.MEMORY]: true });
       });
 
       const writing = yield* Effect.forkChild(
-        writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.BROWSER, true),
+        writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.MEMORY, true),
       );
       yield* until(() => bodies.length > 0);
       yield* store.clearAccount();

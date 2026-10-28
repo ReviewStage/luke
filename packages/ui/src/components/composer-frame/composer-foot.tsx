@@ -1,5 +1,5 @@
 import type { ShortcutChord } from "@luke/settings/shortcuts";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
@@ -8,6 +8,7 @@ import {
   IconButton,
   SUBMIT_STATE,
 } from "../button/button.js";
+import { ErrorLine } from "../error-line/error-line.js";
 import { ErrorState, type ErrorStateRemedy } from "../error-state/error-state.js";
 import { LengthCounter } from "../length-counter/length-counter.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
@@ -31,7 +32,12 @@ import { Tooltip } from "../tooltip/hint.js";
  * is named by its busy words, and turns its ring only once the send has
  * been out a moment, so one that lands at once never flashes it. Inside a
  * frame that is a form it submits the form, as Enter in the field does;
- * given `onSend` it acts on its own press instead.
+ * given `onSend` it acts on its own press instead. A box whose empty send
+ * can say why it is empty, an answer still unfinished, hands it `refuses`:
+ * the send then stays pressable while empty, read as unavailable
+ * (`aria-disabled`), a press telling the owner, and what the owner says
+ * stands under the bar in an `ErrorLine` that describes the send, said as
+ * it lands, rather than a press that does nothing and says nothing.
  *
  * A send that settles something with no message to send, a notice's "Got it",
  * reads in words (`inWords`) rather than as the round glyph, and is the
@@ -71,7 +77,17 @@ export type ComposerSend = {
   inWords?: boolean | undefined;
   /** The key that sends where it is no bare Enter, drawn on its hint: ⌘↩ for a box whose Enter breaks the line. */
   chord?: ShortcutChord | undefined;
+  /** Where the box can say why it holds nothing to send: what its press while empty tells, and what it says, once said, under the bar. */
+  refuses?: ComposerRefusal | undefined;
 } & BusyProps;
+
+/** Why an empty send takes no message: told on its press, and said under the bar. */
+export interface ComposerRefusal {
+  /** Hears a press of the send while the box is empty. */
+  readonly onRefused: () => void;
+  /** Why the send was refused, as "Pick an option."; nothing until it has been. */
+  readonly words: string | undefined;
+}
 
 /** Stop in the send's place: its name, its press, and whether the stop it asked for is still out. */
 export type ComposerStop = {
@@ -135,11 +151,26 @@ function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The send: the round submit in the panel's ink, busy while its send is out. */
-function SendButton({ send }: { send: ComposerSend }): React.JSX.Element {
-  const { label, empty, held = false, inWords = false, onSend, chord } = send;
+/** The send: the round submit in the panel's ink, busy while its send is out, and pressable while empty where it says why (`refuses`), described by that line (`refusalId`). */
+function SendButton({
+  send,
+  refusalId,
+}: {
+  send: ComposerSend;
+  refusalId: string;
+}): React.JSX.Element {
+  const { label, empty, held = false, inWords = false, onSend, chord, refuses } = send;
   const busy = send.busy === true ? { busy: true, busyLabel: send.busyLabel } : {};
   const type = onSend === undefined ? BUTTON_TYPE.SUBMIT : BUTTON_TYPE.BUTTON;
+  // Note that an empty send that can say why stays pressable, and a held one never is.
+  const refusing =
+    refuses === undefined
+      ? {}
+      : {
+          focusableWhenDisabled: empty && !held,
+          onRefused: refuses.onRefused,
+          "aria-describedby": refusalId,
+        };
   if (inWords) {
     return (
       <Button
@@ -147,6 +178,7 @@ function SendButton({ send }: { send: ComposerSend }): React.JSX.Element {
         type={type}
         disabled={empty || held}
         onClick={onSend}
+        {...refusing}
         {...busy}
       >
         {label}
@@ -162,6 +194,7 @@ function SendButton({ send }: { send: ComposerSend }): React.JSX.Element {
         type={type}
         disabled={empty || held}
         onClick={onSend}
+        {...refusing}
         {...busy}
       />
     </Tooltip>
@@ -209,6 +242,7 @@ export function ComposerFoot({
   /** The one line under the bar, where there is something to say. */
   note?: ComposerNote | undefined;
 }): React.JSX.Element {
+  const refusalId = useId();
   return (
     <FootBox>
       <FootBar>
@@ -220,13 +254,21 @@ export function ComposerFoot({
                 <LengthCounter length={counter.length} limit={counter.limit} />
               )}
               {actions}
-              {stop === undefined ? <SendButton send={send} /> : <StopButton stop={stop} />}
+              {stop === undefined ? (
+                <SendButton send={send} refusalId={refusalId} />
+              ) : (
+                <StopButton stop={stop} />
+              )}
             </FootEnd>
           </>
         ) : (
           <div className="luke-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
         )}
       </FootBar>
+      {/* Note that the line stands, empty, for as long as the send can refuse, so what it says lands as said. */}
+      {send.refuses === undefined ? null : (
+        <ErrorLine id={refusalId}>{send.refuses.words}</ErrorLine>
+      )}
       {note === undefined ? null : (
         <div className="luke-composer-foot-note flex flex-col items-start gap-tight-gap">
           <ErrorState onRetry={note.onRetry} remedy={note.remedy}>

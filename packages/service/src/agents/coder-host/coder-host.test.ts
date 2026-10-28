@@ -19,6 +19,7 @@ import {
   writeDelegation,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
+import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
@@ -39,13 +40,14 @@ import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/datab
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_STATUS, INBOX_TOOL } from "@luke/features/inbox-wire";
-import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
+import { agentTranscriptLiveRowsSchema, LIVE_POLL } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -82,7 +84,9 @@ import {
   unparsedWire,
   type WireRecord,
 } from "../../core.js";
+import { liveCursorParts } from "../../live/live-procedures.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
+import { agentTranscriptLive } from "../../sync/live-queries.js";
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { saveNotes } from "../../tasks/plan-notes.js";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
@@ -90,16 +94,16 @@ import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { added } from "../../testing/task-contents.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_AUTHENTICATOR,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN,
-} from "../brain-host/bounds.js";
-import { memoryRelayState } from "../brain-host/relay.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
+import {
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_AUTHENTICATOR,
+  EVE_HOST_DEPLOYMENT_PRINCIPAL,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_REFUSAL,
+  EVE_HOST_TURN,
+} from "../eve-host/bounds.js";
+import { memoryRelayState } from "../eve-host/relay.js";
 import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
@@ -207,8 +211,8 @@ function principal(
 /** The developer's own seat in the agent's conversation: the same principal opened the session and speaks now, on a typed turn. */
 function ownSeat(userId: string, conversationId: string): SessionAuth {
   const seat = principal(userId, {
-    [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
-    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+    [EVE_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
+    [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
   });
   return { current: seat, initiator: seat };
 }
@@ -216,13 +220,13 @@ function ownSeat(userId: string, conversationId: string): SessionAuth {
 /** The voice's seat in the agent's conversation: the deployment acting for the agent's starter, on a spoken turn, as the coder door admits a call's ask. */
 function spokenSeat(target: ConversationTarget): SessionAuth {
   const seat: SessionAuthContext = {
-    principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-    principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
-    authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    principalId: EVE_HOST_DEPLOYMENT_PRINCIPAL,
+    principalType: EVE_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    authenticator: EVE_HOST_AUTHENTICATOR.DEPLOYMENT,
     attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.SPOKEN,
-      [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: target.userId,
+      [EVE_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
+      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.SPOKEN,
+      [EVE_HOST_ATTRIBUTE.ACCOUNT]: target.userId,
     },
   };
   return { current: seat, initiator: seat };
@@ -824,6 +828,119 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
+      "a transcript's cursor answer carries every message written or amended past the reader's cursor, the journal its turn moved past a later line included, and nothing else, and its newest messages whole once a rewind leaves the cursor behind",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+          const state = memoryRelayState();
+          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          const db = yield* Database;
+          const line = (text: string) =>
+            writer.writeAwaitingLine(
+              target,
+              { text, clientKey: randomUUID(), sender: { kind: MESSAGE_SENDER.MEMBER, userId } },
+              Effect.succeed(true),
+            );
+          const relayed = (events: readonly MessageStreamEvent[]) =>
+            Effect.forEach(
+              events,
+              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+              (event) => host.relay(event, admitted, session as never, state, {}),
+              { discard: true },
+            );
+          /** Every message of the conversation as the table holds it: its place and the revision it was last amended at, by id. */
+          const standing = Effect.map(
+            db
+              .select({ id: messages.id, seq: messages.seq, revision: messages.revision })
+              .from(messages)
+              .where(eq(messages.conversationId, target.conversationId)),
+            (rows) =>
+              new Map(rows.map((row) => [row.id, { seq: row.seq, revision: row.revision }])),
+          );
+          type Standing = Effect.Success<typeof standing>;
+          /** The messages written, moved, or amended between two readings of the table, by id. */
+          const changed = (from: Standing, to: Standing) =>
+            [...to]
+              .filter(([id, now]) => {
+                const was = from.get(id);
+                return was?.seq !== now.seq || was.revision !== now.revision;
+              })
+              .map(([id]) => id)
+              .toSorted();
+          /** The transcript's live read for a reader holding its newest messages at `cursor`: where they stand, and the messages it answers, by id. */
+          const answered = (cursor: string) =>
+            Effect.map(
+              liveCursorParts(
+                agentTranscriptLive,
+                {
+                  ownerId: target.userId,
+                  conversationId: target.conversationId,
+                  parentConversationId: target.conversationId,
+                  agentId: agent.id,
+                  readerId: userId,
+                },
+                { [LIVE_POLL.CURSOR]: cursor },
+              ),
+              ({ queries }) => ({
+                at: queries.window.cursor,
+                ids: Schema.decodeUnknownSync(Schema.Array(transcriptWindowRowSchema))(
+                  queries.window.rows,
+                )
+                  .map((row) => row.id)
+                  .toSorted(),
+              }),
+            );
+          const turn = codingTurn("turn_0", "turn.completed");
+          const opening = turn.findIndex((event) => event.type === "actions.requested");
+          const stepsBegun = turn.findIndex((event) => event.type === "message.completed") - 1;
+
+          yield* line("Start on the invites.");
+          const opened = yield* standing;
+          const whole = yield* answered(CODING_AGENT_CURSOR_START);
+          assert.deepEqual(whole.ids, [...opened.keys()].toSorted());
+
+          // The turn opens its journal.
+          yield* relayed(turn.slice(0, opening));
+          const begun = yield* standing;
+          const first = yield* answered(whole.at?.next ?? assert.fail("no cursor"));
+          assert.equal(first.at?.past, whole.at?.next);
+          assert.deepEqual(first.ids, changed(opened, begun));
+
+          // The journal grows a step in place, where it stands.
+          yield* relayed(turn.slice(opening, stepsBegun));
+          const working = yield* standing;
+          const second = yield* answered(first.at?.next ?? assert.fail("no cursor"));
+          const grown = changed(begun, working);
+          assert.ok(
+            grown.length > 0 && grown.every((id) => working.get(id)?.seq === begun.get(id)?.seq),
+            "the journal was amended where it stood",
+          );
+          assert.deepEqual(second.ids, grown);
+
+          // A line lands while the turn runs, and the closing journal moves past it.
+          yield* line("Use the settings page.");
+          yield* relayed(turn.slice(stepsBegun));
+          const settled = yield* standing;
+          const third = yield* answered(second.at?.next ?? assert.fail("no cursor"));
+          const journal = [...working].find(([id, was]) => settled.get(id)?.seq !== was.seq);
+          assert.ok(journal !== undefined, "the closed journal moved to a later place");
+          assert.ok(third.ids.includes(journal[0]));
+          assert.deepEqual(third.ids, changed(working, settled));
+          assert.ok(third.ids.length < settled.size, "nothing standing as the cursor held it");
+
+          // A rewind to the later line drops it and the journal behind it.
+          const later = changed(working, settled).find((id) => !working.has(id));
+          assert.ok(later !== undefined);
+          assert.ok(Result.isSuccess(yield* rewindConversation(target, later)));
+          const rewound = yield* answered(third.at?.next ?? assert.fail("no cursor"));
+          assert.equal(rewound.at?.past, undefined, "answered whole, past no cursor");
+          assert.deepEqual(rewound.ids, [...(yield* standing).keys()].toSorted());
+        }),
+    );
+
+    it.effect(
       "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing for an account outside the agent's workspace, nor for a member once removed",
       () =>
         Effect.gen(function* () {
@@ -1139,7 +1256,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           assert.deepEqual(
             yield* host.admit(auth, sessionId),
-            Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+            Result.fail(EVE_HOST_REFUSAL.NOT_CURRENT_SESSION),
           );
           assert.ok(Result.isSuccess(yield* host.admit(auth, fresh)));
           assert.ok(seed !== undefined);
@@ -2073,7 +2190,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               handed,
             );
           const desked = (text: string | undefined) => text?.includes(DESK_LEAD) === true;
@@ -2113,7 +2230,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // A coder's turn carries no desk.
           const coderTurn = yield* host.turnMessage(
             coderAdmitted,
-            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
             {},
           );
           assert.ok(!desked(coderTurn.text), coderTurn.text ?? "");
@@ -2137,7 +2254,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               handed,
             );
           const noticed = (text: string | undefined) =>
@@ -2212,7 +2329,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const desk =
             (yield* host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               {},
             )).text ?? "";
           const named = (agent: { readonly title: string | null }) =>
@@ -2241,7 +2358,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               handed,
             );
           const told = (message: { readonly text: string | undefined }) =>
@@ -2292,7 +2409,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const coder = yield* openAgent(host);
           const coderTurn = yield* host.turnMessage(
             coder.admitted,
-            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
             { opened: true },
           );
           assert.ok(!told(coderTurn), coderTurn.text ?? "");
@@ -2374,7 +2491,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const host = yield* hostOverStore();
           const { admitted } = yield* openAgent(host);
           const typedOn = (handed: TurnHanded) =>
-            host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
+            host.turnMessage(admitted, { kind: EVE_HOST_TURN.TYPED, turnId: undefined }, handed);
 
           const after = yield* typedOn({ spoken: true, opened: true });
           assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
@@ -2401,7 +2518,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               Effect.suspend(() =>
                 host.turnMessage(
                   admitted,
-                  { kind: BRAIN_HOST_TURN.TYPED, turnId: hostTurnId(sessionId, eveTurnId) },
+                  { kind: EVE_HOST_TURN.TYPED, turnId: hostTurnId(sessionId, eveTurnId) },
                   handed,
                 ),
               ),
@@ -2592,130 +2709,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               [opened.id, undefined],
               [line.success.id, { journalId: journal.id, afterStep: 1 }],
             ],
-          );
-        }),
-    );
-
-    it.effect(
-      "a line the voice says on a call names on the agent's page the turn its ask ran in, with the steps begun before the ask where it joined a typed turn under way, said before the ask bound (read again once it does), while that turn ran, or three minutes after it settled alike, and the turn's journal names the same turn; a line whose ask learned no turn names none",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
-          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-          const state = memoryRelayState();
-          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
-          const relayed = (events: readonly MessageStreamEvent[]) =>
-            Effect.forEach(events, (event) =>
-              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-              host.relay(event, admitted, session as never, state, {}),
-            );
-          const opening = codingTurn("turn_0", "turn.completed");
-          yield* relayed(
-            opening.slice(0, opening.findIndex((e) => e.type === "step.completed") + 1),
-          );
-          const asks = askRecord();
-          const delegationId = `dl_${randomUUID()}`;
-          const ask = yield* asks.record({
-            userId: target.userId,
-            conversationId: target.conversationId,
-            clientId: delegationId,
-            origin: ASK_ORIGIN.SPOKEN,
-            createdAt: new Date(NOW),
-          });
-          yield* asks.dispatchOnce(target, ask.id, () =>
-            Effect.succeed({ sessionId, deliveryId: "delivery-call" }),
-          );
-          const lineId = `line-${delegationId}`;
-          yield* writer.upsertSpokenRow(target, {
-            role: MESSAGE_ROLE.USER,
-            clientId: lineId,
-            text: "Where are you with the invites?",
-            metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-          });
-          const said = (clientId: string, text: string, delegation: string) =>
-            writer.upsertSpokenRow(target, {
-              role: MESSAGE_ROLE.ASSISTANT,
-              clientId,
-              text,
-              metadata: {
-                author: MESSAGE_AUTHOR.VOICE_MODEL,
-                channel: MESSAGE_CHANNEL.VOICE,
-                delegation_id: delegation,
-              },
-            });
-          const pageAfter = (cursor: typeof CURSOR_START) =>
-            transcriptPast(target, CODER_TOOL_SET, cursor, agent).pipe(
-              Effect.provide(modelCatalogOf(CATALOG)),
-            );
-          // The voice says it is checking before eve has steered the ask in, so before it binds, and a
-          // tab following the transcript reads that line then.
-          yield* said("said-early", "Checking now.", delegationId);
-          const early = yield* pageAfter(CURSOR_START);
-          assert.deepEqual(
-            early.messages.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).at(-1)
-              ?.readFrom,
-            undefined,
-          );
-          session.auth = { current: spokenSeat(target).current, initiator: auth.initiator };
-          const tail = steeredTail("turn_0", "The developer asked where the invites are.", [
-            "delivery-call",
-          ]);
-          yield* relayed(tail.slice(0, 2));
-          yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
-
-          // The voice answers the ask while the turn it joined still runs, as on a call into a busy agent.
-          yield* said("said-mid-turn", "The table is built; the tests run now.", delegationId);
-          yield* relayed(tail.slice(2));
-          const turnId = hostTurnId(sessionId, "turn_0");
-          assert.equal((yield* turnRow(turnId))?.status, TURN_STATUS.SETTLED);
-          // And again three minutes after the turn settled, past the window the stored row names it in.
-          yield* TestClock.adjust(Duration.minutes(3));
-          yield* said("said-later", "The tests passed, by the way.", delegationId);
-          // A line following an ask the voice handed on that never reached a turn.
-          const unbound = `dl_${randomUUID()}`;
-          yield* asks.record({
-            userId: target.userId,
-            conversationId: target.conversationId,
-            clientId: unbound,
-            origin: ASK_ORIGIN.SPOKEN,
-            createdAt: new Date(NOW),
-          });
-          yield* said("said-unbound", "I couldn't reach it.", unbound);
-
-          // The tab reads the early line again past its cursor, now naming the turn its ask joined.
-          const reread = (yield* pageAfter(early.cursor)).messages.find((message) =>
-            message.parts.some((part) => isTextUIPart(part) && part.text === "Checking now."),
-          );
-          assert.deepEqual(reread?.readFrom, { turnId, afterStep: 1 });
-          const page = yield* pageAfter(CURSOR_START);
-          const spoken = page.messages.filter(
-            (message) =>
-              message.role === MESSAGE_ROLE.ASSISTANT &&
-              "channel" in message.metadata &&
-              message.metadata.channel === MESSAGE_CHANNEL.VOICE,
-          );
-          assert.deepEqual(
-            spoken.map((message) => [message.parts, message.readFrom]),
-            [
-              [[{ type: "text", text: "Checking now.", state: "done" }], { turnId, afterStep: 1 }],
-              [
-                [{ type: "text", text: "The table is built; the tests run now.", state: "done" }],
-                { turnId, afterStep: 1 },
-              ],
-              [
-                [{ type: "text", text: "The tests passed, by the way.", state: "done" }],
-                { turnId, afterStep: 1 },
-              ],
-              [[{ type: "text", text: "I couldn't reach it.", state: "done" }], undefined],
-            ],
-          );
-          const journals = page.messages.filter(
-            (message) => message.role === MESSAGE_ROLE.ASSISTANT && !spoken.includes(message),
-          );
-          assert.deepEqual(
-            journals.map((message) => message.turnId),
-            [turnId],
           );
         }),
     );

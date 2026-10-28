@@ -1,10 +1,8 @@
 import { workspaceTokenRepositorySchema } from "@luke/features/github-repositories-wire";
-import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { workspaceSentryAnswerSchema } from "@luke/features/sentry-install-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
-  tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
@@ -85,21 +83,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT]: actProcedure(
-    "Could not connect Linear to that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: actProcedure(
-    "Could not disconnect Linear from that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]: actProcedure(
-    "Could not read that workspace's Linear issues on this system.",
-  )
-    .input(exactInput(tasksLinearIssuesParamsSchema))
-    .output(EffectSchema.flip(EffectSchema.Array(linearIssueSummarySchema))),
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actProcedure(
     "Could not read that workspace's Sentry on this system.",
   )

@@ -1,0 +1,199 @@
+import { RUN_TURN_ORIGIN, type RunTurnOrigin, TURN_TRIGGER, type TurnTrigger } from "../../core.js";
+
+/**
+ * The bounds and names the agents' hosts run under: how a request names the
+ * conversation and the kind of turn it opens, and what a reopened session
+ * is seeded with. Every one is a
+ * product knob as much as an implementation detail.
+ */
+export const EVE_HOST = {
+  /** The longest one stored message is rendered in the rotation seed, in characters. */
+  RECENT_MESSAGE_CHARS: 600,
+  /** How many stored messages a rotated session is seeded with, newest last. */
+  SEED_MESSAGES: 60,
+  /** The longest the seed grows, in characters, cut from the front. */
+  SEED_CHARS: 40_000,
+} as const;
+
+/** A conversation id as the header carries it: a uuid, and nothing else names a row. */
+export const CONVERSATION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The request headers a client names the conversation, the turn's kind, and
+ * its sender's time zone with, and the one the deployment names the account
+ * it acts for with, the last read only from a request the deployment's own
+ * credential admitted, never from an account's bearer, whose account is the
+ * bearer's.
+ */
+export const EVE_HOST_HEADER = {
+  CONVERSATION: "x-luke-conversation",
+  TURN: "x-luke-turn",
+  ACCOUNT: "x-luke-account",
+  /** The sender's IANA time zone, which the turn its message opens reads the day in. */
+  TIME_ZONE: "x-luke-time-zone",
+} as const;
+
+/** An account id as the header carries it: the auth service's own id shape, bounded, and nothing else names a user row. */
+export const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * The attribute names the session's auth carries those under, for the
+ * session's life: the conversation and the turn from any request's headers,
+ * and the acted-for account, or the carrier, only on a principal the
+ * deployment's own credential minted, never laid over from a request.
+ */
+export const EVE_HOST_ATTRIBUTE = {
+  CONVERSATION: "luke:conversation",
+  TURN: "luke:turn",
+  ACCOUNT: "luke:account",
+  /** The current request's time zone, where it named one a zone stands under; the turn's standing context reads it. */
+  TIME_ZONE: "luke:time-zone",
+  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, the voice brain's steer of a coding agent and a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
+  CARRIER: "luke:carrier",
+} as const;
+
+/**
+ * The authenticator names the door admits a principal under: an account's
+ * own bearer, or the deployment acting for an account it names under the
+ * deployment's one secret. The deployment's name is one name whatever role
+ * it acts in — the voice service's, or the voice brain's messaging a coding
+ * agent — because one secret proves no more than that something holding it acted;
+ * which role is the turn kind on the principal, recorded as such, and never
+ * a name the credential cannot support.
+ */
+export const EVE_HOST_AUTHENTICATOR = {
+  ACCOUNT: "luke-account",
+  DEPLOYMENT: "luke-deployment",
+} as const;
+
+/**
+ * The principal types the door mints, in eve's own vocabulary: a person for
+ * an account's bearer, a service for the deployment acting for an account.
+ * The two are different types rather than one type with a flag, so a reader
+ * of a session's initiator can tell a developer's opening from the
+ * deployment's without remembering to check a field.
+ */
+export const EVE_HOST_PRINCIPAL_TYPE = {
+  ACCOUNT: "user",
+  DEPLOYMENT: "service",
+} as const;
+
+/** The one principal id the deployment acts under; the account it acts for is its attribute, never its id. */
+export const EVE_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
+
+/**
+ * What kind of turn a request opens, as the header names it. An unheard turn
+ * is a spoken line whose answer no one hears: the developer's last line a
+ * call hands over once it has ended. It is recorded as the spoken line it
+ * is, so the transcript's row is its line, but the agent is neither told
+ * its words are heard nor runs the call's own tools on it.
+ */
+export const EVE_HOST_TURN = {
+  TYPED: "typed",
+  SPOKEN: "spoken",
+  UNHEARD: "unheard",
+} as const;
+
+export type EveHostTurn = (typeof EVE_HOST_TURN)[keyof typeof EVE_HOST_TURN];
+
+const EVE_HOST_TURN_LIST: readonly string[] = Object.values(EVE_HOST_TURN);
+
+export function isEveHostTurn(value: string): value is EveHostTurn {
+  return EVE_HOST_TURN_LIST.includes(value);
+}
+
+/**
+ * The kinds of turn the relay records: each a request names, and a
+ * subagent's task run in its own child session. Note that the child's is
+ * kept apart from `EVE_HOST_TURN`, because no request names it and the
+ * door must never admit it as one.
+ */
+export const RELAY_TURN = {
+  ...EVE_HOST_TURN,
+  CHILD: "child",
+} as const;
+
+export type RelayTurn = (typeof RELAY_TURN)[keyof typeof RELAY_TURN];
+
+/**
+ * Where the developer's line of a turn stands on the record. Eve's received
+ * message is the brain's input: for a typed ask it is the developer's own
+ * words and the relay writes it as the user row. A spoken ask is the
+ * exception: the developer's line is the voice session's
+ * transcript, cut at the delegation and written by the voice writer under the
+ * delegation's id, while eve's input is the question the service composed
+ * around it, already on record on the ask. Writing that input as a user row
+ * too would leave two developer lines for one utterance, read back to the
+ * brain twice, so the relay writes none for a spoken ask's line and instead
+ * ties the transcript's row, which shares the ask's client id, to the turn,
+ * whether the ask opened a spoken turn or joined a typed one under way.
+ */
+export const RECEIVED_LINE = {
+  /** The relay writes eve's received message as the turn's user row. */
+  RELAY: "relay",
+  /** The transcript's row, another writer's under the ask's own id, is the line; the relay writes none and ties that row to the turn. */
+  TRANSCRIPT: "transcript",
+} as const;
+
+export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
+
+/** The run stream's origin and trigger for each kind of turn the relay records, and whose row the line that opens it is; a line that joins the turn under way is told apart as it arrives (`relay.ts`'s `#received`). */
+export const EVE_HOST_TURN_KIND = {
+  [EVE_HOST_TURN.TYPED]: {
+    origin: RUN_TURN_ORIGIN.TYPED,
+    trigger: TURN_TRIGGER.ASK,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
+  [EVE_HOST_TURN.SPOKEN]: {
+    origin: RUN_TURN_ORIGIN.SPOKEN,
+    trigger: TURN_TRIGGER.ASK,
+    receivedLine: RECEIVED_LINE.TRANSCRIPT,
+  },
+  [EVE_HOST_TURN.UNHEARD]: {
+    origin: RUN_TURN_ORIGIN.SPOKEN,
+    trigger: TURN_TRIGGER.ASK,
+    receivedLine: RECEIVED_LINE.TRANSCRIPT,
+  },
+  // The task the brain handed the subagent is the child turn's received line.
+  [RELAY_TURN.CHILD]: {
+    origin: RUN_TURN_ORIGIN.CHILD,
+    trigger: TURN_TRIGGER.CHILD_TASK,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
+} as const satisfies Record<
+  RelayTurn,
+  {
+    readonly origin: RunTurnOrigin;
+    readonly trigger: TurnTrigger;
+    readonly receivedLine: ReceivedLine;
+  }
+>;
+
+/** The environment the host reads beside the names every hosted route already honours. */
+export const EVE_HOST_ENVIRONMENT = {
+  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/coder/v1/*` rewrite. */
+  EVE_ORIGIN: "LUKE_EVE_ORIGIN",
+  /**
+   * The secret the deployment acts for an account under at eve's door, read on
+   * both sides of it: the web functions and the eve service send it, and the
+   * eve service admits it. It is never the cron's `CRON_SECRET`, so the bearer
+   * Vercel's scheduler holds opens no eve session.
+   */
+  DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",
+} as const;
+
+/** Why the host refused a request's standing, in words the model or a route can read. */
+export const EVE_HOST_REFUSAL = {
+  NO_PRINCIPAL: "Not run: the session has no signed-in account.",
+  NO_CONVERSATION: "Not run: the session names no conversation of this account.",
+  NOT_OWNER: "Not run: this conversation belongs to another account.",
+  NOT_INITIATOR: "Not run: this session was opened by another account.",
+  NO_TURN_KIND: "Not run: the request names no kind of turn.",
+  NO_ACCOUNT: "Not run: the deployment's request names no account.",
+  NOT_DEPLOYMENT_ACT:
+    "Not run: the deployment may only open the turns it is admitted for, stop one, or retire a session.",
+  NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
+} as const;
+
+export type EveHostRefusal = (typeof EVE_HOST_REFUSAL)[keyof typeof EVE_HOST_REFUSAL];
