@@ -1195,6 +1195,7 @@ function Invitations({
         <MenuRow
           key={one.id}
           thing={one.email}
+          alone
           actions={[
             {
               label: "Cancel invitation",
@@ -1440,8 +1441,8 @@ function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactN
  * The workspace's Linear, for an owner or an admin: Connect while none is,
  * or Reconnect once its sign-in expired, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
- * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
- * a connected row quiet, whose menu holds Disconnect, which asks first. A
+ * under the row; and a Disconnect button once one stands, an icon button
+ * that asks first, since a ⋯ over one item would only hide it. A
  * plan already started from an issue keeps what it read. The row is
  * `MenuRow`'s `SettingsRow` led by Linear's mark, its press the outline
  * `Button`.
@@ -1487,6 +1488,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Linear"
+        alone
         actions={actions}
         row={{
           leading: LINEAR_MARK,
@@ -1605,9 +1607,12 @@ function ManagedSentry({
   );
   const actions = [
     sentry.installations.map((installation) => ({
+      // Note that a lone installation's act stands as a button of its own, so it says only Disconnect.
       label:
-        installation.account === undefined ? "Disconnect" : `Disconnect ${installation.account}`,
-      icon: <TrashIcon />,
+        installation.account === undefined || sentry.installations.length === 1
+          ? "Disconnect"
+          : `Disconnect ${installation.account}`,
+      icon: <GLYPH.DISCONNECT />,
       danger: true,
       onSelect: () => {
         setLeaving(installation);
@@ -1619,6 +1624,7 @@ function ManagedSentry({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Sentry"
+        alone
         actions={actions}
         row={{
           leading: SENTRY_MARK,

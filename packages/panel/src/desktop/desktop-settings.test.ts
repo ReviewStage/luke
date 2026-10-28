@@ -26,12 +26,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import {
-  chooseMenuItem,
-  menuItems,
-  pressInPhoneHead,
-  readPhoneHead,
-} from "../testing/phone-head.js";
+import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
@@ -817,7 +812,7 @@ test("on a phone a page is headed by the way back to the list, its title, and it
   assert.deepEqual(readPhoneHead(page, "settings-page"), {
     start: ["Settings"],
     title: "Appearance",
-    end: ["Appearance actions"],
+    end: ["Reset to defaults"],
   });
   const section = page.querySelector('section[aria-label="Appearance"]');
   assert.deepEqual(
@@ -831,13 +826,11 @@ test("on a phone a page is headed by the way back to the list, its title, and it
     ),
     "the page's head holds no reset",
   );
-  pressInPhoneHead(page, "settings-page", "Appearance actions");
-  assert.deepEqual(menuItems(), [{ label: "Reset to defaults", disabled: false }]);
-  chooseMenuItem("Reset to defaults");
+  pressInPhoneHead(page, "settings-page", "Reset to defaults");
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  assert.equal(resets.length, 1, "the ⋯'s reset resets the page");
+  assert.equal(resets.length, 1, "the bar's reset resets the page");
   pressInPhoneHead(page, "settings-page", "Settings");
   assert.equal(listings, 1);
 });
