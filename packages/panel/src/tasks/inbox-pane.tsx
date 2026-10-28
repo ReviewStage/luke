@@ -723,7 +723,10 @@ function AskBox({
       <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
         <CardHead>
           <span className={INBOX_ASK_KIND}>{askHeadWords(ask, undefined)}</span>
-          <span className={INBOX_ASK_STANDING}>{ANSWERED}</span>
+          <span className={INBOX_ASK_STANDING}>
+            <CheckIcon aria-hidden="true" />
+            {ANSWERED}
+          </span>
         </CardHead>
       </Card>
     </div>
