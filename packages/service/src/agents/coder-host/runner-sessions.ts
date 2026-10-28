@@ -155,7 +155,13 @@ import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
-import { NOT_FOUND_STATUS, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
+import {
+  COMMAND_GONE,
+  NOT_FOUND_STATUS,
+  type SandboxFile,
+  SandboxUnavailable,
+  sessionEnding,
+} from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
@@ -980,39 +986,50 @@ export const runnerSessions = <
           // the write: a change of it is handed to the runner by `retune`, which holds the same
           // lease, so it is written after this line, never undone by it. A runner that reads its
           // lines has its exit read beside them, at most `CODER.RUNNER_EXIT_READ`, as its liveness.
+          // A sandbox stopping under the files' upload, or the exit's read, is read as the runner
+          // gone, and relaunches below, which uploads the files again.
           const reads = running.mark.linesRead === true;
-          const [ahead, opened, , exit] = yield* Effect.all(
+          const [ahead, opened, uploaded, exit] = yield* Effect.all(
             [
               harness.ahead(agent),
               openedLine(agent, sessionId, sent, false),
-              filesWritten(runnerPlace, sent),
+              filesWritten(runnerPlace, sent).pipe(
+                Effect.as(true),
+                Effect.catchIf(sessionEnding, () => Effect.succeed(false)),
+              ),
               // Note that an exit Vercel did not answer reads as a runner that runs, so an outage
               // neither fails the message nor relaunches beside a runner still reading.
               reads
-                ? machine
-                    .runnerExit(running.handle, CODER.RUNNER_EXIT_READ)
-                    .pipe(Effect.orElseSucceed(() => null))
+                ? machine.runnerExit(running.handle, CODER.RUNNER_EXIT_READ).pipe(
+                    Effect.catchIf(sessionEnding, () => Effect.succeed(COMMAND_GONE)),
+                    Effect.orElseSucceed(() => null),
+                  )
                 : Effect.succeed(null),
             ],
             { concurrency: "unbounded" },
           );
           const lines = [...ahead.lines, opened.line];
           // Note that a write to stdin is that runner's liveness check: Vercel refuses stdin to a
-          // command that exited (`command_not_found_or_exited`, a 404), which relaunches below,
-          // because reading the exit first waits out `EXIT_WAIT` on a runner that runs. A runner
-          // that reads its lines is queued them only where its exit read none, and one that ends
-          // before it takes them hands them to the launch its END starts (`deliverWaiting`).
-          const wrote = reads
-            ? exit === null &&
-              (yield* Effect.as(queued(agent, running.mark.firstSequence, lines), true))
-            : yield* machine.writeLine(running.handle, lines.map(line).join("")).pipe(
-                Effect.as(true),
-                Effect.catchIf(
-                  (failure) =>
-                    failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
-                  () => Effect.succeed(false),
-                ),
-              );
+          // command that exited (`command_not_found_or_exited`, a 404), or whose sandbox is
+          // stopping under it, which relaunches below, because reading the exit first waits out
+          // `EXIT_WAIT` on a runner that runs. A runner that reads its lines is queued them only
+          // where its exit read none, and one that ends before it takes them hands them to the
+          // launch its END starts (`deliverWaiting`).
+          const wrote =
+            uploaded &&
+            (reads
+              ? exit === null &&
+                (yield* Effect.as(queued(agent, running.mark.firstSequence, lines), true))
+              : yield* machine.writeLine(running.handle, lines.map(line).join("")).pipe(
+                  Effect.as(true),
+                  Effect.catchIf(
+                    (failure) =>
+                      (failure instanceof SandboxUnavailable &&
+                        failure.status === NOT_FOUND_STATUS) ||
+                      sessionEnding(failure),
+                    () => Effect.succeed(false),
+                  ),
+                ));
           if (wrote) {
             yield* opened.taken;
             // The installation token lives an hour, so each message sets a fresh one, after the
@@ -1043,7 +1060,15 @@ export const runnerSessions = <
         }
         // The place stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         const wasUp = found.value.running !== undefined;
-        const resumed = yield* machine.resume(found.value);
+        // Note that a place whose stop began as the send reached it (a launch's end or the sweep
+        // stopped it a moment before) refuses every call until it has stopped, so it is resumed
+        // once more and the runner launched in the session that opens, as Vercel's SDK does.
+        const resumed = yield* Effect.gen(function* () {
+          const place = yield* machine.resume(found.value);
+          if (place === PLACE_RESUME.GONE) return place;
+          yield* relaunched(agent, sessionId, found.value.name, place, layout, sent);
+          return place;
+        }).pipe(Effect.retry({ times: 1, while: sessionEnding }));
         if (resumed === PLACE_RESUME.GONE) {
           // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
           // the session goes on in a fresh one, a clean checkout of the repository under the
@@ -1066,7 +1091,6 @@ export const runnerSessions = <
           yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
-        yield* relaunched(agent, sessionId, found.value.name, resumed, layout, sent);
         yield* handed(wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED);
         return accepted;
       });
