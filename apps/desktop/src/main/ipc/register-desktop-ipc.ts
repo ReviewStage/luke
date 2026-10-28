@@ -15,7 +15,6 @@ import {
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { LEAVE } from "@luke/host/quit";
-import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import type { WireBoundaryInput } from "@luke/wire";
 import {
   BrowserWindow,
@@ -110,9 +109,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const { panels } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
-  const browserExperimentOn = () =>
-    experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER);
-
   // The acts main answers itself on the act port: its windows', ports', and
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
@@ -122,7 +118,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         open: portTo(BROWSER_LIVE_PORT_CHANNEL),
         whenGone: whenPageGone,
       },
-      experimentOn: browserExperimentOn,
       createId: randomUUID,
       run,
     }),

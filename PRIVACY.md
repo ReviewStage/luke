@@ -1065,8 +1065,8 @@ while it is open, a few at a time: they are never written to disk and never
 reach our service, a trace, or a counted event, and the screen recording
 leaves them out.
 
-**Browser tabs.** With the Browser tab experiment on, a Browser tab shows an
-agent's cloud browser, which the agent drives and you can watch and take over.
+**Browser tabs.** A Browser tab shows an agent's cloud browser, which the
+agent drives and you can watch and take over.
 The cloud browser is a Chromium that runs in the agent's own Vercel Sandbox,
 never on your Mac, so it reaches that sandbox's own `localhost` and holds none
 of your Mac's cookies or signed-in sites. What the agent does with it reaches the model:

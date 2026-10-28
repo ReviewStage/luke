@@ -8,7 +8,6 @@
   "packages/panel/src/desktop/automation-editor.tsx": 1,
   "packages/panel/src/desktop/automation-runs-panel.tsx": 1,
   "packages/panel/src/desktop/automations-page.tsx": 1,
-  "packages/panel/src/desktop/desktop-inbox.tsx": 1,
   "packages/panel/src/desktop/desktop-tasks.tsx": 1,
   "packages/panel/src/desktop/mobile-bar.tsx": 1,
   "packages/panel/src/desktop/person-page.tsx": 1,

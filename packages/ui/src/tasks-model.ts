@@ -1,6 +1,5 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  type RepositoryPin,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -677,47 +676,6 @@ export const REPOSITORY_PIN_FAILED_NOTES = {
   PIN: "The repository could not be pinned. Try again.",
   UNPIN: "The repository could not be unpinned. Try again.",
 } as const;
-
-/** A repository pinned or unpinned here that main's view has yet to carry: which, and the instant it was asked. */
-export interface PendingRepositoryPin {
-  readonly pinned: boolean;
-  readonly at: number;
-}
-
-/** The repository pins given here that main's view has yet to carry, by repository. */
-export type PendingRepositoryPins = ReadonlyMap<string, PendingRepositoryPin>;
-
-/**
- * The repositories the sidebar draws pinned, newest pinned first: the pins
- * main's view carries, with every pin and unpin given here and not yet
- * carried drawn over them, so a press moves its group at once.
- */
-export function pinnedRepositories(
-  pins: readonly RepositoryPin[] | undefined,
-  pending: PendingRepositoryPins,
-): readonly string[] {
-  const standing = (pins ?? []).filter((pin) => pending.get(pin.repository)?.pinned !== false);
-  const added = [...pending]
-    .filter(
-      ([repository, pin]) => pin.pinned && !standing.some((each) => each.repository === repository),
-    )
-    .map(([repository, pin]) => ({ repository, pinnedAt: pin.at }));
-  return [...added, ...standing]
-    .sort((a, b) => b.pinnedAt - a.pinnedAt)
-    .map((pin) => pin.repository);
-}
-
-/** The pending repository pins the view still contradicts; one it now carries has landed and is let go. */
-export function unsettledRepositoryPins(
-  pending: PendingRepositoryPins,
-  pins: readonly RepositoryPin[] | undefined,
-): PendingRepositoryPins {
-  const unsettled = [...pending].filter(
-    ([repository, pin]) =>
-      (pins ?? []).some((each) => each.repository === repository) !== pin.pinned,
-  );
-  return unsettled.length === pending.size ? pending : new Map(unsettled);
-}
 
 /** What the toast says when the service refused an agent's pin, by whether it was a pin or an unpin. */
 export const AGENT_PIN_FAILED_NOTES = {

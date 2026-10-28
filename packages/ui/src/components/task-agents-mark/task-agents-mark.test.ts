@@ -10,9 +10,9 @@ import { TaskAgentsMark } from "./task-agents-mark.js";
 
 /**
  * task-agents-mark.test.ts -- a task's row wears the one icon that matters
- * most about its agents, named for a reader: a question waiting on them,
- * then a failure, then an agent at work, then its pull request, an open or
- * draft one before a merged one and a merged one before a closed one.
+ * most about its agents, named for a reader: a failure, then an agent at
+ * work, then its pull request, an open or draft one before a merged one and
+ * a merged one before a closed one.
  */
 
 /** A pull request numbered `number`, standing in `state`. */
@@ -42,10 +42,10 @@ function agents(
   };
 }
 
-/** What a reader hears of the icon drawn for `summary` with `waiting` questions on the reader; nothing where none is drawn. */
-function heard(summary: TaskAgentsSummary | undefined, waiting: number): string | undefined {
+/** What a reader hears of the icon drawn for `summary`; nothing where none is drawn. */
+function heard(summary: TaskAgentsSummary | undefined): string | undefined {
   const box = document.createElement("div");
-  box.innerHTML = renderToStaticMarkup(createElement(TaskAgentsMark, { agents: summary, waiting }));
+  box.innerHTML = renderToStaticMarkup(createElement(TaskAgentsMark, { agents: summary }));
   return box.querySelector("[role='img']")?.getAttribute("aria-label") ?? undefined;
 }
 
@@ -53,36 +53,30 @@ const MERGED = pullRequest(1, PULL_REQUEST_STATE.MERGED);
 const CLOSED = pullRequest(2, PULL_REQUEST_STATE.CLOSED);
 
 it.each([
-  ["a question outranks a failure", agents({ failed: 1, working: 1 }), 1, "Waiting on you"],
-  ["a question on a task with no agents still shows", undefined, 1, "Waiting on you"],
-  ["a failure outranks an agent at work", agents({ failed: 1, working: 1 }, [MERGED]), 0, "Failed"],
+  ["a failure outranks an agent at work", agents({ failed: 1, working: 1 }, [MERGED]), "Failed"],
   [
     "an agent at work outranks a pull request",
     agents({ working: 1 }, [pullRequest(3, PULL_REQUEST_STATE.OPEN)]),
-    0,
     "Working",
   ],
   [
     "an open pull request outranks a merged one",
     agents({}, [MERGED, pullRequest(3, PULL_REQUEST_STATE.OPEN)]),
-    0,
     "Pull request open",
   ],
   [
     "a draft outranks a merged one",
     agents({}, [MERGED, pullRequest(4, PULL_REQUEST_STATE.DRAFT)]),
-    0,
     "Pull request draft",
   ],
   [
     "a merged pull request outranks a closed one",
     agents({}, [CLOSED, MERGED]),
-    0,
     "Pull request merged",
   ],
-  ["a closed pull request still shows", agents({}, [CLOSED]), 0, "Pull request closed"],
-  ["agents done with nothing published show nothing", agents({}), 0, undefined],
-  ["a task with no agents shows nothing", undefined, 0, undefined],
-])("%s", (_case, summary, waiting, words) => {
-  assert.equal(heard(summary, waiting), words);
+  ["a closed pull request still shows", agents({}, [CLOSED]), "Pull request closed"],
+  ["agents done with nothing published show nothing", agents({}), undefined],
+  ["a task with no agents shows nothing", undefined, undefined],
+])("%s", (_case, summary, words) => {
+  assert.equal(heard(summary), words);
 });

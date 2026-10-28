@@ -59,7 +59,7 @@ import {
 import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
+import { FAKE_ANSWER, fakeActPort, fakeActs } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -415,22 +415,6 @@ const PLATFORM = {
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
-
-test("a repository pin still waiting on the service is let go with a sign-out, so the next account never wears it", () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    // The service never answers, as when the window signs out with the pin still out.
-    { [ACT_KIND.TASKS_PIN_REPOSITORY]: () => new Promise<boolean>(() => undefined) },
-  );
-
-  act(() => tab.control().onPinRepository("acme/secret", true));
-  const pending = tab.control().pinnedRepositories;
-  tab.stand({ signedIn: false, tasks: IDLE_TASKS_VIEW });
-  tab.stand({ signedIn: true, tasks: { ...OPEN, repositoryPins: [] } });
-
-  assert.deepEqual(pending, ["acme/secret"]);
-  assert.deepEqual(tab.control().pinnedRepositories, []);
-});
 
 test("a task's name, pin, and status still waiting on the service are let go with a sign-out, so the next account never wears them", async () => {
   // The service never answers, as when the window signs out with the presses still out.
@@ -1238,7 +1222,7 @@ test("with Channels on, a channel's link opens the Inbox narrowed to it, which a
   );
   const channel = {
     open: tab.control().inboxView.open,
-    listed: tab.control().inboxView.listed,
+    chosen: tab.control().inboxView.chosen,
     channelId: place().channelId,
   };
   act(() =>
@@ -1250,7 +1234,7 @@ test("with Channels on, a channel's link opens the Inbox narrowed to it, which a
   const thread = place().channelId;
   act(() => tab.control().inboxView.onOpenItem({ taskId: "alerts", itemId: opened }, design));
 
-  assert.deepEqual(channel, { open: true, listed: false, channelId: app });
+  assert.deepEqual(channel, { open: true, chosen: undefined, channelId: app });
   assert.equal(thread, app);
   assert.deepEqual(tab.control().inboxView.chosen, { taskId: "alerts", itemId: opened });
   assert.equal(place().channelId, design);
@@ -1625,65 +1609,29 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("the Inbox opened stands its list over the item last chosen, in a narrow room and a wide one, from elsewhere and from the item alike", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room: SHELL_ROOM.WIDE });
-  act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
+test("the Inbox opens on nothing chosen, from its row, from a link, and as the window rests on it, whatever was chosen in it before", () => {
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
+    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
+  );
+  const choose = () => {
+    act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-1" }));
+    act(() => tab.control().boardView.onOpen());
+  };
 
+  choose();
   act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().inboxView.listed, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+  const fromRow = tab.control().inboxView.chosen;
+  choose();
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.INBOX } }));
+  const fromLink = tab.control().inboxView.chosen;
+  choose();
+  act(() => tab.control().onSelect(TASK.id));
+  act(() => tab.control().onLeaveTask());
 
-  act(() => tab.control().inboxView.onListed(false));
-  act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().inboxView.listed, true, "from the item");
-});
-
-test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
-
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().inboxView.onOpen());
-  const chosen = tab.control().inboxView.chosen;
-  act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().inboxView.onOpen());
-  const linked = tab.control().inboxView.chosen;
-  act(() => tab.control().onChooseWorkspace(ACME.id));
-  act(() => tab.control().inboxView.onClose());
-  act(() => tab.control().inboxView.onOpen());
-
-  assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
-  assert.deepEqual(linked, { taskId: "notes", itemId });
-  assert.equal(tab.control().inboxView.chosen, undefined);
-});
-
-test("a link to the Inbox stands on the item last chosen in the workspace it lists, as the sidebar's row does", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.INBOX } }));
-
-  assert.equal(tab.control().inboxView.open, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
-});
-
-test("the Inbox chosen by one account is not stood on by the next to sign in on this Mac", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().inboxView.onClose());
-  tab.stand({ signedIn: false });
-  tab.stand({ signedIn: true, account: "teammate@example.com" });
-  act(() => tab.control().inboxView.onOpen());
-
-  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(fromRow, undefined);
+  assert.equal(fromLink, undefined);
+  assert.equal(tab.control().inboxView.open, true, "leaving the plan rests on the Inbox");
   assert.equal(tab.control().inboxView.chosen, undefined);
 });
 
@@ -2556,23 +2504,6 @@ test("with no plan open the window rests on the Inbox: it stands once the list l
   assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
 });
 
-test("leaving an open plan rests on the Inbox, on the item last chosen there", () => {
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
-    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
-  );
-  assert.equal(tab.control().inboxView.open, false, "an open plan stands with nothing over it");
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
-  act(() => tab.control().onSelect(TASK.id));
-
-  act(() => tab.control().onLeaveTask());
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
-  assert.equal(tab.control().boundFor, undefined);
-  assert.equal(tab.control().inboxView.open, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: TASK.id, itemId: "item-1" });
-});
-
 test("another workspace listed with no plan open rests the window again, on that workspace's Inbox rather than the item chosen in the last", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
@@ -2731,44 +2662,28 @@ test("a pin dragged to a new place stands there at once, and goes back with what
   assert.equal(newestToastSays(), "The pin could not be moved. Try again.");
 });
 
-test("a change to the sections is drawn at once, sent after the one before it, and a refused one goes back with a toast", async () => {
-  const answers: ((changed: boolean) => void)[] = [];
+test("a drag's changes to the sections go to main as one ask, and a refused one says so in a toast", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_WRITE_SECTION]: () =>
-        new Promise((resolve) => {
-          answers.push(resolve);
-        }),
-    },
+    { [ACT_KIND.TASKS_WRITE_SECTION]: () => Promise.resolve(false) },
   );
-  const sent = () => tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_WRITE_SECTION);
-  const titles = () => tab.control().taskSections.sections.map((section) => section.title);
   const make = (id: string, title: string) => ({
     kind: TASK_SECTION_WRITE.CREATE,
     id,
     workspaceId: "workspace-1",
     title,
   });
+  const writes = [
+    make("0a1b2c3d-0000-4000-8000-000000000001", "Launch"),
+    make("0a1b2c3d-0000-4000-8000-000000000002", "Later"),
+  ];
 
-  await act(async () =>
-    tab
-      .control()
-      .onWriteSections([
-        make("0a1b2c3d-0000-4000-8000-000000000001", "Launch"),
-        make("0a1b2c3d-0000-4000-8000-000000000002", "Later"),
-      ]),
+  await act(async () => tab.control().onWriteSections(writes));
+
+  assert.deepEqual(
+    tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_WRITE_SECTION),
+    [{ kind: ACT_KIND.TASKS_WRITE_SECTION, payload: { writes } }],
   );
-  const drawn = titles();
-  const sentFirst = sent().length;
-  await act(async () => answers[0]?.(true));
-  const sentSecond = sent().length;
-  await act(async () => answers[1]?.(false));
-
-  assert.deepEqual(drawn, ["Launch", "Later"]);
-  assert.deepEqual([sentFirst, sentSecond], [1, 2]);
-  // Main's view never carried either, as this test stands no answer in it, so both go once settled.
-  assert.deepEqual(titles(), []);
   assert.equal(newestToastSays(), "Your sections could not be changed. Try again.");
 });
 
@@ -3497,8 +3412,27 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
   assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });
 
-/** A registry whose atoms count on this clock, as the window's count on its own. */
+/** A follow the host holds open and never tells a change on. */
+const heldFollow = {
+  next: () => new Promise<never>(() => undefined),
+  return: async () => ({ done: true, value: undefined }) as const,
+  [Symbol.asyncIterator]() {
+    return heldFollow;
+  },
+  [Symbol.asyncDispose]: async () => undefined,
+};
+
+/**
+ * A registry whose atoms count on this clock, as the window's count on its
+ * own. Note that the task's cloud Browser tabs are answered as none and
+ * followed quietly, because a read refused is tried again on its beat, and a
+ * day passed on this clock would run every one of those beats.
+ */
 function registryOn(clock: Clock.Clock): AtomRegistry {
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [] }),
+    [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(heldFollow as never),
+  });
   return AtomRegistryModule.make({
     initialValues: [
       [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],

@@ -740,6 +740,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
+    "New browser tab · Billing usage alerts",
   ]);
   const row = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
   assert.ok(row, "the agent is listed");
@@ -834,6 +835,7 @@ test("an archived agent of the open task is still found, after the standing ones
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
+    "New browser tab · Billing usage alerts",
     "Refund export · Archived · Billing usage alerts",
   ]);
 

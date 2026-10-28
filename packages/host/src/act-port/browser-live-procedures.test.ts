@@ -24,8 +24,7 @@ import { type TestActPort, testActPort } from "./testing.js";
  * what the host hears on that connection reaches that port and no other,
  * and its close closes the port after saying so; what the panel sends on it
  * reaches the host by connection; a detach and the page's end let the
- * connection go; and only a panel with the Browser tab experiment on is
- * answered. Synthetic ids and frames throughout.
+ * connection go; and only a panel is answered. Synthetic ids and frames throughout.
  */
 
 /** A window, read by identity alone. */
@@ -62,7 +61,7 @@ interface ScriptedPort {
   send(message: WireBoundaryInput): void;
 }
 
-function fixture(options: { experimentOn?: boolean } = {}) {
+function fixture() {
   const asked: string[] = [];
   const opened: ScriptedPort[] = [];
   const gone = new Map<Window, () => void>();
@@ -115,7 +114,6 @@ function fixture(options: { experimentOn?: boolean } = {}) {
         },
         whenGone: (sender, then) => void gone.set(sender, then),
       },
-      experimentOn: () => options.experimentOn ?? true,
       createId: () => `connection-${++ids}`,
       run: <A>(effect: Effect.Effect<A>) => {
         pending.push(effect);
@@ -202,24 +200,18 @@ it.effect("a detach and the page's end let the panel's views go", () =>
   }),
 );
 
-it.effect("only a panel with the Browser tab experiment on may attach a view", () =>
+it.effect("only a panel may attach a view", () =>
   Effect.gen(function* () {
-    const off = fixture({ experimentOn: false });
-    const on = fixture();
+    const { actPort, asked, opened } = fixture();
     const other: ActSender<Window> = { ...panelOf(), panel: false };
 
-    const whileOff = yield* off.actPort.perform(
-      { kind: ACT_KIND.BROWSER_LIVE_ATTACH, payload: ATTACH },
-      panelOf(),
-    );
-    const fromOther = yield* on.actPort.perform(
+    const fromOther = yield* actPort.perform(
       { kind: ACT_KIND.BROWSER_LIVE_ATTACH, payload: ATTACH },
       other,
     );
 
-    assert.deepEqual(whileOff, REFUSED);
     assert.deepEqual(fromOther, REFUSED);
-    assert.deepEqual([...off.asked, ...on.asked], []);
-    assert.deepEqual([...off.opened, ...on.opened], [], "no port is posted");
+    assert.deepEqual(asked, []);
+    assert.deepEqual(opened, [], "no port is posted");
   }),
 );

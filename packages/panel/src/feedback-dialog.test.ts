@@ -157,7 +157,7 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
         registry,
         createElement(FeedbackDialog, {
           kind: FEEDBACK_KIND.FEEDBACK,
-          about: EXPERIMENT.BROWSER,
+          about: EXPERIMENT.MEMORY,
           account: SIGNED_IN,
           onClose: () => undefined,
         }),
@@ -165,7 +165,7 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
     ),
   );
 
-  assert.equal(dialog()?.querySelector("h2")?.textContent, "Feedback on Browser tab");
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Feedback on Memory");
   // React reads a typed value off the element's own setter, as a keystroke sets it.
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
@@ -181,7 +181,7 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
       name: SIGNED_IN.name,
       email: SIGNED_IN.email,
       images: [],
-      experiment: EXPERIMENT.BROWSER,
+      experiment: EXPERIMENT.MEMORY,
     },
   });
 });
@@ -193,7 +193,7 @@ test("a note kept from one experiment's row is not sent under another place's ti
   roots.push(root);
   const registry = AtomRegistry.make();
   registries.push(registry);
-  const draw = (about: typeof EXPERIMENT.BROWSER | undefined) =>
+  const draw = (about: typeof EXPERIMENT.MEMORY | undefined) =>
     act(() =>
       root.render(
         onRegistry(
@@ -208,7 +208,7 @@ test("a note kept from one experiment's row is not sent under another place's ti
       ),
     );
 
-  draw(EXPERIMENT.BROWSER);
+  draw(EXPERIMENT.MEMORY);
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field(), "The board missed a plan.");

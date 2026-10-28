@@ -174,6 +174,7 @@ import {
   listedItems,
   NEEDS_YOU,
   needsYou as needsYouOf,
+  threadsWords,
 } from "./inbox-model.js";
 import {
   RowMedia,
@@ -1321,6 +1322,29 @@ export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAc
         icon: <ComposeIcon />,
         onClick: onNewTask,
       };
+}
+
+/**
+ * The pane beside the list while nothing is chosen, as a mail app's stands
+ * empty: how many threads the list holds, or, holding none, that nothing
+ * needs the reader, over New task where one can start.
+ */
+export function InboxPaneEmpty({
+  listed,
+  newTask,
+}: {
+  /** How many threads the list holds. */
+  listed: number;
+  newTask?: (() => void) | undefined;
+}): React.JSX.Element {
+  if (listed === 0) {
+    return (
+      <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
+        {NEEDS_YOU.NONE}
+      </EmptyState>
+    );
+  }
+  return <EmptyState icon={<InboxIcon />}>{threadsWords(listed)}</EmptyState>;
 }
 
 /** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */

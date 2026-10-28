@@ -1,5 +1,6 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
+  CODING_AGENT_MACHINE,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
@@ -12,7 +13,7 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
@@ -168,7 +169,7 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCapability } from "../use-app-state.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab } from "./main-tabs.js";
@@ -300,6 +301,12 @@ export type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL
 /** What the panel's pages stand on: the agent on no task an agent's page holds the panel under, else the task. */
 function pagePlaceOf(holder: SidePanelHolder, id: string): PagePlace {
   return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
+}
+
+/** A repository as the panel reads it where it stands for no task: the workspace whose installation reaches it, and the repository, `owner/name`. */
+export interface PanelRepositoryPlace {
+  readonly workspaceId: string;
+  readonly repository: string;
 }
 
 /** No fixed kind, the same array every render. */
@@ -653,9 +660,9 @@ export function panelEntries(input: {
     readonly onNew: (agentId: string) => void;
   };
   /**
-   * Where a new Browser tab may open, while the Browser tab experiment is
-   * on: each of the task's coding agents' cloud browsers, the one viewed
-   * first, drafted through `onAgent`; none where the caller offers none.
+   * Where a new Browser tab may open: each of the task's coding agents'
+   * cloud browsers, the one viewed first, drafted through `onAgent`; none
+   * where the caller offers none.
    */
   browsers?: {
     readonly agents: readonly CloudBrowserOffer[];
@@ -767,8 +774,6 @@ export function panelOffers(input: {
   pages: readonly PageLine[];
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
-  /** Whether the Browser tab experiment is on. */
-  browsers: boolean;
   /** The agent whose browser a new tab is offered in first: the one the panel or the column shows. */
   viewedAgent: string | undefined;
   plan: PlanStanding | undefined;
@@ -782,10 +787,12 @@ export function panelOffers(input: {
     const subject = agentSubject(agents, agentId, cards.held, false);
     return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
   };
+  // Note that an agent on a Mac is offered none, because only a cloud sandbox runs a browser.
   const cloudOffers: readonly CloudBrowserOffer[] =
-    !input.browsers || holder !== SIDE_PANEL_HOLDER.TASK
+    holder !== SIDE_PANEL_HOLDER.TASK
       ? []
-      : [...(agents.agents ?? [])]
+      : (agents.agents ?? [])
+          .filter((agent) => agent.machine !== CODING_AGENT_MACHINE.DEVICE)
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
@@ -1740,6 +1747,7 @@ function TabContent({
   tab,
   taskId,
   codeFilesRead,
+  repositoryPlace,
   pagePlace,
   repository,
   files,
@@ -1773,8 +1781,10 @@ function TabContent({
   pagePlace: PagePlace;
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
-  /** Whether a File tab reads the task's files: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
+  /** Whether a File tab reads the task's files: a task's panel's does, and a panel standing for no task does where it reads its repository by `repositoryPlace`. */
   codeFilesRead: boolean;
+  /** The workspace and repository a File tab reads through where the panel stands for no task; none where it stands for one. */
+  repositoryPlace: PanelRepositoryPlace | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
@@ -1932,9 +1942,19 @@ function TabContent({
           taskId={taskId}
           repository={repository}
           file={file}
-          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId, ...window })}
-          readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
-          readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
+          readFile={(window) =>
+            act(ACT_KIND.TASKS_FILE, { ...(repositoryPlace ?? { taskId }), ...window })
+          }
+          readFolder={(path) =>
+            act(ACT_KIND.TASKS_TREE, { ...(repositoryPlace ?? { planId: taskId }), path })
+          }
+          readWhole={() =>
+            act(ACT_KIND.TASKS_TREE, {
+              ...(repositoryPlace ?? { planId: taskId }),
+              path: "",
+              recursive: true,
+            })
+          }
           openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
@@ -2223,6 +2243,7 @@ export function SidePanel({
   holder,
   taskId,
   repository,
+  repositoryPlace,
   pages,
   agents,
   openAgents,
@@ -2249,6 +2270,8 @@ export function SidePanel({
   taskId: string;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
+  /** Where the panel stands for no task, an agent's page or an Inbox item of an agent on none: the workspace and repository its File tabs read through; none beside a task, or where no repository is known. */
+  repositoryPlace?: PanelRepositoryPlace | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   agents: CodingAgentsControl;
@@ -2414,12 +2437,11 @@ export function SidePanel({
   const terminals = !terminalsHere
     ? NO_TERMINALS
     : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
-  const browserOn = useExperiment(EXPERIMENT.BROWSER);
-  // The task's agents' cloud Browser tabs stand while the experiment is on,
-  // on every platform, since the page draws them from the service and needs
-  // nothing of main's; on a task's own panel alone, never an agent's page's or
-  // the Inbox's, which borrows its task's panel.
-  const cloudListing = browserOn && holder === SIDE_PANEL_HOLDER.TASK;
+  // The task's agents' cloud Browser tabs stand on every platform, since the
+  // page draws them from the service and needs nothing of main's; on a task's
+  // own panel alone, never an agent's page's or the Inbox's, which borrows its
+  // task's panel.
+  const cloudListing = holder === SIDE_PANEL_HOLDER.TASK;
   const cloudListed = useCloudBrowserTabs(taskId, cloudListing);
   // A draft of a tab in an agent's browser stands after the tabs the service lists, until it opens one.
   const cloudDraftsHeld = useCloudBrowserDrafts(taskId, cloudListing);
@@ -2498,7 +2520,6 @@ export function SidePanel({
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
-    browsers: browserOn,
     viewedAgent,
     plan: task,
     cards: {
@@ -2636,7 +2657,8 @@ export function SidePanel({
               <TabContent
                 tab={tab}
                 taskId={taskId}
-                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
+                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
+                repositoryPlace={repositoryPlace}
                 pagePlace={pagePlaceOf(holder, taskId)}
                 repository={repository}
                 files={files}

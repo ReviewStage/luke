@@ -214,9 +214,11 @@ async function inbox(
   fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(NO_EXPERIMENTS);
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    // Whether the list was asked for, which the window keeps as the Tasks tab does.
-    const [listed, setListed] = useState(false);
+    // Note that the item stands chosen, as a press on its row chooses it.
+    const [chosen, setChosen] = useState<InboxChoice | undefined>({
+      taskId: TASK.id,
+      itemId: ITEM.id,
+    });
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     // The task's agents as the Inbox read them, which the window's own hook holds its panel to (`use-tasks-tab.ts`).
     const taskAgents = useInboxTaskAgents(panelFor);
@@ -251,8 +253,7 @@ async function inbox(
             onChoose: setChosen,
             onOpenItem: () => undefined,
             onOpenChannel: () => undefined,
-            listed,
-            onListed: setListed,
+            onClear: () => setChosen(undefined),
             pages,
             onTaskAgents: taskAgents.onRead,
           },

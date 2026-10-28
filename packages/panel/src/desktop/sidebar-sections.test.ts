@@ -9,16 +9,11 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import { applySectionWrite, memberOf } from "@luke/features/task-section-writes";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import {
-  applySectionWrite,
-  memberOf,
-  sectionOrder,
-  sectionTaskIds,
-  workspaceSections,
-} from "@luke/ui/task-sections-model";
+import { sectionOrder, sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";

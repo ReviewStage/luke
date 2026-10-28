@@ -58,7 +58,6 @@ function saidOf(at: number) {
       task,
       current: false,
       unread: false,
-      waiting: 0,
       now: NOW,
       onOpen: () => undefined,
     }),
