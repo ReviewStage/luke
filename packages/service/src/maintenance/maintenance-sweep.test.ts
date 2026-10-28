@@ -68,6 +68,7 @@ interface Recorded {
   retention: number[];
   wakeups: number[];
   operatorWakes: number[];
+  withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -89,6 +90,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     retention: [],
     wakeups: [],
     operatorWakes: [],
+    withdrawnLines: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -159,6 +161,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.operatorWakes.push(now);
         return { woken: 1, failed: 0 };
       }),
+    purgeWithdrawnLines: (now) =>
+      Effect.sync(() => {
+        recorded.withdrawnLines.push(now);
+        return 2;
+      }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
         recorded.automated.push(now);
@@ -216,6 +223,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -248,6 +256,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -267,6 +276,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -310,6 +320,7 @@ it.effect(
         retention: [instant],
         wakeups: [instant],
         operatorWakes: [instant],
+        withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],

@@ -13,7 +13,7 @@ import {
 } from "@luke/features/brain";
 import { wireValidatedTool } from "@luke/features/brain/tool-set";
 import { sessionKey } from "@luke/runtime/vocabulary";
-import { TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
 import { Effect, Option, Ref, Result, Schema } from "effect";
@@ -22,7 +22,8 @@ import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { listMessagesPast, readMessageByClientId } from "../message-reads.js";
+import { lineSendersOf } from "../coding-agent-store.js";
+import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
 
 /**
@@ -376,6 +377,87 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         });
         assert.equal(yield* Ref.get(handed), 2);
         assert.equal(yield* rowOf, 1);
+      }),
+  );
+
+  it.effect(
+    "a line whose hand-over answered nothing reads nowhere and awaits nothing, and a turn eve later hands it to takes the row with the kind and sender it was sent with",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        const text = "Check the deploy again.";
+        const refused = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text,
+            clientKey: "wake",
+            sender: { kind: MESSAGE_SENDER.LUKE },
+            metadata: { channel: MESSAGE_CHANNEL.LUKE },
+          },
+          Effect.succeed(false),
+        );
+        const page = yield* listMessagesPast(target.userId, target.conversationId, TOOLS, {
+          seq: 0,
+          revision: 0,
+        });
+        assert.deepEqual(refused, Result.succeed(Option.none()));
+        assert.ok(page.read.ok);
+        assert.equal(page.read.value.length, 0);
+        assert.equal((yield* awaitingLinesOf(target.userId, [target.conversationId])).size, 0);
+
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "t_0" });
+        const taken = yield* writer.takeAwaitingLine(target, { text, turnId });
+        const read = yield* readMessageByClientId(
+          target.userId,
+          target.conversationId,
+          TOOLS,
+          sentLineId("wake"),
+        );
+
+        assert.ok(Result.isSuccess(taken) && taken.success.length === 1);
+        assert.ok(read.ok);
+        assert.equal(read.value[0]?.turnId, turnId);
+        const message = read.value[0]?.message;
+        assert.ok(message !== undefined && message.role === MESSAGE_ROLE.USER);
+        assert.deepEqual(message.metadata, { channel: MESSAGE_CHANNEL.LUKE });
+        assert.deepEqual(
+          (yield* lineSendersOf(target, taken.success)).get(taken.success[0] ?? ""),
+          {
+            kind: MESSAGE_SENDER.LUKE,
+          },
+        );
+      }),
+  );
+
+  it.effect(
+    "a withdrawn line eve coalesced beside a spoken ask with a line it did take is taken with that line",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
+        const writer = yield* storeWriter({ tools: TOOLS });
+        for (const [text, taken] of [
+          ["Rerun the tests.", false],
+          ["Push the branch.", true],
+        ] as const) {
+          yield* writer.writeAwaitingLine(
+            target,
+            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.LUKE } },
+            Effect.succeed(taken),
+          );
+        }
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.SPOKEN, eveTurnId: "t_0" });
+
+        const taken = yield* writer.takeAwaitingLine(target, {
+          text: "Check the deploy.\n\nRerun the tests.\n\nPush the branch.",
+          turnId,
+          beside: true,
+        });
+
+        assert.ok(Result.isSuccess(taken));
+        assert.equal(taken.success.length, 2);
       }),
   );
 });

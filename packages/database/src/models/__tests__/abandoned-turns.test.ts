@@ -10,14 +10,16 @@ import {
 } from "@luke/features/brain";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { conversations } from "../../schemas/storage.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
+import { conversations, messages } from "../../schemas/storage.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  purgeWithdrawnLines,
   runningTurnIds,
   settleEndedSession,
   settleEndedSessionTurn,
@@ -347,6 +349,45 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
 
         assert.equal(settled, 1);
         assert.deepEqual(yield* runningTurnIds(agent.conversationId), [begunSince]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the sweep over withdrawn lines", (it) => {
+  it.effect(
+    "a line whose hand-over answered nothing stays until a coding agent's turn bound has passed since, then goes, and one a turn took after all stays",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        for (const text of ["Rerun the tests.", "Push the branch."]) {
+          yield* writer.writeAwaitingLine(
+            target,
+            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.LUKE } },
+            Effect.succeed(false),
+          );
+        }
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "t_0" });
+        yield* writer.takeAwaitingLine(target, { text: "Push the branch.", turnId });
+        const standing = Effect.map(
+          db
+            .select({ clientId: messages.clientId })
+            .from(messages)
+            .where(eq(messages.conversationId, target.conversationId)),
+          (rows) => rows.map((row) => row.clientId).sort(),
+        );
+        // Note that the lines were withdrawn at the test clock's start, the epoch.
+        yield* purgeWithdrawnLines(TURN_ABANDON.CODING_AGENT_AFTER_MS);
+        const withinBound = yield* standing;
+        yield* purgeWithdrawnLines(TURN_ABANDON.CODING_AGENT_AFTER_MS + 1);
+
+        assert.deepEqual(withinBound, [
+          sentLineId("Push the branch."),
+          sentLineId("Rerun the tests."),
+        ]);
+        assert.deepEqual(yield* standing, [sentLineId("Push the branch.")]);
       }),
   );
 });
