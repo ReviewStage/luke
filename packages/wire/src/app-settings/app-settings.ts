@@ -17,6 +17,7 @@ export const APP_SETTING_ID = {
   /** Offered by no build: Quiet Music and Spotify during a call, removed with calls. */
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
+  AGENT_ENTER: "agent_enter",
   QUIET_DURING_MEETINGS: "quiet_during_meetings",
   ANNOUNCE_SESSIONS: "announce_sessions",
   SHOW_IN_DOCK: "show_in_dock",

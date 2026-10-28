@@ -2,6 +2,7 @@ import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/fe
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
+import { AGENT_ENTER, AGENT_ENTER_LABEL, AGENT_ENTER_LIST, isAgentEnter } from "./agent-enter.js";
 import { HOST_CAPABILITY } from "./capabilities.js";
 import {
   DIFF_FONT,
@@ -234,6 +235,27 @@ export const APP_SETTING_SCHEMA = {
     order: 110,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: microphoneRouteDrawn,
+  }),
+  /*
+   * What Enter does in an agent's message box while its turn runs: steer it,
+   * as every message did before queueing, or queue the message behind it.
+   * Kept on this device, as how a keyboard is worked is the device's.
+   */
+  agentEnter: choiceSetting({
+    field: "agentEnter",
+    id: APP_SETTING_ID.AGENT_ENTER,
+    label: "While an agent works, Enter",
+    detail: "Hold ⌘ as you press Enter to do the other. The menu beside Send offers both.",
+    values: AGENT_ENTER_LIST,
+    token: (choice) => choice,
+    optionLabel: (choice) => AGENT_ENTER_LABEL[choice],
+    guard: (value: UnparsedWireValue) => optional(value, isAgentEnter),
+    default: AGENT_ENTER.STEER,
+    page: SETTINGS_PAGE.CODING_AGENTS,
+    section: SETTING_SECTION.COMPOSER,
+    order: 400,
+    // Nothing to run per write: the message box reads the choice as a key is pressed.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   lineNumbers: toggleSetting({
     field: "lineNumbers",

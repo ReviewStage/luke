@@ -1,0 +1,169 @@
+import type { AgentQueue, QueuedMessage } from "@luke/features/agent-queue-wire";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentQueueAnswerView,
+} from "@luke/features/coding-agent-view";
+import {
+  type AgentQueueChange,
+  type CodingAgentAttachment,
+  hasWordsOrFiles,
+  QUEUE_CHANGE,
+} from "@luke/features/coding-agent-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { useEffect, useRef, useState } from "react";
+import { useAct } from "../act.js";
+import type { AgentComposerControl } from "./use-agent-composer.js";
+
+/**
+ * use-agent-queue.ts -- an agent's queue as its tab draws and changes it: the messages queued behind its turn, in the order they go, and the one door every change goes through.
+ *
+ * The queue is read live with the transcript, whose every page carries it
+ * (`use-agent-transcript.ts`), so a change shows as the next page lands;
+ * nothing here polls. A new order is drawn at once, before that page, so a
+ * dropped row never springs back to where it stood, and lets go as the
+ * page carrying the queue it changed lands. Every change is one act
+ * (`codingAgents.queue`), and each is the same however often it is sent: a
+ * queued message names its own key, and every other change names the
+ * message it changes, so a retried press never doubles.
+ */
+
+/** What a change answered where the act itself failed. */
+const UNANSWERED: CodingAgentQueueAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+
+/** An agent's queue as its tab holds it. */
+export interface AgentQueueControl {
+  /** Its messages in the order they go, a new order drawn before the page that carries it. */
+  readonly messages: readonly QueuedMessage[];
+  readonly paused: AgentQueue["paused"];
+  /** One change, answered as the service answered it. */
+  readonly change: (change: AgentQueueChange) => Promise<CodingAgentQueueAnswerView>;
+  /** The message at `from` put at `to`, as a drag drops it. */
+  readonly move: (from: number, to: number) => void;
+}
+
+export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
+  const { act } = useAct();
+  const [moved, setMoved] = useState<{
+    readonly over: AgentQueue | undefined;
+    readonly order: readonly string[];
+  }>();
+  const held = queue?.messages ?? [];
+  // Note that a new order stands only over the queue it was made from, so the next page lets it go.
+  const order = moved !== undefined && moved.over === queue ? moved.order : undefined;
+  const messages =
+    order === undefined ? held : order.flatMap((id) => held.filter((message) => message.id === id));
+  const change = (next: AgentQueueChange) =>
+    act(ACT_KIND.CODING_AGENTS_QUEUE, { agentId, change: next }).catch(() => UNANSWERED);
+  const move = (from: number, to: number) => {
+    const ids = messages.map((message) => message.id);
+    const [taken] = ids.splice(from, 1);
+    if (taken === undefined) return;
+    ids.splice(to, 0, taken);
+    setMoved({ over: queue, order: ids });
+    void change({ change: QUEUE_CHANGE.REORDER, order: ids });
+  };
+  return { messages, paused: queue?.paused, change, move };
+}
+
+/** The box's words and files kept aside while it holds a queued message's words being edited. */
+interface Stashed {
+  readonly id: string;
+  readonly text: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+}
+
+/** How an agent's box queues its message and edits one queued already, as the composer's `queueing` takes it. */
+export interface QueueEditing {
+  /** The message the box is editing, by its id; none while none is. */
+  readonly editing: string | undefined;
+  /** The box's message queued behind the turn, the box emptied for the next. */
+  readonly queue: () => void;
+  /** The message's words taken into the box to edit, the box's own kept aside, and the message held out of the hand-off. */
+  readonly edit: (message: QueuedMessage) => void;
+  /** The box's words saved back into the message's place, and the box given back what it held. */
+  readonly save: () => void;
+  /** The edit given up, the message left as it was, and the box given back what it held. */
+  readonly cancel: () => void;
+}
+
+/**
+ * The box's part in the queue. An edit moves the queued message's words into
+ * the box, keeping what the box held aside, and holds the message out of the
+ * hand-off, which passes over it meanwhile; Save writes the words back in its
+ * place, and Cancel, Escape, an emptied box, or the tab closing lets it go as
+ * it was. Its files stay with it, as the queue lists only their names.
+ */
+export function useQueueEditing(
+  composer: AgentComposerControl,
+  queue: AgentQueueControl,
+): QueueEditing {
+  const [stashed, setStashed] = useState<Stashed | undefined>();
+  const held = useRef<string | undefined>(undefined);
+  held.current = stashed?.id;
+  const { change } = queue;
+  const latestChange = useRef(change);
+  latestChange.current = change;
+  // An edit open as the tab closes is let go, so the message goes on as it was.
+  useEffect(
+    () => () => {
+      const id = held.current;
+      if (id !== undefined)
+        void latestChange.current({ change: QUEUE_CHANGE.HOLD, messageId: id, held: false });
+    },
+    [],
+  );
+  const giveBack = (stash: Stashed) => {
+    composer.setDraft(stash.text);
+    composer.setAttachments(() => stash.attachments);
+    setStashed(undefined);
+  };
+  const cancel = () => {
+    if (stashed === undefined) return;
+    void change({ change: QUEUE_CHANGE.HOLD, messageId: stashed.id, held: false });
+    giveBack(stashed);
+  };
+  return {
+    editing: stashed?.id,
+    queue: () => {
+      const text = composer.draft.trim();
+      const { attachments } = composer;
+      if (!hasWordsOrFiles(text, attachments)) return;
+      const clientKey = crypto.randomUUID();
+      composer.setDraft("");
+      composer.setAttachments(() => []);
+      void change({
+        change: QUEUE_CHANGE.ADD,
+        text,
+        clientKey,
+        ...(attachments.length === 0 ? undefined : { attachments }),
+      }).then((answer) => {
+        // A message the queue did not take comes back into the box, where the box holds nothing newer.
+        if ("failure" in answer && composer.draft === "") {
+          composer.setDraft(text);
+          composer.setAttachments(() => attachments);
+        }
+      });
+    },
+    edit: (message) => {
+      if (stashed !== undefined)
+        void change({ change: QUEUE_CHANGE.HOLD, messageId: stashed.id, held: false });
+      const kept = stashed ?? {
+        id: message.id,
+        text: composer.draft,
+        attachments: composer.attachments,
+      };
+      setStashed({ ...kept, id: message.id });
+      composer.setDraft(message.text);
+      composer.setAttachments(() => []);
+      void change({ change: QUEUE_CHANGE.HOLD, messageId: message.id, held: true });
+    },
+    save: () => {
+      if (stashed === undefined) return;
+      const text = composer.draft.trim();
+      if (text === "") return cancel();
+      void change({ change: QUEUE_CHANGE.EDIT, messageId: stashed.id, text });
+      giveBack(stashed);
+    },
+    cancel,
+  };
+}

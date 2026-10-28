@@ -12,6 +12,7 @@ import type { AppSettingsView } from "@luke/settings/wire";
 import { TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import type { ActionResult } from "@luke/wire";
 import { AccountSection } from "./account-section.js";
+import { AgentComposerSection } from "./agent-composer-section.js";
 import { AppearanceSection } from "./appearance-page.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 import { ExperimentalPage } from "./experimental-page.js";
@@ -122,6 +123,9 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
+      {view === SETTINGS_VIEW.CODING_AGENTS && panelView ? (
+        <AgentComposerSection view={panelView} writes={writes} />
+      ) : null}
 
       {view === SETTINGS_VIEW.HOSTS ? <HostsSection signedIn={signedIn} /> : null}
 

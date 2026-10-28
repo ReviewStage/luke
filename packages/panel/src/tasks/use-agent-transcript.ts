@@ -1,3 +1,4 @@
+import type { AgentQueue } from "@luke/features/agent-queue-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
@@ -140,6 +141,8 @@ export interface AgentTranscriptControl {
   delegations: ReadonlyMap<string, number>;
   /** Where each of the agent's workers stands, by the call that started it, as its own session reads and the last page said; none on a worker's, and from a service older than it. */
   subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  /** The messages queued behind the agent's turn and the queue's pause, as the last page said; none while none is queued, and on a worker's. */
+  queue: AgentQueue | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -171,6 +174,7 @@ interface Held {
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
   subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  queue: AgentQueue | undefined;
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
@@ -196,6 +200,7 @@ function fresh(transcript: CodingAgentTranscriptKey): Held {
     subagentTitles: new Map(),
     delegations: new Map(),
     subagents: new Map(),
+    queue: undefined,
     rewound: undefined,
     failed: false,
   };
@@ -288,6 +293,7 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
       (page.subagents ?? []).map((standing) => [standing.callId, standing]),
       sameStanding,
     ),
+    queue: page.queue,
     failed: false,
   };
 }
@@ -453,6 +459,7 @@ export function useAgentTranscript(input: {
     subagentTitles: held.subagentTitles,
     delegations: held.delegations,
     subagents: held.subagents,
+    queue: held.queue,
     reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
     onRetry,

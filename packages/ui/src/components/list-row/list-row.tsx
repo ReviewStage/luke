@@ -398,6 +398,7 @@ export function List({
   moves = false,
   joinsWalk = false,
   selection,
+  onPointerDown,
   children,
 }: {
   /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
@@ -413,6 +414,8 @@ export function List({
   joinsWalk?: boolean;
   /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
+  /** A press on the list, as a drag that puts its rows in another order hears it (the panel's `useRowDrag`). */
+  onPointerDown?: PointerEventHandler<HTMLUListElement> | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   const roving = useRovingKeys<HTMLUListElement>();
@@ -430,6 +433,7 @@ export function List({
       data-density={density}
       data-finger-tall={fingerTall ? "true" : undefined}
       aria-label={label}
+      onPointerDown={onPointerDown}
       {...(moves ? motionRows() : {})}
     >
       <ListVariantContext.Provider value={variant}>

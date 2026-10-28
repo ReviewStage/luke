@@ -79,3 +79,10 @@ export {
   zoomFactor,
   zoomStepped,
 } from "./zoom.js";
+export {
+  AGENT_ENTER,
+  AGENT_ENTER_LABEL,
+  AGENT_ENTER_LIST,
+  type AgentEnter,
+  isAgentEnter,
+} from "./agent-enter.js";

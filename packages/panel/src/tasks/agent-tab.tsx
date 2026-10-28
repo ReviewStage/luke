@@ -13,6 +13,7 @@ import {
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
   type CodingAgentTodos,
+  QUEUE_CHANGE,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { threadLineWords } from "@luke/features/inbox-wire";
@@ -22,6 +23,7 @@ import type { TaskStatus } from "@luke/features/task-wire";
 import { CALL_KIND, CALL_WORDS, sameFieldsBy, sameShape } from "@luke/features/turn-rows";
 import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { AGENT_ENTER } from "@luke/settings";
 import {
   ANNOUNCE,
   announce,
@@ -90,6 +92,7 @@ import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -100,6 +103,7 @@ import {
 } from "./agent-pictures.js";
 import { AgentPlace } from "./agent-place.js";
 import { type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { AgentQueueDock } from "./agent-queue-dock.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
@@ -224,6 +228,7 @@ import {
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
 import { useAgentPullRequest } from "./use-agent-pull-request.js";
+import { useAgentQueue, useQueueEditing } from "./use-agent-queue.js";
 import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -2454,6 +2459,9 @@ function AgentTabView({
     [transcript.messages, cut],
   );
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
+  const queue = useAgentQueue(agent.id, transcript.queue);
+  const queueEditing = useQueueEditing(composer, queue);
+  const enterQueues = useAppSlice(APP_SETTINGS_VIEW)?.agentEnter === AGENT_ENTER.QUEUE;
   // A rewind writes in the box, so it is offered only while the box takes words.
   const boxOpen =
     onUnarchive === undefined && continuedNote === undefined && composer.closed === undefined;
@@ -2652,6 +2660,18 @@ function AgentTabView({
       <AgentTabFoot>
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
+        <AgentQueueDock
+          messages={queue.messages}
+          paused={queue.paused}
+          editing={queueEditing.editing}
+          onMove={queue.move}
+          onSteer={(message) => queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })}
+          onEdit={queueEditing.edit}
+          onDelete={(message) =>
+            queue.change({ change: QUEUE_CHANGE.DELETE, messageId: message.id })
+          }
+          onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
+        />
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
@@ -2688,6 +2708,17 @@ function AgentTabView({
             skills={skills}
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
+            queueing={
+              agent.runtime === undefined
+                ? undefined
+                : {
+                    enterQueues,
+                    onQueue: queueEditing.queue,
+                    editing: queueEditing.editing !== undefined,
+                    onSave: queueEditing.save,
+                    onCancel: queueEditing.cancel,
+                  }
+            }
           />
         )}
       </AgentTabFoot>
