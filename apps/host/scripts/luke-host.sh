@@ -48,10 +48,11 @@ uninstall_darwin() {
       esac
     done
   done
-  rm -rf "$app" "$home/$MAC_LOG_FOLDER"
-  if [ "$(readlink -f /usr/local/bin/luke-host 2>/dev/null)" = "$app/luke-host/bin/luke-host" ]; then
+  # Note that the link is read as the install wrote it, before its target goes, since a link to nothing resolves to nothing.
+  if [ "$(readlink /usr/local/bin/luke-host 2>/dev/null)" = "$app/luke-host/bin/luke-host" ]; then
     rm -f /usr/local/bin/luke-host
   fi
+  rm -rf "$app" "$home/$MAC_LOG_FOLDER"
   printf 'Luke host is removed from this Mac for %s. Remove it in Settings › Hosts too, if it is still listed.\n' "$user"
 }
 
