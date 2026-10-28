@@ -19,12 +19,14 @@ import type { HostedApiError } from "@luke/features";
 import { AGENT_QUEUE_BOUNDS, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
 import { LINE_GRACE_MILLIS } from "@luke/features/coding-agent-status";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { and, asc, count, eq, exists, max, sql } from "drizzle-orm";
+import { TURN_STATUS } from "@luke/wire";
+import { and, asc, count, eq, exists, inArray, max, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { agentQueuePause, queuedMessage } from "../schemas/agent-queue.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { turns } from "../schemas/storage.js";
 import { agentReachableBy } from "./workspace-store.js";
 
 type AgentQueueEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
@@ -532,12 +534,26 @@ const findUnpausedQueues = SqlSchema.findAll({
         .from(queuedMessage)
         .innerJoin(codingAgent, eq(codingAgent.id, queuedMessage.agentId))
         .where(
-          sql`not ${exists(
-            db
-              .select({ agentId: agentQueuePause.agentId })
-              .from(agentQueuePause)
-              .where(eq(agentQueuePause.agentId, queuedMessage.agentId)),
-          )}`,
+          and(
+            sql`not ${exists(
+              db
+                .select({ agentId: agentQueuePause.agentId })
+                .from(agentQueuePause)
+                .where(eq(agentQueuePause.agentId, queuedMessage.agentId)),
+            )}`,
+            // Note that an agent at work is left out before the bound, so busy queues never crowd out an idle one.
+            sql`not ${exists(
+              db
+                .select({ id: turns.id })
+                .from(turns)
+                .where(
+                  and(
+                    eq(turns.conversationId, codingAgent.conversationId),
+                    inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+                  ),
+                ),
+            )}`,
+          ),
         )
         .limit(limit),
     ),
