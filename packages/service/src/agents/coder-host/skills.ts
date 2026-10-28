@@ -12,14 +12,15 @@
  * itself. An agent with no repository is offered its installed skills
  * alone. The member is the agent's starter, whose conversation it is, and
  * for an automation's agent the automation's owner, who starts it; the
- * workspace is its task's, read as that member, as its repository's reads
- * are.
+ * workspace is its own, read as that member as the agent reads itself
+ * (`ownAgentWorkspace`), so its skills stay while that member no longer sees
+ * its task.
  */
 
 import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect } from "effect";
-import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
+import { agentMember, ownAgentWorkspace } from "../../github/workspace-repository.js";
 import {
   type AgentSkill,
   installedSkills,
@@ -43,8 +44,8 @@ function sourcedSkills(
   loaded: (skill: RepositorySkill) => string = loadedMarkdown,
 ): Effect.Effect<readonly [readonly AgentSkill[], readonly AgentSkill[]], never, CheckoutServices> {
   return Effect.gen(function* () {
-    // The workspace is read once for both sources.
-    const workspaceOf = yield* Effect.cached(agentWorkspace(target.userId, agent));
+    // The workspace is read once for both sources, as the agent reads itself.
+    const workspaceOf = yield* Effect.cached(ownAgentWorkspace(target.userId, agent));
     return yield* Effect.all(
       [
         hasRepository(agent)

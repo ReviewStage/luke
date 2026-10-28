@@ -3,6 +3,7 @@ import {
   type Agent,
   listWorkspaceAgents,
   readAgent,
+  readVisibleAgent,
   taskNamesOf,
 } from "@luke/database/models/agent-store";
 import { describeWire } from "@luke/wire/effect";
@@ -110,14 +111,23 @@ export const workspaceAgentsOf = (
     return { agents, taskOf };
   });
 
-/** The agent under the id where it is one of the workspace's, archived or not; nothing for an agent of another workspace or none. */
+/**
+ * The agent under the id where it is one of the workspace's, archived or
+ * not, as the calling agent's tools name it; nothing for an agent of another
+ * workspace or none. Another agent is read as a member may read it
+ * (`readVisibleAgent`), and the caller itself as it reads itself
+ * (`readAgent`), so its own tools never lose it when its starter
+ * loses sight of its task.
+ */
 export const workspaceAgent = (
   userId: string,
   workspaceId: string,
   agentId: string,
+  callerId: string,
 ): Effect.Effect<Option.Option<Agent>, StoreFailure, DatabaseServices> =>
-  Effect.map(readAgent(userId, agentId), (found) =>
-    Option.filter(found, (agent) => agent.organizationId === workspaceId),
+  Effect.map(
+    agentId === callerId ? readAgent(userId, agentId) : readVisibleAgent(userId, agentId),
+    (found) => Option.filter(found, (agent) => agent.organizationId === workspaceId),
   );
 
 /** The task one agent stands on, read as the account; null for an agent on none or on one the account cannot read. */

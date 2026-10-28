@@ -381,6 +381,8 @@ export const INBOX_REFUSAL = {
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
   NOT_ITS_MEMBER:
     "Not posted: your threads are the developer's alone, which no teammate sees; name the developer in to, or leave to out.",
+  ADDRESSEE_CANNOT_SEE:
+    "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -652,6 +654,8 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_ADDRESSEE;
     case INBOX_POST_REFUSAL.NOT_ITS_MEMBER:
       return INBOX_REFUSAL.NOT_ITS_MEMBER;
+    case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
+      return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
   }
 }
 
@@ -1049,7 +1053,12 @@ export function moveAgentThread(
       }
       const itemId = yield* movedThreadId(agent, read.success.thread);
       if (Option.isNone(itemId)) return channelRejected(CHANNEL_REFUSAL.NO_THREAD);
-      const moved = yield* moveChannelThread(agent.userId, itemId.value, channel.success.id);
+      const moved = yield* moveChannelThread(
+        agent.userId,
+        itemId.value,
+        channel.success.id,
+        agent.agentId,
+      );
       if (Result.isFailure(moved)) {
         // Note that the channel was found open in the agent's workspace, so one the move refuses is not the thread's.
         return channelRejected(

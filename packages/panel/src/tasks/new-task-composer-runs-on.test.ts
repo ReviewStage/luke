@@ -242,12 +242,11 @@ test("a device online but still getting ready, or that couldn't set up, is liste
   assert.deepEqual(
     [row("Studio"), row("Build host")].map((each) => [
       each.getAttribute("aria-disabled"),
-      each.textContent?.includes("Getting ready…"),
-      each.textContent?.includes("Couldn't set up"),
+      each.querySelector('[role="img"]')?.getAttribute("aria-label"),
     ]),
     [
-      ["true", true, false],
-      ["true", false, true],
+      ["true", "Getting ready…"],
+      ["true", "Couldn't set up"],
     ],
   );
 });

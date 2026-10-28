@@ -33,7 +33,7 @@
  * first and reads back only as far as it is scrolled.
  */
 
-import { type Agent, readAgent } from "@luke/database/models/agent-store";
+import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { readRewoundRevision } from "@luke/database/models/conversation-rewind";
 import { childConversationId } from "@luke/database/models/ids";
@@ -106,7 +106,7 @@ export interface MessagesProcedureSeams extends EveReach {
 /** The agent the path names, where the account is a member of its workspace, its conversation targeted under the member who started it; not found otherwise. */
 const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, id: string) {
   const agentId = yield* pathUuid(id);
-  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const target: ConversationTarget = {
     userId: agent.value.userId,

@@ -41,6 +41,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
 import { isVideoType } from "@luke/features/conversation-picture-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { agentName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@luke/features/turn-rows";
@@ -580,7 +581,7 @@ function agentNamedWithId(agent: Agent): string {
 function pullWords(published: AgentPullRequest | null): string {
   return published === null
     ? ""
-    : `, with its pull request #${published.number} (${published.url})`;
+    : `, with its pull request ${mentionMarkdownLink(`#${published.number}`, published.url)}`;
 }
 
 /** Whether a pull request is still open, a draft among them, so work that goes on goes on in it. */

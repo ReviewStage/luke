@@ -16,7 +16,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, readAgent } from "@luke/database/models/agent-store";
+import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -549,7 +549,7 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   },
 ) {
   const { agentId, title, text, clientKey, attachments } = asked;
-  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (!controlsAgent(userId, agent.value)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const { userId: starterId, taskId } = agent.value;
@@ -626,7 +626,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }),
     agent: signedIn.agent.effect(function* ({ input, context }) {
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(agentInboxPast(context.userId, agent.value.id, after));

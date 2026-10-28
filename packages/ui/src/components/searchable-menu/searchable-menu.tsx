@@ -109,6 +109,14 @@ type SearchableMenuPlace =
     }
   | { layer: typeof SEARCHABLE_MENU_LAYER.EMBEDDED };
 
+/** How a row that cannot be picked says why: in words at its end, or by its end marks alone, a status dot whose hint says the words. */
+export const MENU_ROW_WHY = {
+  WORDS: "words",
+  MARK: "mark",
+} as const;
+
+export type MenuRowWhy = (typeof MENU_ROW_WHY)[keyof typeof MENU_ROW_WHY];
+
 /** One row the menu lists. */
 export interface MenuRow {
   /** Names the row apart from every other; what a pick hands back, and what `value` names. */
@@ -126,6 +134,8 @@ export interface MenuRow {
   command?: KeyedCommand | undefined;
   /** Why the row cannot be picked now, printed muted at its end in the shortcut's place; the row is dimmed and the arrows pass over it. */
   disabled?: string | undefined;
+  /** Whether that why is printed, or said by the row's end marks alone, so a column of status dots keeps one edge; printed where none is said. */
+  why?: MenuRowWhy | undefined;
   /** The row is listed only once something is searched: a model older than its family's newest. */
   searchOnly?: boolean | undefined;
   /** Rows the row opens beside itself rather than being picked, as a pinned row's submenu: where a new Browser tab opens. */
@@ -346,10 +356,11 @@ function highlightOver(input: {
   return input.first;
 }
 
-/** What a row prints at its end: why it cannot be picked now or its shortcut, then its own marks; or nothing. */
+/** What a row prints at its end: why it cannot be picked now, unless its marks say it, or its shortcut, then its own marks; or nothing. */
 function rowHint(row: MenuRow): React.ReactNode {
+  const why = row.why === MENU_ROW_WHY.MARK ? undefined : row.disabled;
   const said =
-    row.disabled ??
+    why ??
     (row.command === undefined ? undefined : <Shortcut chord={APP_SHORTCUTS[row.command].chord} />);
   if (row.end === undefined || row.end === null) return said;
   return (
@@ -361,9 +372,9 @@ function rowHint(row: MenuRow): React.ReactNode {
 }
 
 /**
- * The matching rows as the list's options, a run under each heading. A
- * menu with a row chosen keeps every row's check room, so their hints end
- * in one line; one with none chosen keeps none.
+ * The matching rows as the list's options, a run under each heading, the
+ * one chosen checked; the rest keep no check room, so their hints end at the
+ * row's edge.
  */
 function optionGroups(
   rows: readonly MenuRow[],

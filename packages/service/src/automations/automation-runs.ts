@@ -5,8 +5,8 @@ import {
   awaitingLinesOfReached,
   discardAgent,
   latestTurnsOfReached,
-  readAgent,
   readAgentByKey,
+  readVisibleAgent,
 } from "@luke/database/models/agent-store";
 import {
   type Automation,
@@ -348,7 +348,7 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   if (automation.targetKind !== AUTOMATION_TARGET.SAME_AGENT || automation.targetAgentId === null) {
     return true;
   }
-  const agent = yield* readAgent(automation.userId, automation.targetAgentId);
+  const agent = yield* readVisibleAgent(automation.userId, automation.targetAgentId);
   return Option.match(agent, {
     onNone: () => true,
     onSome: (held) => held.repository?.toLowerCase() === repository.toLowerCase(),
@@ -413,7 +413,7 @@ const steerClaimed = Effect.fnUntraced(function* (
   run: ActedRun,
   agentId: string,
 ) {
-  const found = yield* readAgent(automation.userId, agentId);
+  const found = yield* readVisibleAgent(automation.userId, agentId);
   if (Option.isNone(found) || found.value.archivedAt !== null) {
     return yield* failedRun(run, AUTOMATION_RUN_REASON.AGENT_GONE);
   }
@@ -454,7 +454,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null
-      ? yield* readAgent(automation.userId, automation.targetAgentId)
+      ? yield* readVisibleAgent(automation.userId, automation.targetAgentId)
       : Option.none();
   const agents = [
     ...started.filter((agent) =>

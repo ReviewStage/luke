@@ -6,8 +6,7 @@ import {
 import { queryBuilder } from "@luke/database/core/query";
 import {
   AGENT_WORKSPACE,
-  agentReachableBy,
-  agentSeenBy,
+  agentVisibleTo,
   taskReachableBy,
 } from "@luke/database/models/workspace-store";
 import { agentPin, taskPin } from "@luke/database/schemas";
@@ -15,7 +14,7 @@ import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
 import { AGENT_BRIEF } from "@luke/features/agent-wire";
-import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import {
@@ -163,17 +162,13 @@ function agentsStatement(userId: string) {
       ),
     )
     .from(agentTable)
-    .leftJoin(task, eq(task.id, agentTable.taskId))
     .leftJoin(agentPin, and(eq(agentPin.codingAgentId, agentTable.id), eq(agentPin.userId, userId)))
     .leftJoin(starter, eq(starter.id, agentTable.userId))
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
     .leftJoinLateral(latest, sql`true`)
     .where(
-      or(
-        // An agent on a task is listed only where the account sees it too, as the held list reads it.
-        and(isNotNull(agentTable.taskId), taskReachableBy(userId), agentSeenBy(userId)),
-        and(isNull(agentTable.taskId), agentReachableBy(userId)),
-      ),
+      // An agent on a task is listed only where the account reaches the task too, as a read of it by its id is.
+      agentVisibleTo(userId),
     );
 }
 

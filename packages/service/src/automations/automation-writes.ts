@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
+import { readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -217,8 +217,9 @@ interface TargetColumns {
 
 /**
  * A target the account may aim runs at: a new agent each run, or an agent
- * the account reads; an agent it cannot read is refused as no request at
- * all, the same as a malformed one.
+ * the account may read (`readVisibleAgent`), its task included; an
+ * agent it cannot read is refused as no request at all, the same as a
+ * malformed one.
  */
 const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -227,7 +228,7 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
     return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
   }
-  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, target.agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
 });

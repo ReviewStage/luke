@@ -18,7 +18,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type Agent, readAgent, readAgentRouting } from "@luke/database/models/agent-store";
+import { type Agent, readAgentRouting, readVisibleAgent } from "@luke/database/models/agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
@@ -54,10 +54,10 @@ export interface ReachedAgent {
 }
 
 /**
- * The agent the path names, on a task or with none, where the account is a
- * member of its workspace, or not found; its conversation is targeted
- * under the member who started it, which is whom the conversation belongs
- * to.
+ * The agent the path names, on a task or with none, where the account may
+ * read it (`readVisibleAgent`), its task included, or not found; its
+ * conversation is targeted under the member who started it, which is whom
+ * the conversation belongs to.
  */
 export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountResolving,
@@ -77,7 +77,7 @@ export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
 ): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
-  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, yield* pathUuid(id)));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, yield* pathUuid(id)));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return {
     userId,

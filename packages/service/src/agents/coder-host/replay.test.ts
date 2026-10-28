@@ -139,7 +139,7 @@ it("a source that never made a branch of its own sends the new agent to the work
     /It never made a branch of its own: it took up the work of the coding agent "Add PR tab"/u,
   );
   assert.match(pushed, /git switch 'luke\/pull-request-tab'/u);
-  assert.ok(pushed.includes("#3030 (https://github.com/acme/app/pull/3030)"));
+  assert.ok(pushed.includes("[@#3030](https://github.com/acme/app/pull/3030)"));
   assert.doesNotMatch(pushed, /start from the repository's default branch/u);
 
   const copied = carriedFrom("luke/add-pr-tab-continued-1a2b3c4d");
@@ -147,7 +147,7 @@ it("a source that never made a branch of its own sends the new agent to the work
   assert.match(copied, /git switch 'luke\/add-pr-tab-continued-1a2b3c4d'/u);
   assert.match(
     copied,
-    /That agent's own branch is `luke\/pull-request-tab`, with its pull request #3030/u,
+    /That agent's own branch is `luke\/pull-request-tab`, with its pull request \[@#3030\]/u,
   );
 
   const unread = replayOf(

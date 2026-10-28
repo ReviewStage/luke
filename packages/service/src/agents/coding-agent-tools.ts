@@ -95,7 +95,7 @@ import {
 } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
-  agentWorkspace,
+  ownAgentWorkspace,
   taskWorkspace,
   workspaceRepository,
 } from "../github/workspace-repository.js";
@@ -1229,9 +1229,14 @@ export function callerTask(caller: AgentCaller): string | null {
   return caller.agent.taskId;
 }
 
-/** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
+/**
+ * The workspace the caller reaches agents in, read on its member's standing
+ * now as the agent reads itself (`ownAgentWorkspace`); nothing where they no
+ * longer reach the agent. Every agent and task its tools act on is still
+ * read on the member's own rule (`workspaceAgent`, a start's reach).
+ */
 export const callerWorkspace = (caller: AgentCaller) =>
-  agentWorkspace(caller.agent.userId, caller.agent);
+  ownAgentWorkspace(caller.agent.userId, caller.agent);
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
 /** The provider's own harness the agent runs on; none on eve. */
@@ -1245,7 +1250,7 @@ const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
     const workspace = yield* callerWorkspace(caller);
     if (Option.isNone(workspace)) return Option.none();
     const userId = callerUserId(caller);
-    const found = yield* workspaceAgent(userId, workspace.value, agentId);
+    const found = yield* workspaceAgent(userId, workspace.value, agentId, caller.agent.id);
     if (Option.isNone(found)) return Option.none();
     const agent = found.value;
     const task = yield* agentTaskOf(userId, agent);

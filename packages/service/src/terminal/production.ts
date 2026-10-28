@@ -11,7 +11,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository, readAgent } from "@luke/database/models/agent-store";
+import { hasRepository, readVisibleAgent } from "@luke/database/models/agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import {
   claimCredentialRenewal,
@@ -50,7 +50,7 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
       reach: (userId, agentId) =>
         run(
           Effect.gen(function* () {
-            const found = yield* readAgent(userId, agentId);
+            const found = yield* readVisibleAgent(userId, agentId);
             if (Option.isNone(found) || found.value.archivedAt !== null) return Option.none();
             const agent = found.value;
             // Note that a shell in an agent on its starter's own GitHub token is its starter's alone.

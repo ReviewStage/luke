@@ -4,11 +4,7 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import {
-  agentNoTeammatesOperator,
-  agentSeenBy,
-  taskSeenBy,
-} from "@luke/database/models/workspace-store";
+import { agentVisibleTo, taskSeenBy } from "@luke/database/models/workspace-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { member } from "@luke/database/schemas/auth";
 import { planPageVersion } from "@luke/database/schemas/plan-page";
@@ -82,16 +78,11 @@ function agentPagesNewest(userId: string, agentId: string) {
     .selectDistinctOn([planPageVersion.pageId], NEWEST_COLUMNS)
     .from(planPageVersion)
     .innerJoin(agentTable, eq(agentTable.id, planPageVersion.agentId))
-    .innerJoin(
-      member,
-      and(eq(member.organizationId, agentTable.organizationId), eq(member.userId, userId)),
-    )
     .where(
       and(
         isNull(planPageVersion.taskId),
         eq(planPageVersion.agentId, agentId),
-        agentSeenBy(userId),
-        agentNoTeammatesOperator(userId),
+        agentVisibleTo(userId),
       ),
     )
     .orderBy(planPageVersion.pageId, desc(planPageVersion.version))
