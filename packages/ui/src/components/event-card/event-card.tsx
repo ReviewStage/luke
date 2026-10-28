@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { useUntilFound } from "../../use-until-found.js";
 import { CARD_CORNER, CARD_LOOK, CARD_PADDING, Card } from "../card/card.js";
 import { ShowMoreRow } from "../show-more-row/show-more-row.js";
 import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -14,7 +15,9 @@ import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/
  * The card draws the frame and the order; the words, the chip, and each
  * place's link are the caller's, drawn as its own markdown and chips are.
  * The first `EVENT_CARD_NOTES_SHOWN` notes stand, and the rest wait behind
- * the foot every capped list ends in (`ShowMoreRow`).
+ * the foot every capped list ends in (`ShowMoreRow`), drawn and hidden
+ * until found (`use-until-found.ts`), so a find reaches them and opens the
+ * card where it lands in one.
  */
 
 /** How many of a card's notes stand before the rest fold behind its foot. */
@@ -48,7 +51,7 @@ export function EventCard({
   head,
   children,
   notes = NO_NOTES,
-  ...rest
+  ...attributes
 }: {
   /** Who did what, to which thing, as one line. */
   head: ReactNode;
@@ -57,10 +60,11 @@ export function EventCard({
   notes?: readonly EventCardNote[] | undefined;
 } & { readonly [data: `data-${string}`]: string | undefined }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const shown = open ? notes : notes.slice(0, EVENT_CARD_NOTES_SHOWN);
+  const rest = useUntilFound<HTMLUListElement>(!open, () => setOpen(true));
+  const more = notes.slice(EVENT_CARD_NOTES_SHOWN);
   return (
     <Card
-      {...rest}
+      {...attributes}
       look={CARD_LOOK.RAISED}
       corner={CARD_CORNER.CONTROL}
       padding={CARD_PADDING.COMPACT}
@@ -72,16 +76,19 @@ export function EventCard({
       {children == null ? null : <div className="min-w-0">{children}</div>}
       {notes.length === 0 ? null : (
         <ul className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
-          {shown.map((note) => (
+          {notes.slice(0, EVENT_CARD_NOTES_SHOWN).map((note) => (
             <NoteRow key={note.key} note={note} />
           ))}
         </ul>
       )}
-      <ShowMoreRow
-        more={notes.length - EVENT_CARD_NOTES_SHOWN}
-        shown={open}
-        onToggle={() => setOpen(!open)}
-      />
+      {more.length === 0 ? null : (
+        <ul ref={rest} className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
+          {more.map((note) => (
+            <NoteRow key={note.key} note={note} />
+          ))}
+        </ul>
+      )}
+      <ShowMoreRow more={more.length} shown={open} onToggle={() => setOpen(!open)} />
     </Card>
   );
 }

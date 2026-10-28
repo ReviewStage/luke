@@ -1,14 +1,7 @@
 import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
-import {
-  Fragment,
-  type ReactNode,
-  type RefObject,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, type ReactNode, useId, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { useUntilFound } from "../../use-until-found.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_LOOK, CARD_PADDING, Card } from "../card/card.js";
 import { CopyButton } from "../copy-button/copy-button.js";
 import { OneLine } from "../one-line/one-line.js";
@@ -57,12 +50,6 @@ import { wholeWordsHint } from "../tooltip/hint.js";
 
 /** How many lines a block shows before the rest waits behind Show all. */
 const CODE_CARD_CUT_LINES = 40;
-
-/** The `hidden` a cut block's rest wears: drawn, and found by a find over the page, but not shown until a match lands in it. */
-const UNTIL_FOUND = "until-found";
-
-/** The event a find fires at what `UNTIL_FOUND` hides before it shows a match there. */
-const BEFORE_MATCH = "beforematch";
 
 /** What the line under a cut block says, cut and whole. */
 const CUT_LABEL = {
@@ -176,34 +163,6 @@ function CodeRuns({
   ));
 }
 
-/**
- * The rest of a cut block, hidden until found while `hiding`, and `onFound`
- * called when a find lands in it. Note that the attribute is set here rather
- * than as a prop, because React draws `hidden` as a flag and would set it
- * to no value, which hides the rest from every find.
- */
-function useRestUntilFound(
-  hiding: boolean,
-  onFound: () => void,
-): RefObject<HTMLSpanElement | null> {
-  const rest = useRef<HTMLSpanElement | null>(null);
-  const [found] = useState(() => ({ current: onFound }));
-  found.current = onFound;
-  useLayoutEffect(() => {
-    const element = rest.current;
-    if (element === null) return;
-    if (!hiding) {
-      element.removeAttribute("hidden");
-      return;
-    }
-    element.setAttribute("hidden", UNTIL_FOUND);
-    const open = () => found.current();
-    element.addEventListener(BEFORE_MATCH, open);
-    return () => element.removeEventListener(BEFORE_MATCH, open);
-  }, [hiding, found]);
-  return rest;
-}
-
 /** What a block's own words are, or what a caller draws in their place. */
 type CodeCardLines =
   | {
@@ -255,7 +214,7 @@ export function CodeCard({
   // Note that the newline a block ends on closes its last line rather than opening one more, but a block drawn as rows names each row itself, so an empty last row is a row.
   const text = (rows === undefined ? (code ?? "").replace(/\n$/u, "") : (code ?? "")).split("\n");
   const cut = code !== undefined && text.length > CODE_CARD_CUT_LINES;
-  const rest = useRestUntilFound(cut && !whole, () => setWhole(true));
+  const rest = useUntilFound<HTMLSpanElement>(cut && !whole, () => setWhole(true));
   const lead = cut ? CODE_CARD_CUT_LINES : text.length;
   const drawLines = (from: number, to: number): ReactNode =>
     rows === undefined ? (
