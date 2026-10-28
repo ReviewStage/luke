@@ -12,6 +12,7 @@ import {
   type InboxListed,
   inboxAgentOf,
   inboxLineKind,
+  NEEDS_YOU,
   type TasklessInboxAgent,
   taskHolder,
 } from "./inbox-model.js";
@@ -109,8 +110,8 @@ function useWaitingBrief(itemId: string): AppInboxWaitingItem | undefined {
   );
 }
 
-/** What an item still waiting says of where it stands, before its inbox is read. */
-const WAITING_WORDS = "Waiting for an answer";
+/** What an item still waiting says of where it stands, before its inbox is read: what its read card says to the reader it waits on. */
+const WAITING_WORDS = NEEDS_YOU.LABEL;
 
 /** An item's card from main's brief alone: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
