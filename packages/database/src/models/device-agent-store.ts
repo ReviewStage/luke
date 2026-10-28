@@ -40,7 +40,20 @@ import {
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
 } from "@luke/features/device-agent-wire";
-import { and, arrayContains, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -465,12 +478,18 @@ const insertRequest = SqlSchema.findAll({
     ),
 });
 
-/** A request waiting for the account's Mac given. */
+/**
+ * A request waiting for the account's Mac given, of a kind this build
+ * knows. Note that a row of a kind an earlier build queued and never
+ * withdrew is passed over rather than read, because one row the decode
+ * refuses would fail the Mac's whole read until the expiry took it.
+ */
 function requestWaiting(userId: string, deviceId: string) {
   return and(
     eq(deviceAgentRequest.userId, userId),
     eq(deviceAgentRequest.deviceId, deviceId),
     isNull(deviceAgentRequest.claimedAt),
+    inArray(deviceAgentRequest.kind, Object.values(DEVICE_AGENT_REQUEST_KIND)),
   );
 }
 
