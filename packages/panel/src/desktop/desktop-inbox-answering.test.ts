@@ -691,16 +691,11 @@ function answeredFields(within: Element): (string | null | undefined)[][] {
     const name = field.querySelector(".luke-field-label, .luke-checkbox-words")?.firstChild
       ?.textContent;
     const box = field.querySelector<HTMLElement>('[role="checkbox"]');
-    const number = field.querySelector<HTMLInputElement>('input[type="number"]');
     const words = field.querySelector('[role="textbox"]');
     const pills = field.querySelector<HTMLElement>(".luke-choice-list");
     if (box !== null) {
       assert.equal(box.getAttribute("aria-readonly"), "true");
       return [kind, name, box.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"];
-    }
-    if (number !== null) {
-      assert.equal(number.readOnly, true);
-      return [kind, name, number.value];
     }
     if (pills !== null) {
       assert.equal(pills.dataset.readOnly, "true");
@@ -1556,7 +1551,7 @@ function answeredBox(pane: HTMLElement): HTMLElement {
 /** Each press of an answered box, by its words, whether it was the one given, and its glyph's tone where it wears one; every one read-only. */
 function answeredPresses(box: HTMLElement): (string | boolean | undefined)[][] {
   return [...box.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")].map((press) => {
-    assert.equal(press.disabled, true, "a press given takes no press");
+    assert.equal(press.getAttribute("aria-disabled"), "true", "a press given takes no press");
     assert.equal(press.dataset.readOnly, "true", "and stands at full strength, not faded");
     return [
       press.textContent ?? "",
@@ -1583,11 +1578,15 @@ test("an answered decide's card leaves the agent's message for the head of the r
   const box = answeredBox(pane);
   const rows = [...box.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
   assert.deepEqual(
-    rows.map((row) => [wordsOf(row), row.getAttribute("aria-checked"), row.disabled]),
+    rows.map((row) => [
+      wordsOf(row),
+      row.getAttribute("aria-checked"),
+      row.getAttribute("aria-disabled"),
+    ]),
     [
-      ["1 dayAs today.", "false", true],
-      ["7 daysRecommendedWhat most teams use.", "true", true],
-      ["30 days", "false", true],
+      ["1 dayAs today.", "false", "true"],
+      ["7 daysRecommendedWhat most teams use.", "true", "true"],
+      ["30 days", "false", "true"],
     ],
     "each row as offered, unnumbered, the pick checked and none pressable",
   );

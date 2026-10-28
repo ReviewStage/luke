@@ -124,6 +124,7 @@ import {
 } from "./inbox-model.js";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager.js";
 import { InboxStamp } from "./inbox-stamp.js";
+import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -194,12 +195,14 @@ import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from ".
  * session recording (`ph-no-capture`), and the viewer, drawn over the
  * window outside it, is out of it on its own.
  *
- * Words selected in what the agent wrote stand Reply over them, as an
- * agent's words do in its tab (`reply-to-selection.tsx`): a press lays them
- * into the box as a quote block, so a reply can answer the agent point by
- * point. Reply stands only while the box takes a quote: never while a send
- * is out, a dictation holds the box, or its editor is still loading
- * (`inbox-answer-box.tsx`).
+ * Words selected anywhere in the thread but the draft reply stand Reply
+ * over them, as an agent's words do in its tab (`reply-to-selection.tsx`):
+ * its title, the agent's words and a member's, an answer's picks, ticks,
+ * and values, and the lines saying what became of an ask. A press lays
+ * them into the box as a quote block, so a reply can answer the thread
+ * point by point. Reply stands only while the box takes a quote: never
+ * while a send is out, a dictation holds the box, or its editor is still
+ * loading (`inbox-answer-box.tsx`).
  */
 
 /** What the thread says under its item where the task's inbox could not be read. */
@@ -968,7 +971,8 @@ function QuestionClose({
 
 /**
  * The thread's subject, as a plan or a pull request leads with one: the
- * item's title alone, the thread under it.
+ * item's title alone, the thread under it, its words quoted into a reply
+ * as the thread's are.
  */
 function Subject({
   item,
@@ -979,7 +983,10 @@ function Subject({
   heading: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
   return (
-    <header className="inbox-subject flex flex-col gap-tight-gap border-b border-border pb-block-gap">
+    <header
+      className="inbox-subject flex flex-col gap-tight-gap border-b border-border pb-block-gap"
+      {...{ [REPLY_SCOPE]: "" }}
+    >
       <Text
         as={TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
