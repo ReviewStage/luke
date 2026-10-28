@@ -367,7 +367,7 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Connected with a subscription"));
 });
 
-test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed from its ⋯ after asking", async () => {
+test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed with its Remove key button after asking", async () => {
   const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
   const page = await mount();
   const dialog = await open(page, "Claude");
@@ -406,12 +406,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   }
   assert.ok(dialog.querySelector(".ph-no-capture input"), "the dialog's fields are not recorded");
 
-  await press(card(dialog, "API key"), "Anthropic key actions");
-  const remove =
-    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === "Remove key",
-    ) ?? assert.fail("no Remove key");
-  act(() => remove.click());
+  await press(card(dialog, "API key"), "Remove key");
   await settle();
   assert.equal(
     sent.some((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE),
@@ -551,10 +546,7 @@ test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and ho
   const page = await mount();
   assert.deepEqual(rowState(page, "Codex"), needsHand("Sign-in expired"));
   const dialog = await open(page, "Codex");
-  assert.match(
-    card(dialog, "Subscription").textContent ?? "",
-    /Sign-in expired\.(?! Sign in)/u,
-  );
+  assert.match(card(dialog, "Subscription").textContent ?? "", /Sign-in expired\.(?! Sign in)/u);
 });
 
 test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {
