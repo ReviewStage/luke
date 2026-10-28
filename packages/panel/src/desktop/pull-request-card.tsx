@@ -1,4 +1,4 @@
-import { CHECK_SUMMARY, type CheckSummary } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, type CheckSummary } from "@luke/features/agent-wire";
 import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { LinesChanged } from "../tasks/agent-published.js";

@@ -2,6 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxStartParams,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import { AGENT_KIND } from "@luke/features/agent-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
@@ -9,12 +15,6 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxStartParams,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
@@ -413,7 +413,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
       refused?.querySelector(".luke-hover-card-name")?.textContent,
       refused?.querySelector(".luke-hover-card-note")?.textContent,
     ],
-    ["Their ledger", "Luke cannot read this page."],
+    ["Their ledger", "Luke can't read this page."],
   );
 });
 
@@ -456,7 +456,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
     agentId: asked.agentId,
-    agentKind: CODING_AGENT_KIND.OPERATOR,
+    agentKind: AGENT_KIND.OPERATOR,
     title: asked.title,
     postedAt: asked.postedAt,
     updatedAt: asked.updatedAt,
@@ -784,7 +784,7 @@ test("an item a link names is not found though another task's read failed, and i
     taskId === BILLING.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -926,7 +926,7 @@ test("an item a link names under a task whose own read fails is kept asked for, 
     taskId === quiet.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -1102,8 +1102,8 @@ const STARTED: InboxItem = {
 };
 
 /** Every thread the box starts, written down and answered as the service starts it, the task's inbox then holding it. */
-function heldStarts(): CodingAgentInboxStartParams[] {
-  const sent: CodingAgentInboxStartParams[] = [];
+function heldStarts(): AgentInboxStartParams[] {
+  const sent: AgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({

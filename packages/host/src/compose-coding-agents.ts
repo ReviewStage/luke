@@ -1,65 +1,65 @@
-import type { HostedCodingAgentClient } from "@luke/features";
+import type { HostedAgentClient } from "@luke/features";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
-  type CodingAgentAccountItems,
-  type CodingAgentAgentAnswer,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentDeleteAnswerView,
-  type CodingAgentGitHubImageView,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxChanged,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxReadAllView,
-  type CodingAgentInboxReadStateView,
-  type CodingAgentListAnswer,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOperatorEnsureAnswerView,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPartView,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentReviewOptionsAnswerView,
-  type CodingAgentTranscriptOlderAnswer,
-  type CodingAgentTranscriptPage,
-  codingAgentArchiveParamsSchema,
-  codingAgentChooseParamsSchema,
-  codingAgentDefaultWriteParamsSchema,
-  codingAgentGitHubImageParamsSchema,
-  codingAgentInboxAnswerParamsSchema,
-  codingAgentInboxAttachmentParamsSchema,
-  codingAgentInboxCloseParamsSchema,
-  codingAgentInboxMessageParamsSchema,
-  codingAgentInboxReadAllParamsSchema,
-  codingAgentInboxReadStateParamsSchema,
-  codingAgentInboxScopeSchema,
-  codingAgentInboxStartParamsSchema,
-  codingAgentListParamsSchema,
-  codingAgentMessageParamsSchema,
-  codingAgentMessagesParamsSchema,
-  codingAgentOperatorEnsureParamsSchema,
-  codingAgentPageParamsSchema,
-  codingAgentPartParamsSchema,
-  codingAgentPictureParamsSchema,
-  codingAgentPinParamsSchema,
-  codingAgentPullRequestActionParamsSchema,
-  codingAgentPullRequestParamsSchema,
-  codingAgentPullRequestReadParamsSchema,
-  codingAgentRenameParamsSchema,
-  codingAgentRewindParamsSchema,
-  codingAgentServersParamsSchema,
-  codingAgentStartParamsSchema,
-  codingAgentStopParamsSchema,
-  codingAgentTranscriptKeySchema,
-  codingAgentTranscriptOlderParamsSchema,
-  codingAgentWorkspaceListParamsSchema,
+  AGENT_CALL_FAILURE,
+  type AgentAccountInboxAnswerView,
+  type AgentAccountItems,
+  type AgentAgentAnswer,
+  type AgentChangesAnswerView,
+  type AgentDefaultAnswer,
+  type AgentDeleteAnswerView,
+  type AgentGitHubImageView,
+  type AgentInboxAnsweredView,
+  type AgentInboxAttachmentView,
+  type AgentInboxChanged,
+  type AgentInboxMessagedView,
+  type AgentInboxReadAllView,
+  type AgentInboxReadStateView,
+  type AgentListAnswer,
+  type AgentMessagesAnswerView,
+  type AgentModelsAnswer,
+  type AgentOperatorEnsureAnswerView,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPageAnswerView,
+  type AgentPartView,
+  type AgentPullRequestAnswerView,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+  type AgentReviewOptionsAnswerView,
+  type AgentTranscriptOlderAnswer,
+  type AgentTranscriptPage,
+  agentArchiveParamsSchema,
+  agentChooseParamsSchema,
+  agentDefaultWriteParamsSchema,
+  agentGitHubImageParamsSchema,
+  agentInboxAnswerParamsSchema,
+  agentInboxAttachmentParamsSchema,
+  agentInboxCloseParamsSchema,
+  agentInboxMessageParamsSchema,
+  agentInboxReadAllParamsSchema,
+  agentInboxReadStateParamsSchema,
+  agentInboxScopeSchema,
+  agentInboxStartParamsSchema,
+  agentListParamsSchema,
+  agentMessageParamsSchema,
+  agentMessagesParamsSchema,
+  agentOperatorEnsureParamsSchema,
+  agentPageParamsSchema,
+  agentPartParamsSchema,
+  agentPictureParamsSchema,
+  agentPinParamsSchema,
+  agentPullRequestActionParamsSchema,
+  agentPullRequestParamsSchema,
+  agentPullRequestReadParamsSchema,
+  agentRenameParamsSchema,
+  agentRewindParamsSchema,
+  agentServersParamsSchema,
+  agentStartParamsSchema,
+  agentStopParamsSchema,
+  agentTranscriptKeySchema,
+  agentTranscriptOlderParamsSchema,
+  agentWorkspaceListParamsSchema,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -79,7 +79,7 @@ import {
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -156,7 +156,7 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 
 /** The service's side of the agents, as this concern asks it. */
 export type CodingAgentClient = Pick<
-  HostedCodingAgentClient,
+  HostedAgentClient,
   | "chapters"
   | "generateChapters"
   | "readChaptersModel"
@@ -251,7 +251,7 @@ export interface CodingAgentsComposer extends Composer {
   readonly reset: Effect.Effect<void>;
 }
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Whether the service may be asked now: a run that sends, behind an open account gate. */
 function gateOf({ kernel, account }: CodingAgentsDependencies): () => boolean {
@@ -407,7 +407,7 @@ function composed(
   ) =>
     Effect.gen(function* () {
       const sentence = "following a transcript names an agent, and a worker's call where it is one";
-      const transcript = yield* readParams(codingAgentTranscriptKeySchema, params, sentence);
+      const transcript = yield* readParams(agentTranscriptKeySchema, params, sentence);
       if (transcript.kind !== TRANSCRIPT_KIND.AGENT) return yield* invalid(sentence);
       return {
         transcript,
@@ -416,7 +416,7 @@ function composed(
     });
 
   /** The account's items as a window is told them. */
-  const tellItems = (told: CodingAgentAccountItems) =>
+  const tellItems = (told: AgentAccountItems) =>
     Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
   /** Whether a window follows the account's items, so a sign-out follows them again for whoever signs in next. */
   let itemsFollowed = false;
@@ -428,20 +428,18 @@ function composed(
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
-      Effect.map(asked(client.models()), (answer) => carried<CodingAgentModelsAnswer>(answer)),
+      Effect.map(asked(client.models()), (answer) => carried<AgentModelsAnswer>(answer)),
     [GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ]: () =>
-      Effect.map(asked(client.readDefault()), (answer) =>
-        carried<CodingAgentDefaultAnswer>(answer),
-      ),
+      Effect.map(asked(client.readDefault()), (answer) => carried<AgentDefaultAnswer>(answer)),
     [GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE]: (params) =>
       Effect.gen(function* () {
         const choice = yield* readParams(
-          codingAgentDefaultWriteParamsSchema,
+          agentDefaultWriteParamsSchema,
           params,
           "the default names a model and its effort",
         );
         const answer = yield* asked(client.writeDefault(choice));
-        return carried<CodingAgentDefaultAnswer>(answer);
+        return carried<AgentDefaultAnswer>(answer);
       }),
     [GATEWAY_METHOD.HOSTS_LIST]: () =>
       Effect.map(asked(client.hosts()), (answer) => carried<HostsAnswerView>(answer)),
@@ -559,26 +557,26 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* readParams(
-          codingAgentListParamsSchema,
+          agentListParamsSchema,
           params,
           "listing a task's agents names one task",
         );
         const answer = yield* asked(client.list(taskId, includeArchived));
-        return carried<CodingAgentListAnswer>(answer);
+        return carried<AgentListAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST]: (params) =>
       Effect.gen(function* () {
         const listed = yield* readParams(
-          codingAgentWorkspaceListParamsSchema,
+          agentWorkspaceListParamsSchema,
           params,
           "listing a workspace's agents names one workspace",
         );
-        return carried<CodingAgentListAnswer>(yield* asked(client.listWorkspace(listed)));
+        return carried<AgentListAnswer>(yield* asked(client.listWorkspace(listed)));
       }),
     [GATEWAY_METHOD.CODING_AGENTS_START]: (params) =>
       Effect.gen(function* () {
         const { taskId, ...request } = yield* readParams(
-          codingAgentStartParamsSchema,
+          agentStartParamsSchema,
           params,
           "starting an agent names a task or an agent to start from, and the press's own key",
         );
@@ -589,23 +587,23 @@ function composed(
         // Note that a Start answers without waiting for the task list to carry its agent, because
         // the window joins the agent it answers to the task's agents itself, and a list from
         // before the write only lacks a row it has not drawn yet.
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
       Effect.gen(function* () {
         const { agentId, after, callId } = yield* readParams(
-          codingAgentMessagesParamsSchema,
+          agentMessagesParamsSchema,
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
         // Note that the page is read at once, since Copy transcript waits on no hold.
         const answer = yield* asked(client.messagesNow(agentId, after, callId));
-        return carried<CodingAgentMessagesAnswerView>(windowsPage(answer));
+        return carried<AgentMessagesAnswerView>(windowsPage(answer));
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const { transcript, key } = yield* agentTranscriptOf(params);
-        const tell = (page: CodingAgentTranscriptPage) =>
+        const tell = (page: AgentTranscriptPage) =>
           Effect.sync(() =>
             kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
           );
@@ -628,12 +626,12 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER]: (params) =>
       Effect.gen(function* () {
         const { agentId, callId, before } = yield* readParams(
-          codingAgentTranscriptOlderParamsSchema,
+          agentTranscriptOlderParamsSchema,
           params,
           "reading an older page names the transcript and where to read below",
         );
         const answer = yield* asked(client.messagesBefore(agentId, before, callId, true));
-        return carried<CodingAgentTranscriptOlderAnswer>(answer);
+        return carried<AgentTranscriptOlderAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -644,52 +642,52 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...request } = yield* readParams(
-          codingAgentMessageParamsSchema,
+          agentMessageParamsSchema,
           params,
           "messaging an agent names the agent, its words, and the send's key",
         );
         const answer = yield* asked(client.message(agentId, request));
-        if (!("agent" in answer)) return carried<CodingAgentAgentAnswer>(answer);
+        if (!("agent" in answer)) return carried<AgentAgentAnswer>(answer);
         // Note that a send answers at once rather than once its row reaches the followed transcript,
         // because the window draws the line under the row's id until that row lands, so no page from
         // before the write can take it away, and the next send waits on this answer.
-        return carried<CodingAgentAgentAnswer>({ agent: answer.agent });
+        return carried<AgentAgentAnswer>({ agent: answer.agent });
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...choice } = yield* readParams(
-          codingAgentChooseParamsSchema,
+          agentChooseParamsSchema,
           params,
           "changing an agent's model names the agent, a model, and its effort",
         );
         const answer = yield* asked(client.choose(agentId, choice));
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_RENAME]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...request } = yield* readParams(
-          codingAgentRenameParamsSchema,
+          agentRenameParamsSchema,
           params,
           "renaming an agent names the agent and its title",
         );
         const answer = yield* asked(client.rename(agentId, request));
         if ("txid" in answer) yield* listed(answer.txid);
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_SERVERS]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...request } = yield* readParams(
-          codingAgentServersParamsSchema,
+          agentServersParamsSchema,
           params,
           "switching an agent's MCP servers names the agent and the servers off",
         );
         const answer = yield* asked(client.switchServers(agentId, request));
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ARCHIVE]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...request } = yield* readParams(
-          codingAgentArchiveParamsSchema,
+          agentArchiveParamsSchema,
           params,
           "archiving an agent names the agent and whether it is archived",
         );
@@ -697,17 +695,17 @@ function composed(
         // Note that an agent archived lets go of what this host held of its transcript and its workers'.
         if ("agent" in answer) yield* held.forget((key) => key.agentId === agentId);
         if ("txid" in answer) yield* listed(answer.txid);
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PIN]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...request } = yield* readParams(
-          codingAgentPinParamsSchema,
+          agentPinParamsSchema,
           params,
           "pinning an agent names the agent and whether it is pinned",
         );
         // A pin is drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it.
-        const answer = yield* writeAgent<CodingAgentAgentAnswer>(
+        const answer = yield* writeAgent<AgentAgentAnswer>(
           agentId,
           (row) =>
             request.pinned
@@ -720,80 +718,80 @@ function composed(
             "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
           ),
         );
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR]: (params) =>
       Effect.gen(function* () {
         const { workspaceId, ...request } = yield* readParams(
-          codingAgentOperatorEnsureParamsSchema,
+          agentOperatorEnsureParamsSchema,
           params,
           "ensuring the operator names its workspace",
         );
         const answer = yield* asked(client.ensureOperator(workspaceId, request));
         // Note that a made operator is waited for on the list, so its row stands once the window hears its id.
         if ("txid" in answer) yield* listed(answer.txid);
-        return carried<CodingAgentOperatorEnsureAnswerView>(answer);
+        return carried<AgentOperatorEnsureAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
-          codingAgentStopParamsSchema,
+          agentStopParamsSchema,
           params,
           "stopping an agent names one agent",
         );
         const answer = yield* asked(client.stop(agentId));
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_REWIND]: (params) =>
       Effect.gen(function* () {
         const { agentId, messageId } = yield* readParams(
-          codingAgentRewindParamsSchema,
+          agentRewindParamsSchema,
           params,
           "rewinding an agent names one agent and one of its lines",
         );
         const answer = yield* asked(client.rewind(agentId, messageId));
-        return carried<CodingAgentAgentAnswer>(answer);
+        return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_DELETE]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
-          codingAgentStopParamsSchema,
+          agentStopParamsSchema,
           params,
           "deleting an agent names one agent",
         );
         const answer = yield* asked(client.delete(agentId));
         if ("txid" in answer) yield* listed(answer.txid);
-        return carried<CodingAgentDeleteAnswerView>(answer);
+        return carried<AgentDeleteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PAGE]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
-          codingAgentPageParamsSchema,
+          agentPageParamsSchema,
           params,
           "reading an agent's page names one agent",
         );
         const answer = yield* asked(client.agent(agentId));
-        return carried<CodingAgentPageAnswerView>(answer);
+        return carried<AgentPageAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          codingAgentPullRequestReadParamsSchema,
+          agentPullRequestReadParamsSchema,
           params,
           "reading what an agent published names one agent",
         );
         const answer = yield* asked(client.pullRequest(agentId, number));
-        return carried<CodingAgentPullRequestAnswerView>(answer);
+        return carried<AgentPullRequestAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHANGES]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          codingAgentPullRequestReadParamsSchema,
+          agentPullRequestReadParamsSchema,
           params,
           "reading an agent's changes names one agent",
         );
         const answer = yield* asked(client.changes(agentId, number));
-        return carried<CodingAgentChangesAnswerView>(answer);
+        return carried<AgentChangesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS]: (params) =>
       Effect.gen(function* () {
@@ -832,81 +830,81 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          codingAgentPullRequestReadParamsSchema,
+          agentPullRequestReadParamsSchema,
           params,
           "reading an agent's pull request names one agent",
         );
         const answer = yield* asked(client.overviewPullRequest(agentId, number));
-        return carried<CodingAgentOverviewPullRequestAnswerView>(answer);
+        return carried<AgentOverviewPullRequestAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
-          codingAgentPullRequestParamsSchema,
+          agentPullRequestParamsSchema,
           params,
           "reading what an agent's pickers offer names one agent",
         );
         const answer = yield* asked(client.reviewOptions(agentId));
-        return carried<CodingAgentReviewOptionsAnswerView>(answer);
+        return carried<AgentReviewOptionsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          codingAgentPullRequestReadParamsSchema,
+          agentPullRequestReadParamsSchema,
           params,
           "reading an agent's pull request's checks names one agent",
         );
         const answer = yield* asked(client.overviewChecks(agentId, number));
-        return carried<CodingAgentOverviewChecksAnswerView>(answer);
+        return carried<AgentOverviewChecksAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          codingAgentPullRequestReadParamsSchema,
+          agentPullRequestReadParamsSchema,
           params,
           "reading an agent's pull request's conversation names one agent",
         );
         const answer = yield* asked(client.overviewConversation(agentId, number));
-        return carried<CodingAgentOverviewConversationAnswerView>(answer);
+        return carried<AgentOverviewConversationAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION]: (params) =>
       Effect.gen(function* () {
         const { agentId, number, request } = yield* readParams(
-          codingAgentPullRequestActionParamsSchema,
+          agentPullRequestActionParamsSchema,
           params,
           "changing an agent's pull request names the agent and the change",
         );
         const answer = yield* asked(client.pullRequestAction(agentId, request, number));
-        return carried<CodingAgentPullRequestWriteAnswerView>(answer);
+        return carried<AgentPullRequestWriteAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          codingAgentPullRequestReadParamsSchema,
+          agentPullRequestReadParamsSchema,
           params,
           "reading which files of an agent's pull request were viewed names the agent",
         );
         const answer = yield* asked(client.pullRequestViewed(agentId, number));
-        return carried<CodingAgentPullRequestViewedAnswerView>(answer);
+        return carried<AgentPullRequestViewedAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {
         const { agentId, src } = yield* readParams(
-          codingAgentGitHubImageParamsSchema,
+          agentGitHubImageParamsSchema,
           params,
           "reading an image of an agent's pull request names the agent and the image's address",
         );
         const answer = yield* asked(client.githubImage(agentId, src));
-        return carried<CodingAgentGitHubImageView>(answer);
+        return carried<AgentGitHubImageView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const scope = yield* readParams(
-          codingAgentInboxScopeSchema,
+          agentInboxScopeSchema,
           params,
           "following an inbox names a plan or an agent",
         );
-        const tell = (inbox: CodingAgentInboxChanged["inbox"]) =>
+        const tell = (inbox: AgentInboxChanged["inbox"]) =>
           Effect.sync(() => kernel.emit(GATEWAY_EVENT.INBOX_CHANGED, carried({ scope, inbox })));
         const key = new InboxScopeKey(scope);
         const follow = gate() ? followInbox(inboxes, key, tell) : tell(UNANSWERED);
@@ -916,7 +914,7 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
         const scope = yield* readParams(
-          codingAgentInboxScopeSchema,
+          agentInboxScopeSchema,
           params,
           "letting an inbox go names a plan or an agent",
         );
@@ -926,37 +924,37 @@ function composed(
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
       Effect.gen(function* () {
         const { itemId, attachmentId } = yield* readParams(
-          codingAgentInboxAttachmentParamsSchema,
+          agentInboxAttachmentParamsSchema,
           params,
           "reading an inbox item's image names the item and the attachment",
         );
         const answer = yield* asked(client.inboxAttachment(itemId, attachmentId));
-        return carried<CodingAgentInboxAttachmentView>(answer);
+        return carried<AgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PICTURE]: (params) =>
       Effect.gen(function* () {
         const { agentId, pictureId, callId } = yield* readParams(
-          codingAgentPictureParamsSchema,
+          agentPictureParamsSchema,
           params,
           "reading an agent's picture names the agent and the picture",
         );
         const answer = yield* asked(client.agentPicture(agentId, pictureId, callId));
-        return carried<CodingAgentInboxAttachmentView>(answer);
+        return carried<AgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PART]: (params) =>
       Effect.gen(function* () {
         const { agentId, messageId, index, callId } = yield* readParams(
-          codingAgentPartParamsSchema,
+          agentPartParamsSchema,
           params,
           "reading a part of an agent's transcript names the agent, the message, and the part",
         );
         const answer = yield* asked(client.agentPart(agentId, messageId, index, callId));
-        return carried<CodingAgentPartView>(answer);
+        return carried<AgentPartView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>
       Effect.gen(function* () {
         const { itemId, ...request } = yield* readParams(
-          codingAgentInboxAnswerParamsSchema,
+          agentInboxAnswerParamsSchema,
           params,
           "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
         );
@@ -969,12 +967,12 @@ function composed(
           asked(client.answerInbox(itemId, request)),
           writtenOf,
         );
-        return carried<CodingAgentInboxAnsweredView>(answer);
+        return carried<AgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE]: (params) =>
       Effect.gen(function* () {
         const { itemId, ...request } = yield* readParams(
-          codingAgentInboxCloseParamsSchema,
+          agentInboxCloseParamsSchema,
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
         );
@@ -987,12 +985,12 @@ function composed(
           asked(client.closeInbox(itemId, request)),
           writtenOf,
         );
-        return carried<CodingAgentInboxAnsweredView>(answer);
+        return carried<AgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE]: (params) =>
       Effect.gen(function* () {
         const { itemId, ...request } = yield* readParams(
-          codingAgentInboxMessageParamsSchema,
+          agentInboxMessageParamsSchema,
           params,
           "a message on an inbox item names the item, the words or files, and the message's key",
         );
@@ -1009,23 +1007,23 @@ function composed(
           asked(client.messageInbox(itemId, request)),
           writtenOf,
         );
-        return carried<CodingAgentInboxMessagedView>(answer);
+        return carried<AgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_START]: (params) =>
       Effect.gen(function* () {
         const request = yield* readParams(
-          codingAgentInboxStartParamsSchema,
+          agentInboxStartParamsSchema,
           params,
           "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
         );
         const answer = yield* asked(client.startInboxThread(request));
         yield* reads.confirmAccountWide("failure" in answer ? undefined : answer.txid);
-        return carried<CodingAgentInboxMessagedView>(answer);
+        return carried<AgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>
       Effect.gen(function* () {
         const { itemId, unread } = yield* readParams(
-          codingAgentInboxReadStateParamsSchema,
+          agentInboxReadStateParamsSchema,
           params,
           "marking an inbox item names the item and whether it reads as unread",
         );
@@ -1035,12 +1033,12 @@ function composed(
           writtenOf,
           true,
         );
-        return carried<CodingAgentInboxReadStateView>(answer);
+        return carried<AgentInboxReadStateView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL]: (params) =>
       Effect.gen(function* () {
         const { itemIds, ...request } = yield* readParams(
-          codingAgentInboxReadAllParamsSchema,
+          agentInboxReadAllParamsSchema,
           params,
           "marking the inbox read names the workspace it lists, where it lists one, and the items it lists there",
         );
@@ -1050,11 +1048,11 @@ function composed(
           writtenOf,
           true,
         );
-        return carried<CodingAgentInboxReadAllView>(answer);
+        return carried<AgentInboxReadAllView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
-        const tell = (answer: CodingAgentAccountInboxAnswerView) =>
+        const tell = (answer: AgentAccountInboxAnswerView) =>
           Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED, carried(answer)));
         const userId = dependencies.accountId();
         const follow =

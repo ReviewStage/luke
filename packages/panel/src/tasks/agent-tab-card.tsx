@@ -1,8 +1,8 @@
 import type {
-  CodingAgentMessage,
-  CodingAgentPullRequest,
-  CodingAgentStatus,
-} from "@luke/features/coding-agent-wire";
+  AgentPullRequest,
+  AgentStatus,
+  AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import {
@@ -102,8 +102,8 @@ const ENDED_SEPARATOR = " · ";
 
 /** The transcript an agent's or a worker's tab last drew, and where the agent stood, since when its run began, and the titles it and its workers bear, as the page it was read from said. */
 export interface HeldTranscript {
-  readonly messages: readonly CodingAgentMessage[];
-  readonly status: CodingAgentStatus;
+  readonly messages: readonly AgentTranscriptMessage[];
+  readonly status: AgentStatus;
   readonly runStartedAt: number | undefined;
   /** A worker's own title, on a worker's; an agent's is its summary's. */
   readonly title: string | undefined;
@@ -126,7 +126,7 @@ export interface CardReading {
   readonly tile?: Actor | undefined;
   /** The pull request the agent opened, where the place holds it, on a row of its own under the head. */
   readonly pullRequest?:
-    | Pick<CodingAgentPullRequest, "number" | "title" | "state" | "checks">
+    | Pick<AgentPullRequest, "number" | "title" | "state" | "checks">
     | undefined;
   /** Who archived the agent and why, on an archived agent's card where the service said. */
   readonly archivedBy?: ArchivedByReading | undefined;
@@ -258,7 +258,7 @@ export function cardCorner(input: {
 
 /** When the latest of the agent's turns among `messages` answered or ended, where the service said. */
 export function lastFinished(
-  messages: readonly CodingAgentMessage[] | undefined,
+  messages: readonly AgentTranscriptMessage[] | undefined,
 ): number | undefined {
   return messages?.findLast((message) => message.finishedAt !== undefined)?.finishedAt;
 }
@@ -269,7 +269,7 @@ export function lastFinished(
  * being the agent's own (`own`); nothing where the call is not held.
  */
 export function delegatedChoice(
-  messages: readonly CodingAgentMessage[] | undefined,
+  messages: readonly AgentTranscriptMessage[] | undefined,
   callId: string,
   own: ModelChoice,
 ): ModelChoice | undefined {
@@ -291,7 +291,7 @@ export function heldLatest(
   held: HeldTranscript | undefined,
   now: { writing: boolean; runStartedAt: number | undefined },
   chosen: boolean,
-): readonly CodingAgentMessage[] | undefined {
+): readonly AgentTranscriptMessage[] | undefined {
   if (held === undefined || held.runStartedAt !== now.runStartedAt) return undefined;
   if (chosen) return held.messages;
   return !agentStillWriting(held.status) && !now.writing ? held.messages : undefined;

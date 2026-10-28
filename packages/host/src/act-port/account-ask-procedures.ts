@@ -11,7 +11,7 @@ import type {
   ProviderKeyRemoveParams,
   ProviderKeySaveParams,
   ProviderKeysAnswerView,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import { Effect } from "effect";
 import { ACCOUNT_ASK_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";

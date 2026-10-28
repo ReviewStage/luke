@@ -4,30 +4,30 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
+  type Agent,
+  archiveAgent,
+  createAgent,
+  listWorkspaceAgentLines,
+  readAgent,
+} from "@luke/database/models/agent-store";
+import {
   deleteAutomation,
   listAutomationRuns,
   listAutomations,
 } from "@luke/database/models/automation-store";
-import {
-  archiveCodingAgent,
-  type CodingAgent,
-  createCodingAgent,
-  listWorkspaceCodingAgentLines,
-  readCodingAgent,
-} from "@luke/database/models/coding-agent-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { agentName } from "@luke/features/model-label";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Result } from "effect";
@@ -103,7 +103,7 @@ const services = Layer.mergeAll(
   githubReaching([]).layer,
   modelCatalogOf([
     {
-      id: CODING_AGENT_DEFAULT_CHOICE.model,
+      id: AGENT_DEFAULT_CHOICE.model,
       name: "Claude Opus 5.5",
       provider: MODEL_PROVIDER.ANTHROPIC,
       efforts: ["low", "medium", "high", "max"],
@@ -144,7 +144,7 @@ const restore = (
   userId: string,
   workspaceId: string,
   agentId: string,
-  stopStanding: (agent: CodingAgent) => Effect.Effect<void, HostedRefusal> = nothingToStop,
+  stopStanding: (agent: Agent) => Effect.Effect<void, HostedRefusal> = nothingToStop,
 ) =>
   ensureOperator(EVE.eve, userId, workspaceId, {
     reset: false,
@@ -173,9 +173,8 @@ const HOUR_MS = 3_600_000;
 /** The member's operators in the workspace, archived ones included, newest first. */
 const operatorsOf = (userId: string, workspaceId: string) =>
   Effect.map(
-    listWorkspaceCodingAgentLines(userId, workspaceId, { includeArchived: true, limit: 50 }),
-    (lines) =>
-      lines.filter((line) => line.kind === CODING_AGENT_KIND.OPERATOR && line.userId === userId),
+    listWorkspaceAgentLines(userId, workspaceId, { includeArchived: true, limit: 50 }),
+    (lines) => lines.filter((line) => line.kind === AGENT_KIND.OPERATOR && line.userId === userId),
   );
 
 it.layer(getTestDB())("the member's operator", (it) => {
@@ -202,14 +201,14 @@ it.layer(getTestDB())("the member's operator", (it) => {
           operators.map((operator) => operator.id),
           [first.agent.id],
         );
-        const agent = Option.getOrThrow(yield* readCodingAgent(member, first.agent.id));
+        const agent = Option.getOrThrow(yield* readAgent(member, first.agent.id));
         assert.deepEqual(
           [agent.taskId, agent.repository, agent.prompt, agent.planSnapshot, agent.archivedAt],
           [null, null, null, null, null],
         );
         assert.deepEqual(
           [agent.model, agent.effort],
-          [CODING_AGENT_DEFAULT_CHOICE.model, CODING_AGENT_DEFAULT_CHOICE.effort],
+          [AGENT_DEFAULT_CHOICE.model, AGENT_DEFAULT_CHOICE.effort],
         );
       }),
   );
@@ -221,7 +220,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
         const member = yield* openMember;
         const workspaceId = yield* openWorkspace(member);
         const named = (agentId: string) =>
-          Effect.map(readCodingAgent(member, agentId), (read) => {
+          Effect.map(readAgent(member, agentId), (read) => {
             const agent = Option.getOrThrow(read);
             const summary = codingAgentSummary(
               agent,
@@ -289,7 +288,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
           [standing.map((operator) => operator.id), archivedOnes.map((operator) => operator.id)],
           [[reset.agent.id], [before.agent.id]],
         );
-        const archived = Option.getOrThrow(yield* readCodingAgent(member, before.agent.id));
+        const archived = Option.getOrThrow(yield* readAgent(member, before.agent.id));
         assert.equal(archived.conversationId, before.agent.conversationId);
       }),
   );
@@ -352,18 +351,18 @@ it.layer(getTestDB())("the member's operator", (it) => {
         const theirs = yield* ensure(teammate, workspaceId);
         yield* ensure(teammate, workspaceId, true);
         const coder = Option.getOrThrow(
-          yield* createCodingAgent(member, {
+          yield* createAgent(member, {
             taskId: null,
             organizationId: workspaceId,
             planSnapshot: null,
             prompt: "Sweep the copy.",
             idempotencyKey: randomUUID(),
-            model: CODING_AGENT_DEFAULT_CHOICE.model,
-            effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+            model: AGENT_DEFAULT_CHOICE.model,
+            effort: AGENT_DEFAULT_CHOICE.effort,
             repository: "acme/relay",
           }),
         );
-        yield* archiveCodingAgent(member, coder.agent.id, true);
+        yield* archiveAgent(member, coder.agent.id, true);
         const ours = yield* standingsOf(member, workspaceId);
         const teammates = yield* standingsOf(teammate, workspaceId);
 
@@ -544,11 +543,11 @@ it.layer(getTestDB())("the member's operator", (it) => {
         };
         const start = (ask: StartAsk) =>
           Effect.result(startCodingAgent(unreachedEve, member, ask).pipe(Effect.provide(services)));
-        const operator = { ...blank, kind: CODING_AGENT_KIND.OPERATOR };
+        const operator = { ...blank, kind: AGENT_KIND.OPERATOR };
 
         const refused = [
           yield* start(blank),
-          yield* start({ ...blank, kind: CODING_AGENT_KIND.CODER }),
+          yield* start({ ...blank, kind: AGENT_KIND.CODER }),
           yield* start({ ...operator, repository: "acme/relay" }),
           yield* start({ ...operator, prompt: "Watch my agents." }),
           yield* start({ ...operator, blank: false }),
@@ -636,7 +635,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
         );
 
         // Archived by hand, as the archive or update_agent does it, the next ensure makes a fresh one with no Reset to name the old.
-        yield* archiveCodingAgent(member, reset.agent.id, true);
+        yield* archiveAgent(member, reset.agent.id, true);
         const after = yield* ensure(member, workspaceId);
         assert.notEqual(after.agent.id, reset.agent.id);
         assert.deepEqual(

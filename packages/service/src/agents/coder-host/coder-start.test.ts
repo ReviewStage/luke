@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -10,7 +10,7 @@ import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automation-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Effect, Layer, Option, Result } from "effect";
@@ -85,7 +85,7 @@ const services = Layer.mergeAll(
   githubReaching(INSTALLATIONS).layer,
   modelCatalogOf([
     {
-      id: CODING_AGENT_DEFAULT_CHOICE.model,
+      id: AGENT_DEFAULT_CHOICE.model,
       name: "Claude Opus 5.5",
       provider: MODEL_PROVIDER.ANTHROPIC,
       efforts: ["low", "medium", "high", "max"],
@@ -174,7 +174,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 
         assert.equal(first.created, true);
         assert.deepEqual([again.created, again.agent.id], [false, first.agent.id]);
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, first.agent.id));
+        const agent = Option.getOrThrow(yield* readAgent(owner, first.agent.id));
         assert.deepEqual(
           [agent.taskId, agent.organizationId, agent.repository, agent.prompt, agent.planSnapshot],
           [null, workspaceId, RELAY_REPOSITORY, TASK, null],

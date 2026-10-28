@@ -1,7 +1,7 @@
 import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 
 /**
  * agent-pin.ts -- one coding agent with no plan an account pinned in its sidebar, and when.
@@ -25,7 +25,7 @@ export const agentPin = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     codingAgentId: uuid("coding_agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     // Where the pin stands in the sidebar's Pinned section once it has been dragged, a fractional index (`@luke/features/pin-order`); null stands it by `pinnedAt`.
     position: text("position"),
     pinnedAt: timestamptz("pinned_at").notNull(),

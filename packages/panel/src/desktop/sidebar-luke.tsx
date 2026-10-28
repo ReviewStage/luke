@@ -1,4 +1,4 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import {
   LIST_DENSITY,

@@ -1,14 +1,11 @@
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
+import {
+  AGENT_KIND,
+  type AgentAttachment,
+  type AgentKind,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_KIND,
-  type CodingAgentAttachment,
-  type CodingAgentKind,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -108,7 +105,7 @@ export interface InboxDraft {
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
   readonly note: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
 }
@@ -118,7 +115,7 @@ export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: ""
 /** Why a card's last send did not go, or was not taken: its words, and the refusal they say where the service refused it. */
 export interface InboxNote {
   readonly words: string;
-  readonly failure?: CodingAgentCallFailure | undefined;
+  readonly failure?: AgentCallFailure | undefined;
 }
 
 /** What a card says under its box: the note's words, and whether Unarchive follows them. */
@@ -139,10 +136,9 @@ const AGENT_ARCHIVED_NOTE = "This agent is archived.";
  */
 export function inboxNoteReading(
   note: InboxNote,
-  agent: CodingAgentSummary | undefined,
+  agent: AgentSummary | undefined,
 ): InboxNoteReading {
-  const archived =
-    note.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
+  const archived = note.failure === AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
   return archived
     ? { words: AGENT_ARCHIVED_NOTE, unarchive: true }
     : { words: note.words, unarchive: false };
@@ -643,7 +639,7 @@ export function askNumberedPick(
 /** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
 export interface InboxThreadSend {
   readonly text: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly answers?: InboxAnswers;
 }
 
@@ -1179,7 +1175,7 @@ export type TasklessInboxAgent = Pick<
  */
 export function inboxAgentOf(agent: {
   readonly id: string;
-  readonly kind?: CodingAgentKind | undefined;
+  readonly kind?: AgentKind | undefined;
   readonly title: string | null;
   readonly model: string;
   readonly automationId?: string | null | undefined;
@@ -1217,9 +1213,7 @@ export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
 
 /** Whether a holder is the member's operator, Luke, whose items stand in a group of his own. */
 export function operatorHolder(holder: InboxHolder): boolean {
-  return (
-    holder.kind === INBOX_HOLDER.AGENT && holder.agent.agentKind === CODING_AGENT_KIND.OPERATOR
-  );
+  return holder.kind === INBOX_HOLDER.AGENT && holder.agent.agentKind === AGENT_KIND.OPERATOR;
 }
 
 /** The automation whose group an agent's items stand in; none for a task, the member's operator, and the agents no automation the reader may read names. */

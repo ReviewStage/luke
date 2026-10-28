@@ -1,4 +1,4 @@
-import type { GitHubPerson } from "@luke/features/coding-agent-wire";
+import type { GitHubPerson } from "@luke/features/agent-wire";
 import { countWords, TERM } from "@luke/features/words";
 import {
   ALIGN,

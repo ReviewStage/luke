@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
@@ -82,19 +82,19 @@ const TASK: TaskSummary = {
 };
 const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Batch the invitations",
   createdAt: 3,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
 /** An agent of the task archived since, whose Pull request tab the task may still keep. */
-const ARCHIVED: CodingAgentSummary = {
+const ARCHIVED: AgentSummary = {
   ...AGENT,
   id: "5e7d9c3b-1a2f-4b6e-9d8c-7f6a5b4c3d2e",
   title: "Draft the invitation email",

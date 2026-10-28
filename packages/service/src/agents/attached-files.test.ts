@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { keptImageOf, lineParts, receivedPartsOf } from "@luke/database/models/attached-file-parts";
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
 import { PICTURE_OMISSION } from "@luke/features/conversation-picture-wire";
 import type { MessageReceivedPart } from "eve/client";
 import { test } from "vitest";
@@ -19,14 +19,14 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toStri
 /** A text file of the name, its words its name. */
 const textFile = (name: string) => ({
   name,
-  mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+  mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
   data: Buffer.from(name, "utf8").toString("base64"),
 });
 
 /** A PNG of the name. */
 const picture = (name: string) => ({
   name,
-  mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+  mediaType: AGENT_ATTACHMENT_TYPE.PNG,
   data: PNG,
 });
 
@@ -67,7 +67,7 @@ test("each image is handed with the line naming what was kept of it, which eve's
   const attachments = [
     { ...picture("flow.png"), kept: { id } },
     { ...picture("huge.png"), kept: { omitted: PICTURE_OMISSION.LIMIT } },
-    { name: "spec.pdf", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF, data: PNG },
+    { name: "spec.pdf", mediaType: AGENT_ATTACHMENT_TYPE.PDF, data: PNG },
   ];
   const handed = eveContent("Match these.", attachments);
   const received = receivedMessage({ message: "", parts: receiptOf(handed) });
@@ -104,7 +104,7 @@ test("words spelled like the line are words where no image comes just before the
     message: "",
     parts: [
       { type: "text", text: line },
-      { type: "file", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF, filename: "flow.png" },
+      { type: "file", mediaType: AGENT_ATTACHMENT_TYPE.PDF, filename: "flow.png" },
       { type: "text", text: "Image other.png is attachment 0b7c6a52-3f1d-4c8e-9a40-5d2e1f7b9c33" },
     ],
   });

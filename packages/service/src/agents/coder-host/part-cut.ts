@@ -30,12 +30,12 @@ import {
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
 import {
-  CODING_AGENT_BOUNDS,
-  type CodingAgentMessage,
-  type CodingAgentPartCut,
+  AGENT_BOUNDS,
+  type AgentTranscriptMessage,
   PART_CUT_FIELD,
+  type PartCut,
   type PartCutField,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INTEGRATION_REMOTE_TOOL } from "@luke/features/integration-wire";
 import { isRecord, isWireString, type WireValue } from "@luke/wire";
 import { toolPartName } from "@luke/wire/ui-messages";
@@ -43,7 +43,7 @@ import type { ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
 
 /** How many characters of a cut field a page carries at each end. */
-export const CUT_END_CHARS = Math.floor(CODING_AGENT_BOUNDS.MAX_PART_CHARS / 2);
+export const CUT_END_CHARS = Math.floor(AGENT_BOUNDS.MAX_PART_CHARS / 2);
 
 /** The tools whose output a page may cut: each reads something and answers it as words, which the window only draws. */
 export const CUT_TOOLS: ReadonlySet<string> = new Set([
@@ -97,9 +97,9 @@ function heavyFieldOf(part: WireValue): HeavyField | undefined {
 function cutPart(
   part: WireValue,
   index: number,
-): { readonly part: WireValue; readonly cut: CodingAgentPartCut } | undefined {
+): { readonly part: WireValue; readonly cut: PartCut } | undefined {
   const heavy = heavyFieldOf(part);
-  if (heavy === undefined || heavy.words.length <= CODING_AGENT_BOUNDS.MAX_PART_CHARS) {
+  if (heavy === undefined || heavy.words.length <= AGENT_BOUNDS.MAX_PART_CHARS) {
     return undefined;
   }
   if (!isRecord(part)) return undefined;
@@ -117,8 +117,8 @@ function cutPart(
 }
 
 /** A message as a page asked cut carries it: each part past the bound without its field, and the cuts beside them; the message itself where none is. */
-export function cutMessage(message: CodingAgentMessage): CodingAgentMessage {
-  const cuts: CodingAgentPartCut[] = [];
+export function cutMessage(message: AgentTranscriptMessage): AgentTranscriptMessage {
+  const cuts: PartCut[] = [];
   const parts = message.parts.map((part, index) => {
     const cut = cutPart(part, index);
     if (cut === undefined) return part;

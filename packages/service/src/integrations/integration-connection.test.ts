@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
@@ -160,7 +160,7 @@ const plannedSession = (
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${userId}`,
       model: "anthropic/claude-opus-5.5",

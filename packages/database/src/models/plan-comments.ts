@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
 import { type CommentSpan, spanWithin, textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,
@@ -323,7 +320,7 @@ const findCommentFile = SqlSchema.findOneOption({
     attachmentId: Schema.String,
   }),
   Result: Schema.Struct({
-    contentType: Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    contentType: Schema.Literals(Object.values(AGENT_ATTACHMENT_TYPE)),
     bytes: Schema.Uint8Array,
   }),
   execute: ({ userId, taskId, attachmentId }) =>
@@ -446,7 +443,7 @@ function fileRowsOf(
   place: EntryPlace,
   entryId: string,
   userId: string,
-  files: readonly CodingAgentAttachment[],
+  files: readonly AgentAttachment[],
   now: Date,
 ): Effect.Effect<(typeof attachment.$inferInsert)[]> {
   return Effect.forEach(files, (file, position) => {
@@ -477,7 +474,7 @@ function writeEntry(
     readonly words?: string;
     readonly clientKey?: string;
     readonly asked?: PlanCommentAsked;
-    readonly files?: readonly CodingAgentAttachment[];
+    readonly files?: readonly AgentAttachment[];
   },
   now: Date,
 ): TaskStoreEffect<void> {
@@ -654,7 +651,7 @@ function replied(
   reply: {
     readonly words: string;
     readonly clientKey?: string;
-    readonly attachments?: readonly CodingAgentAttachment[];
+    readonly attachments?: readonly AgentAttachment[];
   },
   now: Date,
 ): TaskStoreEffect<PlanCommentOutcome> {
@@ -846,7 +843,7 @@ export function readPlanCommentFile(
   attachmentId: string,
 ): TaskStoreEffect<
   Option.Option<{
-    readonly contentType: CodingAgentAttachment["mediaType"];
+    readonly contentType: AgentAttachment["mediaType"];
     readonly bytes: Uint8Array;
   }>
 > {

@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import { Effect } from "effect";
@@ -205,7 +201,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
               effort: "high",
               title: "Invite flow",
               createdAt: 1,
-              status: CODING_AGENT_STATUS.COMPLETED,
+              status: AGENT_STATUS.COMPLETED,
               turnId: null,
             },
           ],

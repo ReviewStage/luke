@@ -1,8 +1,8 @@
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
-  type CodingAgentChangedFile,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { MARK_STRIP_LOOK, MarkStrip, STATUS_TONE, type StatusTone } from "@luke/ui";
 
 /**
@@ -49,7 +49,7 @@ export function ChangesStrip({
   peek,
 }: {
   /** The changed files, in the tree's order. */
-  files: readonly CodingAgentChangedFile[];
+  files: readonly AgentChangedFile[];
   /** The file stood on, else the one at the top of the list, which stands out. */
   current: string | undefined;
   /** Whether a file is marked viewed; none while the marks are not read. */

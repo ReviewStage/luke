@@ -1,4 +1,4 @@
-import { type CodingAgentInboxScope, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { type AgentInboxScope, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
@@ -28,7 +28,7 @@ import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.
  * one's place.
  */
 
-type ScopeKind = CodingAgentInboxScope["kind"];
+type ScopeKind = AgentInboxScope["kind"];
 
 /** One holder of inbox items as the Inbox follows it: a task or an agent with no task, by its id, and when main says the latest of its items changed. */
 export interface InboxHolding {

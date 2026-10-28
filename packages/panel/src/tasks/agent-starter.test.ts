@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_BRIEF,
+  AGENT_FAILURE,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -62,20 +62,20 @@ const MEMBERS: readonly WorkspaceMember[] = [
 
 const WORKSPACE = { id: "workspace-acme", memberCount: MEMBERS.length };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.FAILED,
+  status: AGENT_STATUS.FAILED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
   startedBy: CHARLES,
 };
 
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: "https://github.com/acme/relay/pull/42",
@@ -128,7 +128,7 @@ function cards(): HTMLElement[] {
 /** The agent named where `readerId` reads it, as the Inbox's thread names it, its card hung once the pointer rests on it, and how many times it was opened. */
 async function agentNamed(
   readerId: string | undefined,
-  pullRequests: ReadonlyMap<string, CodingAgentPullRequest> = new Map(),
+  pullRequests: ReadonlyMap<string, AgentPullRequest> = new Map(),
 ) {
   const opened: string[] = [];
   const read = agentCardReading(AGENT, "Invite flow", NOTHING_HELD, false, {
@@ -325,22 +325,18 @@ test("an agent's card wears its tile beside its name, its pull request on a row 
 });
 
 test("a key a teammate's agent failed on is named as theirs, with no Settings of the reader's to mend it", () => {
-  const failed = (failure: typeof CODING_AGENT_FAILURE.PROVIDER_KEY, starter?: string) =>
-    endLineParts(CODING_AGENT_STATUS.FAILED, failure, starter)?.words;
+  const failed = (failure: typeof AGENT_FAILURE.PROVIDER_KEY, starter?: string) =>
+    endLineParts(AGENT_STATUS.FAILED, failure, starter)?.words;
 
   assert.equal(
-    failed(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
+    failed(AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
     "Failed: Charles Pan's API key was refused or cannot be read",
   );
+  assert.equal(endLineReason(AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"), FAILURE_REASON.OTHER);
+  assert.match(failed(AGENT_FAILURE.PROVIDER_KEY) ?? "", /your API key was refused/u);
+  assert.equal(endLineReason(AGENT_FAILURE.PROVIDER_KEY), FAILURE_REASON.API_KEY);
   assert.equal(
-    endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
-    FAILURE_REASON.OTHER,
-  );
-  assert.match(failed(CODING_AGENT_FAILURE.PROVIDER_KEY) ?? "", /your API key was refused/u);
-  assert.equal(endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY), FAILURE_REASON.API_KEY);
-  assert.equal(
-    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.FAST_ON_OWN_KEY, "Charles Pan")
-      ?.words,
+    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.FAST_ON_OWN_KEY, "Charles Pan")?.words,
     "Failed: Fast isn't available on Charles Pan's own API key; choose the model with Fast off",
   );
 });
@@ -408,7 +404,7 @@ test("a starter or sender who left keeps their picture and their account's name 
 
   assert.deepEqual(macOwnerOf(lee, MEMBERS, "user-dean", former), left);
   assert.deepEqual(
-    lineSender({ ...lee, kind: CODING_AGENT_SENDER.MEMBER }, "user-dean", MEMBERS, former),
+    lineSender({ ...lee, kind: AGENT_SENDER.MEMBER }, "user-dean", MEMBERS, former),
     left,
   );
 });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { OVERVIEW_BOUNDS } from "@luke/features/coding-agent-wire";
+import { OVERVIEW_BOUNDS } from "@luke/features/agent-wire";
 import { describe, test } from "vitest";
 import { type StackCandidate, stackOf } from "./pull-request-stack.js";
 

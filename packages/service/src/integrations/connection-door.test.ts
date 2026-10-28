@@ -4,15 +4,15 @@ import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import {
-  createCodingAgent,
+  createAgent,
   dispatchMentioningServers,
-  recordCodingAgentRunnerToken,
-  updateCodingAgentServers,
-} from "@luke/database/models/coding-agent-store";
+  recordAgentRunnerToken,
+  updateAgentServers,
+} from "@luke/database/models/agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { AGENT_PAYER } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { isRecord, type WireRecord } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
@@ -82,7 +82,7 @@ const memberWithLinear = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -91,11 +91,11 @@ const memberWithLinear = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+    payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
   });
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   yield* beginIntegrationSignIn(userId, firstIntegrationAccount(userId, LINEAR), `state-${userId}`);
   assert.equal(yield* completeIntegrationSignIn(userId, LINEAR, `state-${userId}`), true);
   const admitted = Option.getOrThrow(yield* admitRunnerBearer(bearer));
@@ -208,7 +208,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         const before = yield* nativeAgentConnections(member.admitted).pipe(
           Effect.provide(services),
         );
-        yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
+        yield* updateAgentServers(member.userId, member.agentId, [LINEAR]);
         const after = yield* nativeAgentConnections(member.admitted).pipe(Effect.provide(services));
 
         assert.ok(before.includes(LINEAR) && before.includes(NOTION));
@@ -352,7 +352,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         const unknown = yield* callConnectionTool(member.admitted, LINEAR, "list_issue", {}).pipe(
           Effect.provide(services),
         );
-        yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
+        yield* updateAgentServers(member.userId, member.agentId, [LINEAR]);
         const bearersBefore = heard.bearers.length;
         const listed = yield* listConnectionTools(member.admitted, LINEAR).pipe(
           Effect.provide(services),
@@ -389,7 +389,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         const listIssues = callConnectionTool(member.admitted, LINEAR, "list_issues", {
           team: "ENG",
         }).pipe(Effect.provide(services));
-        yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
+        yield* updateAgentServers(member.userId, member.agentId, [LINEAR]);
         // The developer's message mentions @Linear, which its hand-over writes on the agent's row.
         yield* dispatchMentioningServers(
           member.userId,

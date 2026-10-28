@@ -9,13 +9,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { createCodingAgent, latestTurnsOfReached } from "@luke/database/models/coding-agent-store";
+import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
 import { devicesSeenSince } from "@luke/database/models/device-store";
 import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
@@ -181,7 +181,7 @@ const enrolledHost = (userId: string) =>
 const agentRunningOn = (userId: string, deviceId: string | null) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -189,7 +189,7 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
-      ...(deviceId === null ? {} : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
+      ...(deviceId === null ? {} : { machine: AGENT_MACHINE.DEVICE, deviceId }),
     });
     const { conversationId } = Option.getOrThrow(started).agent;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });

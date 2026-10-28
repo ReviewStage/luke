@@ -9,7 +9,7 @@
  * account, is handed to none of its agents. The brain agents are handed
  * every one offered. A coding agent is handed every one but those the
  * developer switched off for it from its composer, which writes
- * the agent's `disabled_servers` (`coding-agent-store.ts`); its worker's
+ * the agent's `disabled_servers` (`agent-store.ts`); its worker's
  * session is admitted for its parent's conversation, so it follows its
  * parent agent's switches. A server the developer mentioned in a message to
  * a coding agent (`@Linear`) is handed to the next turn the agent starts
@@ -44,9 +44,9 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import {
-  readCodingAgentOfConversation,
-  takeCodingAgentMentionedServers,
-} from "@luke/database/models/coding-agent-store";
+  readAgentOfConversation,
+  takeAgentMentionedServers,
+} from "@luke/database/models/agent-store";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -119,7 +119,7 @@ function takenMentions(
   conversationId: string,
 ): Effect.Effect<readonly string[], never, DatabaseServices> {
   if (policy !== CONNECTION_POLICY.AGENT_SWITCHES_AND_MENTIONS) return Effect.succeed([]);
-  return takeCodingAgentMentionedServers(userId, conversationId).pipe(
+  return takeAgentMentionedServers(userId, conversationId).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(
@@ -226,7 +226,7 @@ export function turnServers(
     if (policy === CONNECTION_POLICY.ALWAYS_ON) {
       return { on: true, account: userId, connections: handed } as const;
     }
-    const agent = yield* readCodingAgentOfConversation(userId, conversationId);
+    const agent = yield* readAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
     // A native turn took its mentions as it started and names them here (`turnMentions`); an eve turn takes them now.

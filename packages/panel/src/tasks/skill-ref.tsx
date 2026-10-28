@@ -6,10 +6,9 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRow,
+  HoverCardSkeleton,
   INLINE_REF_LOOK,
   InlineRef,
-  Skeleton,
-  SkeletonRegion,
 } from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
@@ -59,12 +58,6 @@ export interface SkillSubject {
   readonly onOpen: () => void;
 }
 
-/** What a card says while the skill it hangs for is still being read. */
-const SKILL_READING = "Reading skill…";
-
-/** How much of its line the card's description stands in for while it is read. */
-const SKILL_CARD_NOTE_WIDTH = "80%";
-
 /** The skill's card: its mark, name, and source, what it is for, and its file's line where it has one. */
 export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Element {
   const { skill } = subject;
@@ -104,18 +97,6 @@ export function skillOption(skill: SkillOption): ComboboxOption {
   };
 }
 
-/** The skill's card while its skill is read: its mark and name, which the chip knows, and the line of what it is for as a placeholder. */
-function SkillCardSkeleton({ name }: { name: string }): React.JSX.Element {
-  return (
-    <HoverCard data-skill-card="">
-      <HoverCardHead glyph={<SkillMark />} name={skillWord(name)} />
-      <SkeletonRegion label={SKILL_READING}>
-        <Skeleton width={SKILL_CARD_NOTE_WIDTH} />
-      </SkeletonRegion>
-    </HoverCard>
-  );
-}
-
 /**
  * A skill named in place: the book and its `/name` as a mention's pill, which
  * hangs its card and, handed `onOpen`, is one button that opens its file. Note
@@ -142,7 +123,7 @@ export function SkillRef({
       hintLabel={skill?.path}
       card={
         skill === undefined ? (
-          <SkillCardSkeleton name={name} />
+          <HoverCardSkeleton glyph={<SkillMark />} name={skillWord(name)} data-skill-card="" />
         ) : (
           <SkillCard subject={{ skill, onOpen: () => onOpen?.() }} />
         )

@@ -1,11 +1,7 @@
 import { queryBuilder } from "@luke/database/core/query";
 import { lastSettledTurnAt, newestAwaitingLineAt } from "@luke/database/models/message-reads";
 import { messages, turns } from "@luke/database/schemas/storage";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_KIND,
-  OPERATOR_QUIET_REPLY,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_FAILURE, AGENT_KIND, OPERATOR_QUIET_REPLY } from "@luke/features/agent-wire";
 import { UI_PART_TYPE } from "@luke/features/turn-run";
 import { and, desc, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { FAILURE_WORDS } from "../agents/coder-host/status.js";
@@ -19,7 +15,7 @@ import { TURN_FAILURE, TURN_STATUS } from "../core.js";
  * `coder-host/status.ts`'s `codingAgentFailureOf`), as a fragment a live
  * statement joins or selects beside the agent's own row. Nothing here reads
  * the clock: the status itself, which turns on it, is the reader's to read
- * (`@luke/features/coding-agent-status`). The failure is named here, in
+ * (`@luke/features/agent-status`). The failure is named here, in
  * the wire's own word, so the turn's detail never leaves the database.
  */
 
@@ -94,7 +90,7 @@ export function quietTurnOf(
         sql`jsonb_array_length(jsonb_path_query_array(${messages.parts}, ${TEXT_PARTS_PATH}::jsonpath)) = 1`,
       ),
     );
-  return sql<boolean>`(${kind} = ${CODING_AGENT_KIND.OPERATOR} and coalesce(${journal}, false))`;
+  return sql<boolean>`(${kind} = ${AGENT_KIND.OPERATOR} and coalesce(${journal}, false))`;
 }
 
 /** Whether the newest turn failed because its session ended for good, which leaves every line awaiting nothing; null where no turn stands. */
@@ -120,12 +116,12 @@ export function failureWordOf(latest: LatestTurn): SQL<string | null> {
       )} then ${word}`,
   );
   return sql<string | null>`case
-    when ${latest.id} is null then ${CODING_AGENT_FAILURE.NOT_STARTED}
+    when ${latest.id} is null then ${AGENT_FAILURE.NOT_STARTED}
     when ${latest.status} <> ${TURN_STATUS.FAILED} then null
-    when ${latest.failure} = ${TURN_FAILURE.ABANDONED} then ${CODING_AGENT_FAILURE.ABANDONED}
-    when ${latest.failure} = ${TURN_FAILURE.SESSION_ENDED} then ${CODING_AGENT_FAILURE.SESSION_ENDED}
-    when ${latest.failure} is distinct from ${TURN_FAILURE.MODEL} then ${CODING_AGENT_FAILURE.OTHER}
+    when ${latest.failure} = ${TURN_FAILURE.ABANDONED} then ${AGENT_FAILURE.ABANDONED}
+    when ${latest.failure} = ${TURN_FAILURE.SESSION_ENDED} then ${AGENT_FAILURE.SESSION_ENDED}
+    when ${latest.failure} is distinct from ${TURN_FAILURE.MODEL} then ${AGENT_FAILURE.OTHER}
     ${sql.join(named, sql` `)}
-    else ${CODING_AGENT_FAILURE.MODEL}
+    else ${AGENT_FAILURE.MODEL}
   end`;
 }

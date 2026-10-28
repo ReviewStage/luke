@@ -1,6 +1,6 @@
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
-import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
@@ -121,7 +121,7 @@ const COMMENT_TASK_TOOLS = [
  * `editPlan` and `showPage`), and that the instructions leave out
  * the same words (`instructions.ts`).
  */
-export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
+export function taskToolsOf(agent: Pick<Agent, "taskId">): ReadonlySet<TaskTool> {
   // A page stands on the agent itself where it works on no task, so every agent shows one.
   if (agent.taskId === null) return new Set([CODER_TOOL.SHOW_PAGE]);
   return new Set([
@@ -145,9 +145,7 @@ export type RepositoryTool = typeof CODER_TOOL.OPEN_PULL_REQUEST | typeof CODER_
  * writes the files its work makes, such as a page to show; and that the
  * instructions leave out the same words (`instructions.ts`).
  */
-export function repositoryToolsOf(
-  agent: Pick<CodingAgent, "repository">,
-): ReadonlySet<RepositoryTool> {
+export function repositoryToolsOf(agent: Pick<Agent, "repository">): ReadonlySet<RepositoryTool> {
   if (agent.repository === null) return new Set();
   return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH]);
 }
@@ -170,8 +168,8 @@ export type KindTool =
  * member's asks by the tool itself (`../operator-desk.ts`); and that the
  * instructions leave out the same words (`instructions.ts`).
  */
-export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindTool> {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR
+export function kindToolsOf(agent: Pick<Agent, "kind">): ReadonlySet<KindTool> {
+  return agent.kind === AGENT_KIND.OPERATOR
     ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
     : new Set([CODER_TOOL.DELETE_SECTION, CODER_TOOL.DELETE_AUTOMATION]);
 }
@@ -186,20 +184,20 @@ export type MachineTool = typeof CODER_TOOL.BROWSER;
  * from its shell instead), so the tool would only be refused. The
  * instructions leave out the same words (`instructions.ts`).
  */
-export function machineToolsOf(agent: Pick<CodingAgent, "machine">): ReadonlySet<MachineTool> {
-  return agent.machine === CODING_AGENT_MACHINE.DEVICE ? new Set() : new Set([CODER_TOOL.BROWSER]);
+export function machineToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<MachineTool> {
+  return agent.machine === AGENT_MACHINE.DEVICE ? new Set() : new Set([CODER_TOOL.BROWSER]);
 }
 
 /** What of an agent decides which tools eve offers it. */
-export type CoderOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind" | "machine">;
+export type CoderOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "machine">;
 
 /** The coder's tools eve offers some agents and not others: each one some agent's task, repository, kind, machine, or Memory withholds. */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any" }),
-  ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
-  ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
-  ...machineToolsOf({ machine: CODING_AGENT_MACHINE.VERCEL }),
+  ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
+  ...kindToolsOf({ kind: AGENT_KIND.CODER }),
+  ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   CODER_TOOL.REMEMBER,
   CODER_TOOL.RECALL,
 ]);

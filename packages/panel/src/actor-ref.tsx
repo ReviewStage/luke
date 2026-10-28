@@ -689,9 +689,9 @@ export function LukeCard({
 
 /** What a card says of someone the window cannot name, by why. */
 const SOMEONE_NOTES = {
-  [SOMEONE_REASON.FORMER]: "No longer in this workspace.",
+  [SOMEONE_REASON.FORMER]: "No longer in this workspace",
   [SOMEONE_REASON.UNNAMED]: "Luke can't say who made this change.",
-  [SOMEONE_REASON.EARLIER]: "The plan before its history began.",
+  [SOMEONE_REASON.EARLIER]: "The plan before its history began",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */

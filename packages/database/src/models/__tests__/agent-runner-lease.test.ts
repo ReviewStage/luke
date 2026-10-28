@@ -5,11 +5,8 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, startTask } from "../../testing/index.js";
-import {
-  claimCodingAgentRunnerLease,
-  releaseCodingAgentRunnerLease,
-} from "../coding-agent-runner-lease.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { claimAgentRunnerLease, releaseAgentRunnerLease } from "../agent-runner-lease.js";
+import { createAgent } from "../agent-store.js";
 
 /**
  * The lease a call holds on a native agent's runner, over a real dialect:
@@ -29,7 +26,7 @@ const openAgent = Effect.gen(function* () {
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
   );
   const task = yield* startTask(userId, { name: "Invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -51,15 +48,15 @@ it.layer(getTestDB())("a native agent's runner lease", (it) => {
 
         const claimed = yield* Effect.all(
           [
-            claimCodingAgentRunnerLease(agentId, first, NOW, HELD_UNTIL),
-            claimCodingAgentRunnerLease(agentId, second, NOW, HELD_UNTIL),
+            claimAgentRunnerLease(agentId, first, NOW, HELD_UNTIL),
+            claimAgentRunnerLease(agentId, second, NOW, HELD_UNTIL),
           ],
           { concurrency: "unbounded" },
         );
         assert.deepEqual(claimed, [true, false]);
 
-        yield* releaseCodingAgentRunnerLease(agentId, first);
-        assert.equal(yield* claimCodingAgentRunnerLease(agentId, second, NOW, HELD_UNTIL), true);
+        yield* releaseAgentRunnerLease(agentId, first);
+        assert.equal(yield* claimAgentRunnerLease(agentId, second, NOW, HELD_UNTIL), true);
       }),
   );
 
@@ -67,15 +64,12 @@ it.layer(getTestDB())("a native agent's runner lease", (it) => {
     Effect.gen(function* () {
       const agentId = yield* openAgent;
       const [killed, next, third] = [randomUUID(), randomUUID(), randomUUID()];
-      assert.equal(yield* claimCodingAgentRunnerLease(agentId, killed, NOW, HELD_UNTIL), true);
+      assert.equal(yield* claimAgentRunnerLease(agentId, killed, NOW, HELD_UNTIL), true);
 
-      assert.equal(
-        yield* claimCodingAgentRunnerLease(agentId, next, HELD_UNTIL, LATER_UNTIL),
-        true,
-      );
-      yield* releaseCodingAgentRunnerLease(agentId, killed);
+      assert.equal(yield* claimAgentRunnerLease(agentId, next, HELD_UNTIL, LATER_UNTIL), true);
+      yield* releaseAgentRunnerLease(agentId, killed);
 
-      assert.equal(yield* claimCodingAgentRunnerLease(agentId, third, PAST_IT, LATER_UNTIL), false);
+      assert.equal(yield* claimAgentRunnerLease(agentId, third, PAST_IT, LATER_UNTIL), false);
     }),
   );
 
@@ -83,8 +77,8 @@ it.layer(getTestDB())("a native agent's runner lease", (it) => {
     Effect.gen(function* () {
       const [one, other] = [yield* openAgent, yield* openAgent];
 
-      assert.equal(yield* claimCodingAgentRunnerLease(one, randomUUID(), NOW, HELD_UNTIL), true);
-      assert.equal(yield* claimCodingAgentRunnerLease(other, randomUUID(), NOW, HELD_UNTIL), true);
+      assert.equal(yield* claimAgentRunnerLease(one, randomUUID(), NOW, HELD_UNTIL), true);
+      assert.equal(yield* claimAgentRunnerLease(other, randomUUID(), NOW, HELD_UNTIL), true);
     }),
   );
 });

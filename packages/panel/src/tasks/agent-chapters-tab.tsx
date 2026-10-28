@@ -1,4 +1,4 @@
-import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import type { AgentChangedFile } from "@luke/features/agent-wire";
 import {
   type Chapter,
   chapterHunks,
@@ -421,8 +421,16 @@ function RiskChip({
 }): React.JSX.Element {
   const card =
     reasons.length === 0 ? undefined : (
-      <HoverCard>
-        <HoverCardHead name={RISK_WORDS[risk]} />
+      <HoverCard data-risk-card="">
+        <HoverCardHead
+          glyph={
+            // Note that the dot stands in a box of its own, because the head's glyph box sizes its child to a glyph's, which would swell the dot.
+            <span className="flex items-center justify-center">
+              <RiskMark risk={risk} />
+            </span>
+          }
+          name={RISK_WORDS[risk]}
+        />
         {reasons.map((reason) => (
           <HoverCardNote key={reason}>{reason}</HoverCardNote>
         ))}
@@ -702,7 +710,7 @@ function ChaptersReading({
   read: ChaptersRead;
   changes: ChangesReads;
   /** Every file the pull request changes, as the read of its files answered. */
-  files: readonly CodingAgentChangedFile[];
+  files: readonly AgentChangedFile[];
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
 }): React.JSX.Element {

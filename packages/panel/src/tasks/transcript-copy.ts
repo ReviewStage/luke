@@ -1,14 +1,14 @@
 import type { Replay } from "@luke/features/agent-replay";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
+  AGENT_BOUNDS,
+  AGENT_BRIEF,
+  AGENT_CURSOR_START,
+  type AgentBrief,
+  type AgentTranscriptMessage,
   agentMessageWords,
   applyMessagesPage,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_CURSOR_START,
-  type CodingAgentBrief,
-  type CodingAgentMessage,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { THREAD_LINE_LEAD, threadLineWords } from "@luke/features/inbox-wire";
 import {
   CALL_KIND,
@@ -264,7 +264,7 @@ function drawnWords(block: CopiedBlock): readonly string[] {
  * them only once read whole, and its ends are the stored JSON's, not the
  * answer as drawn.
  */
-export function drawnMessageWords(message: CodingAgentMessage): string {
+export function drawnMessageWords(message: AgentTranscriptMessage): string {
   const sent = sentLineWords(message);
   return sent ?? drawnRowsWords(agentRows(message, false));
 }
@@ -281,7 +281,7 @@ export function drawnRowsWords(rows: readonly TurnRow<AgentPart>[]): string {
  * message, which the tab draws as its sender's (`agentMessageOf`), under
  * who sent it, without the lines that are the agent's alone.
  */
-function developerTurn(message: CodingAgentMessage): CopiedTurn {
+function developerTurn(message: AgentTranscriptMessage): CopiedTurn {
   const words = messageWords(message);
   if (agentMessageOf(message) !== undefined) {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: agentMessageWords(words) ?? words }] as const;
@@ -298,7 +298,7 @@ function developerTurn(message: CodingAgentMessage): CopiedTurn {
  * (`githubLineWords`), without the instructions and the fence. Nothing for
  * any other line, whose words are its own.
  */
-function sentLineWords(message: CodingAgentMessage): string | undefined {
+function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   const github = githubLineOf(message);
   if (github !== undefined) return githubLineWords(github);
   const thread = threadLineOf(message);
@@ -319,8 +319,8 @@ function sentLineWords(message: CodingAgentMessage): string | undefined {
  */
 export function agentTranscript(input: {
   title: string;
-  messages: readonly CodingAgentMessage[];
-  brief: CodingAgentBrief | undefined;
+  messages: readonly AgentTranscriptMessage[];
+  brief: AgentBrief | undefined;
   /** The task a worker was handed, where the transcript is a worker's rather than the agent's own. */
   task?: string | undefined;
   /** Whether it is a member's operator's, whose heartbeat that found nothing is copied, as it is drawn, as no reply (`placedMessages`). */
@@ -330,7 +330,7 @@ export function agentTranscript(input: {
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
   // An agent started blank was handed nothing, so its first line is copied as a turn of the developer's.
   const first =
-    brief === CODING_AGENT_BRIEF.BLANK && task === undefined
+    brief === AGENT_BRIEF.BLANK && task === undefined
       ? undefined
       : messages.find(
           (message) => message.role === MESSAGE_ROLE.USER && agentMessageOf(message) === undefined,
@@ -338,7 +338,7 @@ export function agentTranscript(input: {
   const label =
     task !== undefined
       ? BRIEF_LABEL.SUBAGENT_TASK
-      : brief === CODING_AGENT_BRIEF.PROMPT
+      : brief === AGENT_BRIEF.PROMPT
         ? BRIEF_LABEL.PROMPT
         : BRIEF_LABEL.PLAN;
   const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
@@ -568,14 +568,14 @@ export function transcriptMarkdown(transcript: CopiedTranscript, copy: Transcrip
 async function pagesFrom(
   read: TranscriptReader,
   params: Parameters<TranscriptReader>[0],
-  held: readonly CodingAgentMessage[],
-): Promise<readonly CodingAgentMessage[] | undefined> {
+  held: readonly AgentTranscriptMessage[],
+): Promise<readonly AgentTranscriptMessage[] | undefined> {
   const answer = await read(params).catch(() => ({
-    failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
   }));
   if ("failure" in answer) return undefined;
   const messages = applyMessagesPage(held, answer.messages);
-  if (answer.messages.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE) return messages;
+  if (answer.messages.length < AGENT_BOUNDS.MESSAGES_PAGE) return messages;
   return pagesFrom(read, { ...params, after: answer.cursor }, messages);
 }
 
@@ -590,8 +590,8 @@ async function pagesFrom(
 export function readWholeTranscript(
   read: TranscriptReader,
   of: { agentId: string; callId?: string | undefined },
-): Promise<readonly CodingAgentMessage[] | undefined> {
+): Promise<readonly AgentTranscriptMessage[] | undefined> {
   const { agentId, callId } = of;
-  const params = { agentId, after: CODING_AGENT_CURSOR_START };
+  const params = { agentId, after: AGENT_CURSOR_START };
   return pagesFrom(read, callId === undefined ? params : { ...params, callId }, []);
 }

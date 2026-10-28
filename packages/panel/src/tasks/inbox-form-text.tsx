@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { INBOX_BOUNDS, type InboxField } from "@luke/features/inbox-wire";
 import { COMPOSER_LOOK, ComposerFrame, type FieldControl } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
@@ -43,7 +43,7 @@ export interface FormTextDoors {
   /** The item's agent, which the `@` list does not offer; none where the words go to no agent. */
   readonly self: string | undefined;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads. */
-  readonly agent: CodingAgentSummary | undefined;
+  readonly agent: AgentSummary | undefined;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   readonly skills: SkillSource | undefined;
   /** The words a dictation is likely to say (`dictation-keywords.ts`). */
@@ -89,10 +89,7 @@ export function InboxFormText({
       statuses,
       place: {
         disabled: agent?.disabledServers ?? [],
-        handed:
-          agent?.status === CODING_AGENT_STATUS.RUNNING
-            ? SERVER_HANDED.STEERS
-            : SERVER_HANDED.OPENS,
+        handed: agent?.status === AGENT_STATUS.RUNNING ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
       },
     },
     // Note that the field has no microphone, so no dictation of its own has anything to say.

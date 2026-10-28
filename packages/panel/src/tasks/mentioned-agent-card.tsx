@@ -1,10 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_BOUNDS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_BOUNDS, type AgentPullRequest, type AgentSummary } from "@luke/features/agent-wire";
 import { LINK_PLACE, pullRequestAddressOf } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -83,7 +79,7 @@ const TASK_WORDS = {
 /** A read of agents that answered nothing a card can draw. */
 const UNREAD = undefined;
 
-type AgentsRead = readonly CodingAgentSummary[] | typeof UNREAD;
+type AgentsRead = readonly AgentSummary[] | typeof UNREAD;
 
 /** No pull request of another task's agents is held here. */
 const NO_PULL_REQUESTS: CodingAgentsControl["pullRequests"] = new Map();
@@ -125,7 +121,7 @@ function agentById(agentId: string): Effect.Effect<AgentsRead> {
           const { automationId, ...page } = answer.agent;
           return [automationId === null ? page : { ...page, automationId }];
         }
-        return answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND ? NO_AGENT : UNREAD;
+        return answer.failure === AGENT_CALL_FAILURE.NOT_FOUND ? NO_AGENT : UNREAD;
       },
       () => UNREAD,
     ),
@@ -133,12 +129,12 @@ function agentById(agentId: string): Effect.Effect<AgentsRead> {
 }
 
 /** A read that found no such agent. */
-const NO_AGENT: readonly CodingAgentSummary[] = [];
+const NO_AGENT: readonly AgentSummary[] = [];
 
 /** The words a name searches by, where the service takes them: some, and within its bound. */
 function searchWords(name: string): string | undefined {
   const words = name.trim();
-  return words === "" || words.length > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS ? undefined : words;
+  return words === "" || words.length > AGENT_BOUNDS.MAX_SEARCH_CHARS ? undefined : words;
 }
 
 /** One task's agents, read once for every card hung of it while one stands. */
@@ -280,7 +276,7 @@ export function ReadAgentModel({
 }
 
 /** What a card of an agent's says of the task it works on: its name as the window lists it, none, or another the window does not list. */
-function useTaskFoot(agent: CodingAgentSummary | undefined): string | undefined {
+function useTaskFoot(agent: AgentSummary | undefined): string | undefined {
   const tasks = useKnownNames().tasks;
   if (agent === undefined) return undefined;
   if (agent.planId === null) return TASK_WORDS.NONE;
@@ -290,7 +286,7 @@ function useTaskFoot(agent: CodingAgentSummary | undefined): string | undefined 
 
 /** An agent as its tab's card names it, from the agents a read answered. */
 function readSubject(
-  agents: readonly CodingAgentSummary[],
+  agents: readonly AgentSummary[],
   agentId: string,
   place: MentionedAgentsPlace,
 ): AgentSubject {
@@ -370,7 +366,7 @@ export function MentionedAgentCard({
 function agentPullRequest(
   agentId: string,
   number: number | undefined,
-): Effect.Effect<CodingAgentPullRequest | null | typeof UNREAD> {
+): Effect.Effect<AgentPullRequest | null | typeof UNREAD> {
   return Effect.promise(() =>
     askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
       (answer) => ("failure" in answer ? UNREAD : answer.pullRequest),

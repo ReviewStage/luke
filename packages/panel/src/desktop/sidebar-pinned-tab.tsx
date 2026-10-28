@@ -1,9 +1,5 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import {
-  CODING_AGENT_BOUNDS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type AgentPullRequest, type AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -134,7 +130,7 @@ function pinSubject(
 }
 
 /** What a pin's pull request is drawn and named from: its number, title, and where it stands. */
-type PinnedPullRequest = PullRequestMarked & Pick<CodingAgentPullRequest, "title">;
+type PinnedPullRequest = PullRequestMarked & Pick<AgentPullRequest, "title">;
 
 /** The repository a pull request's address names, without its number: what two pull requests of one repository share. */
 function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
@@ -147,10 +143,7 @@ function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
  * (`pullRequestOfTab`), a numbered tab's included. Nothing for any other pin,
  * or for a pin of another task, whose agents the window does not read.
  */
-function openPullRequestOf(
-  pin: PinnedTab,
-  tasks: TasksControl,
-): CodingAgentPullRequest | undefined {
+function openPullRequestOf(pin: PinnedTab, tasks: TasksControl): AgentPullRequest | undefined {
   const { tab } = pin;
   if (!isChangesTab(tab) || pin.task !== tasks.activeTaskId) return undefined;
   return pullRequestOfTab(tasks.agents, tab);
@@ -222,7 +215,7 @@ function unpinItem(pin: PinnedTab, tasks: TasksControl): MenuAction {
  * whose whole menu the pin then offers; none for another task's pin, or an
  * agent the open task no longer holds.
  */
-function openAgentOf(pin: PinnedTab, tasks: TasksControl): CodingAgentSummary | undefined {
+function openAgentOf(pin: PinnedTab, tasks: TasksControl): AgentSummary | undefined {
   const { tab } = pin;
   if (!isAgentTab(tab) || pin.task !== tasks.activeTaskId) return undefined;
   return tasks.agents.agents?.find((each) => each.id === tab.agent);
@@ -272,7 +265,7 @@ const pinPullRequestAtom = Atom.family((agentId: string) =>
         (answer) =>
           "failure" in answer
             ? Effect.fail(answer.failure)
-            : Effect.succeed<CodingAgentPullRequest | undefined>(answer.pullRequest ?? undefined),
+            : Effect.succeed<AgentPullRequest | undefined>(answer.pullRequest ?? undefined),
       ),
     ),
     PIN_PULL_REQUEST_KEPT,
@@ -388,8 +381,6 @@ interface PinnedRowDrawn {
   inSight: boolean;
   tasks: TasksControl;
   onOpen: () => void;
-  /** The row's item, its press's parent, which its card counts as its control. */
-  item: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -414,21 +405,13 @@ function PinnedTabRow({
   description?: React.ReactNode;
   rowRef?: ((press: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
-  const { pin, card, glyph, gone, current, inSight, tasks, onOpen, item } = drawn;
+  const { pin, card, glyph, gone, current, inSight, tasks, onOpen } = drawn;
   const place = useRowPlace();
   const editing = editor !== undefined;
-  // Note that the row's item is its press's parent, which its card counts as its control.
-  const hold = useCallback(
-    (press: HTMLElement | null) => {
-      item.current = press?.parentElement ?? null;
-      rowRef?.(press);
-    },
-    [item, rowRef],
-  );
   return (
-    <RowHintOptions card={card} cardBeside cardRegion={item}>
+    <RowHintOptions card={card}>
       <ListRow
-        ref={hold}
+        ref={rowRef}
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
@@ -493,7 +476,7 @@ function PinnedAgentRow({
   agent,
   drawn,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   drawn: PinnedRowDrawn;
 }): React.JSX.Element {
   const { pin, tasks } = drawn;
@@ -524,7 +507,7 @@ function PinnedAgentRow({
             <InlineEdit
               value={rename.asked ?? pin.label}
               label="Agent name"
-              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
               editing
               onEnd={(edit) => {
                 endedByKey(edit.byKey);
@@ -565,7 +548,6 @@ export function SidebarPinnedTab({
   const livePullRequest = pinPullRequest(kept, task, tasks);
   const agent = pinAgent(kept, task, tasks);
   const pin = namedPin(kept, task, agent, livePullRequest, tasks.agents.models);
-  const item = useRef<HTMLElement | null>(null);
   const gone = pinGone(pin, tasks);
   const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
     tasks.onOpenPinnedTab({ ...pin, tab: { agent: agentId } }),
@@ -593,7 +575,6 @@ export function SidebarPinnedTab({
     inSight,
     tasks,
     onOpen,
-    item,
   };
   const open = openAgentOf(pin, tasks);
   if (open !== undefined) return <PinnedAgentRow agent={open} drawn={drawn} />;

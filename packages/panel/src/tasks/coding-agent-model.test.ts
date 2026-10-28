@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-} from "@luke/features/coding-agent-view";
-import {
+  AGENT_PAYER,
+  AGENT_RUNTIME,
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
+  type AgentTranscriptMessage,
   CHECK_SUMMARY,
-  CODING_AGENT_PAYER,
-  CODING_AGENT_RUNTIME,
-  CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
-  type CodingAgentMessage,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   LOCAL_AGENT_REFUSAL,
   OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -138,22 +135,22 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
 });
 
 /** A row of the developer's, as the service writes one. */
-function developer(id: string, text: string): CodingAgentMessage {
+function developer(id: string, text: string): AgentTranscriptMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
 test("an operator's heartbeat that found nothing draws no reply, a line it took in stands in order, and a reply that says more, or any other agent's, is drawn", () => {
   const heartbeat = developer("m-1", "Your heartbeat: look over the developer's open work.");
-  const quiet: CodingAgentMessage = {
+  const quiet: AgentTranscriptMessage = {
     id: "m-2",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [{ type: "step-start" }, { type: "text", text: `${OPERATOR_QUIET_REPLY}\n` }],
   };
-  const typed: CodingAgentMessage = {
+  const typed: AgentTranscriptMessage = {
     ...developer("m-3", "Anything new?"),
     arrivedIn: { journalId: "m-2", afterStep: 1 },
   };
-  const said: CodingAgentMessage = {
+  const said: AgentTranscriptMessage = {
     id: "m-4",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [{ type: "text", text: `Stopped Ana. ${OPERATOR_QUIET_REPLY}` }],
@@ -196,7 +193,7 @@ function sentUnder(clientKey: string, text: string): SentLine {
 }
 
 /** The developer's row the service wrote for a line sent under `clientKey`. */
-function writtenFor(id: string, clientKey: string, text: string): CodingAgentMessage {
+function writtenFor(id: string, clientKey: string, text: string): AgentTranscriptMessage {
   return { ...developer(id, text), clientId: sentLineId(clientKey) };
 }
 
@@ -223,7 +220,7 @@ test("the line an agent was started on stands until the transcript reads back th
     messageWords(agentLines([], [opening])[0] ?? developer("none", "")),
     "Fix the sidebar.",
   );
-  const reply: CodingAgentMessage = { id: "m-0", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
+  const reply: AgentTranscriptMessage = { id: "m-0", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
   assert.equal(unreadOpeningLine(opening, [reply]), opening, "no row of the developer's yet");
   // eve writes the first row under no key of the start's.
   assert.equal(unreadOpeningLine(opening, [developer("m-1", "Fix the sidebar.")]), undefined);
@@ -244,7 +241,7 @@ test("a developer's row is keyed by the id its line was drawn under, and every o
   assert.ok(drawn);
   assert.equal(transcriptRowKey(row), transcriptRowKey(drawn));
   assert.equal(transcriptRowKey(developer("m-2", "Older.")), "m-2");
-  const reply: CodingAgentMessage = { id: "m-3", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
+  const reply: AgentTranscriptMessage = { id: "m-3", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
   assert.equal(transcriptRowKey(reply), "m-3");
 });
 
@@ -265,7 +262,7 @@ test("the lines sent and not read back follow the transcript's rows, as the deve
   );
 });
 
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 123,
   title: "Teammate invitations",
   url: "https://github.com/acme/relay/pull/123",
@@ -436,7 +433,7 @@ test("an effort carried to a model that lacks it falls to the nearest the model 
 });
 
 test("the plan edits that have answered are counted, not the ones still out or the other calls", () => {
-  const messages: CodingAgentMessage[] = [
+  const messages: AgentTranscriptMessage[] = [
     {
       id: "m1",
       role: MESSAGE_ROLE.ASSISTANT,
@@ -479,7 +476,7 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
     ...(output === undefined ? undefined : { output }),
   });
   const accepted = { status: "accepted", agent: { id: "agent-2" } };
-  const messages: CodingAgentMessage[] = [
+  const messages: AgentTranscriptMessage[] = [
     {
       id: "m1",
       role: MESSAGE_ROLE.ASSISTANT,
@@ -508,7 +505,7 @@ test("the starts that made a new task and the accepted section and task change c
     ...(output === undefined ? undefined : { output }),
   });
   const made = { status: "accepted", agent: { id: "agent-2" }, newTask: { id: "task-2" } };
-  const messages: CodingAgentMessage[] = [
+  const messages: AgentTranscriptMessage[] = [
     {
       id: "m1",
       role: MESSAGE_ROLE.ASSISTANT,
@@ -534,26 +531,26 @@ test("the starts that made a new task and the accepted section and task change c
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
-  const task: CodingAgentMessage = {
+  const task: AgentTranscriptMessage = {
     id: "m-plan",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: "# Invitations" }],
   };
-  const opened: CodingAgentMessage = {
+  const opened: AgentTranscriptMessage = {
     id: "m-turn",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [{ type: AGENT_PART.STEP_START }],
     startedAt: 1_000,
   };
-  const calling: CodingAgentMessage = {
+  const calling: AgentTranscriptMessage = {
     ...opened,
     parts: [
       { type: AGENT_PART.STEP_START },
       { type: "tool-bash", toolCallId: "call_1", state: TOOL_STATE.INPUT_AVAILABLE },
     ],
   };
-  const closed: CodingAgentMessage = { ...calling, finishedAt: 9_000 };
-  const line: CodingAgentMessage = {
+  const closed: AgentTranscriptMessage = { ...calling, finishedAt: 9_000 };
+  const line: AgentTranscriptMessage = {
     id: "m-line",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: "Also expire them after a week." }],
@@ -615,7 +612,7 @@ test("a planning transcript's raw parts read as the agent tab reads them: eve's 
 
 test("a message refused for a repository out of reach names the plan's remedy on a plan, and on an agent with no plan says its words alone but where the remedy needs no plan", () => {
   const refused = {
-    failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+    failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
     unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/relay" },
   } as const;
 
@@ -625,12 +622,12 @@ test("a message refused for a repository out of reach names the plan's remedy on
   assert.equal("taskId" in onTask && onTask.taskId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   assert.deepEqual(taskless, {
     reason: FAILURE_REASON.OTHER,
-    text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
+    text: messageFailureWords(AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
   // Giving the repository to Luke's GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
-      failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       unreached: {
         reason: REPOSITORY_UNREACHED.NOT_SELECTED,
         repository: "acme/relay",
@@ -650,7 +647,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
 test("a refusal for the member's own GitHub token reads with its remedy, Update GitHub token, with or without a task", () => {
   const refused = (reason: "no-token" | "token-no-access" | "token-cannot-push") =>
     ({
-      failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       unreached: { reason, repository: "acme/relay" },
     }) as const;
 
@@ -678,34 +675,34 @@ test("a refusal for the member's own GitHub token reads with its remedy, Update 
 
 test("a message a Claude plan refused says to reconnect it, a limit says when it resets, and a plan's refusal says nothing of turning to another payer", () => {
   const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
-  const claude = planPayerOf(CODING_AGENT_RUNTIME.CLAUDE_CODE);
+  const claude = planPayerOf(AGENT_RUNTIME.CLAUDE_CODE);
   const words = (refused: Parameters<typeof messageFailureNote>[0], payer = claude) =>
     messageFailureNote(refused, null, payer).text;
 
   assert.deepEqual(
     [
-      words({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }),
-      words({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt }),
-      words({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED }),
+      words({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }),
+      words({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt }),
+      words({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED }),
       words(
-        { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
-        planPayerOf(CODING_AGENT_RUNTIME.CODEX),
+        { failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+        planPayerOf(AGENT_RUNTIME.CODEX),
       ),
-      messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
+      messageFailureNote({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null).text,
     ],
     [
       "Your Claude subscription needs reconnecting in Settings.",
       `Your Claude subscription has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
       "Your Claude subscription has reached its usage limit. It waits until the limit resets.",
       `The subscription paying for this agent has reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`,
-      messageFailureWords(CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
+      messageFailureWords(AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT),
     ],
   );
 });
 
 test("a Start refused for a missing credential says in one sentence which harness to connect, its press opening Settings beside Retry; a message to an agent Luke's key paid for says to continue in a new one, Settings mending nothing", () => {
   const missing = (provider?: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER]) => ({
-    failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+    failure: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
     ...(provider === undefined ? undefined : { provider }),
   });
 
@@ -713,8 +710,8 @@ test("a Start refused for a missing credential says in one sentence which harnes
     [
       startFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null),
       startFailureNote(missing(MODEL_PROVIDER.OPENAI), "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
-      messageFailureNote(missing(MODEL_PROVIDER.OPENAI), null, CODING_AGENT_PAYER.API_KEY),
-      messageFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null, CODING_AGENT_PAYER.LUKE),
+      messageFailureNote(missing(MODEL_PROVIDER.OPENAI), null, AGENT_PAYER.API_KEY),
+      messageFailureNote(missing(MODEL_PROVIDER.ANTHROPIC), null, AGENT_PAYER.LUKE),
     ],
     [
       {
@@ -748,12 +745,12 @@ test("a message to an agent whose device is away says it is offline, in the word
     [
       messageFailureNote(
         {
-          failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+          failure: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
           localAgentRefusal: LOCAL_AGENT_REFUSAL.MAC_AWAY,
         },
         null,
       ).text,
-      messageFailureWords(CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED),
+      messageFailureWords(AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED),
     ],
     [away, away],
   );
@@ -763,7 +760,7 @@ test("a Start another member's device refused names the device and its owner and
   const refused = (refusedDevice?: { name: string; owner?: string }) =>
     startFailureNote(
       {
-        failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+        failure: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
         localAgentRefusal: LOCAL_AGENT_REFUSAL.NOT_OWNER,
         ...(refusedDevice === undefined ? undefined : { refusedDevice }),
       },
@@ -789,7 +786,7 @@ test("a missing credential's press names the harness to connect, and Settings wh
     remedyLabel(
       startFailureNote(
         {
-          failure: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+          failure: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
           ...(provider === undefined ? undefined : { provider }),
         },
         null,
@@ -803,15 +800,15 @@ test("a missing credential's press names the harness to connect, and Settings wh
 });
 
 test("a Start or a message refused for an API key saved but unreadable says so and offers Settings, where saving it again mends it; a Start its plan refused for good offers Settings too, a message the plan refused does not", () => {
-  const unreadable = { failure: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE } as const;
+  const unreadable = { failure: AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE } as const;
 
   assert.deepEqual(
     [
       startFailureNote(unreadable, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10"),
-      messageFailureNote(unreadable, null, CODING_AGENT_PAYER.API_KEY),
-      startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null),
-      startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null),
-      messageFailureNote({ failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null).reason,
+      messageFailureNote(unreadable, null, AGENT_PAYER.API_KEY),
+      startFailureNote({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT }, null),
+      startFailureNote({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null),
+      messageFailureNote({ failure: AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE }, null).reason,
     ],
     [
       {
@@ -837,10 +834,9 @@ test("a Start or a message refused for an API key saved but unreadable says so a
 
 test("a Continue refused for what Settings mends names Settings, since no press beside it opens Settings", () => {
   assert.deepEqual(
-    [
-      CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
-      CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
-    ].map((failure) => continueFailureNote({ failure }, null).text),
+    [AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE, AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT].map(
+      (failure) => continueFailureNote({ failure }, null).text,
+    ),
     [
       "Your saved API key can't be read. Save it again in Settings to start an agent.",
       "Your subscription is signed out. Sign in again in Settings to start an agent.",
@@ -849,13 +845,13 @@ test("a Continue refused for what Settings mends names Settings, since no press 
 });
 
 test("a message to a teammate's agent its starter's own key refused names the starter and offers the reader no Settings of their own", () => {
-  const note = (failure: CodingAgentCallFailure) =>
-    messageFailureNote({ failure }, null, CODING_AGENT_PAYER.API_KEY, "Ada");
+  const note = (failure: AgentCallFailure) =>
+    messageFailureNote({ failure }, null, AGENT_PAYER.API_KEY, "Ada");
 
   assert.deepEqual(
     [
-      note(CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE),
-      note(CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING),
+      note(AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE),
+      note(AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING),
     ],
     [
       {
@@ -871,32 +867,32 @@ test("a message to a teammate's agent its starter's own key refused names the st
 });
 
 test("a page that reads an agent as the list already holds it answers the list as it was, and one that moves it moves only that agent", () => {
-  const agent = (id: string): CodingAgentSummary => ({
+  const agent = (id: string): AgentSummary => ({
     id,
     planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: id,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
     runStartedAt: 5,
   });
   const agents = [agent("a"), agent("b")];
   assert.equal(
-    withAgentRun(agents, "a", { status: CODING_AGENT_STATUS.RUNNING, runStartedAt: 5 }),
+    withAgentRun(agents, "a", { status: AGENT_STATUS.RUNNING, runStartedAt: 5 }),
     agents,
   );
   assert.equal(
     withAgentRun(agents, "unknown", {
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
     }),
     agents,
   );
   const ended = withAgentRun(agents, "a", {
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
   });
-  assert.equal(ended[0]?.status, CODING_AGENT_STATUS.COMPLETED);
+  assert.equal(ended[0]?.status, AGENT_STATUS.COMPLETED);
   assert.equal(ended[0]?.runStartedAt, undefined);
   assert.equal(ended[1], agents[1]);
 });

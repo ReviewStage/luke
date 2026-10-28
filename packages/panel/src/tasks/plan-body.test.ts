@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
@@ -62,16 +58,16 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { ...CHARLES, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Fix auth flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
 };
 
 let root: Root | undefined;

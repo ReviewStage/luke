@@ -7,12 +7,7 @@ import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
-import {
-  createCodingAgent,
-  listCodingAgents,
-  listWorkspaceCodingAgents,
-  readCodingAgent,
-} from "../coding-agent-store.js";
+import { createAgent, listAgents, listWorkspaceAgents, readAgent } from "../agent-store.js";
 import { recordRepositoryReads, unaskedTokenRepositories } from "../github-repository-reads.js";
 import {
   readGitHubTokenRow,
@@ -63,7 +58,7 @@ const tokenWorkspace = Effect.gen(function* () {
     githubAccess: GITHUB_ACCESS.TOKEN,
   });
   const appTask = yield* createTask(owner, { organizationId: workspace, repository: "acme/api" });
-  const started = yield* createCodingAgent(owner, {
+  const started = yield* createAgent(owner, {
     taskId: tokenTask.id,
     planSnapshot: "# Side",
     prompt: null,
@@ -102,11 +97,11 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
           Effect.map(listTasks(userId), (tasks) => tasks.map((each) => each.id).sort());
         const sees = (userId: string) =>
           Effect.gen(function* () {
-            const listed = yield* listWorkspaceCodingAgents(userId, workspace, { limit: 10 });
+            const listed = yield* listWorkspaceAgents(userId, workspace, { limit: 10 });
             return {
               tasks: yield* taskIds(userId),
               task: Option.isSome(yield* readTask(userId, tokenTask.id)),
-              agent: Option.isSome(yield* readCodingAgent(userId, agent.id)),
+              agent: Option.isSome(yield* readAgent(userId, agent.id)),
               listedAgents: listed.length,
             };
           });
@@ -144,7 +139,7 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         const { owner, workspace, appTask } = yield* tokenWorkspace;
         const teammate = yield* openAccount;
         yield* joinWorkspace(workspace, teammate);
-        const started = yield* createCodingAgent(owner, {
+        const started = yield* createAgent(owner, {
           taskId: appTask.id,
           planSnapshot: "# API",
           prompt: null,
@@ -157,7 +152,7 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         const onToken = Option.getOrThrow(started).agent;
 
         const agentsOf = (userId: string) =>
-          Effect.map(listCodingAgents(userId, appTask.id), (agents) => agents.map((a) => a.id));
+          Effect.map(listAgents(userId, appTask.id), (agents) => agents.map((a) => a.id));
         assert.deepEqual(yield* agentsOf(owner), [onToken.id]);
         assert.deepEqual(yield* agentsOf(teammate), []);
       }),

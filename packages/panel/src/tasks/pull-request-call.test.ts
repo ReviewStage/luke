@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -34,7 +34,7 @@ const OPEN = {
 
 /** The agent's turn holding the one `open_pull_request` call, drawn with the links its place opens recorded. */
 function drawn(output: WireRecord | undefined) {
-  const message: CodingAgentMessage = {
+  const message: AgentTranscriptMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [

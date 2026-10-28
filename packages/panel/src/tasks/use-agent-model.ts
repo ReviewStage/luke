@@ -1,8 +1,5 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import type { CodingAgentRuntime, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import type { AgentRuntime, AgentSummary } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { useRef, useState } from "react";
 import { chooseFailureNote } from "./coding-agent-model.js";
@@ -22,10 +19,7 @@ import { chooseFailureNote } from "./coding-agent-model.js";
  */
 
 /** How a change is sent: the agent and the choice, answered as the view hears it. */
-export type ChoiceWriter = (
-  agentId: string,
-  choice: ModelChoice,
-) => Promise<CodingAgentAgentAnswer>;
+export type ChoiceWriter = (agentId: string, choice: ModelChoice) => Promise<AgentAgentAnswer>;
 
 /** Everything the chip draws and presses. */
 export interface AgentModelControl {
@@ -36,7 +30,7 @@ export interface AgentModelControl {
   /** Changes the agent's model, effort, and context window for its next step. */
   choose: (next: ModelChoice) => void;
   /** The provider's own harness the agent runs on, which narrows what the chip offers; none on eve. */
-  runtime?: CodingAgentRuntime | undefined;
+  runtime?: AgentRuntime | undefined;
 }
 
 interface Held {
@@ -50,7 +44,7 @@ function fresh(agentId: string): Held {
 }
 
 export function useAgentModel(input: {
-  agent: Pick<CodingAgentSummary, "id" | "model" | "effort" | "contextWindow" | "runtime">;
+  agent: Pick<AgentSummary, "id" | "model" | "effort" | "contextWindow" | "runtime">;
   choose: ChoiceWriter;
 }): AgentModelControl {
   const { agent } = input;
@@ -69,7 +63,7 @@ export function useAgentModel(input: {
     setHeld((was) => ({ ...was, pending: next, note: undefined }));
     latest.current
       .choose(agent.id, next)
-      .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
+      .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         if (write !== writes.current || latest.current.agent.id !== agent.id) return;
         setHeld((was) => ({

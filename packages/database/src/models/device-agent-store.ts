@@ -21,13 +21,13 @@
  * predates the kind fails its whole held read on one.
  *
  * Every line queued for one agent is queued under that agent's runner
- * lease (`./coding-agent-runner-lease.ts`), as every write to a cloud
+ * lease (`./agent-runner-lease.ts`), as every write to a cloud
  * runner is. That is what keeps an agent's lines committed in the order of
  * their `seq`: the sequence is shared by every agent and holds no lock, so
  * two lines queued at once outside the lease could commit out of order.
  */
 
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_CAPABILITY,
   DEVICE_AGENT_LINE_KIND,
@@ -58,7 +58,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { conversations } from "../schemas/storage.js";
@@ -129,9 +129,9 @@ const lineBefore = alias(deviceAgentLine, "line_before");
  */
 function pinnedAgent(userId: string, agentId: string) {
   return and(
-    eq(codingAgent.id, agentId),
-    eq(codingAgent.userId, userId),
-    eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
+    eq(agentTable.id, agentId),
+    eq(agentTable.userId, userId),
+    eq(agentTable.machine, AGENT_MACHINE.DEVICE),
     eq(device.userId, userId),
   );
 }
@@ -176,9 +176,9 @@ export type DeviceAgentLineStanding = typeof DeviceAgentLineStandingSchema.Type;
 
 /** The columns a pin reads off an agent. */
 const PIN_COLUMNS = {
-  userId: codingAgent.userId,
-  agentId: codingAgent.id,
-  deviceId: codingAgent.deviceId,
+  userId: agentTable.userId,
+  agentId: agentTable.id,
+  deviceId: agentTable.deviceId,
 };
 
 const findPinOfSession = SqlSchema.findOneOption({
@@ -189,11 +189,11 @@ const findPinOfSession = SqlSchema.findOneOption({
       db
         .select(PIN_COLUMNS)
         .from(conversations)
-        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
+        .innerJoin(agentTable, eq(agentTable.conversationId, conversations.id))
         .where(
           and(
             eq(conversations.runtimeSessionId, runtimeSessionId),
-            eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
+            eq(agentTable.machine, AGENT_MACHINE.DEVICE),
           ),
         )
         .limit(1),
@@ -207,10 +207,8 @@ const findPin = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select(PIN_COLUMNS)
-        .from(codingAgent)
-        .where(
-          and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE)),
-        ),
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), eq(agentTable.machine, AGENT_MACHINE.DEVICE))),
     ),
 });
 
@@ -291,16 +289,16 @@ const insertLine = SqlSchema.findAll({
           qb
             .select({
               id: sql<string>`coalesce(${id ?? null}::uuid, gen_random_uuid())`.as("id"),
-              agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
-              userId: sql<string>`${codingAgent.userId}`.as("user_id"),
+              agentId: sql<string>`${agentTable.id}`.as("agent_id"),
+              userId: sql<string>`${agentTable.userId}`.as("user_id"),
               deviceId: sql<string>`${device.id}`.as("device_id"),
               kind: sql<DeviceAgentLineKind>`${kind}`.as("kind"),
               payload: sql<DeviceAgentObject>`${JSON.stringify(payload)}::jsonb`.as("payload"),
               sealedSecrets: sql<string | null>`${sealedSecrets}::text`.as("sealed_secrets"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
             })
-            .from(codingAgent)
-            .innerJoin(device, eq(device.id, codingAgent.deviceId))
+            .from(agentTable)
+            .innerJoin(device, eq(device.id, agentTable.deviceId))
             .where(
               capability === undefined
                 ? pinnedAgent(userId, agentId)
@@ -463,15 +461,15 @@ const insertRequest = SqlSchema.findAll({
           qb
             .select({
               id: sql<string>`${id}::uuid`.as("id"),
-              agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
-              userId: sql<string>`${codingAgent.userId}`.as("user_id"),
+              agentId: sql<string>`${agentTable.id}`.as("agent_id"),
+              userId: sql<string>`${agentTable.userId}`.as("user_id"),
               deviceId: sql<string>`${device.id}`.as("device_id"),
               kind: sql<DeviceAgentRequestKind>`${kind}`.as("kind"),
               args: sql<DeviceAgentObject>`${JSON.stringify(args)}::jsonb`.as("args"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
             })
-            .from(codingAgent)
-            .innerJoin(device, eq(device.id, codingAgent.deviceId))
+            .from(agentTable)
+            .innerJoin(device, eq(device.id, agentTable.deviceId))
             .where(pinnedAgent(userId, agentId)),
         )
         .returning({ id: deviceAgentRequest.id }),

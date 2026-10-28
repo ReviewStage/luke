@@ -1,15 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import { AGENT_BOUNDS, AGENT_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { formatCount } from "@luke/features/number-format";
 import {
   REPOSITORY_UNREACHED,
@@ -106,7 +99,7 @@ function Box({
 }: {
   sender: MessageSender;
   /** The transcript as the tab reads it, which a sent line is read back from. */
-  messages?: readonly CodingAgentMessage[];
+  messages?: readonly AgentTranscriptMessage[];
 }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -129,7 +122,7 @@ function Box({
 }
 
 /** The box mounted, every message it sends written down and answered by `answer`. */
-async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new Promise(ignore)) {
+async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promise(ignore)) {
   const sent: { text: string; clientKey: string }[] = [];
   const sender: MessageSender = (_agentId, text, clientKey) => {
     sent.push({ text, clientKey });
@@ -180,7 +173,7 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
 
 test("a paste past the box's cap is cut to the room left and the note says so, until the words change", async () => {
   const box = await mounted();
-  const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+  const cap = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
   const note = () => box.container.querySelector(".luke-composer-foot-note")?.textContent;
   assert.equal(note(), undefined);
 
@@ -204,10 +197,8 @@ test("a paste that fits the cap says nothing of a cut", async () => {
 });
 
 test("a paste into a full box whose message did not go leaves the failure and its Retry standing", async () => {
-  const box = await mounted(() =>
-    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-  );
-  typeInComposer(box.container, "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  const box = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  typeInComposer(box.container, "x".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS));
   pressInComposer(box.container, "Enter");
   await settle();
   const retry = () =>
@@ -220,7 +211,7 @@ test("a paste into a full box whose message did not go leaves the failure and it
 
 test("the length counter stands from four fifths of the cap and not before", async () => {
   const box = await mounted();
-  const cap = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+  const cap = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
   const counter = () => box.container.querySelector(".luke-length-counter")?.textContent;
 
   typeInComposer(box.container, "x".repeat(cap * 0.8 - 1));
@@ -256,9 +247,7 @@ test("words selected raise the format toolbar, its marks alone, and a message bo
 });
 
 test("a message that did not go comes back into the box, the caret at its end, and Retry sends it again under its key", async () => {
-  const box = await mounted(() =>
-    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-  );
+  const box = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   typeInComposer(box.container, "Fix the bug");
   pressInComposer(box.container, "Enter");
   await settle();
@@ -282,7 +271,7 @@ test("a message that did not go comes back into the box, the caret at its end, a
 });
 
 /** The agent as the service answers a message it took. */
-const TAKEN: CodingAgentAgentAnswer = {
+const TAKEN: AgentAgentAnswer = {
   agent: {
     id: "agent-1",
     planId: "plan-1",
@@ -290,35 +279,35 @@ const TAKEN: CodingAgentAgentAnswer = {
     effort: "high",
     title: null,
     createdAt: 1_800_000_000_000,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
   },
 };
 
 /** The box mounted, its one send answered only as the test lets it. */
 async function answeredLater() {
-  let answer: (answered: CodingAgentAgentAnswer) => void = ignore;
+  let answer: (answered: AgentAgentAnswer) => void = ignore;
   const box = await mounted(
     () =>
-      new Promise<CodingAgentAgentAnswer>((resolve) => {
+      new Promise<AgentAgentAnswer>((resolve) => {
         answer = resolve;
       }),
   );
-  return { ...box, answer: (answered: CodingAgentAgentAnswer) => answer(answered) };
+  return { ...box, answer: (answered: AgentAgentAnswer) => answer(answered) };
 }
 
 /** The box mounted, each send answered only as the test lets it, in the order they went. */
 async function answeredInTurn() {
-  const answers: ((answered: CodingAgentAgentAnswer) => void)[] = [];
+  const answers: ((answered: AgentAgentAnswer) => void)[] = [];
   const box = await mounted(
     () =>
-      new Promise<CodingAgentAgentAnswer>((resolve) => {
+      new Promise<AgentAgentAnswer>((resolve) => {
         answers.push(resolve);
       }),
   );
   return {
     ...box,
-    answer: async (index: number, answered: CodingAgentAgentAnswer) => {
+    answer: async (index: number, answered: AgentAgentAnswer) => {
       answers[index]?.(answered);
       await settle();
     },
@@ -355,7 +344,7 @@ test("a message refused after the developer wrote on keeps their words in the bo
   await settle();
   typeInComposer(box.container, "Still writing");
 
-  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await box.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(box.shown(), "Still writing", "the newer words stay");
   const retry =
     [...box.container.querySelectorAll("button")].find((each) => each.textContent === "Retry") ??
@@ -379,7 +368,7 @@ test("a message refused while another waits behind it still lets that one go, an
   pressInComposer(box.container, "Enter");
   await settle();
 
-  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await box.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(
     box.sent.map((each) => each.text),
     ["First", "Second"],
@@ -393,7 +382,7 @@ test("a message refused while another waits behind it still lets that one go, an
 });
 
 test("a message refused after its row was read back comes back into the box with Retry, since the service withdrew that row", async () => {
-  let answer: (answered: CodingAgentAgentAnswer) => void = ignore;
+  let answer: (answered: AgentAgentAnswer) => void = ignore;
   const keys: string[] = [];
   const sender: MessageSender = (_agentId, _text, clientKey) => {
     keys.push(clientKey);
@@ -406,7 +395,7 @@ test("a message refused after its row was read back comes back into the box with
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const draw = (messages: readonly CodingAgentMessage[]) =>
+  const draw = (messages: readonly AgentTranscriptMessage[]) =>
     act(async () => root.render(onRegistry(registry, createElement(Box, { sender, messages }))));
   await draw([]);
   await settle();
@@ -415,7 +404,7 @@ test("a message refused after its row was read back comes back into the box with
   await settle();
 
   // The service writes the line's row before the agent is handed it, and the transcript reads it back.
-  const row: CodingAgentMessage = {
+  const row: AgentTranscriptMessage = {
     id: "m-1",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "Fix the bug" }],
@@ -424,7 +413,7 @@ test("a message refused after its row was read back comes back into the box with
   await draw([row]);
   await settle();
   // The agent did not take it, so the service withdraws the row and refuses the send.
-  answer({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  answer({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   await draw([]);
   await settle();
@@ -686,7 +675,7 @@ test("a dictation the service refused for want of an OpenAI key says to add one 
     [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
     [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
     [ACT_KIND.DICTATION_TRANSCRIBE]: () =>
-      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING }),
+      Promise.resolve({ failure: AGENT_CALL_FAILURE.OPENAI_KEY_MISSING }),
   });
   const box = await mounted();
   const dictate = box.button("Dictate");
@@ -754,14 +743,14 @@ async function mountedRefusedForMove() {
     return Promise.resolve(
       sent.length === 1
         ? {
-            failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+            failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
             unreached: {
               reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE,
               repository: "Acme/Relay",
               workspace: { id: "team-1", name: "Acme Team" },
             },
           }
-        : { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        : { failure: AGENT_CALL_FAILURE.UNANSWERED },
     );
   };
   const doors: RepositoryRemedyDoors = {
@@ -852,7 +841,7 @@ interface OpenedByRemedy {
 async function mountedRefusedOnToken(unreached: RepositoryUnreached) {
   const opened: OpenedByRemedy = { github: [], settings: [] };
   const sender: MessageSender = () =>
-    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached });
+    Promise.resolve({ failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached });
   const doors: RepositoryRemedyDoors = {
     openWorkspaceGitHub: ignore,
     openGitHub: (url) => opened.github.push(url),
@@ -925,7 +914,7 @@ test("messages still waiting to go as the agent refuses one for good are all kep
   pressInComposer(box.container, "Enter");
   await settle();
 
-  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
+  await box.answer(0, { failure: AGENT_CALL_FAILURE.AGENT_RETIRED });
   assert.deepEqual(
     box.sent.map((each) => each.text),
     ["Fix tests"],
@@ -940,7 +929,7 @@ test("a message refused because the agent's host was removed closes the box on t
   pressInComposer(box.container, "Enter");
   await settle();
 
-  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED });
+  await box.answer(0, { failure: AGENT_CALL_FAILURE.DEVICE_REMOVED });
 
   assert.ok(
     box.container.textContent?.includes(

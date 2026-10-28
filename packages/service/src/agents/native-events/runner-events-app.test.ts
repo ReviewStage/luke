@@ -5,14 +5,14 @@ import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import {
-  createCodingAgent,
-  readCodingAgent,
-  readCodingAgentContext,
-  readCodingAgentRouting,
-  recordCodingAgentPublished,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
-import { claimDueCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+  createAgent,
+  readAgent,
+  readAgentContext,
+  readAgentRouting,
+  recordAgentPublished,
+  recordAgentRunnerToken,
+} from "@luke/database/models/agent-store";
+import { claimDueAgentWakeups } from "@luke/database/models/agent-wakeups";
 import {
   listProviderKeyRows,
   type ProviderKeyRow,
@@ -25,11 +25,11 @@ import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
+  AGENT_PAYER,
+  type AgentPayer,
   CHECK_SUMMARY,
-  CODING_AGENT_PAYER,
-  type CodingAgentPayer,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -118,12 +118,12 @@ const HARNESS = {
   CLAUDE_CODE: {
     model: "anthropic/claude-opus-5.5",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+    payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
   },
   CODEX: {
     model: "openai/gpt-5.5",
     runtime: CONVERSATION_RUNTIME.CODEX,
-    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+    payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
   },
 } as const;
 
@@ -132,7 +132,7 @@ const agentOn = (
   harness: {
     readonly model: string;
     readonly runtime: (typeof HARNESS)[keyof typeof HARNESS]["runtime"];
-    readonly payer: CodingAgentPayer;
+    readonly payer: AgentPayer;
   },
   lines: readonly string[],
 ) =>
@@ -141,7 +141,7 @@ const agentOn = (
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: harness.model,
@@ -154,7 +154,7 @@ const agentOn = (
     });
     const agent = Option.getOrThrow(started).agent;
     const bearer = randomBytes(32).toString("base64url");
-    yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+    yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
     const target = { userId, conversationId: agent.conversationId };
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const lineIds: string[] = [];
@@ -305,7 +305,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
         // The task was marked done, and the agent's pull request merged: its turn takes the task
         // up again, and the turn's end, everyone then idle, finishes it (`tasks/task-finish.ts`).
         yield* updateTask(agent.userId, agent.taskId, { status: TASK_STATUS.DONE });
-        yield* recordCodingAgentPublished(agent.userId, agent.agentId, MERGED);
+        yield* recordAgentPublished(agent.userId, agent.agentId, MERGED);
 
         const first = yield* post(agent.bearer, events.slice(0, 11));
         const midway = yield* transcriptOf(agent.target.conversationId);
@@ -364,7 +364,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
             model: "anthropic/claude-opus-5.5",
           },
         ]);
-        const routing = yield* readCodingAgentRouting(agent.userId, agent.agentId);
+        const routing = yield* readAgentRouting(agent.userId, agent.agentId);
         assert.equal(Option.getOrThrow(routing).nativeSession, SESSION);
       }),
   );
@@ -454,7 +454,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
       Effect.gen(function* () {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
-        const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        const row = Option.getOrThrow(yield* readAgent(agent.userId, agent.agentId));
         // Before any turn settles, the page already names who pays.
         const first = yield* transcriptPast(
           agent.target,
@@ -464,7 +464,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
           row,
         ).pipe(Effect.provide(modelCatalogOf([])));
         assert.equal(first.usage, undefined);
-        assert.equal(first.payer, CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION);
+        assert.equal(first.payer, AGENT_PAYER.CLAUDE_SUBSCRIPTION);
         yield* post(agent.bearer, workflowTurn(agent.lineId));
 
         const page = yield* transcriptPast(
@@ -479,7 +479,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
           inputTokens: 228,
           outputTokens: 9,
           cachedInputTokens: 200,
-          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
         });
       }),
   );
@@ -492,7 +492,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
 
       const wrong = yield* post(randomBytes(32).toString("base64url"), events);
       const none = yield* post(undefined, events);
-      yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
+      yield* recordAgentRunnerToken(agent.userId, agent.agentId, null);
       const retired = yield* post(agent.bearer, events);
       const { rows, turns: written } = yield* transcriptOf(agent.target.conversationId);
 
@@ -777,7 +777,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
         yield* post(agent.bearer, events);
         yield* post(agent.bearer, relaunch);
         const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
-        const context = yield* readCodingAgentContext(agent.userId, agent.agentId);
+        const context = yield* readAgentContext(agent.userId, agent.agentId);
 
         assert.deepEqual(ended.map((turn) => [turn.status, turn.failureDetail]).sort(), [
           [
@@ -831,7 +831,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
           (message, sequence) => ({ sequence, message }) as RunnerEvent,
         );
         const due = (at: Date) =>
-          Effect.map(claimDueCodingAgentWakeups(at, at, 100, 3), (claimed) =>
+          Effect.map(claimDueAgentWakeups(at, at, 100, 3), (claimed) =>
             claimed.filter((each) => each.agentId === agent.agentId).map((each) => each.prompt),
           );
 
@@ -1155,7 +1155,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [TURN_STATUS.SETTLED, codexUsage(800, 160), null],
           ],
         );
-        const routing = yield* readCodingAgentRouting(agent.userId, agent.agentId);
+        const routing = yield* readAgentRouting(agent.userId, agent.agentId);
         assert.equal(Option.getOrThrow(routing).nativeSession, THREAD);
       }),
   );
@@ -1298,7 +1298,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         yield* post(agent.bearer, events);
         const { rows, turns: ended } = yield* transcriptOf(agent.target.conversationId);
-        const context = yield* readCodingAgentContext(agent.userId, agent.agentId);
+        const context = yield* readAgentContext(agent.userId, agent.agentId);
 
         assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
           ["step-start"],
@@ -1660,7 +1660,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           }),
         );
 
-        const onKey = yield* agentOn({ ...HARNESS.CODEX, payer: CODING_AGENT_PAYER.API_KEY }, [
+        const onKey = yield* agentOn({ ...HARNESS.CODEX, payer: AGENT_PAYER.API_KEY }, [
           "Fix the test.",
         ]);
         yield* signedIn(onKey.userId);
@@ -1843,10 +1843,9 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ),
         );
 
-        const onKey = yield* agentOn(
-          { ...HARNESS.CLAUDE_CODE, payer: CODING_AGENT_PAYER.API_KEY },
-          ["Fix the test."],
-        );
+        const onKey = yield* agentOn({ ...HARNESS.CLAUDE_CODE, payer: AGENT_PAYER.API_KEY }, [
+          "Fix the test.",
+        ]);
         yield* pasted(onKey.userId);
         yield* saveProviderKey(
           onKey.userId,
@@ -1943,7 +1942,7 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
       Effect.gen(function* () {
         const post = yield* standing;
         const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the test."]);
-        const before = yield* readCodingAgentContext(agent.userId, agent.agentId);
+        const before = yield* readAgentContext(agent.userId, agent.agentId);
         yield* post(
           agent.bearer,
           numbered([
@@ -1954,7 +1953,7 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
           ]),
         );
         const step = Option.getOrThrow(
-          yield* readCodingAgentContext(agent.userId, agent.agentId),
+          yield* readAgentContext(agent.userId, agent.agentId),
         ).lastStep;
 
         assert.equal(Option.getOrThrow(before).lastStep, null);
@@ -1996,9 +1995,7 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
           }),
         ]),
       );
-      const step = Option.getOrThrow(
-        yield* readCodingAgentContext(agent.userId, agent.agentId),
-      ).lastStep;
+      const step = Option.getOrThrow(yield* readAgentContext(agent.userId, agent.agentId)).lastStep;
 
       assert.deepEqual(
         step === null ? null : [step.inputTokens, step.cachedInputTokens, step.outputTokens],
@@ -2023,7 +2020,7 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
           answered("msg_1", "On it.", 3, 0, 4),
         ];
         yield* post(agent.bearer, numbered(turn));
-        const named = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        const named = Option.getOrThrow(yield* readAgent(agent.userId, agent.agentId));
         const task = Option.getOrThrow(yield* readTask(agent.userId, agent.taskId)).task;
         // The turn's end asks again, and the title now standing is kept.
         yield* post(
@@ -2054,11 +2051,11 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
         ]),
       );
       const answeredUntitled = Option.getOrThrow(
-        yield* readCodingAgent(agent.userId, agent.agentId),
+        yield* readAgent(agent.userId, agent.agentId),
       ).title;
       const callsAtAnswer = asked.calls;
       yield* after.run;
-      const named = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+      const named = Option.getOrThrow(yield* readAgent(agent.userId, agent.agentId));
 
       assert.equal(answer.status, HOSTED_HTTP_STATUS.OK);
       assert.equal(callsAtAnswer, 0);

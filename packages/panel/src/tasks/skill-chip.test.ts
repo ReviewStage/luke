@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -92,7 +92,7 @@ async function mounted(view: ReactNode, source: SkillSource = reading) {
 /** The composer holding the words given, as the developer left them. */
 function Composer({ words }: { words: string }): ReactNode {
   const [draft, setDraft] = useState(words);
-  const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
+  const [attachments, setAttachments] = useState<readonly AgentAttachment[]>([]);
   return createElement(AgentComposer, {
     ...QUIET_COMPOSER,
     composer: {
@@ -162,7 +162,7 @@ test("a skill still being read hangs a card of its name, with a placeholder for 
 
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
-  assert.equal(card?.querySelector('[role="status"]')?.textContent, "Reading skill…");
+  assert.equal(card?.querySelector('[role="status"]')?.textContent, "Reading…");
 });
 
 test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which says and opens nothing, since the chip opens it", async () => {
@@ -256,7 +256,7 @@ test("a sent message naming a skill keeps its lines too, the skill still its chi
 });
 
 /** A coding agent's turn that loaded the skill named, as the service stores it. */
-function loadedTurn(skill: string, state = "output-available"): CodingAgentMessage {
+function loadedTurn(skill: string, state = "output-available"): AgentTranscriptMessage {
   return {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -273,7 +273,7 @@ function loadedTurn(skill: string, state = "output-available"): CodingAgentMessa
 }
 
 /** The turn drawn as an agent's tab draws it. */
-function agentTurn(message: CodingAgentMessage): ReactNode {
+function agentTurn(message: AgentTranscriptMessage): ReactNode {
   return createElement(AgentMessage, {
     message,
     plan: false,

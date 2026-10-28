@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeDelegation } from "@luke/database/models/agent-store";
 import { fillChildTitle } from "@luke/database/models/child-titles";
-import { writeDelegation } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@luke/database/testing";
@@ -73,9 +73,9 @@ const openAgent = Effect.gen(function* () {
   const agentId = yield* openTaskAgent(userId, workspaceId, task.id);
   const db = yield* Database;
   const [row] = yield* db
-    .select({ conversationId: codingAgent.conversationId })
-    .from(codingAgent)
-    .where(eq(codingAgent.id, agentId));
+    .select({ conversationId: agentTable.conversationId })
+    .from(agentTable)
+    .where(eq(agentTable.id, agentId));
   const conversationId = row?.conversationId ?? assert.fail("the agent has no conversation");
   const params = {
     ownerId: userId,
@@ -223,9 +223,9 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
           const db = yield* Database;
           const [row] = yield* db
-            .select({ createdAt: codingAgent.createdAt })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, params.agentId));
+            .select({ createdAt: agentTable.createdAt })
+            .from(agentTable)
+            .where(eq(agentTable.id, params.agentId));
           const agent = { createdAt: row?.createdAt ?? assert.fail("the agent has no row") };
           const own = { id: params.agentId };
           const turnId = randomUUID();
