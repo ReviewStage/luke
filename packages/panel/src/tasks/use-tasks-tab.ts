@@ -1567,6 +1567,24 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (viewed.activeTaskId !== undefined) onRenamePins(viewed.activeTaskId, pinLabels);
   }, [viewed.activeTaskId, pinLabels, onRenamePins]);
+  // A Plan tab an earlier version pinned to the sidebar on this Mac becomes
+  // the task's own pin on the account, since the Plan tab's Pin is the
+  // task's now (`task-actions.tsx`), once the list names the task, and
+  // leaves this Mac's pins; one the list does not name yet waits there,
+  // drawn nowhere (`desktop-sidebar.tsx`). A task already pinned only lets
+  // the tab's pin go. Note that the mark is read as the effect runs, so it
+  // is the newest, as a press's would be.
+  const markTaskNow = useRef<(taskId: string, mark: TaskMark) => void>(() => undefined);
+  const { onUnpin } = sidePanel;
+  useEffect(() => {
+    for (const pin of sidePanel.pins) {
+      if (pin.tab !== SIDE_PANEL_TAB.PLAN) continue;
+      const pinned = tasks.tasks.find((each) => each.id === pin.task);
+      if (pinned === undefined) continue;
+      if (pinned.pinnedAt === undefined) markTaskNow.current(pinned.id, TASK_MARK.PIN);
+      onUnpin(pin.task, pin.tab);
+    }
+  }, [sidePanel.pins, tasks.tasks, onUnpin]);
   // Main hears which agent's tab, or which task's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the task's
   // place, the side panel fills the window over the column, or the column
@@ -1859,6 +1877,7 @@ export function useTasksTab(input: {
         }
       });
   };
+  markTaskNow.current = markTask;
   // A fixture's repositories are pinned nowhere, as its tasks are marked
   // nowhere. A pin says nothing once it lands, since the group it moves is
   // in sight; a refusal puts the group back only while no later press

@@ -12,7 +12,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
-import { ActionMenu, type MenuEntry } from "./action-menu.js";
+import { ActionMenu, type MenuEnds, type MenuEntry } from "./action-menu.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -129,14 +129,18 @@ export function PlaceMore({
   thing,
   shown,
   groups,
+  ends,
 }: {
   /** What the place is, which names its ⋯ and its menu: "Inbox" makes "Inbox actions". */
   thing: string;
   /** Whether the place is on screen, for the menu not to outlive it. */
   shown: boolean;
   groups: (opener: HTMLElement) => readonly (readonly MenuEntry[])[];
+  /** What the menu draws beyond its items, read as it is drawn: a task's header's names the task and says who created it on its Plan view. */
+  ends?: (() => MenuEnds | undefined) | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  const drawn = menu.drawn === undefined ? undefined : ends?.();
   return (
     <>
       <MoreButton thing={thing} {...menu.trigger()} />
@@ -144,6 +148,8 @@ export function PlaceMore({
         <ActionMenu
           label={moreLabel(thing)}
           menu={menu.drawn}
+          subject={drawn?.subject}
+          footer={drawn?.footer}
           groups={groups(menu.drawn.opener)}
           onClose={menu.close}
         />

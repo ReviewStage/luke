@@ -148,7 +148,7 @@ import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
-import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
+import { inColumn, type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
@@ -555,7 +555,9 @@ const placeOf = (row: PinnedRow): PinPlace => row.place;
  * not yet dragged on top, newest pinned first (`pin-order.ts`): the pinned
  * plans, the pinned agents with no plan among them, and the tabs pinned to
  * the sidebar on plans the list holds. A tab of an archived or deleted plan
- * is drawn nowhere, its plan being out of the list.
+ * is drawn nowhere, its plan being out of the list; nor is a Plan tab an
+ * earlier version pinned, which is made its plan's own pin as soon as the
+ * list names the plan (`use-tasks-tab.ts`).
  */
 function pinnedRows(
   pinned: readonly TaskSummary[],
@@ -579,7 +581,7 @@ function pinnedRows(
   );
   const tabRows = tasks.sidePanel.pins.flatMap((pin): PinnedRow[] => {
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return task === undefined
+    return task === undefined || pin.tab === SIDE_PANEL_TAB.PLAN
       ? []
       : [{ kind: TASK_ROW.TASK, task, pin, place: { position: pin.position, at: pin.at } }];
   });

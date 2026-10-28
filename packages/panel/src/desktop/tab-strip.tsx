@@ -18,7 +18,7 @@ import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { ActionMenu, type MenuEntry } from "./action-menu.js";
+import { ActionMenu, type MenuEnds, type MenuEntry } from "./action-menu.js";
 import { ROW_RUN, withRowMoves } from "./row-moves.js";
 
 /**
@@ -111,9 +111,12 @@ export function TabStrip({
  */
 export function MenuTab({
   groups,
+  ends,
   ...tab
 }: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu" | "menu" | "hint"> & {
   groups: MenuEntry[][];
+  /** What the menu draws beyond its items: the Plan tab's names the task and says who created it. */
+  ends?: MenuEnds | undefined;
 }): React.JSX.Element {
   const menu = useMenu(true);
   const placeOf = useContext(TabPlaceContext);
@@ -133,6 +136,8 @@ export function MenuTab({
           <ActionMenu
             label={`${tab.label} actions`}
             menu={menu.drawn}
+            subject={ends?.subject}
+            footer={ends?.footer}
             groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
             onClose={menu.close}
           />

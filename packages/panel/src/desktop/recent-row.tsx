@@ -13,7 +13,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import { TaskRowStatus, taskCardOf } from "./task-card.js";
 
 /**
@@ -61,6 +61,7 @@ export function RecentRow({
     rename: rename.begin,
     drawn: true,
     unread,
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const row = useRef<HTMLElement | null>(null);
   const hold = useCallback((press: HTMLElement | null) => {

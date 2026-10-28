@@ -352,7 +352,10 @@ const PINS_KEPT = 100;
 /**
  * The tab a pin opens: a fixed one, an agent's, a file's, or an agent's
  * Changes. Note that a pin of the task's Call, which is gone, reads as the
- * retired fixed kind it is and is let go.
+ * retired fixed kind it is and is let go, and that a pin of the Plan tab,
+ * which an earlier version offered, reads and is then made the task's own
+ * pin on the account (`use-tasks-tab.ts`), since the Plan tab's Pin is the
+ * task's.
  */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,

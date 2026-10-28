@@ -2772,6 +2772,38 @@ test("a change to the sections is drawn at once, sent after the one before it, a
   assert.equal(newestToastSays(), "Your sections could not be changed. Try again.");
 });
 
+/** A pin's payload, read back as the act's own schema admits it. */
+const readTaskPin = Schema.decodeUnknownOption(
+  Schema.Struct({ taskId: Schema.String, pinned: Schema.Boolean }),
+);
+
+test("a Plan tab an earlier version pinned to the sidebar becomes the task's own pin once the list names the task, and leaves this Mac's pins; a task already pinned only lets the tab's pin go", async () => {
+  const pin = (task: string, at: number) => ({ task, tab: "plan", label: "Plan", at });
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: ["plan"],
+      width: 320,
+      pins: [pin(TASK.id, 1), pin(OTHER_TASK_ID, 2)],
+    }),
+  );
+  const pinnedAlready = { ...listed(), id: OTHER_TASK_ID, pinnedAt: 5 };
+  const tab = mount(
+    { shown: true, tasks: listRead([listed(), pinnedAlready]) },
+    { [ACT_KIND.TASKS_PIN]: () => Promise.resolve(true) },
+  );
+  await act(async () => undefined);
+
+  assert.deepEqual(
+    tab.payloads
+      .filter((each) => each.kind === ACT_KIND.TASKS_PIN)
+      .map((each) => Option.getOrUndefined(readTaskPin(each.payload))),
+    [{ taskId: TASK.id, pinned: true }],
+  );
+  assert.deepEqual(tab.control().sidePanel.pins, [], "neither tab stays pinned on this Mac");
+});
+
 test("a pin's place the service took follows the next list, even one a drag on another Mac has moved since", async () => {
   const pinned = { ...listed(), pinnedAt: 5, pinPosition: "a0" };
   const tab = mount(

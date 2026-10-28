@@ -30,7 +30,7 @@ import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
-import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -67,7 +67,6 @@ import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane } from "../tasks/inbox-pane.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
-import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
@@ -77,6 +76,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace, useOfferTaskRename } from "../tasks/task-menu-items.js";
+import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standing.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
@@ -86,19 +86,18 @@ import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.j
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
-import type { TaskLooks } from "../tasks/use-task-looks.js";
+import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
-import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
+import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import {
   COLUMN,
   changesTabOf,
-  type ShownTab,
   SIDE_PANEL_HOLDER,
   SidePanel,
   type SidePanelDrawing,
@@ -109,9 +108,9 @@ import {
   useSidePanelDrawing,
 } from "./side-panel.js";
 import { useStrandedTaskBanner } from "./stranded-task-banner.js";
-import { useTabViews } from "./strip-tabs.js";
+import { type ShownTab, useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
-import { TaskActions } from "./task-actions.js";
+import { TASK_MENU_SURFACE, TaskActions, useTaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   ACTIVITY_BACK,
@@ -182,7 +181,7 @@ import {
 const TASK_LOADING_LABEL = readingWords("the task");
 
 /** How wide the toolbar's worded actions stand while the task is read: a repository's chip, and Start with its model menu. */
-const ACTION_SKELETON_WIDTHS = { REPOSITORY: "112px", START: "104px" } as const;
+const ACTION_SKELETON_WIDTHS = { START: "104px" } as const;
 
 /** An icon press's width, the task's ⋯'s and the summary's toggle's, as tall as it is wide. */
 const ICON_PRESS_WIDTH = "var(--luke-control-height)";
@@ -226,11 +225,10 @@ function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Elemen
   return <div className="desktop-plan-body relative flex min-h-0 flex-1">{children}</div>;
 }
 
-/** The task's actions at the toolbar's right while the task is read, as the toolbar lands them: the repository's chip, Start, the ⋯, and the summary's toggle where the summary holds something. */
+/** The task's actions at the toolbar's right while the task is read, as the toolbar lands them: Start, the chosen agent's ⋯, and the summary's toggle where the summary holds something. */
 function TaskActionsSkeleton({ summary }: { summary: boolean }): React.JSX.Element {
   return (
     <>
-      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ACTION_SKELETON_WIDTHS.REPOSITORY} />
       <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ACTION_SKELETON_WIDTHS.START} />
       <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} />
       {summary ? <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} /> : null}
@@ -625,8 +623,9 @@ function PlanDocument({
   away: TaskHeadBack;
 }): React.JSX.Element {
   const { region } = tasks;
-  // The tab a phone's panel shows past the plan, which its header is named by (`side-panel.tsx`'s `ShownTab`).
+  // The tab a phone's panel shows past the plan, which its header is named by, and the tab its column shows, whose menu the header's ⋯ offers on its Agents view (`strip-tabs.tsx`'s `ShownTab`).
   const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
+  const [shownAgentTab, setShownAgentTab] = useState<ShownTab | undefined>(undefined);
   // The toolbar's slot the chosen agent's ⋯ stands in, as the side panel's bar keeps one for its chosen tab's; a phone's header offers the tab's actions instead.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // A phone's Activity lists the panel's tabs until one is chosen, from it or by anything else, such as
@@ -920,11 +919,58 @@ function PlanDocument({
   const openedRepository = opened?.repository ?? null;
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
+  // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
+  const reads = useReadMarks();
+  const unread = openedId === undefined ? false : reads.markedUnread(openedId);
+  // The task's own menu, which its Plan tab draws from its ⋯ and its
+  // right-click, and a phone's header on its Plan view; its shortcuts and
+  // the questions its items ask stand in the toolbar on every tab
+  // (`TaskActions`). Held above the states with no document, as the
+  // refusal above is.
+  const taskMenu = useTaskMenuItems(tasks, openedId ?? "", opened?.name ?? "", {
+    rename: beginRename,
+    drawn: true,
+    unread,
+    surface: TASK_MENU_SURFACE.DOCUMENT,
+  });
+  // The repository chip's doors (`task-standing.tsx`): a pick is sent
+  // through the task's own door, which answers why the service refused it,
+  // said beside the chip under the task it was about and no other; ⌘K's
+  // Change repository asks the chip to open its menu, each ask counted so
+  // the same press opens it again.
+  const chooseRepository = useSteadyDoor((repository: string) => {
+    if (opened === undefined) return;
+    const { id: taskId } = opened;
+    setRefusal(undefined);
+    tasks.onSetRepository(taskId, repository).then(
+      (note) => setRefusal(note === undefined ? undefined : { taskId, note }),
+      () => undefined,
+    );
+  });
+  const repositoryNote =
+    refusal !== undefined && refusal.taskId === openedId ? refusal.note : undefined;
+  const { repositories, repositoryMenu } = tasks;
+  const menuRequest =
+    repositoryMenu !== undefined && repositoryMenu.taskId === openedId
+      ? repositoryMenu.request
+      : undefined;
+  const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
+    () =>
+      openedId === undefined
+        ? undefined
+        : {
+            chooser: repositories,
+            onChoose: chooseRepository,
+            openRequest: menuRequest,
+            note: repositoryNote,
+          },
+    [openedId, repositories, chooseRepository, menuRequest, repositoryNote],
+  );
   const workspaceName = home?.name ?? "";
   const { macs: devices } = agents;
-  const standing = useMemo(
-    () => ({ workspaceName, onSet: setStanding, devices }),
-    [workspaceName, setStanding, devices],
+  const standing = useMemo<TaskStandingDoor>(
+    () => ({ workspaceName, onSet: setStanding, devices, repository: repositoryDoor }),
+    [workspaceName, setStanding, devices, repositoryDoor],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;
@@ -1091,17 +1137,6 @@ function PlanDocument({
   const listed = listedOpen ?? task;
   // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's empty column.
   const columnComing = agents.agents === undefined ? !agents.listFailed : true;
-  const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
-  const chooseRepository = (repository: string) => {
-    const { id: taskId } = task;
-    setRefusal(undefined);
-    tasks.onSetRepository(taskId, repository).then(
-      (note) => setRefusal(note === undefined ? undefined : { taskId, note }),
-      () => undefined,
-    );
-  };
-  const menuRequest =
-    tasks.repositoryMenu?.taskId === task.id ? tasks.repositoryMenu.request : undefined;
   // The panel holds the keys while the focus went into it last, or while it
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
@@ -1196,19 +1231,11 @@ function PlanDocument({
   };
   // A tab chosen from Activity heads the row by its name and leads back to the list; the task's own views name the task and lead out of it.
   const onTab = pane === TASK_PANE.ACTIVITY && !activityListed ? shownTab : undefined;
-  const taskMenu = (
-    <TaskActions
-      tasks={tasks}
-      task={task}
-      button
-      onRename={beginRename}
-      lead={
-        switched
-          ? (opener) => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab, opener)]
-          : undefined
-      }
-    />
-  );
+  // What the header's ⋯ offers under the views follows what is on screen: the task's own menu on the Plan view, the chosen agent's on Agents, and the tab's on one chosen from Activity, the last two each naming what they act on (`shownTabGroups`).
+  const shownGroups = (opener: HTMLElement): readonly (readonly MenuEntry[])[] =>
+    pane === TASK_PANE.PLAN
+      ? taskMenu.groups()
+      : shownTabGroups(pane === TASK_PANE.AGENTS ? shownAgentTab : onTab, opener);
   const head = switched ? (
     <TaskHead
       back={onTab === undefined ? away : { label: ACTIVITY_BACK, onPress: () => onListed(true) }}
@@ -1222,7 +1249,14 @@ function PlanDocument({
           void rename.end(end.value);
         },
       }}
-      actions={taskMenu}
+      actions={
+        <PlaceMore
+          thing="Task"
+          shown={tasks.shown}
+          groups={(opener) => [taskPaneItems(pane, choosePane), ...shownGroups(opener)]}
+          ends={() => (pane === TASK_PANE.PLAN ? taskMenu : undefined)}
+        />
+      }
     />
   ) : null;
   return (
@@ -1273,15 +1307,13 @@ function PlanDocument({
                               shown={tasks.shown}
                               onOpenTerminal={terminalDoors.onOpenTerminal}
                               slot={switched ? null : actionsSlot}
+                              onShown={switched ? setShownAgentTab : undefined}
                             />
                           }
                           actions={
                             <>
                               {rename.refused ? (
                                 <FailureNote>{RENAME_FAILED_NOTE}</FailureNote>
-                              ) : null}
-                              {repositoryNote !== undefined ? (
-                                <FailureNote>{repositoryNote}</FailureNote>
                               ) : null}
                               <CopyChord copy={tasks.copy} />
                               {terminalDoors.terminals ? (
@@ -1298,19 +1330,8 @@ function PlanDocument({
                                   onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
                                 />
                               ) : null}
-                              {/* Keyed once for the chip and the menu alike, so another plan
-              starts both afresh and the same plan keeps them. */}
-                              <Fragment key={task.id}>
-                                <RepositoryChip
-                                  place={CHIP_PLACE.TOOLBAR}
-                                  value={task.repository}
-                                  chooser={tasks.repositories}
-                                  onChoose={chooseRepository}
-                                  openRequest={menuRequest}
-                                />
-                                {/* The task's ⋯, until it moves to the Plan tab; a phone's is its header's. */}
-                                {switched ? null : taskMenu}
-                              </Fragment>
+                              {/* The task's shortcuts and the questions its menu asks, on every tab; the menu itself is the Plan tab's. */}
+                              <TaskActions actions={taskMenu} />
                               {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
                               <span
                                 ref={setActionsSlot}
@@ -1389,6 +1410,7 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
+                        planMenu={taskMenu}
                         task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,
