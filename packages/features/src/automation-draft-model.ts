@@ -1,5 +1,4 @@
 import { Result } from "effect";
-import type { AutomationPreset } from "./automation-code-review.js";
 import {
   nextScheduledRun,
   readSchedule,
@@ -127,7 +126,7 @@ export interface AutomationDraft {
   readonly archiveSuccessful: boolean;
   /** The owner's MCP servers a run's new agent is not handed, by connection name (`notion`, `notion-2`), as the agent box's servers button switches them. */
   readonly disabledServers: readonly string[];
-  /** The guards it runs under: a saved one's, or a new one's where a preset set them, the service's defaults otherwise. */
+  /** The guards it runs under: a saved one's, the service's defaults otherwise. */
   readonly guards: AutomationGuards | null;
   /** The hours an integration trigger waits before the same subject fires it again, or nothing while its field holds no number. */
   readonly subjectCooldownHours: number | undefined;
@@ -680,33 +679,6 @@ export function withGithubEvent(
 ): AutomationDraft {
   if (event === draft.githubEvent) return draft;
   return { ...draft, githubEvent: event, githubFilters: {} };
-}
-
-/**
- * A new draft filled in from a preset: its name, trigger, task, guards, and
- * archiving, where it runs and who owns it kept as they were chosen. Note
- * that a GitHub preset's event stands as the draft's, its schedule left at
- * a new one's should the trigger be changed back.
- */
-export function presetDraft(draft: AutomationDraft, preset: AutomationPreset): AutomationDraft {
-  const { trigger } = preset;
-  return {
-    ...draft,
-    name: preset.name,
-    prompt: preset.prompt,
-    triggerKind: trigger.kind,
-    githubEvent: trigger.kind === AUTOMATION_TRIGGER.GITHUB ? trigger.event : draft.githubEvent,
-    githubFilters: {},
-    githubSettings:
-      trigger.kind === AUTOMATION_TRIGGER.GITHUB ? githubSettingsOf(trigger) : draft.githubSettings,
-    integrationTrigger:
-      trigger.kind === AUTOMATION_TRIGGER.INTEGRATION ? trigger : draft.integrationTrigger,
-    target: AUTOMATION_TARGET.NEW_AGENT,
-    agentId: null,
-    archiveSuccessful: preset.archiveSuccessful,
-    guards: preset.guards,
-    subjectCooldownHours: preset.guards.subjectCooldownHours ?? draft.subjectCooldownHours,
-  };
 }
 
 /**

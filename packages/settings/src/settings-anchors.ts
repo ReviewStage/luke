@@ -53,7 +53,6 @@ export const SETTINGS_SEARCH_ROW = {
  */
 export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.BROWSER]: "experiment-browser",
-  [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",

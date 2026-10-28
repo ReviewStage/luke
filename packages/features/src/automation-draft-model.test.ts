@@ -9,7 +9,6 @@ import {
   draftNextRuns,
   draftProblems,
   filterValuesOf,
-  presetDraft,
   repositoryHeld,
   SCHEDULE_KIND,
   sameDraft,
@@ -556,27 +555,6 @@ test("a move to another GitHub event lets go of the filters the event before was
       ...SAID_SETTINGS,
     },
   });
-});
-
-test("a preset's guards are the draft's and are what it is made with, a saved automation opens on its own, and a draft that set none is the same as the automation made from it", () => {
-  const fresh = automationDraft(undefined, DEFAULTS);
-  const preset = {
-    name: "Code review",
-    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
-    prompt: "Review this pull request.",
-    guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
-    archiveSuccessful: true,
-    description: "Reviews pull requests.",
-  } as const;
-  const taken = presetDraft(fresh, preset);
-
-  assert.ok(!sameDraft({ ...taken, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }, taken));
-  assert.ok(sameDraft(fresh, { ...fresh, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }));
-  assert.deepEqual(createRequestOf(taken, "workspace-1").guards, preset.guards);
-  assert.deepEqual(
-    automationDraft({ ...SAVED, guards: preset.guards }, DEFAULTS).guards,
-    preset.guards,
-  );
 });
 
 test("a Sentry trigger opens and writes back as it was given, and moves only where its event or filters do", () => {

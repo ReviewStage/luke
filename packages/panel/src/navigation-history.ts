@@ -275,11 +275,8 @@ function sameAutomationsPage(one: AutomationsPlace, other: AutomationsPlace): bo
   return one.kind === other.kind;
 }
 
-/** Whether one Automations page stands as it was opened: a new one on the same suggestion, an automation's on the same run. */
+/** Whether one Automations page stands as it was opened: an automation's on the same run. */
 function sameAutomationsOpening(one: AutomationsPlace, other: AutomationsPlace): boolean {
-  if (one.kind === AUTOMATIONS_PAGE.NEW && other.kind === AUTOMATIONS_PAGE.NEW) {
-    return one.preset === other.preset;
-  }
   if (one.kind === AUTOMATIONS_PAGE.EDIT && other.kind === AUTOMATIONS_PAGE.EDIT) {
     return one.runId === other.runId;
   }
@@ -556,17 +553,6 @@ function awayFrom(trail: Trail, reachable: (place: Place) => boolean): number | 
 }
 
 /**
- * Whether two places are one draft's: one page, and for a new automation's
- * page the same suggestion, since one opened from another suggestion starts
- * another draft.
- */
-function sameDraftPage(one: Place, other: Place): boolean {
-  if (!samePage(one, other)) return false;
-  if (one.kind !== PLACE_KIND.AUTOMATIONS || other.kind !== PLACE_KIND.AUTOMATIONS) return true;
-  return one.page.kind !== AUTOMATIONS_PAGE.NEW || sameAutomationsOpening(one.page, other.page);
-}
-
-/**
  * How a step to `to` asks: as the window's guard asks, unless it moves only
  * within the draft standing, between a narrow room's sub-steps or to the
  * same automation on another run, which leaves no page and so loses nothing
@@ -577,7 +563,7 @@ function asking(
   to: Place | undefined,
 ): LeaveGuard["guard"] {
   const { place } = latest;
-  return place !== undefined && to !== undefined && sameDraftPage(place, to)
+  return place !== undefined && to !== undefined && samePage(place, to)
     ? (leave) => leave
     : latest.guard;
 }
@@ -1273,13 +1259,13 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
       // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again;
       // one that also marks another run of the same automation, as a run's link does, opens it on that run past the ask,
-      // since it keeps the draft. A new automation's page from another suggestion is another draft, so it asks.
+      // since it keeps the draft.
       const here: Place = {
         kind: PLACE_KIND.AUTOMATIONS,
         page: automationsPage,
         workspaceId: listedWorkspace,
       };
-      const sameDraft = automationsOpen && sameDraftPage(here, to);
+      const sameDraft = automationsOpen && samePage(here, to);
       if (!sameDraft) {
         tasks.automationsView.onOpen(to.page, to.runs);
       } else if (!sameAutomationsOpening(automationsPage, to.page)) {

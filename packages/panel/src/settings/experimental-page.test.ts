@@ -142,7 +142,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,
     EXPERIMENT.OPERATOR,
-    EXPERIMENT.CODE_REVIEW,
     EXPERIMENT.BROWSER,
     EXPERIMENT.VIDEO_CALLS,
   ]);
@@ -193,7 +192,6 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ["Channels"],
     ["Memory"],
     ["Luke, your operator"],
-    ["Code review"],
     ["Browser tab"],
     ["Video calls", "Avatar"],
   ]);

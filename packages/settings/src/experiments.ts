@@ -10,8 +10,6 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A Browser tab in the side panel: an agent's cloud browser beside the plan, watched and taken over. */
   BROWSER: "browser",
-  /** The Code review automation, offered on the Automations page with its own settings in the editor. */
-  CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar in the agent's tab. */
   VIDEO_CALLS: "video-calls",
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
@@ -80,15 +78,6 @@ export const EXPERIMENTS = [
       "and tells you what needs you.",
     owner: "Dean",
     since: "2026-10-22",
-  },
-  {
-    key: EXPERIMENT.CODE_REVIEW,
-    name: "Code review",
-    detail:
-      "Suggest a Code review automation on the automations page, which reviews each pull " +
-      "request as Luke and posts one GitHub review.",
-    owner: "Dean",
-    since: "2026-10-19",
   },
   {
     key: EXPERIMENT.BROWSER,

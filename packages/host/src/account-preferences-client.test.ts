@@ -75,7 +75,7 @@ it.effect("reads the experiments part past a key it does not know, beside the vo
         new Response(
           JSON.stringify({
             ...PREFERENCES_ANSWER,
-            experiments: { [EXPERIMENT.CODE_REVIEW]: true, newer: true },
+            experiments: { [EXPERIMENT.BROWSER]: true, newer: true },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
@@ -85,7 +85,7 @@ it.effect("reads the experiments part past a key it does not know, beside the vo
     assert.deepEqual(answer, {
       preferences: PREFERENCES_ANSWER.preferences,
       hasStoredSnapshot: true,
-      experiments: { [EXPERIMENT.CODE_REVIEW]: true },
+      experiments: { [EXPERIMENT.BROWSER]: true },
     });
   }),
 );
@@ -97,21 +97,21 @@ it.effect("writes an experiment's switch as a patch of that experiment alone", (
         new Response(
           JSON.stringify({
             ...PREFERENCES_ANSWER,
-            experiments: { [EXPERIMENT.CODE_REVIEW]: true },
+            experiments: { [EXPERIMENT.BROWSER]: true },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
 
     const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writeExperiments({
-      [EXPERIMENT.CODE_REVIEW]: true,
+      [EXPERIMENT.BROWSER]: true,
     });
-    assert.deepEqual(answer?.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
+    assert.deepEqual(answer?.experiments, { [EXPERIMENT.BROWSER]: true });
 
     const [request] = requests;
     assert.equal(request?.init?.method, "PUT");
     assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-      experiments: { [EXPERIMENT.CODE_REVIEW]: true },
+      experiments: { [EXPERIMENT.BROWSER]: true },
     });
   }),
 );
