@@ -1491,22 +1491,33 @@ export function useTasksTab(input: {
     [inboxAgent],
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
-  // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
-  const cloudTaskId =
-    inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
+  // The cloud Browser tabs, while the Browser tab experiment is on, which the panel draws by its holder:
+  // an agent's page its agent's, on a task or on none, and a task's own panel its agents', never the Inbox's.
+  const activeTaskId = viewed.activeTaskId;
+  const cloudPlace = useMemo(
+    () =>
+      inboxView !== undefined
+        ? undefined
+        : pageAgent !== undefined
+          ? { agentId: pageAgent }
+          : activeTaskId === undefined
+            ? undefined
+            : { taskId: activeTaskId },
+    [inboxView, pageAgent, activeTaskId],
+  );
   const cloudOn = useExperiment(EXPERIMENT.BROWSER);
-  const cloudListed = useCloudBrowserTabs(cloudTaskId, cloudOn);
+  const cloudListed = useCloudBrowserTabs(cloudPlace, cloudOn);
   // A draft of a tab in an agent's browser stands in the strip after the tabs the service lists.
-  const cloudDrafts = useCloudBrowserDrafts(cloudTaskId, cloudOn);
-  // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
+  const cloudDrafts = useCloudBrowserDrafts(cloudPlace, cloudOn);
+  // Note that a panel off its holder lists none, rather than none read yet, so a cloud tab chosen there gives way.
   const cloudBrowsers = useMemo(
     () =>
-      cloudTaskId === undefined
+      cloudPlace === undefined
         ? NO_IDS
         : cloudListed === undefined
           ? undefined
           : [...cloudListed.map((each) => each.id), ...cloudDrafts.map((each) => each.id)],
-    [cloudTaskId, cloudListed, cloudDrafts],
+    [cloudPlace, cloudListed, cloudDrafts],
   );
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const sidePanel = useSidePanel(

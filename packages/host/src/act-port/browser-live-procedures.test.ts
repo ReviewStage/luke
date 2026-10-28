@@ -40,9 +40,9 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const TAB_ID = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
-const ATTACH = { viewId: "view-a", taskId: TASK_ID, tabId: TAB_ID };
+const ATTACH = { viewId: "view-a", agentId: AGENT_ID, tabId: TAB_ID };
 const REFUSED = { refused: "Could not show that tab." };
 
 let windows = 0;
@@ -71,9 +71,9 @@ function fixture(options: { experimentOn?: boolean } = {}) {
   let closedListener: Parameters<HostOperator["onBrowserLiveClosed"]>[0] | undefined;
   let ids = 0;
   const host: BrowserLiveActsDependencies<Window>["host"] = {
-    browserLiveConnect: ({ connectionId, taskId, tabId }) =>
+    browserLiveConnect: ({ connectionId, agentId, tabId }) =>
       Effect.sync(() => {
-        asked.push(`connect:${connectionId}:${taskId}:${tabId}`);
+        asked.push(`connect:${connectionId}:${agentId}:${tabId}`);
         return true;
       }),
     browserLiveSend: ({ connectionId, text }) =>
@@ -170,8 +170,8 @@ it.effect(
       assert.equal(opened[0]?.closed, true);
       assert.deepEqual(opened[1]?.posted, []);
       assert.deepEqual(asked, [
-        `connect:connection-1:${TASK_ID}:${TAB_ID}`,
-        `connect:connection-2:${TASK_ID}:${TAB_ID}`,
+        `connect:connection-1:${AGENT_ID}:${TAB_ID}`,
+        `connect:connection-2:${AGENT_ID}:${TAB_ID}`,
         'send:connection-1:{"type":"take-over"}',
       ]);
     }),

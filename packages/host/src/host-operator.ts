@@ -990,7 +990,7 @@ export interface HostOperator {
   /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
   browserLiveConnect(params: {
     connectionId: string;
-    taskId: string;
+    agentId: string;
     tabId: string;
   }): Effect.Effect<boolean>;
   /** One text frame for the service on a live view's connection. */
@@ -1431,13 +1431,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksBrowserTabs: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, params),
         answerOf(tasksBrowserTabsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
-          taskId: params.taskId,
           agentId: params.agentId,
           address: params.address,
         }),
@@ -2540,7 +2539,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, {
           connectionId: params.connectionId,
-          taskId: params.taskId,
+          agentId: params.agentId,
           tabId: params.tabId,
         }),
         (answer) => answer.ok,

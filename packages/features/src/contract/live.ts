@@ -142,6 +142,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
+  agentBrowserTabs: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_BROWSER_TABS }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
   tasks: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASKS }))
     .input(liveReadSchema)

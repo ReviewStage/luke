@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
+import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
@@ -52,7 +52,12 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
     "agent.pages": Option.getOrThrow(agentPagesLiveStatements(USER_ID, randomUUID())).pages,
-    "task.browserTabs": Option.getOrThrow(taskBrowserTabsLiveStatement(USER_ID, randomUUID())),
+    "task.browserTabs": Option.getOrThrow(
+      browserTabsLiveStatement(USER_ID, { taskId: randomUUID() }),
+    ),
+    "agent.browserTabs": Option.getOrThrow(
+      browserTabsLiveStatement(USER_ID, { agentId: randomUUID() }),
+    ),
     "task.history": Option.getOrThrow(taskHistoryLiveStatements(USER_ID, randomUUID())).revisions,
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),

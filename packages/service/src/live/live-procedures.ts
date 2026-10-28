@@ -73,7 +73,7 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
+import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { readAutomation } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
@@ -84,6 +84,7 @@ import {
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
+import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -262,6 +263,22 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   return yield* sealedParts(statements.value, asked, query.topics(params), look);
 });
 
+/** An agent's or a task's Browser tabs sealed for following, held on the watched look; unavailable where the statement can't be built. */
+const browserTabsParts = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  place: BrowserTabsPlace,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+) {
+  const statement = browserTabsLiveStatement(userId, place);
+  if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return yield* sealedParts(
+    { tabs: statement.value },
+    asked,
+    NO_TOPICS,
+    LIVE_POLL_HOLD.WATCHED_LOOK,
+  );
+});
+
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: string,
@@ -366,14 +383,14 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statement = taskBrowserTabsLiveStatement(context.userId, taskId);
-      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(
-        { tabs: statement.value },
-        input,
-        NO_TOPICS,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
+      return yield* browserTabsParts(context.userId, { taskId }, input);
+    }),
+    agentBrowserTabs: signedIn.agentBrowserTabs.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* pathUuid(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* browserTabsParts(context.userId, { agentId }, input);
     }),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

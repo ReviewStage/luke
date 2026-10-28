@@ -6,7 +6,6 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
-import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
@@ -42,7 +41,6 @@ import {
   useConfirmDialog,
   useResizeEdge,
 } from "@luke/ui";
-import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import { ListIcon } from "@luke/ui/icons";
 import {
   agentOfTab,
@@ -80,7 +78,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -304,8 +301,8 @@ export const SIDE_PANEL_HOLDER = {
 
 export type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
 
-/** What the panel's pages stand on: the agent on no task an agent's page holds the panel under, else the task. */
-function pagePlaceOf(holder: SidePanelHolder, id: string): PagePlace {
+/** What the panel's pages and cloud Browser tabs stand on: the agent an agent's page holds the panel under, else the task. */
+function holderPlaceOf(holder: SidePanelHolder, id: string): PagePlace {
   return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
 }
 
@@ -789,10 +786,12 @@ export function panelOffers(input: {
     const subject = agentSubject(agents, agentId, cards.held, false);
     return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
   };
+  // Note that an agent's page offers a tab in its own agent's browser alone, whose id it holds the panel under.
   const cloudOffers: readonly CloudBrowserOffer[] =
-    !input.browsers || holder !== SIDE_PANEL_HOLDER.TASK
+    !input.browsers || holder === SIDE_PANEL_HOLDER.INBOX
       ? []
       : [...(agents.agents ?? [])]
+          .filter((agent) => holder !== SIDE_PANEL_HOLDER.AGENT || agent.id === taskId)
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
@@ -807,7 +806,9 @@ export function panelOffers(input: {
     browsers: {
       agents: cloudOffers,
       onAgent: (agentId: string) =>
-        panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
+        panel.onChoose({
+          cloudBrowser: startCloudDraft(holderPlaceOf(holder, taskId), agentId).id,
+        }),
     },
     plan: input.plan,
     cards,
@@ -888,7 +889,7 @@ function stripTabs(input: {
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
-  /** The task's agents' cloud Browser tabs, as the service lists them. */
+  /** The holder's cloud Browser tabs, as the service lists them: the agent's, or the task's agents'. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
   held: HeldTranscripts;
   copied: TranscriptCopier;
@@ -898,7 +899,7 @@ function stripTabs(input: {
   onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
-  /** The open plan, or the agent on no task, whose pages a page tab's card previews. */
+  /** The open plan, or the agent on no task, whose pages a page tab's card previews, and whose panel a closed cloud Browser draft leaves. */
   pagePlace: PagePlace;
   /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
   plan: PlanStanding | undefined;
@@ -1058,9 +1059,7 @@ function stripTabs(input: {
           }),
         }),
         close: () => {
-          if ("draft" in drawn && input.planId !== undefined) {
-            discardCloudDraft(input.planId, drawn.id);
-          }
+          if ("draft" in drawn) discardCloudDraft(input.pagePlace, drawn.id);
           panel.onClose(tab);
         },
       },
@@ -1214,7 +1213,7 @@ function PanelTabs({
     onOpenAgent,
     onCloseMacTerminal,
     shownAgent,
-    pagePlace: pagePlaceOf(holder, taskId),
+    pagePlace: holderPlaceOf(holder, taskId),
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting: inbox?.waiting.length ?? 0,
@@ -1756,7 +1755,7 @@ function TabContent({
 }: {
   tab: SidePanelTab;
   taskId: string;
-  /** What the panel's pages stand on: the task, or the agent on no task whose page holds the panel. */
+  /** What the panel's pages and cloud Browser drafts stand on: the task, or the agent whose page holds the panel. */
   pagePlace: PagePlace;
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
@@ -1794,7 +1793,7 @@ function TabContent({
   onPullRequestView: SidePanelControl["onPullRequestView"];
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
-  /** The task's agents' cloud Browser tabs, which a cloud Browser tab reads its tab from. */
+  /** The holder's cloud Browser tabs, which a cloud Browser tab reads its tab from. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
   /** Lands on the tab a draft opened, the draft let go of; or discards a draft. */
   cloudDrafts: {
@@ -1826,7 +1825,7 @@ function TabContent({
       return (
         <CloudBrowserDraftPane
           key={drawn.id}
-          taskId={taskId}
+          place={pagePlace}
           draft={drawn.draft}
           owner={drawn.owner}
           onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
@@ -1837,7 +1836,6 @@ function TabContent({
     return (
       <CloudBrowserPane
         key={tab.cloudBrowser}
-        taskId={taskId}
         tab={drawn.tab}
         owner={drawn.owner}
         shown={shown}
@@ -2379,7 +2377,7 @@ export function SidePanel({
         chosen: (chosen) =>
           (chosenTab !== undefined && sameTab(chosen, chosenTab)) ||
           (shownAgent !== undefined && sameTab(chosen, { agent: shownAgent })),
-        pages: pagePlaceOf(holder, taskId),
+        pages: holderPlaceOf(holder, taskId),
       }),
     [agents, drawnTranscripts, chosenTab, shownAgent, holder, taskId],
   );
@@ -2396,22 +2394,18 @@ export function SidePanel({
     ? NO_TERMINALS
     : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
   const browserOn = useExperiment(EXPERIMENT.BROWSER);
-  // The task's agents' cloud Browser tabs stand while the experiment is on,
-  // on every platform, since the page draws them from the service and needs
-  // nothing of main's; on a task's own panel alone, never an agent's page's or
-  // the Inbox's, which borrows its task's panel.
-  const cloudListing = browserOn && holder === SIDE_PANEL_HOLDER.TASK;
-  const cloudListed = useCloudBrowserTabs(taskId, cloudListing);
+  // The cloud Browser tabs stand while the experiment is on, on every
+  // platform, since the page draws them from the service and needs nothing of
+  // main's: an agent's page lists its agent's, on a task or on none, and a
+  // task's panel every one of its agents', never the Inbox's, which borrows
+  // its task's panel.
+  const cloudListing = browserOn && holder !== SIDE_PANEL_HOLDER.INBOX;
+  const cloudPlace = useMemo(() => holderPlaceOf(holder, taskId), [holder, taskId]);
+  const cloudListed = useCloudBrowserTabs(cloudPlace, cloudListing);
   // A draft of a tab in an agent's browser stands after the tabs the service lists, until it opens one.
-  const cloudDraftsHeld = useCloudBrowserDrafts(taskId, cloudListing);
+  const cloudDraftsHeld = useCloudBrowserDrafts(cloudPlace, cloudListing);
   const cloudBrowsers = useMemo(() => {
-    const ownerOf = (agentId: string | null): CloudBrowserOwner => {
-      if (agentId === null) {
-        return {
-          name: OPERATOR_NAME,
-          icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />,
-        };
-      }
+    const ownerOf = (agentId: string): CloudBrowserOwner => {
       const subject = agentSubject(agents, agentId, drawnTranscripts, false);
       return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
     };
@@ -2425,14 +2419,14 @@ export function SidePanel({
     const drawn = cloudBrowsers.find((each) => each.id === id);
     return drawn === undefined ? TAB_WORDS.BROWSER : cloudBrowserTitleOf(drawn);
   };
-  // The "+" offers a new tab in each of the task's coding agents' cloud browsers, the one viewed first.
+  // The "+" offers a new tab in each of the holder's coding agents' cloud browsers, the one viewed first.
   const viewedAgent = shownAgent ?? (panel.tab === undefined ? undefined : agentOfTab(panel.tab));
   const cloudDrafts = {
     onOpened: (draftId: string, opened: AgentBrowserTab) => {
-      discardCloudDraft(taskId, draftId);
+      discardCloudDraft(cloudPlace, draftId);
       panel.onChoose({ cloudBrowser: opened.id });
     },
-    onDiscard: (draftId: string) => discardCloudDraft(taskId, draftId),
+    onDiscard: (draftId: string) => discardCloudDraft(cloudPlace, draftId),
   };
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
@@ -2485,7 +2479,7 @@ export function SidePanel({
     cards: {
       agents,
       held: drawnTranscripts,
-      pagePlace: pagePlaceOf(holder, taskId),
+      pagePlace: holderPlaceOf(holder, taskId),
       shownAgent,
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
     },
@@ -2615,7 +2609,7 @@ export function SidePanel({
                 tab={tab}
                 taskId={taskId}
                 codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
-                pagePlace={pagePlaceOf(holder, taskId)}
+                pagePlace={holderPlaceOf(holder, taskId)}
                 repository={repository}
                 files={files}
                 pages={taskPages}

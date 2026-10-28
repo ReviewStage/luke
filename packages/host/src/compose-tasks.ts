@@ -16,6 +16,7 @@ import {
   adminFavoriteParamsSchema,
   adminReadParamsSchema,
 } from "@luke/features/admin-wire";
+import { type BrowserTabsPlace, browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
 import {
   browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
@@ -547,17 +548,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** The Browser tabs of each task a window's side panel follows, by the task. */
+  /** The Browser tabs of each agent or task a window's side panel follows, by the agent's or the task's id, which never collide. */
   const browserTabsFollows = yield* FiberMap.make<string>();
   const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
 
   /**
-   * Follows `taskId`'s Browser tabs live until let go, each change emitted as
+   * Follows the Browser tabs of `place`, one agent's or a task's agents',
+   * live until let go, each change emitted as
    * `TASKS_BROWSER_TABS_CHANGED`. A takeover lapses with no row moving, so
    * the rows last delivered are told again at each instant one lapses, until
    * the next delivery takes their place.
    */
-  function followBrowserTabs(taskId: string) {
+  function followBrowserTabs(place: BrowserTabsPlace) {
     type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
@@ -565,7 +567,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       kernel.emit(
         GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
         carried({
-          taskId,
+          ...place,
           view:
             rows === undefined
               ? { failure: TASK_CALL_FAILURE.UNANSWERED }
@@ -599,7 +601,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* pushLive({
           seal: (poll, after) =>
             gate() && userId !== undefined
-              ? Effect.map(served(client.browserTabsLive(taskId, userId, poll, after)), (sealed) =>
+              ? Effect.map(served(client.browserTabsLive(place, userId, poll, after)), (sealed) =>
                   sealed.ok
                     ? sealed.answer
                     : {
@@ -1637,18 +1639,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = yield* Cache.get(issueReads, linkReadKey(read));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // A task's agents' Browser tabs are answered to the side panel that
-    // asked and held nowhere, since each carries a page's address and title:
+    // An agent's or a task's agents' Browser tabs are answered to the side
+    // panel that asked and held nowhere, since each carries a page's address and title:
     // the panel draws what it was answered, and reads again while it stands.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           tasksBrowserTabsParamsSchema,
           params,
-          "reading a task's Browser tabs names the task",
+          "reading Browser tabs names the agent or the task",
         );
         if (!gate()) return carried<TasksBrowserTabsAnswer>(BROWSER_TABS_UNANSWERED);
-        return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read.taskId)));
+        return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read)));
       }),
     // A tab a member opens in an agent's browser is answered to the panel
     // that asked and held nowhere, as the task's tabs are.
@@ -1657,7 +1659,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksBrowserTabOpenParamsSchema,
           params,
-          "opening a Browser tab names the task, the agent, and the address",
+          "opening a Browser tab names the agent and the address",
         );
         if (!gate()) return carried<TasksBrowserTabOpenAnswer>(BROWSER_TABS_UNANSWERED);
         return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
@@ -1740,19 +1742,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(historyFollows, read.taskId);
         return {};
       }),
-    // A task's Browser tabs are followed for a window's side panel while it
-    // lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
+    // An agent's or a task's Browser tabs are followed for a window's side
+    // panel while it lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
     // what is already followed does nothing.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           taskBrowserTabsFollowSchema,
           params,
-          "following a task's Browser tabs names the task",
+          "following Browser tabs names the agent or the task",
         );
         if (!gate()) return {};
-        const { taskId } = read;
-        yield* FiberMap.run(browserTabsFollows, taskId, followBrowserTabs(taskId), {
+        yield* FiberMap.run(browserTabsFollows, browserTabsPlaceId(read), followBrowserTabs(read), {
           onlyIfMissing: true,
         });
         return {};
@@ -1762,9 +1763,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           taskBrowserTabsFollowSchema,
           params,
-          "letting a task's Browser tabs go names the task",
+          "letting Browser tabs go names the agent or the task",
         );
-        yield* FiberMap.remove(browserTabsFollows, read.taskId);
+        yield* FiberMap.remove(browserTabsFollows, browserTabsPlaceId(read));
         return {};
       }),
     // A plan's pages are followed for a window's Inbox while it draws an item
