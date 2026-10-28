@@ -385,4 +385,17 @@ test("off an agent, as in a plan's or Luke's words, the server's row has no swit
   assert.equal(serverCard.count, "7 tools");
   assert.equal(serverCard.tools.length, 7, "the card lists every tool, scrolling past a few");
   assert.deepEqual(toolCard.tools, [["list_issues", "Read-only"]]);
+
+  restOn(tool ?? assert.fail("the tool's chip stands"));
+  await settle();
+  restOn(
+    [...document.querySelectorAll('[data-server-card] ul[aria-label$=" tools"] > li')].at(-1) ??
+      assert.fail("the tool's row stands"),
+  );
+  await settle();
+  assert.equal(
+    document.querySelector("[data-tool-card] .luke-hover-card-note")?.textContent,
+    "List the team's issues.",
+    "the tool's one-line row hangs what it does",
+  );
 });

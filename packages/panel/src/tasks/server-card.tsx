@@ -1,5 +1,5 @@
 import { type IntegrationTool, toolsCount } from "@luke/features/integration-health";
-import { byName, toolBadge, toolTitle } from "@luke/features/integration-tool-model";
+import { byName, toolBadge, toolSummary, toolTitle } from "@luke/features/integration-tool-model";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   HoverCard,
@@ -9,6 +9,7 @@ import {
   HoverCardRow,
   HoverCardRule,
   ProviderMark,
+  Tooltip,
 } from "@luke/ui";
 import {
   SERVER_HANDED,
@@ -34,8 +35,8 @@ import { useServerRows } from "./agent-servers.js";
  * for one turn alone, the one they open, or, where they reached a turn
  * already under way, the next, and the switch stays off; a server not
  * connected is handed to no agent. Under a rule stand the server's tools
- * in the popover's order, each a row of its title and its badge's words,
- * every one, scrolling past a few, and a tool's mention its one tool's
+ * in the popover's order, each a row of its title and its badge's words
+ * that hangs what the tool does, every one, scrolling past a few, and a tool's mention its one tool's
  * row, of those the server answered with. Where the words are no agent's,
  * as a plan's or Luke's are, the corner is empty and the note says
  * nothing of a switch.
@@ -139,6 +140,33 @@ function serverSub(row: ServerRow): React.JSX.Element | undefined {
   return <span>{parts.join(" · ")}</span>;
 }
 
+/**
+ * One tool's row: its title, and its badge's words at its end. Where its
+ * server said what it does, the row hangs a card of its own saying so, the
+ * first sentence as the popover's list says it, so the card's one-line row
+ * loses none of what the list says.
+ */
+function ToolLine({ tool }: { tool: IntegrationTool }): React.JSX.Element {
+  const title = toolTitle(tool);
+  const row = (
+    <li>
+      <HoverCardRow glyph={null} label={title} end={toolBadge(tool.annotations)} />
+    </li>
+  );
+  if (tool.description === "") return row;
+  const card = (
+    <HoverCard data-tool-card="">
+      <HoverCardHead name={title} sub={title === tool.name ? undefined : tool.name} />
+      <HoverCardNote>{toolSummary(tool.description)}</HoverCardNote>
+    </HoverCard>
+  );
+  return (
+    <Tooltip label={title} card={card}>
+      {row}
+    </Tooltip>
+  );
+}
+
 /** The card a mention of a server, or of one of its tools, hangs. */
 export function ServerCard({
   provider,
@@ -178,13 +206,7 @@ export function ServerCard({
           <HoverCardRule />
           <HoverCardList label={`${row.name} tools`}>
             {tools.map((each) => (
-              <li key={each.name}>
-                <HoverCardRow
-                  glyph={null}
-                  label={toolTitle(each)}
-                  end={toolBadge(each.annotations)}
-                />
-              </li>
+              <ToolLine key={each.name} tool={each} />
             ))}
           </HoverCardList>
         </>
