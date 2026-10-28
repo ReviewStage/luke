@@ -165,7 +165,7 @@ import {
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
 import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
-import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -198,17 +198,17 @@ import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
   AssistantMessageBuilder,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
   sessionKey,
   TURN_ORIGIN,
+  TURN_TRIGGER,
   userMessage,
   userMetadataOf,
 } from "../core.js";
@@ -1689,12 +1689,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           eveTurnId: "turn_0",
         });
         yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
         // eve's receipt takes the Start's line into the turn, as the relay does.
@@ -2488,106 +2488,31 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
   );
 
   it.effect(
-    "an agent's calls are read by every member of its workspace, each call with when it started and ended, its record, whose it was, and its lines naming their rows, and by no one outside it, as an agent that is none is not found",
+    "an agent's calls read as none by a member of its workspace, since Luke takes no calls, and as not found by anyone outside it or for an agent that is none",
     () =>
       Effect.gen(function* () {
-        const { owner, other: teammate, task, ask } = yield* openTask({ repository: null });
+        const { owner, task, ask } = yield* openTask({ repository: null });
         const outsider = yield* openTask();
-        yield* joinWorkspace(task.workspaceId, teammate);
-        const started = readAnswer(
+        const agent = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
         ).agent;
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
-        const sibling = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
-        ).agent;
-        const first = yield* callInto(agent, owner, owner, task.id, [
-          "Start on the export.",
-          "Starting on it.",
-        ]);
-        yield* Database.use((db) =>
-          db
-            .update(voiceSessions)
-            .set({
-              closedAt: new Date(first.startedAt + 60_000),
-              closeReason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
-            })
-            .where(eq(voiceSessions.id, first.voiceSessionId)),
-        );
-        yield* TestClock.adjust(Duration.minutes(5));
-        const second = yield* callInto(agent, teammate, owner, task.id, ["Is it done?", "It is."]);
-        yield* callInto(
-          Option.getOrThrow(yield* readCodingAgent(owner, sibling.id)),
-          owner,
-          owner,
-          task.id,
-          ["Not this one.", "No."],
-        );
-        const callsAs = (reader: string, id: string) => ask(request(AGENT_CALLS, reader, { id }));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
-        const read = readAnswer(
-          taskTranscriptAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* callsAs(owner, agent.id),
-        );
-        assert.deepEqual(
-          read.transcript.calls.map((each) => ({
-            id: each.id,
-            startedAt: each.startedAt,
-            endedAt: each.endedAt,
-            ending: each.ending,
-            by: each.by?.userId,
-            lines: each.messages.map((line) => [
-              line.role,
-              line.parts.map((part) => part.text).join(""),
-              line.metadata?.rowIds,
-            ]),
-          })),
-          [
-            {
-              id: first.voiceSessionId,
-              startedAt: first.startedAt,
-              endedAt: first.startedAt + 60_000,
-              ending: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
-              by: owner,
-              lines: [
-                [TRANSCRIPT_SPEAKER.USER, "Start on the export.", [first.developerRow]],
-                [TRANSCRIPT_SPEAKER.ASSISTANT, "Starting on it.", [first.agentRow]],
-              ],
-            },
-            {
-              id: second.voiceSessionId,
-              startedAt: second.startedAt,
-              endedAt: undefined,
-              ending: undefined,
-              by: teammate,
-              lines: [
-                [TRANSCRIPT_SPEAKER.USER, "Is it done?", [second.developerRow]],
-                [TRANSCRIPT_SPEAKER.ASSISTANT, "It is.", [second.agentRow]],
-              ],
-            },
-          ],
-        );
         assert.deepEqual(
           readAnswer(
             taskTranscriptAnswerSchema,
             HOSTED_HTTP_STATUS.OK,
-            yield* callsAs(teammate, agent.id),
+            yield* ask(request(AGENT_CALLS, owner, { id: agent.id })),
           ),
-          read,
+          { transcript: { calls: [], earlierOmitted: false } },
         );
-
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
         assert.deepEqual(
           yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
           notFound,
         );
-        assert.deepEqual(yield* callsAs(owner, randomUUID()), notFound);
-        assert.deepEqual(yield* callsAs(owner, "not-an-id"), notFound);
+        assert.deepEqual(yield* ask(request(AGENT_CALLS, owner, { id: randomUUID() })), notFound);
       }),
   );
 });
@@ -4526,12 +4451,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           eveTurnId: "turn_0",
         });
         yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
         // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
@@ -4539,11 +4464,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(Result.getOrUndefined(taken)?.length, 1);
         if (!turn.running) {
           yield* writer.consume(target, {
-            kind: BRAIN_RUN_EVENT.TURN_ENDED,
+            kind: RUN_EVENT.TURN_ENDED,
             conversationId: sessionKey(target.conversationId),
             turnId,
             sequence: 2,
-            status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+            status: RUN_STATUS.SUCCEEDED,
             responseIds: [],
             at: 0,
           });
@@ -5291,7 +5216,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const stepBegun = (step: number) =>
           writer.consume(target, {
             ...turn,
-            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            kind: RUN_EVENT.STEP_STARTED,
             sequence: step + 2,
             step,
           });
@@ -5305,7 +5230,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         answer.text("Renamed it.");
         yield* writer.consume(target, {
           ...turn,
-          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          kind: RUN_EVENT.MESSAGE_COMPLETED,
           sequence: 6,
           message: answer.finish(randomUUID()),
         });
@@ -6841,23 +6766,23 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
         sequence: 2,
-        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
+        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(TURN_TRIGGER.ASK)),
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 3,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: 0,
       });
@@ -8235,7 +8160,7 @@ const transcriptRow = (
           parts: parts as never,
           metadata:
             role === MESSAGE_ROLE.USER
-              ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK)
+              ? userMetadataOf(TURN_TRIGGER.ASK)
               : { author: MESSAGE_AUTHOR.MODEL },
           placedAt: new Date(),
         })
@@ -8407,12 +8332,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const turnId = randomUUID();
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         conversationId: sessionKey(target.conversationId),
         turnId,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
       // The source's lines are the turn's, so none of them reads as awaiting a turn of its own.
@@ -8911,16 +8836,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
         const bodies = [
           {
-            kind: BRAIN_RUN_EVENT.TURN_STARTED,
-            origin: BRAIN_TURN_ORIGIN.TYPED,
-            trigger: BRAIN_TURN_TRIGGER.ASK,
+            kind: RUN_EVENT.TURN_STARTED,
+            origin: RUN_TURN_ORIGIN.TYPED,
+            trigger: TURN_TRIGGER.ASK,
             at: 0,
           },
-          { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
-          { kind: BRAIN_RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
+          { kind: RUN_EVENT.STEP_STARTED, step: 1 },
+          { kind: RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
           {
-            kind: BRAIN_RUN_EVENT.TURN_ENDED,
-            status: BRAIN_REQUEST_STATUS.FAILED,
+            kind: RUN_EVENT.TURN_ENDED,
+            status: RUN_STATUS.FAILED,
             responseIds: [],
             at: 1,
           },

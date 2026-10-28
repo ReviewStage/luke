@@ -6,6 +6,7 @@ import {
   automationRunPlace,
 } from "@luke/features/automation-list-model";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { automationRun } from "@luke/features/model-label";
 import { momentText, sinceText } from "@luke/features/time-format";
 import {
   Badge,
@@ -59,8 +60,10 @@ export function automationTrail(
   agent: Pick<CodingAgentSummary, "automationId" | "automationName">,
   tasks: Pick<TasksControl, "automationsView">,
 ): readonly ToolbarPlace[] | undefined {
-  const { automationId, automationName } = agent;
-  if (automationName === undefined) return undefined;
+  // Note that a run from before its origin was kept has no name to lead with, so it draws none.
+  const name = automationRun(agent)?.name;
+  if (name === undefined) return undefined;
+  const { automationId } = agent;
   const { onOpen } = tasks.automationsView;
   const automations: ToolbarPlace = {
     label: AUTOMATIONS_PLACE,
@@ -72,7 +75,7 @@ export function automationTrail(
   return [
     automations,
     {
-      label: automationName,
+      label: name,
       onPress: () => onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     },
   ];

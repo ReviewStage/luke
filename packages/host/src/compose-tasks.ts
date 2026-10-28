@@ -27,7 +27,6 @@ import {
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import { issueTagOf, type TaskIssueTag } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import {
   HOST_LIVE,
@@ -43,14 +42,8 @@ import {
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksGitHubDisconnectAnswer,
-  type TasksGitHubIssuesAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
-  type TasksIssueLinkAnswer,
-  type TasksIssueLinksAnswer,
-  type TasksIssueRelateAnswer,
-  type TasksIssueUnlinkAnswer,
-  type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
   type TasksPagesAnswer,
@@ -84,13 +77,7 @@ import {
   tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
-  tasksGitHubIssuesParamsSchema,
-  tasksIssueLinkParamsSchema,
-  tasksIssueLinksParamsSchema,
   tasksIssueParamsSchema,
-  tasksIssueRelateParamsSchema,
-  tasksIssueUnlinkParamsSchema,
-  tasksLinearIssuesParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPagesParamsSchema,
@@ -270,8 +257,8 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
     : LINK_READ_KEPT.UNANSWERED;
 }
 
-/** A call on a task's linked issues behind a closed gate, or of a service that did not answer. */
-const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+/** A call on a task's Browser tabs behind a closed gate, or of a service that did not answer. */
+const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
@@ -302,13 +289,8 @@ export type TasksClient = Pick<
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
   | "readRepositoryIssue"
-  | "readRepositoryIssues"
-  | "readIssueLinks"
   | "readBrowserTabs"
   | "openBrowserTab"
-  | "linkIssue"
-  | "relateIssue"
-  | "unlinkIssue"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -334,9 +316,6 @@ export type TasksClient = Pick<
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
-    | "linearConnect"
-    | "linearDisconnect"
-    | "linearIssues"
     | "sentryInstallations"
     | "sentryInstall"
     | "sentryDisconnect"
@@ -1355,7 +1334,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const held = heldTaskOf(taskId);
     const listed = view.tasks.find((row) => row.id === taskId);
     if (held === undefined || listed === undefined) return;
-    const { agents: _agents, issues: _issues, ...row } = listed;
+    const { agents: _agents, ...row } = listed;
     const { updatedAt, document, agentEdits, lastEdit, sectionEdits } = held;
     const task: Task = {
       ...row,
@@ -1402,33 +1381,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       document: { status: TASKS_READ.READY, task: held === undefined ? answered : lay(held) },
     };
   }
-
-  /**
-   * The list's row of `taskId` with the issues it links changed as the
-   * service answered a change of them, so the Board's tags follow the task
-   * page without a read of the whole list; a row left linking none names
-   * none, as the list answers it. Note that it runs as a read of the
-   * service does, one at a time, and each change is one a second time
-   * changes no further, because a list read out when the change was made
-   * may land before it and hold it already.
-   */
-  const retag = (
-    taskId: string,
-    change: (tags: readonly TaskIssueTag[]) => readonly TaskIssueTag[],
-  ): Effect.Effect<void> =>
-    serial(
-      Effect.sync(() => {
-        // A task the list does not hold has no row to change.
-        if (!view.tasks.some((row) => row.id === taskId)) return;
-        const tasks = view.tasks.map((row) => {
-          if (row.id !== taskId) return row;
-          const { issues: before, ...rest } = row;
-          const issues = change(before ?? []);
-          return issues.length === 0 ? rest : { ...rest, issues };
-        });
-        write({ tasks });
-      }),
-    );
 
   /** The pin a task answered carries, and where it stands, each only where it stands. */
   function marksOf(task: Pick<Task, "pinnedAt" | "pinPosition">): TaskMarkStamps {
@@ -1680,37 +1632,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = yield* Cache.get(issueReads, linkReadKey(read));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // A repository's issues are answered as an issue is: to the picker that asked, and held nowhere.
-    [GATEWAY_METHOD.TASKS_GITHUB_ISSUES]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksGitHubIssuesParamsSchema,
-          params,
-          "reading a repository's issues names a workspace, its repository, and words or a number where it asks for some",
-        );
-        if (!gate()) {
-          return carried<TasksGitHubIssuesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const { workspaceId, repository, query, number } = read;
-        const ask = number !== undefined ? { number } : query !== undefined ? { query } : {};
-        const answer = yield* served(client.readRepositoryIssues({ workspaceId, repository }, ask));
-        return carried<TasksGitHubIssuesAnswer>(
-          answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
-        );
-      }),
-    // A task's linked issues, and each change of them, are answered to the
-    // page that asked and held nowhere: the page draws what it was answered,
-    // and reads again after each change.
-    [GATEWAY_METHOD.TASKS_ISSUE_LINKS]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksIssueLinksParamsSchema,
-          params,
-          "reading a task's issues names the task",
-        );
-        if (!gate()) return carried<TasksIssueLinksAnswer>(TASK_ISSUES_UNANSWERED);
-        return carried<TasksIssueLinksAnswer>(yield* served(client.readIssueLinks(read.taskId)));
-      }),
     // A task's agents' Browser tabs are answered to the side panel that
     // asked and held nowhere, since each carries a page's address and title:
     // the panel draws what it was answered, and reads again while it stands.
@@ -1721,7 +1642,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "reading a task's Browser tabs names the task",
         );
-        if (!gate()) return carried<TasksBrowserTabsAnswer>(TASK_ISSUES_UNANSWERED);
+        if (!gate()) return carried<TasksBrowserTabsAnswer>(BROWSER_TABS_UNANSWERED);
         return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read.taskId)));
       }),
     // A tab a member opens in an agent's browser is answered to the panel
@@ -1733,57 +1654,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "opening a Browser tab names the task, the agent, and the address",
         );
-        if (!gate()) return carried<TasksBrowserTabOpenAnswer>(TASK_ISSUES_UNANSWERED);
+        if (!gate()) return carried<TasksBrowserTabOpenAnswer>(BROWSER_TABS_UNANSWERED);
         return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
-      }),
-    [GATEWAY_METHOD.TASKS_ISSUE_LINK]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksIssueLinkParamsSchema,
-          params,
-          "linking an issue names the task and the issue",
-        );
-        if (!gate()) return carried<TasksIssueLinkAnswer>(TASK_ISSUES_UNANSWERED);
-        const { taskId, issue } = read;
-        const answer = yield* served(client.linkIssue(taskId, issue));
-        if ("issue" in answer) {
-          const tag = issueTagOf(answer.issue);
-          yield* retag(taskId, (tags) =>
-            tags.some((each) => each.id === tag.id) ? tags : [...tags, tag],
-          );
-        }
-        return carried<TasksIssueLinkAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.TASKS_ISSUE_RELATE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksIssueRelateParamsSchema,
-          params,
-          "relating an issue names the task, the link, and its keyword",
-        );
-        if (!gate()) return carried<TasksIssueRelateAnswer>(TASK_ISSUES_UNANSWERED);
-        const { taskId, linkId, relation } = read;
-        const answer = yield* served(client.relateIssue(taskId, linkId, relation));
-        if ("issue" in answer) {
-          const tag = issueTagOf(answer.issue);
-          yield* retag(taskId, (tags) => tags.map((each) => (each.id === tag.id ? tag : each)));
-        }
-        return carried<TasksIssueRelateAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.TASKS_ISSUE_UNLINK]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksIssueUnlinkParamsSchema,
-          params,
-          "unlinking an issue names the task and the link",
-        );
-        if (!gate()) return carried<TasksIssueUnlinkAnswer>(TASK_ISSUES_UNANSWERED);
-        const { taskId, linkId } = read;
-        const answer = yield* served(client.unlinkIssue(taskId, linkId));
-        if ("unlinked" in answer) {
-          yield* retag(taskId, (tags) => tags.filter((each) => each.id !== linkId));
-        }
-        return carried<TasksIssueUnlinkAnswer>(answer);
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
@@ -2438,52 +2310,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // Vercel Connect's address is answered to the caller that opens it and
-    // held nowhere: the grant lands in the browser, and the follow carries
-    // the connection.
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting Linear names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.linearConnect(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting Linear names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const disconnected = yield* workspaceCall(
-          client.workspaces.linearDisconnect(read.workspaceId),
-        );
-        return carried<TasksWorkspaceAnswer>(
-          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // The issues are answered to the window that asked and held nowhere: a
-    // picker reads them as it opens and as its search changes.
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksLinearIssuesParamsSchema,
-          params,
-          "reading Linear issues names a workspace",
-        );
-        if (!gate()) return carried<TasksLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
-        const listed = yield* served(client.workspaces.linearIssues(read));
-        return carried<TasksLinearIssuesAnswer>(
-          listed.ok ? { issues: listed.answer } : { failure: listed.failure },
         );
       }),
     // A workspace's Sentry is answered to the window that asked and held

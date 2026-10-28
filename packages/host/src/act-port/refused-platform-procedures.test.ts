@@ -10,7 +10,7 @@ import { type TestActPort, testActPort } from "./testing.js";
  * tab carries none yet: each is refused in its kind's own sentence.
  */
 
-const PANEL: ActSender = { sender: Symbol("tab"), panel: true, voice: false, call: false };
+const PANEL: ActSender = { sender: Symbol("tab"), panel: true };
 
 const ports: TestActPort<unknown>[] = [];
 
@@ -26,8 +26,8 @@ it("every platform kind is refused in its own words, whatever it is sent", async
     await port.call(PANEL, PLATFORM_PORT_ACT_KIND.TERMINAL_LIST, { agentId: "agent-1" }),
     { refused: "Could not reach this agent's sandbox." },
   );
-  assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.VOICE_STOP_SPEAKING), {
-    refused: "Could not tell Luke to stop speaking on this system.",
+  assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MICROPHONE_OPEN_SETTINGS), {
+    refused: "Could not open the microphone privacy settings.",
   });
   assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MAC_REPOSITORIES), {
     refused: "Could not read the run commands set on this Mac.",

@@ -13,19 +13,14 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
 import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
-import { callBarAgentId } from "@luke/ui/call-card-model";
 import { isComposingKey } from "@luke/ui/composing-key";
 import { useLinkOpener } from "@luke/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
-import { isAgentTab } from "@luke/ui/tab-strip-model";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,21 +73,12 @@ import {
   useAdminAccessPending,
   useAppSlice,
   useExperimentChoices,
-  VOICE_AVAILABLE,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
-import { voiceViewNow } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
-import { CallChords, WindowVoice } from "./window-voice.js";
 import { useWindowZoom } from "./window-zoom.js";
-
-/** Where an agent stands to be opened: its plan, on its tab, or its own page where it has no plan. */
-interface AgentPlace {
-  readonly taskId: string | null;
-  readonly agentId: string;
-}
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -123,12 +109,6 @@ const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
 const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
   APP_SLICE.CODING_AGENTS,
   (codingAgents) => codingAgents?.unseen ?? NO_UNSEEN_AGENTS,
-);
-
-/** The microphone's grant, which the Tasks tab's microphone answers. */
-const MICROPHONE_GRANT: Atom.Atom<MicrophoneStatus> = Atom.map(
-  APP_SLICE.AUDIO,
-  (audio) => audio?.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
 );
 
 /** Whether this window stands in full screen. */
@@ -200,7 +180,7 @@ export function App(): React.JSX.Element {
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
   const account = useAppSlice(APP_SLICE.ACCOUNT);
-  // Note that the account's key is read above the window, because the window's own call press reads it too.
+  // Note that the account's key is read above the window, because every message box's Dictate reads it.
   return (
     <OpenAiKeyProvider
       account={
@@ -224,8 +204,6 @@ function AppWindow(): React.JSX.Element {
   const inbox = useAppSlice(APP_SLICE.INBOX);
   const unseenAgents = useAppSlice(UNSEEN_AGENTS);
   const settingsHeld = useAppSlice(SETTINGS_HELD);
-  const voiceAvailable = useAppSlice(VOICE_AVAILABLE);
-  const microphoneStatus = useAppSlice(MICROPHONE_GRANT);
   // A picture is read as the account signed in, so the window lets go of every one it read once that account changes.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
@@ -355,11 +333,8 @@ function AppWindow(): React.JSX.Element {
   // The room the stage's width gives, on the desktop the window's: whether
   // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
   // folds. Only crossing a line draws the shell again, never a pixel's drag.
-  // Note that the window reads nothing of the voice, which moves with every
-  // word said on a call: what draws it reads it (`window-voice.tsx`).
   const stage = useStageRoom();
   const room = stage.room;
-  // The Tasks tab, which reads the call standing where it draws it.
   const tasks = useTasksTab({
     acts: { act, press, tell },
     tasks: planning ?? IDLE_TASKS_VIEW,
@@ -367,8 +342,6 @@ function AppWindow(): React.JSX.Element {
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     account: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined,
     accountId: account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined,
-    voiceAvailable,
-    microphoneStatus,
     shown: tab === PANEL_TAB.TASKS,
     unseenAgents,
     inboxWaiting: inbox?.waiting ?? NOTHING_WAITING,
@@ -409,26 +382,6 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
   );
-  // The call card's way back to its agent pressed: the Tasks tab, on that
-  // agent, its task's tab or its own page where it has no task. Read through
-  // refs, because the tab hands new closures each render and the subscription
-  // is owed to the window, not to a render. Note that the window is moved by
-  // more than one step asks once, as a whole, while a page holds unsaved
-  // work, so Leave takes every step and Cancel takes none.
-  const showAgent = useRef(tasks.onShowAgent);
-  showAgent.current = tasks.onShowAgent;
-  const showAgentPage = useRef(tasks.agentView.onOpen);
-  showAgentPage.current = tasks.agentView.onOpen;
-  const openAgent = useCallback(
-    ({ taskId, agentId }: AgentPlace) =>
-      guardLeave(() => {
-        changeTab(PANEL_TAB.TASKS);
-        if (taskId === null) showAgentPage.current(agentId);
-        else showAgent.current(taskId, agentId);
-      })(),
-    [changeTab, guardLeave],
-  );
-  useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
@@ -459,21 +412,6 @@ function AppWindow(): React.JSX.Element {
   const workspacesUnread = tasks.workspaces.length === 0 && !tasks.listFailed;
   const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
   useEffect(() => appBridge().onShowLink(openLink), [openLink]);
-  // The agent whose call bar is on screen, which the call card gives way to
-  // (`WindowVoice`): another agent's tab or page or none, the home page,
-  // Settings, or the agent's own task under its version history, the Inbox,
-  // another agent's page, or a side panel filling the window draw the card
-  // instead.
-  const columnTab = tasks.mainTabs.tab;
-  const agentShown = callBarAgentId({
-    tasksTab: tab === PANEL_TAB.TASKS,
-    documentPage: tasks.page === TASKS_PAGE.DOCUMENT,
-    historyOpen: tasks.history.open,
-    inboxOpen: tasks.inboxView.open,
-    pageAgentId: tasks.agentView.agentId,
-    sidePanelFullScreen: tasks.sidePanel.fullScreen,
-    columnAgentId: columnTab !== undefined && isAgentTab(columnTab) ? columnTab.agent : undefined,
-  });
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
@@ -522,28 +460,10 @@ function AppWindow(): React.JSX.Element {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || isComposingKey(event)) return;
       // A field or dialog that took the press for itself is the nearest layer
-      // of all, ahead of the call, the sign-in wait, and every page: an Escape
+      // of all, ahead of the sign-in wait and every page: an Escape
       // that clears a search or withdraws a question has been answered, and
       // an input method's own is never the window's.
       if (event.defaultPrevented) return;
-      // Muting an open microphone comes before the layers below. Closing the panel
-      // or a sheet mid-sentence would strand the microphone open, and the
-      // same press asks Luke for quiet mid-sentence: a reply being spoken is
-      // the most open thing there is, and Escape ends it without opening a
-      // turn in its place. Which of the two the press does is the
-      // orchestrator's own reading of the call it holds — a listening call is
-      // muted and nothing is said to the model — so the panel asks for both
-      // and predicts only whether the key is claimed at all. The snapshot it
-      // predicts from can be one frame stale — a reply that ended, or began,
-      // since the last report — and the cost is the press doing what it would
-      // have done a frame earlier: a fall-through past a reply just begun
-      // closes the layer below instead. Not worth a round trip on every
-      // Escape.
-      const voice = voiceViewNow();
-      if (voice.listening || voice.lukeSpeaking) {
-        tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
-        return;
-      }
       // Escape on a gate waiting for the browser withdraws the sign-in, as
       // its Cancel does: the wait is the only thing on screen.
       if (signIn.signInWait) {
@@ -569,15 +489,14 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       if (runAppCommand(APP_COMMAND.EXIT_ADMIN)) return;
       // An open task steps back through the history, as the toolbar's Back
-      // does, to the page it was opened from, which leaves it and ends its
-      // call; a task with no step behind it is left for the page the window
+      // does, to the page it was opened from, which leaves it; a task with no step behind it is left for the page the window
       // rests on (`resting-page.ts`), where a press does nothing. A side panel
       // standing only full screen shuts through the history, as its Close does.
       shellDoors.current.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [signIn.cancelSignIn, signIn.signInWait, tasks.inboxView.open, tell]);
+  }, [signIn.cancelSignIn, signIn.signInWait, tasks.inboxView.open]);
 
   // The window's shortcuts, from the keys and from the menu bar alike.
   useAppKeymap(true);
@@ -587,10 +506,10 @@ function AppWindow(): React.JSX.Element {
   useEffect(() => installPressIntent(window), []);
 
   // The doors the window hands every page are held across draws, each part that reads one holding while it does.
-  // Note that the request answers once the host has handed it on, which is how Allow knows to stop waiting; the system's own prompt follows, and its answer arrives as the microphone's status.
+  // Note that the request is the one dictation makes, and answers once macOS has, which is how Allow knows to stop waiting; the answer also arrives as the microphone's status.
   const requestMicrophone = useCallback(
     () =>
-      act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }).then(
+      act(ACT_KIND.MICROPHONE_REQUEST).then(
         () => undefined,
         () => undefined,
       ),
@@ -707,84 +626,80 @@ function AppWindow(): React.JSX.Element {
                 <RepositoryRemedyProvider value={repositoryRemedies}>
                   <GitHubConnectProvider value={gitHubConnect}>
                     <ListedAutomations tasks={tasks}>
-                      <CallChords />
-                      <WindowVoice available={!accountGated} agentShown={agentShown}>
-                        <div
-                          ref={stage.ref}
-                          className="app-stage"
-                          data-capture={String(run.captureMode)}
-                          // The panel is drawn as an ordinary app window's content; desktop.css
-                          // lays it out.
-                          data-surface="desktop"
-                          // The sidebar's width lays out the shell and Settings' page list, and
-                          // places the voice's notice line over the work column beside it.
-                          style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-                        >
-                          {/* The window's content. */}
-                          <ShellRoomContext.Provider value={room}>
-                            <div className="desktop-stage">
-                              <MessageRevealProvider value={messageReveal}>
-                                <ThreadRevealProvider value={threadReveal}>
-                                  <SettingsShell
-                                    gates={gates}
-                                    tab={tab}
-                                    onTabChange={changeTab}
-                                    tasks={shellTasks}
-                                    history={history}
-                                    sidebar={sidebar}
-                                    room={room}
-                                    settingsStep={settingsStep}
-                                    doors={settingsDoors}
-                                  />
-                                </ThreadRevealProvider>
-                              </MessageRevealProvider>
-                            </div>
-                          </ShellRoomContext.Provider>
-                          {/* A note to the people who make Luke, written in a dialog over the
+                      <div
+                        ref={stage.ref}
+                        className="app-stage"
+                        data-capture={String(run.captureMode)}
+                        // The panel is drawn as an ordinary app window's content; desktop.css
+                        // lays it out.
+                        data-surface="desktop"
+                        // The sidebar's width lays out the shell and Settings' page list.
+                        style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                      >
+                        {/* The window's content. */}
+                        <ShellRoomContext.Provider value={room}>
+                          <div className="desktop-stage">
+                            <MessageRevealProvider value={messageReveal}>
+                              <ThreadRevealProvider value={threadReveal}>
+                                <SettingsShell
+                                  gates={gates}
+                                  tab={tab}
+                                  onTabChange={changeTab}
+                                  tasks={shellTasks}
+                                  history={history}
+                                  sidebar={sidebar}
+                                  room={room}
+                                  settingsStep={settingsStep}
+                                  doors={settingsDoors}
+                                />
+                              </ThreadRevealProvider>
+                            </MessageRevealProvider>
+                          </div>
+                        </ShellRoomContext.Provider>
+                        {/* A note to the people who make Luke, written in a dialog over the
           window. */}
-                          <FeedbackDialog
-                            kind={feedbackKind}
-                            about={feedbackAbout}
-                            account={account}
-                            onClose={() => setFeedbackKind(undefined)}
-                          />
-                          {/* The window's passing notice: the thank-you after a note lands, what
+                        <FeedbackDialog
+                          kind={feedbackKind}
+                          about={feedbackAbout}
+                          account={account}
+                          onClose={() => setFeedbackKind(undefined)}
+                        />
+                        {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
-                          <ToastHost />
-                          {/* A command an agent asks to run on this Mac, while main holds it for an answer. */}
-                          <MacCommandAskDialog />
-                          {/* The menu a right-click on any link in the window hangs. */}
-                          <LinkMenu />
-                          <UpdatedToast />
-                          {/* The plans, the open plan's agents and files, every command the
+                        <ToastHost />
+                        {/* A command an agent asks to run on this Mac, while main holds it for an answer. */}
+                        <MacCommandAskDialog />
+                        {/* The menu a right-click on any link in the window hangs. */}
+                        <LinkMenu />
+                        <UpdatedToast />
+                        {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-                          <SettingsPalette
+                        <SettingsPalette
+                          available={!accountGated}
+                          tab={tab}
+                          onTabChange={changeTab}
+                          tasks={tasks}
+                          links={copyLink}
+                          doors={settingsDoors}
+                          readFiles={(taskId) =>
+                            act(ACT_KIND.TASKS_TREE, {
+                              planId: taskId,
+                              path: "",
+                              recursive: true,
+                            })
+                          }
+                        />
+                        {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
+                        <ShellRoomContext.Provider value={room}>
+                          <TabSwitcher
                             available={!accountGated}
                             tab={tab}
                             onTabChange={changeTab}
                             tasks={tasks}
-                            links={copyLink}
-                            doors={settingsDoors}
-                            readFiles={(taskId) =>
-                              act(ACT_KIND.TASKS_TREE, {
-                                planId: taskId,
-                                path: "",
-                                recursive: true,
-                              })
-                            }
                           />
-                          {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
-                          <ShellRoomContext.Provider value={room}>
-                            <TabSwitcher
-                              available={!accountGated}
-                              tab={tab}
-                              onTabChange={changeTab}
-                              tasks={tasks}
-                            />
-                          </ShellRoomContext.Provider>
-                        </div>
-                      </WindowVoice>
+                        </ShellRoomContext.Provider>
+                      </div>
                     </ListedAutomations>
                   </GitHubConnectProvider>
                 </RepositoryRemedyProvider>

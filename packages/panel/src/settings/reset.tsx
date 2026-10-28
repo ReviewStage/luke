@@ -13,17 +13,15 @@ import type {
   SettingsResetScope,
 } from "@luke/settings/wire";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
-import { BUTTON_VARIANT, Button, STATUS_TONE } from "@luke/ui";
+import { BUTTON_VARIANT, Button, IconButton, STATUS_TONE } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { PlaceMore } from "../desktop/phone-head.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** What the toast says once a page's reset landed, by the group it reset. */
 const RESET_NOTES = {
-  [SETTINGS_RESET_SCOPE.VOICE]: "Voice settings reset",
   [SETTINGS_RESET_SCOPE.APPEARANCE]: "Appearance settings reset",
 } as const satisfies Record<SettingsResetScope, string>;
 
@@ -48,8 +46,8 @@ function sameSetting(
  * The group's settings the reset changed, as they stood before it: each
  * whose reading before differs from the store's answer after. Note that
  * the answer is what decides, not the defaults, because a setting the file
- * never held is read as what the launch resolved, a voice chosen by the
- * environment among them, and the reset leaves it reading the same, so an
+ * never held is read as what the launch resolved, and the reset leaves it
+ * reading the same, so an
  * Undo writing it back would make it the file's own.
  */
 function changedBy(
@@ -100,7 +98,7 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * said in a toast with an Undo, which writes back what the page held.
  * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
  * slot; on a phone, whose page ends its bar rather than its title line, it is
- * the one item of the bar's ⋯ (`PlaceMore`), resting there as the button would.
+ * a glyph-alone `IconButton` in the bar's end corner, resting as the button would.
  *
  * The page resets only the rows it draws: it names the group's rows it
  * leaves out, Zoom in a browser, and the store keeps them inside the one
@@ -144,21 +142,16 @@ function ResetPageButton({
     });
   };
   const { busy, run } = useSettingWrite(reset);
+  // Note that a phone's bar holds the reset as a glyph alone, since a ⋯ over its one item would only hide it.
   if (more !== undefined) {
     return (
-      <PlaceMore
-        thing={more}
-        shown
-        groups={() => [
-          [
-            {
-              label: RESET_LABEL,
-              icon: <GLYPH.GO_BACK />,
-              disabled: busy,
-              onSelect: () => run(scope),
-            },
-          ],
-        ]}
+      <IconButton
+        variant={BUTTON_VARIANT.QUIET}
+        icon={<GLYPH.GO_BACK />}
+        label={RESET_LABEL}
+        busy={busy}
+        busyLabel="Resetting"
+        onClick={() => run(scope)}
       />
     );
   }
@@ -175,12 +168,8 @@ function ResetPageButton({
   );
 }
 
-/**
- * Which page carries which group's reset. The Voice page's takes the talk and
- * stop keys with the rest of the page.
- */
+/** Which page carries which group's reset. */
 const PAGE_RESET = {
-  [SETTINGS_VIEW.VOICE]: SETTINGS_RESET_SCOPE.VOICE,
   [SETTINGS_VIEW.APPEARANCE]: SETTINGS_RESET_SCOPE.APPEARANCE,
 } satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 

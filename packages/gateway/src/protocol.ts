@@ -52,20 +52,10 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
-  /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
-  TASKS_GITHUB_ISSUES: "tasks.githubIssues",
-  /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
-  TASKS_ISSUE_LINKS: "tasks.issueLinks",
   /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
-  /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
-  TASKS_ISSUE_LINK: "tasks.issueLink",
-  /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
-  TASKS_ISSUE_RELATE: "tasks.issueRelate",
-  /** One of a task's links let go on the service; answered to the caller. */
-  TASKS_ISSUE_UNLINK: "tasks.issueUnlink",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -123,12 +113,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** A workspace's Linear connection begun on the service by an owner or admin: Vercel Connect's sign-in address, for the caller to open. */
-  WORKSPACES_LINEAR_CONNECT: "workspaces.linearConnect",
-  /** A workspace's Linear disconnected on the service; the view's workspaces are read again. */
-  WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
-  /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_SENTRY: "workspaces.sentry",
   /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */

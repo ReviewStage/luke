@@ -78,7 +78,7 @@ test("an event carrying no token is sent as it was", () => {
   const event = {
     type: undefined,
     exception: { values: [{ type: "TypeError", value: "x is undefined" }] },
-    request: { url: "app://renderer/call.html" },
+    request: { url: "app://renderer/index.html" },
   };
   assert.equal(eventWithoutAccessTokens(event), event);
 });

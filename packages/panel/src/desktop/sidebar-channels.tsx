@@ -1,8 +1,10 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { readingWords } from "@luke/features/words";
 import {
+  BUTTON_SIZE,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  MoreButton,
   NAV_CURRENT,
   NavItem,
   NavItemSkeleton,
@@ -13,6 +15,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
+import { useRef } from "react";
 import { ChannelCard } from "../tasks/channel-card.js";
 import { useChannelMenu } from "../tasks/channel-menu.js";
 import { CHANNEL_SECTIONS, channelSections, channelUnread } from "../tasks/channels-model.js";
@@ -38,10 +41,11 @@ import { needsYouNoun } from "./places-waiting.js";
  * and opens it once made, or lists the archived ones to open or unarchive
  * (`archived-channels-dialog.tsx`). While the channels are first read, a
  * few rows' blocks stand in their place (`SidebarChannelRowsSkeleton`), and
- * where that read failed, it says so with Retry. A right-click offers the
- * channel's menu (`channel-menu.tsx`): Copy link, Mark as read, and Edit on
- * every channel, #general's name staying as it is, and Archive on any but
- * #general, which is never archived. Making and editing ask through
+ * where that read failed, it says so with Retry. The ⋯ a hovered row wears,
+ * and a right-click anywhere on it, offer the channel's menu
+ * (`channel-menu.tsx`): Copy link, and Mark as read while it is unread;
+ * Edit on every channel, #general's name staying as it is; and last and
+ * alone, Archive on any but #general, which is never archived. Making and editing ask through
  * `channel-dialog.tsx`; archiving the channel shown moves the window to
  * #general (`use-channels.ts`). Every answer waits on the service, and a
  * refusal stands in the card until what was asked changes.
@@ -65,6 +69,7 @@ const READING_ROWS = ["56%", "72%", "44%"] as const;
 /** One channel's row: its glyph, its name, in the unread weight while something in it is unread, what waits on the reader in it, its card, and its menu. */
 function ChannelRow({
   channel,
+  waiting,
   workspaceId,
   current,
   shown,
@@ -72,6 +77,8 @@ function ChannelRow({
   onOpen,
 }: {
   channel: Channel;
+  /** How many of the questions the Inbox counts live in it (`useChannelWaiting`). */
+  waiting: number;
   workspaceId: string | undefined;
   current: boolean;
   shown: boolean;
@@ -79,6 +86,7 @@ function ChannelRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  const ellipsis = useRef<HTMLButtonElement | null>(null);
   return (
     <>
       <Tooltip
@@ -91,11 +99,21 @@ function ChannelRow({
           current={current ? NAV_CURRENT.PAGE : undefined}
           unread={channelUnread(channel)}
           count={{
-            value: channel.waiting,
-            noun: needsYouNoun(channel.waiting),
+            value: waiting,
+            noun: needsYouNoun(waiting),
             tone: STATUS_TONE.ATTENTION,
           }}
-          contextMenu={menu.contextMenu()}
+          contextMenu={menu.contextMenu(ellipsis)}
+          actions={
+            groups.length === 0 ? null : (
+              <MoreButton
+                ref={ellipsis}
+                thing="Channel"
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
+            )
+          }
           onClick={onOpen}
         >
           {channel.name}
@@ -165,12 +183,15 @@ function AddChannelRow({
 export function SidebarChannels({
   workspaceId,
   channels,
+  waiting,
   currentId,
   shown,
   onOpen,
 }: {
   workspaceId: string | undefined;
   channels: ChannelsControl;
+  /** How many of the questions the Inbox counts live in each channel, by channel (`useChannelWaiting`), so the rows add up to the Inbox's row. */
+  waiting: ReadonlyMap<string, number>;
   /** The channel the Inbox is narrowed to, none while it lists every channel. */
   currentId: string | undefined;
   /** Whether the sidebar is in sight, which its menus and questions close with. */
@@ -198,6 +219,7 @@ export function SidebarChannels({
           <ChannelRow
             key={channel.id}
             channel={channel}
+            waiting={waiting.get(channel.id) ?? 0}
             workspaceId={workspaceId}
             current={channel.id === currentId}
             shown={shown}

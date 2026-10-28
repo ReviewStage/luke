@@ -56,6 +56,7 @@ import {
 } from "../testing/composer.js";
 import {
   AGENT,
+  ASKING_ID,
   answeredBy,
   answerSend,
   askBoxes,
@@ -102,6 +103,7 @@ import {
   rowNamed,
   STRAY_AGENT,
   saying,
+  sendHeld,
   sendWords,
   settle,
   skillReads,
@@ -1511,7 +1513,7 @@ function replyPress(): HTMLButtonElement | undefined {
   );
 }
 
-test("words selected in the agent's part of a thread stand Reply over them, which quotes them into the box: a settled item's message sends the quote set apart over the words typed under it, and a teammate's words offer no Reply", async () => {
+test("words selected in a thread stand Reply over them, which quotes them into the box: a settled item's message sends the quote set apart over the words typed under it, and a teammate's words stand Reply as the agent's do", async () => {
   const threaded: InboxItem = {
     ...RETRY,
     updatedAt: 5_300,
@@ -1542,7 +1544,7 @@ test("words selected in the agent's part of a thread stand Reply over them, whic
   const pane = itemPane(page);
 
   selectInPane(page, "Should it page", "Should", "too?");
-  assert.equal(replyPress(), undefined, "a teammate's words are not the agent's");
+  assert.notEqual(replyPress(), undefined, "a teammate's words may be quoted too");
 
   selectInPane(page, "Only in business hours.", "Only", "hours.");
   const reply = replyPress() ?? assert.fail("Reply stands over the agent's words");
@@ -2061,6 +2063,81 @@ test("a field's name in an open ask quotes into its box, and words typed into a 
   assert.deepEqual(boxQuotes(pane), ["Reason for the change"]);
 });
 
+test.each([
+  {
+    words: "the reader's own answer",
+    shown: threadItem(
+      [
+        askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.ANSWERED }),
+        {
+          ...threadMessage(
+            "e1b2c3d4-0000-4000-8000-000000000002",
+            { member: READER },
+            "Seven days, to match the trial.",
+            2_000,
+          ),
+          answers: { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["7 days"] },
+        },
+      ],
+      { status: INBOX_STATUS.ANSWERED, answeredBy: READER, settledAt: 2_000 },
+    ),
+    within: '[data-message-id="e1b2c3d4-0000-4000-8000-000000000002"] [data-inbox-message-text]',
+    quoted: "Seven days, to match the trial.",
+  },
+  {
+    words: "the line saying an ask was withdrawn",
+    shown: threadItem(
+      [
+        askingMessage(EXPIRY_ASK, {
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: "The plan settled it.",
+        }),
+      ],
+      { status: INBOX_STATUS.CLOSED, settledAt: 2_000 },
+    ),
+    within: '[data-inbox-settled="withdrawn"]',
+    quoted: "Withdrawn",
+  },
+  {
+    words: "the item's title",
+    shown: threadItem([askingMessage(EXPIRY_ASK)]),
+    within: ".inbox-subject",
+    quoted: "How long should invites last?",
+  },
+  {
+    words: "the figure an answer gave a number field",
+    shown: threadItem(
+      [
+        askingMessage(
+          { type: INBOX_ASK.ANSWER, fields: [{ type: INBOX_FIELD.NUMBER, label: "Retries" }] },
+          { status: INBOX_ASK_STATUS.ANSWERED },
+        ),
+        {
+          ...threadMessage("e1b2c3d4-0000-4000-8000-000000000002", { member: READER }, "", 2_000),
+          answers: {
+            ask: ASKING_ID,
+            reply: INBOX_REPLY.SUBMITTED,
+            values: [{ label: "Retries", value: 14 }],
+          },
+        },
+      ],
+      { status: INBOX_STATUS.ANSWERED, answeredBy: READER, settledAt: 2_000 },
+    ),
+    within: '[data-inbox-answered-field="number"]',
+    quoted: "14",
+  },
+])("$words quotes into the box as the agent's words do", async ({ shown, within, quoted }) => {
+  const pane = await mountThread(shown);
+  const words = pane.querySelector(within) ?? assert.fail(`${within} is drawn`);
+
+  selectWithin(words, quoted, quoted, quoted);
+  const reply = replyPress() ?? assert.fail("Reply stands over the words");
+  act(() => reply.click());
+  await settle();
+
+  assert.deepEqual(boxQuotes(pane), [quoted]);
+});
+
 /** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face it draws, and the marks drawn anywhere but in its head or its body. */
 function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
@@ -2190,7 +2267,7 @@ test("a plain reply sends no answer and leaves the ask open, the box's Send held
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000010"));
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note");
   assert.equal(sendWords(pane), "Send");
-  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(sendHeld(pane), true, "an empty box sends nothing");
   assert.equal(footWords(pane), "", "nothing says replying keeps the ask open");
 
   typeInComposer(pane, "Does it matter for SSO teams?");

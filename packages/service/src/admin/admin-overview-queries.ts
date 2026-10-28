@@ -12,6 +12,7 @@
 
 import { Database, type DatabaseServices, queryBuilder } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
+import { agentAutomationRunSql } from "@luke/database/models/agent-name";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { member, session, user } from "@luke/database/schemas/auth";
 import { automationRun } from "@luke/database/schemas/automation";
@@ -21,7 +22,6 @@ import { inboxItem } from "@luke/database/schemas/inbox";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   DAILY_COUNT,
   type DailyCount,
@@ -120,11 +120,8 @@ const PR_MERGED = or(
   eq(sql`${codingAgent.published} ->> 'state'`, PULL_REQUEST_STATE.MERGED),
 );
 
-/** Whether an automation started the agent: its link, or the origin that outlives the automation. */
-const STARTED_BY_AUTOMATION = or(
-  isNotNull(codingAgent.automationId),
-  isNotNull(codingAgent.automationOrigin),
-);
+/** Whether an automation started the agent, as every query asks it. */
+const STARTED_BY_AUTOMATION = agentAutomationRunSql(codingAgent);
 
 /**
  * Every meaningful action since `since`, one row per action: the account that
@@ -284,11 +281,6 @@ function reachRows(since: Date) {
       })
       .from(integrationConnection)
       .where(eq(integrationConnection.status, INTEGRATION_STATUS.CONNECTED)),
-    queryBuilder
-      .select({ tag: tag(REACH_FEATURE.INTEGRATIONS), userId: userIdOf(member.userId) })
-      .from(workspaceIntegrationConnection)
-      .innerJoin(member, eq(member.organizationId, workspaceIntegrationConnection.organizationId))
-      .where(eq(workspaceIntegrationConnection.status, INTEGRATION_STATUS.CONNECTED)),
     queryBuilder
       .select({ tag: tag(REACH_FEATURE.AUTOMATIONS), userId: userIdOf(automationRun.userId) })
       .from(automationRun)

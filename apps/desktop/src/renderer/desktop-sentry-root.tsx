@@ -34,8 +34,8 @@ const SENTRY_LOAD_DEADLINE_MS = 2_000;
 
 /**
  * Loads the SDK in the first idle moment after the commit it is part of.
- * Note that it waits on no animation frame, because the hidden voice window
- * draws none.
+ * Note that it waits on no animation frame, because a hidden window draws
+ * none.
  */
 function LoadAfterFirstCommit({ load }: { readonly load: () => void }): null {
   useEffect(() => {

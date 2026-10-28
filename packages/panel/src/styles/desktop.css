@@ -1,6 +1,5 @@
 /* Luke's app window: a sidebar of places on the left, the chosen work on the
-   right, a call bar under an open plan, and the confirm and feedback dialogs
-   over it. Last in index.css, so a rule here wins over a panel rule of equal
+   right, and the confirm and feedback dialogs over it. Last in index.css, so a rule here wins over a panel rule of equal
    weight. */
 
 :root {
@@ -72,8 +71,7 @@ body,
 
 /* The Mac panel window's page is clear under the shell, whose frame tint and
    solid sheet paint everything there is, so the window's sidebar material
-   (`panel-manager.ts`) frosts through the frame; the voice and call windows,
-   which hold no shell, keep their ground. */
+   (`panel-manager.ts`) frosts through the frame. */
 :root[data-luke-profile="desktop"]:has(.desktop-shell),
 :root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
   background: transparent;
@@ -607,39 +605,6 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* A New thread stands in the reading pane at the thread's own measure: To
-   and Subject each a row, its label in the caption's voice before it, and
-   each value a field of the one height and inset, the agent picked as a
-   field's pop-up and the subject typed in a field, so the two read as one
-   mail's head; the reply's box under them, growing into the room left. */
-.desktop-inbox.inbox-compose {
-  padding-block: var(--luke-space-16);
-  padding-inline: max(var(--content-inset), var(--reading-room));
-}
-
-.inbox-compose-row {
-  display: grid;
-  min-height: var(--luke-space-48);
-  align-items: center;
-  column-gap: var(--luke-block-gap);
-  grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
-}
-
-.inbox-compose-label {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* The box stands at the rows' own width, its edges on their hairlines: the
-   form's inset is already the room's, so the box takes none of its own. It
-   stands as far under Subject as Subject stands under To: the room a row
-   leaves around its control, which Subject's row already leaves under it. */
-.inbox-compose > .inbox-compose-box {
-  margin-top: calc((var(--luke-space-48) - var(--luke-control-height)) / 2);
-  padding-inline: 0;
-}
-
 /* A line written again where it stands (`edit-composer.tsx`) is already in the
    transcript's measure, so its box takes no inset of its own, and opens out of
    the bubble's corner as a card the window opens in place does. */
@@ -759,19 +724,14 @@ body,
   margin-top: 1.5em;
 }
 
-/* A task's key stands tight over its title, its status and priority
-   chips close under it, and its linked issues' chips close under those, as
-   one head rather than four blocks. */
+/* A task's key stands tight over its title, and its status and priority
+   chips close under it, as one head rather than three blocks. */
 .desktop-document .plan-body > .plan-task-key + * {
   margin-top: var(--luke-list-gap);
 }
 
 .desktop-document .plan-body > .plan-task-standing {
   margin-top: var(--luke-block-gap);
-}
-
-.desktop-document .plan-body > .plan-task-standing + .task-issue-links {
-  margin-top: var(--luke-item-gap);
 }
 
 .desktop-document .luke-markdown-heading {
@@ -789,8 +749,6 @@ body,
 .desktop-document :not(.luke-markdown-heading) + .luke-markdown-heading[data-level="3"] {
   margin-top: 1.6em;
 }
-
-/* The call's room --------------------------------------------------------- */
 
 /* The repository chip ------------------------------------------------------ */
 
@@ -1123,7 +1081,7 @@ body,
   transform: translateX(-100%);
 }
 
-/* No call bar stands below a version, so it needs no room under its last line. */
+/* Nothing stands below a version, so it needs no room under its last line. */
 .version-page .desktop-document .plan-document-body {
   padding-bottom: var(--luke-page-inset);
 }
@@ -1174,10 +1132,8 @@ body,
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
 
-/* What the column shows, beside the plan's summary: under the toolbar and
-   over the call bar, which both span the column. The room the summary takes
-   is said once here, so the call bar's row below centres on the room the
-   document above it is centred in. */
+/* What the column shows, beside the plan's summary: under the toolbar, which
+   spans the column. The room the summary takes is said once here. */
 .desktop-task-main {
   --summary-width: 240px;
   /* The rail stands its controls a column's inset in from its edges, so at
@@ -1259,15 +1215,14 @@ body,
   }
 }
 
+/* The first heading stands level with the chevron, so its fold's hover ends
+   short of the chevron rather than running under it. */
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
-  > .section-heading,
-.task-summary-card-body > .task-summary-section:first-of-type > .section-heading {
-  display: flex;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  margin-bottom: 0;
+  .luke-group-header-head,
+.task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
+  margin-right: calc(var(--luke-control-height) + var(--luke-tight-gap));
 }
 
 .task-summary-archived-agent > .task-summary-row {
@@ -1278,17 +1233,21 @@ body,
   background: var(--luke-color-fill-hover);
 }
 
-.task-summary-archived-agent:has(:focus-visible) > .task-summary-row {
+/* The marks stay while the row's menu stands open from its ⋯, as a list row's acts do. */
+.task-summary-archived-agent:has(:focus-visible) > .task-summary-row,
+.task-summary-archived-agent[data-menu-open="true"] > .task-summary-row {
   padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
 }
 
-.task-summary-archived-agent:has(:focus-visible) > .task-summary-marks {
+.task-summary-archived-agent:has(:focus-visible) > .task-summary-marks,
+.task-summary-archived-agent[data-menu-open="true"] > .task-summary-marks {
   opacity: 1;
   pointer-events: auto;
   transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.task-summary-archived-agent:has(:focus-visible) .failed-mark {
+.task-summary-archived-agent:has(:focus-visible) .failed-mark,
+.task-summary-archived-agent[data-menu-open="true"] .failed-mark {
   display: none;
 }
 
@@ -1577,7 +1536,7 @@ body,
 
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
-:is(.new-task-composer .issue-picker-chip, .new-task-composer .agent-model-chip) {
+.new-task-composer .agent-model-chip {
   display: flex;
   flex-shrink: 0;
 }
@@ -1745,10 +1704,4 @@ body,
   position: relative;
   z-index: 1;
   pointer-events: auto;
-}
-
-/* New thread's bar, should it stand its title on a row of its own, stands
-   it where the form's labels start, rather than where a crumb's words do. */
-.inbox-view-items:has(> .inbox-compose) {
-  --luke-toolbar-wrap-heading-at: var(--content-inset);
 }

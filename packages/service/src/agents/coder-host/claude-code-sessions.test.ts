@@ -114,7 +114,7 @@ import {
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { codingAgentFailureOf } from "./status.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -249,12 +249,6 @@ const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   turn: "typed" as const,
   message: text,
   ...(lineId === undefined ? undefined : { lineId }),
-});
-
-/** The developer's words on a call, as the voice sends them. */
-const spoken = (agent: CodingAgent, text: string) => ({
-  ...message(agent, text),
-  turn: "spoken" as const,
 });
 
 /** The developer's words of a message line: what follows the turn's own words, which lead every message (`turn-message.ts`). */
@@ -2386,7 +2380,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "the turn's own words lead every message: the time on a typed first turn, the call's words and the task on a spoken one, and that the call's words no longer hold on a typed turn after it",
+    "the turn's own words lead every message: the time on a typed first turn, and the time again on the next",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2398,29 +2392,18 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
 
-        const called = yield* sessions.send(opened.sessionId, spoken(agent, "And the emails?"));
         const after = yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
 
-        assert.equal(called.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 1);
-        const [typed, onCall, typedAfter] = textsOf(api.commands[0]);
+        const [typed, typedAfter] = textsOf(api.commands[0]);
         // A typed first turn opens with the time alone: the plan is its first message already.
         assert.ok(typed?.[0]?.startsWith("The time as this turn opens"), typed?.[0] ?? "");
         assert.deepEqual(typed?.slice(1), ["Fix the invitations."]);
-        // The call's words, how to talk the plan through, and the task as it stands, ahead of what was said.
-        for (const told of [
-          "## This turn is spoken",
-          `\`${CODER_TOOL.DELEGATE}\``,
-          "## Talking the plan through",
-          "The task as it stands as this turn opens",
-        ]) {
-          assert.ok(onCall?.[0]?.includes(told), told);
-        }
-        assert.deepEqual(onCall?.slice(1), ["And the emails?"]);
-        // What the spoken turn handed is kept on the row, so the typed turn after it says the words no longer hold.
-        assert.ok(typedAfter?.[0]?.startsWith("This turn is typed"), typedAfter?.[0] ?? "");
-        assert.ok(typedAfter?.[0]?.includes("The time as this turn opens"), typedAfter?.[0] ?? "");
+        assert.ok(
+          typedAfter?.[0]?.startsWith("The time as this turn opens"),
+          typedAfter?.[0] ?? "",
+        );
         assert.deepEqual(typedAfter?.slice(1), ["Also the docs."]);
       }),
   );

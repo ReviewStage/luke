@@ -5,8 +5,8 @@ import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 export type { SettingsView };
 /**
  * Which page of the Settings tab is showing. App state rather than panel state
- * for the same reason the tab is — a shortcut, a voice request, or a button
- * elsewhere in the window turns it from outside the panel.
+ * for the same reason the tab is — a shortcut or a button elsewhere in the
+ * window turns it from outside the panel.
  */
 export { SETTINGS_VIEW };
 
@@ -24,7 +24,6 @@ export const SETTINGS_PAGE_LIST = [
   SETTINGS_VIEW.CODING_AGENTS,
   SETTINGS_VIEW.INTEGRATIONS,
   SETTINGS_VIEW.SKILLS,
-  SETTINGS_VIEW.VOICE,
   SETTINGS_VIEW.APPEARANCE,
   SETTINGS_VIEW.THIS_MAC,
   SETTINGS_VIEW.EXPERIMENTAL,
@@ -57,7 +56,6 @@ const GROUP_OF_PAGE = {
   [SETTINGS_VIEW.INTEGRATIONS]: SETTINGS_PAGE_GROUP.ACCOUNT,
   [SETTINGS_VIEW.SKILLS]: SETTINGS_PAGE_GROUP.ACCOUNT,
   [SETTINGS_VIEW.MEMORY]: SETTINGS_PAGE_GROUP.WORKSPACE,
-  [SETTINGS_VIEW.VOICE]: SETTINGS_PAGE_GROUP.THIS_MAC,
   [SETTINGS_VIEW.APPEARANCE]: SETTINGS_PAGE_GROUP.THIS_MAC,
   [SETTINGS_VIEW.THIS_MAC]: SETTINGS_PAGE_GROUP.THIS_MAC,
   [SETTINGS_VIEW.EXPERIMENTAL]: SETTINGS_PAGE_GROUP.ACCOUNT,
@@ -93,7 +91,7 @@ export const SETTINGS_SECTION = {
   MAC_REPOSITORIES: "workspace-mac-repositories",
   /** Claude's row on Agents: the account's Claude plan and Anthropic key, anchored as its search result is. */
   CLAUDE: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
-  /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which calls and dictation run on too. */
+  /** Codex's row on Agents: the account's ChatGPT plan and OpenAI key, which dictation runs on too. */
   CODEX: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
 } as const;
 

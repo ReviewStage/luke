@@ -41,7 +41,7 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -530,6 +530,12 @@ interface Asked {
 }
 
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
+/** Main's word of what waits on the reader on each task: the one open question on each. */
+const MAIN_WAITING: readonly AppInboxTask[] = [
+  { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
+  { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
+];
+
 export function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
   {
@@ -538,6 +544,7 @@ export function mount(
     room,
     panel,
     holding: firstHolding = HOLDING,
+    waiting = MAIN_WAITING,
     withSidebar = false,
     readerKnown = true,
     toasts = false,
@@ -550,6 +557,8 @@ export function mount(
     panel?: SidePanelControl;
     /** Main's first word of the tasks holding items. */
     holding?: readonly AppInboxTaskHolding[];
+    /** Main's word of each task's items that wait on the reader. */
+    waiting?: readonly AppInboxTask[];
     /** Whether the window's sidebar stands beside the Inbox page, its Inbox row counting. */
     withSidebar?: boolean;
     /** Whether the window knows the reader's own account id, as an account stored without one does not. */
@@ -606,10 +615,7 @@ export function mount(
           if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
         },
       },
-      inbox: [
-        { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
-        { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
-      ],
+      inbox: waiting,
       inboxTasks: holding,
       inboxTaskless: taskless,
       inboxView: {
@@ -850,10 +856,17 @@ export function answerSend(pane: HTMLElement): HTMLButtonElement {
   );
 }
 
+/** Whether the open item's Send sends nothing as it stands: taking no press, or refusing it to say why (`aria-disabled`). */
+export function sendHeld(pane: HTMLElement): boolean {
+  const send = answerSend(pane);
+  return send.disabled || send.getAttribute("aria-disabled") === "true";
+}
+
 /**
  * What the open item's box says outside its controls, its files, and its
- * note line, its presses' words among it: nothing but a notice's Got it, since the box
- * carries no helper text, its Send held until it holds something to send.
+ * note line, its presses' words among it: nothing but a notice's Got it, or
+ * what an unfinished answer lacks once a send of it was refused, since the
+ * box carries no helper text, its Send held until it holds something to send.
  */
 export function footWords(pane: HTMLElement): string {
   const box = pane.querySelector("form.inbox-answer") ?? assert.fail("the box");
@@ -1381,10 +1394,10 @@ export function draftReply(pane: HTMLElement): (string | null)[] {
   return [head, "controls"];
 }
 
-/** The press of the open ask's controls, in the draft reply, whose words are `label`. */
+/** The press of the open ask's controls, in the draft reply, whose own words, a badge beside them aside, are `label`. */
 export function askPress(pane: HTMLElement, label: string): HTMLButtonElement {
   const found = [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
-    (button) => button.textContent === label,
+    (button) => button.querySelector(".luke-button-words")?.textContent === label,
   );
   assert.ok(found, `the ask offers ${label}`);
   return found;

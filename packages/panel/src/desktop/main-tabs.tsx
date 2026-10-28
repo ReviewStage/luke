@@ -25,7 +25,6 @@ import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
-import type { AgentCallDoors } from "../tasks/agent-call.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
@@ -65,27 +64,28 @@ import { TabStrip } from "./tab-strip.js";
  * to it. The strip is the side panel's in every way: the same pills, the
  * same hover and chosen fills, dragged and stepped along, closed by ×,
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
- * right-click (`strip-tabs.tsx`). A tab's own actions, on an agent's its
- * Rename, its Show terminal, its transcript's copies, and its Archive, are
- * its right-click menu's alone: the toolbar's one ⋯ is the task's.
+ * right-click (`strip-tabs.tsx`). An agent's own actions, its one menu
+ * (`agent-actions.tsx`), stand on its tab's right-click after the tab's
+ * keeping, and the chosen agent's in the toolbar's ⋯, drawn into the slot
+ * the toolbar keeps for it (`slot`), so the ⋯ acts on what is under the bar.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
- * works and an alert once it failed, and the voice's live mark while a call
- * into it is in progress, and hangs a card naming it whole with when it
+ * works and an alert once it failed, and hangs a card naming it whole with when it
  * last moved and its latest step, read from what its tab last drew and
- * never from the service. Its menu offers Pin, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, Show terminal,
+ * never from the service. Its menu offers Pin tab, which puts it in the
+ * sidebar, then the agent's menu: Copy link and its transcript's two copies,
+ * Rename, which turns the tab into its name's field, Show terminal,
  * which shows the agent's own Terminal tab in the side panel as ⌘J does from
- * the tab, and its transcript's two copies. Closing it closes only the view:
+ * the tab, its Archive, and its Permanently delete. Closing it closes only the view:
  * the agent goes on as it was, and the "+" opens it again. A tab an agent
  * ended on while no one was looking at it reads in semibold until shown. The
  * draft's tab, named New agent as the "+" row that opens it is, stands after
- * the agents until its first message, or its Call, starts the agent, and
+ * the agents until its first message starts the agent, and
  * closing it lets the draft go at once, a toast's Undo bringing it back with
  * its words and files where it held any (`use-coding-agents.ts`). A task with no other tab standing shows a
- * draft's (`use-main-tabs.ts`), so a voice chat or a typed one is the
- * developer's to start from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
+ * draft's (`use-main-tabs.ts`), so a new agent is the developer's to start
+ * from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
  * chosen, the Draft pencil at its end (`draft-mark.tsx`).
  *
@@ -178,6 +178,7 @@ function AgentMenuTab({
   doors,
   shown,
   terminals,
+  slot,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -185,6 +186,8 @@ function AgentMenuTab({
   doors: TabDoors;
   shown: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
+  slot: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, {
     label: look.label,
@@ -199,6 +202,7 @@ function AgentMenuTab({
         doors={{ ...doors, ...actions.doors }}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
+        slot={slot}
       />
       {actions.dialog}
     </>
@@ -229,10 +233,8 @@ function agentTabs(input: {
   views: TabViews;
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
   drafted: readonly string[];
-  /** The agent a call is in progress into, whose glyph wears the live mark; none while no call stands. */
-  calling: string | undefined;
 }): DrawnTab[] {
-  const { main, agents, unread, views, drafted, calling } = input;
+  const { main, agents, unread, views, drafted } = input;
   const chosen = (tab: MainTab) => main.tab !== undefined && sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -251,7 +253,7 @@ function agentTabs(input: {
       tab,
       agent,
       look: look(tab, {
-        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent, calling: agent.id === calling }),
+        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         endMark: agentEndMark(agent, false) ?? draftMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
@@ -378,8 +380,7 @@ export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): A
 /**
  * The "+" menu's rows: New agent, unavailable with Start's own reason while
  * Start could not run, left out on an archived task, by itself under no
- * heading; then each of its agents under Agents (`agentEntries`). A voice
- * chat is started from a draft's composer, its Call.
+ * heading; then each of its agents under Agents (`agentEntries`).
  */
 function addEntries(
   main: MainTabsControl,
@@ -436,7 +437,7 @@ export function MainTabStrip({
   keys,
   shown,
   onOpenTerminal,
-  calling,
+  slot,
 }: {
   task: TaskSummary;
   main: MainTabsControl;
@@ -456,8 +457,8 @@ export function MainTabStrip({
   shown: boolean;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
-  /** The agent a call is in progress into, whose tab's glyph wears the live mark; none while no call stands. */
-  calling: string | undefined;
+  /** The toolbar's slot the chosen agent's ⋯ is drawn into; none where the toolbar keeps none, as a phone's. */
+  slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -465,7 +466,7 @@ export function MainTabStrip({
   // The agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    agentTabs({ main, agents, unread, views, drafted, calling }),
+    agentTabs({ main, agents, unread, views, drafted }),
     main.tabs,
     (entry) => entry.tab,
   );
@@ -482,7 +483,7 @@ export function MainTabStrip({
     };
   };
   const doorsOf = (entry: DrawnTab): TabDoors => {
-    // An agent's link is its own action (`agent-actions.tsx`); the Call's is the task's.
+    // An agent's link is its own action (`agent-actions.tsx`).
     const linked: LinkPlace | undefined =
       entry.agent === undefined
         ? undefined
@@ -529,6 +530,7 @@ export function MainTabStrip({
               doors={doorsOf(entry)}
               shown={shown}
               terminals={{ onOpenTerminal }}
+              slot={slot}
             />
           ),
         )}
@@ -586,12 +588,9 @@ export function MainTabContent({
   cards,
   onFork,
   onContinue,
-  call,
 }: {
   tab: MainTab;
   agents: CodingAgentsControl;
-  /** What an agent's tab, and a draft's Call, take calls through; none where the platform has no voice. */
-  call?: AgentCallDoors | undefined;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
   views: TabViews;
@@ -618,13 +617,7 @@ export function MainTabContent({
     // The tab stands for a draft the task no longer holds only until the
     // column moves back to the task, a render away.
     return agents.draft?.id === tab.draft ? (
-      <DraftAgentTab
-        key={tab.draft}
-        draft={agents.draft}
-        control={agents}
-        cards={cards.call}
-        call={call}
-      />
+      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} cards={cards.call} />
     ) : (
       <AgentTabSkeleton />
     );
@@ -667,7 +660,6 @@ export function MainTabContent({
         cards={cards.agent(agentId)}
         onHeld={views.onAgentHeld}
         run={agents.origin}
-        call={call}
       />
     </ForkProvider>
   );

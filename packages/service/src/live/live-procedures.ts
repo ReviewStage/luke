@@ -19,11 +19,10 @@
  * account reaches and every agent of them and with no task, as two
  * statements built with the account's id (`task-list-live.ts`).
  *
- * `GET /api/live/task-board?id=` answers one task's whiteboard the same way,
- * as one statement that marks where it stands, after the task is read as
- * the account, so one it does not reach is not found, as its board read
- * answers; and `GET /api/live/task-record?id=` its pages and calls, one
- * statement a part (`task-record-live.ts`), on the same terms. `GET
+ * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
+ * the same way, one statement a part that marks where it stands
+ * (`task-record-live.ts`), after the task is read as the account, so one it
+ * does not reach is not found, as its own read answers. `GET
  * /api/live/task-browser-tabs?id=` answers its Browser tabs as one
  * statement, the agent's pointer on each among them, so a window draws the
  * pointer moving within a moment of the agent's action; a takeover is
@@ -48,7 +47,8 @@
  * `GET /api/live/workspace-invitations?workspaceId=` answers its pending
  * invitations as one, to an owner or an admin of it alone, with the origin
  * each accept link is built on, which the desktop needs since it builds the
- * links itself.
+ * links itself. Both are woken by a write to the workspace's topic
+ * (`workspaceMembersLive`, `workspaceInvitationsLive`).
  *
  * `GET /api/live/channels?workspaceId=` answers one workspace's channels as
  * two statements, its channels and where each one's threads stand
@@ -75,7 +75,6 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { readAutomation } from "@luke/database/models/automation-store";
-import { boardLiveStatement } from "@luke/database/models/board-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTaskHeader } from "@luke/database/models/task-store";
@@ -85,6 +84,7 @@ import {
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -96,8 +96,6 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
-import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
-import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
@@ -122,6 +120,8 @@ import {
   macCommandsLive,
   sidebarLive,
   taskInboxLive,
+  workspaceInvitationsLive,
+  workspaceMembersLive,
 } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
@@ -290,7 +290,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(inboxLive, { userId: context.userId }, input);
+      return yield* liveQueryParts(
+        inboxLive,
+        { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
+        input,
+      );
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -325,15 +329,6 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = automationRunsLiveStatements(context.userId, automationId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
-    }),
-    taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statement = boardLiveStatement(context.userId, taskId);
-      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts({ board: statement.value }, input);
     }),
     taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -447,9 +442,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         isWorkspaceMember(context.userId, input.workspaceId),
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = workspaceMembersLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        workspaceMembersLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     channels: signedIn.channels.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -472,9 +469,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (!MANAGING_ROLES.has(workspace.value.role)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       }
-      const statement = workspaceInvitationsLiveStatement(context.userId, input.workspaceId);
-      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      const sealed = yield* sealedParts({ invitations: statement.value }, input);
+      const sealed = yield* liveQueryParts(
+        workspaceInvitationsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
       return { ...sealed, origin: new URL(context.request.url).origin };
     }),
   };

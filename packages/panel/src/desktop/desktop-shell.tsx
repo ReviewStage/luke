@@ -32,7 +32,6 @@ import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/pa
 import type { AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
@@ -59,7 +58,6 @@ import {
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { backPlaceOf } from "./back-place.js";
-import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
@@ -85,7 +83,7 @@ import { useWindowTitle } from "./window-title.js";
 /**
  * Settings, loaded as a chunk of its own the first time it opens rather than
  * with the window, because the renderer bundle is parsed at every window
- * open, the voice window's included, and Settings is opened seldom. The chunk is a local file, so it stands a frame
+ * open, and Settings is opened seldom. The chunk is a local file, so it stands a frame
  * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
 const SETTINGS_ROUTE = lazyRoute(() =>
@@ -690,12 +688,6 @@ export function DesktopShell({
     if (adminShown && !adminAccess && !adminPending) closeAdmin();
   }, [adminShown, adminAccess, adminPending, closeAdmin]);
   const { region } = tasks;
-  // The folded sidebar's call card stands over the column's foot, clear of its dock.
-  useColumnDock(
-    shell,
-    tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.automationsView.open}:${tasks.boardView.open}:${tasks.adminView.open}:${sidebar.collapsed}`,
-  );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, the Automations page, or the Board standing in its place is not the plan.
   const standingIn =
@@ -980,8 +972,6 @@ export function DesktopShell({
         </MentionedAgents>
       </main>
       {barShown ? <MobileBar tasks={tasks} sidebar={sidebar} onPressMore={keepOverlay} /> : null}
-      {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
-      <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&

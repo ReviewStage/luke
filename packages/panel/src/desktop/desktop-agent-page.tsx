@@ -1,7 +1,9 @@
 import {
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_KIND,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
@@ -28,7 +30,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { isAgentTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -68,18 +70,18 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
+  agentMenuGroups,
   useAgentActions,
-  useAgentCallDoors,
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
+import { useAgentReadMarks } from "./agent-read-marks.js";
 import {
   AutomationRunSteps,
   AutomationRunStrip,
   automationTrail,
   useAutomationRunPlace,
 } from "./automation-agent-run.js";
-import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
@@ -91,7 +93,8 @@ import {
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel.js";
-import { contentActionGroups, useTabViews } from "./strip-tabs.js";
+import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
+import { useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
@@ -119,11 +122,16 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
- * its tab would, and its ⋯ offers the agent's own actions, the very ones its
- * tab's ⋯ offers on a task (`agent-actions.tsx`): Rename, which turns the
- * title into its name's field, Show terminal, Copy link, the
- * transcript's two copies, and Archive, so an agent with no task is
- * acted on as a task's is; ⌘J and New terminal open its terminal as on a
+ * its tab would, and its ⋯ offers the agent's one menu, the very one its
+ * tab's ⋯ offers on a task (`agent-actions.tsx`'s `agentMenuGroups`): Copy
+ * link and the transcript's two copies, Rename, which turns the title into
+ * its name's field, Show terminal, Archive, and Permanently delete, so an
+ * agent with no task is acted on as a task's is; and, since such an agent
+ * has a row of its own among the sidebar's tasks, what that row offers too:
+ * Mark as unread or Mark as read, through a task's marks
+ * (`agent-read-marks.ts`), and Pin or Unpin and Move to section, the
+ * reader's own, while the agent is not archived, and never for Luke, who
+ * has a row of his own kind; ⌘J and New terminal open its terminal as on a
  * task (`terminal-commands.tsx`). An archived agent takes no message, so
  * its composer gives way to its own Unarchive, which its ⋯ offers in
  * Archive's place, and it is not renamed. An agent the service will not hand the reader,
@@ -135,12 +143,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * leads its bar with the path to that automation, says under it what fired
  * the run, and steps through the automation's other runs' agents from the
  * bar's end (`automation-agent-run.tsx`). Escape leaves it for wherever it was
- * opened from, and so does any row of the sidebar. Its composer offers Call
- * as its tab's does, through the window's same press (`agent-actions.tsx`'s
- * `useAgentCallDoors`), told the agent's own task, or none, whatever task is
- * open: the call is keyed by the agent, and asks first where it would hang
- * another agent's call up. While its call stands its foot draws the call as
- * its tab's would.
+ * opened from, and so does any row of the sidebar.
  */
 
 /** What the page says where the agent could not be read. */
@@ -159,22 +162,36 @@ const ACTIONS_THING = "Agent";
 const NAME_LABEL = "Agent name";
 
 /**
- * The page's bar: its title and its ⋯, which offer the agent's own actions as its
- * tab in a task's column does (`agent-actions.tsx`): its title turned into
- * its name's field by Rename, and every action of the tab's ⋯, in the same
- * groups (`strip-tabs.tsx`'s `contentActionGroups`).
+ * The row the sidebar lists the agent by among its tasks, whose pin, read
+ * marks, and section are the page's too: for an agent with no task, as the
+ * listed workspace's agents hold it; none for an agent on a task, or one the
+ * list does not hold, whose page then offers neither.
+ */
+function listedAgent(tasks: TasksControl, agent: CodingAgentSummary): TasklessAgent | undefined {
+  if (agent.planId !== null) return undefined;
+  const { standing, archived } = tasks.listedAgents;
+  return [...standing, ...archived].find((each) => each.id === agent.id);
+}
+
+/**
+ * The page's bar: its title and its ⋯, which offer the agent's one menu as
+ * its tab in a task's column does (`agent-actions.tsx`'s
+ * `agentMenuGroups`): its title turned into its name's field by Rename, and,
+ * for an agent with no task, its sidebar row's own read mark, Pin, and
+ * Move to section beside the tab's actions.
  */
 function AgentPageBar({
+  tasks,
   agent,
   agents,
   shown,
   terminals,
   onClose,
-  luke,
   phone,
   trail,
   steps,
 }: {
+  tasks: TasksControl;
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
@@ -185,25 +202,45 @@ function AgentPageBar({
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
-  /** Whether the agent is Luke, the account's operator, who is named Luke and is neither renamed, archived, nor deleted from here. */
-  luke: boolean;
   /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
   phone?: AgentPagePhone | undefined;
 }): React.JSX.Element {
-  const label = luke ? LUKE_NAME : agentName(agent, agents.models);
+  const label = agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
-  const doors = luke
-    ? { ...actions.doors, onRename: undefined, archive: undefined, deletion: undefined }
-    : actions.doors;
-  const groups = contentActionGroups({
-    chosen: true,
-    onClose: undefined,
-    onCloseOthers: undefined,
-    pin: undefined,
-    ...doors,
-  });
-  const rename = luke ? undefined : actions.rename;
+  const listed = listedAgent(tasks, agent);
+  const reads = useAgentReadMarks();
+  const sectionDialogs = useSectionDialogs(tasks, shown);
+  // The agent's read mark is its sidebar row's: main's unseen dot, which a mark by hand adds to.
+  const unseen = tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agent.id);
+  const read =
+    listed === undefined
+      ? undefined
+      : {
+          unread: unseen || reads.markedUnread(agent.id),
+          onMark: (next: boolean) => reads.mark(listed, next),
+        };
+  // Note that an archived agent offers neither a pin nor a section, as an archived task, and Luke never does.
+  const own =
+    listed !== undefined &&
+    agent.archivedAt === undefined &&
+    agent.kind !== CODING_AGENT_KIND.OPERATOR;
+  const agentPin = own
+    ? {
+        pinned: listed.pinnedAt !== undefined,
+        onToggle: () => tasks.onPinAgent(agent.id, listed.pinnedAt === undefined),
+      }
+    : undefined;
+  const section = own
+    ? moveToSectionEntry(
+        tasks,
+        { agent: true, id: agent.id },
+        listed.workspaceId,
+        sectionDialogs.askNew,
+      )
+    : undefined;
+  const groups = agentMenuGroups({ chosen: true, ...actions.doors, read, agentPin, section });
+  const { rename } = actions;
   const title =
     rename?.editing === true ? (
       <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
@@ -239,6 +276,7 @@ function AgentPageBar({
         />
       )}
       {actions.dialog}
+      {sectionDialogs.dialog}
     </>
   );
   if (phone !== undefined) {
@@ -332,8 +370,6 @@ export function DesktopAgentPage({
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
   );
   const { act } = useAct();
-  // Luke's page is an agent's page in every way but his name and the actions he does not offer.
-  const operator = useLukeOperator({ accountId: tasks.me, workspaceId: tasks.workspace?.id });
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -358,16 +394,7 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
-  // Note that Luke is known by his kind, so one a Reset retired is still drawn as Luke, never as an agent to rename or delete.
-  const luke =
-    operator !== undefined &&
-    (operator.agentId === agentId || (agent !== undefined && isLuke(agent, operator)));
   useTaskAgentsFollow(tasks, agentId, agent);
-  // Its Call names the agent's own task, or none, and an archived agent takes none.
-  const calls = useAgentCallDoors(tasks.calls, {
-    taskId: agent?.planId ?? undefined,
-    archived: agent?.archivedAt !== undefined,
-  });
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -549,12 +576,7 @@ export function DesktopAgentPage({
             draftShown === undefined
               ? away
               : {
-                  label:
-                    agent === undefined
-                      ? AGENT
-                      : luke
-                        ? LUKE_NAME
-                        : agentName(agent, control.models),
+                  label: agent === undefined ? AGENT : agentName(agent, control.models),
                   onPress: () => setDrafting(undefined),
                 },
           onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
@@ -573,12 +595,12 @@ export function DesktopAgentPage({
       )
     ) : (
       <AgentPageBar
+        tasks={tasks}
         agent={agent}
         agents={control}
         shown={tasks.shown}
         terminals={terminalDoors}
         onClose={tasks.agentView.onClose}
-        luke={luke}
         phone={phoneHead}
         trail={automationTrail(agent, tasks)}
         steps={
@@ -666,8 +688,7 @@ export function DesktopAgentPage({
                           subject={tab}
                         >
                           <AgentPane
-                            call={calls}
-                            label={luke ? LUKE_NAME : agentName(agent, control.models)}
+                            label={agentName(agent, control.models)}
                             tabbed={false}
                             tab={paneTab}
                             agents={control}
@@ -702,7 +723,7 @@ export function DesktopAgentPage({
                             away === undefined || agent === undefined
                               ? undefined
                               : {
-                                  back: luke ? LUKE_NAME : agentName(agent, control.models),
+                                  back: agentName(agent, control.models),
                                   onBack: sidePanel.onToggle,
                                 }
                           }

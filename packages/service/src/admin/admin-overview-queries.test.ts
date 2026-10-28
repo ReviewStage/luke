@@ -245,8 +245,15 @@ const seedService = Effect.gen(function* () {
   const merged = yield* startAgent(ada, adaWorkspace, "2026-10-20T11:00:00Z", {
     published: MERGED_PULL_REQUEST,
   });
-  const automationId = yield* fireAutomation(ada, adaWorkspace, "2026-10-20T02:00:00Z");
-  yield* startAgent(ada, adaWorkspace, "2026-10-19T02:00:00Z", { automationId });
+  yield* fireAutomation(ada, adaWorkspace, "2026-10-20T02:00:00Z");
+  // Note that the agent's automation is deleted since, so its row keeps the run's origin and no id.
+  yield* startAgent(ada, adaWorkspace, "2026-10-19T02:00:00Z", {
+    automationOrigin: {
+      name: "Synthetic automation",
+      firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: Date.parse("2026-10-19T02:00:00Z") },
+      prompt: "",
+    },
+  });
   yield* answerInboxItem(ada, adaWorkspace, merged, "2026-10-20T12:00:00Z");
   yield* connectIntegration(ada);
   yield* signIn(ada, "2026-10-21T09:00:00Z");

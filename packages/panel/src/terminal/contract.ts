@@ -11,8 +11,8 @@
  * imports anything, so the bundle carries none of the panel's libraries.
  *
  * Note that what crosses here is a shell's own bytes, which go to the screen
- * and nowhere else: never into app state, a trace, a counted event, or the
- * voice window (AGENTS.md's Never list).
+ * and nowhere else: never into app state, a trace, or a counted event
+ * (AGENTS.md's Never list).
  */
 
 /** A terminal's size in character cells, as a shell is told it. */

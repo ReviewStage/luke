@@ -3,7 +3,7 @@
  *
  * What a task's coding agents need of the developer, through the act port
  * as a window calls them: only a panel of this build's own renderer asks;
- * the voice and call windows, and a frame this build does not trust, are
+ * any other window, and a frame this build does not trust, are
  * refused in each kind's own words before the host is asked; a panel's ask
  * reaches the host with its payload as the panel sent it, and what the host
  * answers is the panel's; a host that fails answers the kind's own
@@ -42,9 +42,8 @@ import { type TestActPort, testActPort } from "./testing.js";
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -169,14 +168,12 @@ function windowPort(
   return { call, asked };
 }
 
-it("the voice and call windows are refused every inbox act in the kind's own words, and the host is not asked", async () => {
-  for (const actor of [VOICE, CALL]) {
-    const { call, asked } = windowPort(actor);
-    for (const act of ACTS) {
-      assert.deepEqual(await call(act.kind, act.payload), { refused: REFUSAL[act.kind] });
-    }
-    assert.deepEqual(asked, []);
+it("a window that is not a panel is refused every inbox act in the kind's own words, and the host is not asked", async () => {
+  const { call, asked } = windowPort(OTHER_WINDOW);
+  for (const act of ACTS) {
+    assert.deepEqual(await call(act.kind, act.payload), { refused: REFUSAL[act.kind] });
   }
+  assert.deepEqual(asked, []);
 });
 
 it("a frame this build does not trust is refused every inbox act, even as a panel, and the host is not asked", async () => {
@@ -451,7 +448,7 @@ it("a panel's inbox stream follows the inbox at the host, hears each change told
   assert.deepEqual(asked, ["follow", "unfollow"]);
 });
 
-it("the voice window is refused an inbox stream, and the host follows nothing", async () => {
+it("a window that is not a panel is refused an inbox stream, and the host follows nothing", async () => {
   const asked: string[] = [];
   // SAFETY: the stream reaches the follow asks alone.
   const host = {
@@ -462,7 +459,7 @@ it("the voice window is refused an inbox stream, and the host follows nothing", 
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
   await assert.rejects(
-    port.as(VOICE)[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]({
+    port.as(OTHER_WINDOW)[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]({
       kind: INBOX_SCOPE_KIND.PLAN,
       id: TASK_ID,
     }),

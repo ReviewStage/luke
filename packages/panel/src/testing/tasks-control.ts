@@ -60,7 +60,13 @@ export function pushedTranscripts(
 }
 
 export function waitingOf(item: InboxItem): AppInboxWaitingItem {
-  return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
+  const waiting = {
+    id: item.id,
+    agentId: item.agentId,
+    title: item.title,
+    postedAt: item.postedAt,
+  };
+  return item.channelId === undefined ? waiting : { ...waiting, channelId: item.channelId };
 }
 
 /** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
@@ -151,7 +157,6 @@ export function codingAgentsControl(
       busy: false,
       onPress: () => Promise.resolve(undefined),
     },
-    startCall: undefined,
     onStop: () => Promise.resolve(),
     onRewind: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -239,8 +244,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-    calls: undefined,
-    live: false,
     mainTabs: {
       tabs: [],
       tab: undefined,
@@ -401,8 +404,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
       tasks: [],
       onShowMention: ignore,
-      linearIssuesIn: () => undefined,
-      githubIssuesIn: () => undefined,
     },
     onLeaveTask: ignore,
     onRenameTask: () => Promise.resolve(true),

@@ -192,7 +192,9 @@ import {
  * (`APP_COMMAND.COMMENT_ON_SELECTION`). In the open editor the format
  * toolbar over the words selected takes the bubble's place, its Comment
  * starting the thread (`useEditorComment`), so two surfaces never stand over
- * one selection. Its words are
+ * one selection; and in a plan the reader may edit, words a press selects in
+ * the read view open the editor on them (`clickPlacement`), so the bubble
+ * stands there only until the press ends. Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
@@ -521,19 +523,20 @@ function CommentEntry({
   const menu = useMenu(true);
   const trigger = menu.trigger();
   const mine = writtenByReader(entry, doors.me);
+  // Note that a reply copies its thread's link, since a link names a comment thread and no comment of one (`LINK_PLACE.COMMENT`).
+  const copies: MenuAction[] = copyLink === undefined ? [] : [copyLink];
+  const edits: MenuAction[] = mine
+    ? [
+        {
+          label: COMMENT_WORDS.EDIT,
+          icon: <GLYPH.RENAME />,
+          onSelect: () =>
+            setEditing(edited.draft.text === "" ? (entry.words ?? "") : edited.draft.text),
+        },
+      ]
+    : [];
   // Note that a thread's starter deletes it whole, or any member where Luke or an agent started it, as the service holds it to.
-  const items: MenuAction[] = [
-    ...(copyLink === undefined ? [] : [copyLink]),
-    ...(mine
-      ? [
-          {
-            label: COMMENT_WORDS.EDIT,
-            icon: <GLYPH.RENAME />,
-            onSelect: () =>
-              setEditing(edited.draft.text === "" ? (entry.words ?? "") : edited.draft.text),
-          },
-        ]
-      : []),
+  const deletes: MenuAction[] = [
     ...(mine && !first
       ? [
           {
@@ -555,6 +558,7 @@ function CommentEntry({
         ]
       : []),
   ];
+  const groups = [copies, edits, deletes].filter((group) => group.length > 0);
   const settle = first && openThread(thread);
   // Note that the check is busy from its press until the service answers, so a slow answer is seen working, and a refusal is the thread's note to say.
   const settling = useBusyPress(() =>
@@ -641,12 +645,15 @@ function CommentEntry({
                   />
                 </Tooltip>
               ) : null}
-              <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
-              {menu.drawn === undefined ? null : (
+              {/* Note that a comment offering nothing draws no ⋯, rather than one opening an empty menu. */}
+              {groups.length === 0 ? null : (
+                <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
+              )}
+              {groups.length === 0 || menu.drawn === undefined ? null : (
                 <ActionMenu
                   label={moreLabel(COMMENT_WORDS.THING)}
                   menu={menu.drawn}
-                  groups={[items]}
+                  groups={groups}
                   onClose={menu.close}
                 />
               )}

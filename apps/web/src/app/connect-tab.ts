@@ -2,7 +2,7 @@
  * connect-tab.ts -- a connect's address opened in a tab the press itself opened, since the service names it only once asked, and in this tab, coming back through its landing, where the browser refused one.
  *
  * A connect (an integration's sign-in, the account's GitHub, a workspace's
- * GitHub or Linear) asks the service for the address to open, and the
+ * GitHub) asks the service for the address to open, and the
  * browser lets a page open a tab only within a moment of a press, which the
  * answer may arrive after. So the press opens an empty tab at once, while
  * it still may, and the address lands in that tab when it comes, keeping
@@ -115,7 +115,6 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
     const account = client[TASKS_ACT_KIND.GITHUB_CONNECT];
     const integration = client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT];
     const github = client[WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT];
-    const linear = client[WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT];
     // SAFETY: every procedure the contract names is read off the client, so this answers each one the client does.
     const procedures = Object.fromEntries(
       Object.keys(actContract).map((kind) => [kind, client[kind as keyof ActPortClient]]),
@@ -128,8 +127,6 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
         press(() => integration(...args)),
       [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT]: (...args: Parameters<typeof github>) =>
         press(() => github(...args)),
-      [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT]: (...args: Parameters<typeof linear>) =>
-        press(() => linear(...args)),
     };
   };
 

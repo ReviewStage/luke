@@ -18,7 +18,7 @@ import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { ROW_RUN, withRowMoves } from "./row-moves.js";
 
 /**
@@ -113,7 +113,7 @@ export function MenuTab({
   groups,
   ...tab
 }: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu" | "menu" | "hint"> & {
-  groups: MenuAction[][];
+  groups: MenuEntry[][];
 }): React.JSX.Element {
   const menu = useMenu(true);
   const placeOf = useContext(TabPlaceContext);

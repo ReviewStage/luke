@@ -114,7 +114,6 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   const { readerId, account: _account, ...rest } = drawn;
   const body = createElement(PlanBody, {
     task,
-    live: false,
     reader: { readerId },
     ...rest,
   });
@@ -164,7 +163,7 @@ function cardOf(
 }
 
 test("the saved body is drawn as Markdown", () => {
-  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK, live: false }));
+  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
 
   assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
@@ -407,7 +406,7 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(dismissed, 1);
 });
 
-test("a plan read and not edited names itself by one h1, its title, with the title's ⋯ at the end of its line", async () => {
+test("a plan read and not edited names itself by one h1, its title, with its Copy link button at the end of its line", async () => {
   const view = await draw(TASK, {
     sectionLinks: {
       workspace: "acme",
@@ -418,13 +417,13 @@ test("a plan read and not edited names itself by one h1, its title, with the tit
   });
 
   const headings = view.querySelectorAll("h1");
-  const more = view.querySelector('[aria-label="Title actions"]');
+  const more = view.querySelector('.luke-page-header-actions [aria-label="Copy link"]');
 
   assert.equal(headings.length, 1, "the plan page names itself once");
   assert.equal(headings[0]?.textContent, TASK.name);
   assert.ok(
     more?.closest(".luke-page-header-actions"),
-    "the title carries its ⋯ in the header's acts",
+    "the title carries its Copy link button in the header's acts",
   );
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);
 });

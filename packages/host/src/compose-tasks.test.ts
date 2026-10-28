@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
@@ -20,12 +19,7 @@ import {
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import {
-  type GitHubRepositoryIssuesAnswer,
-  ISSUE_STATE,
-  type RepositoryIssuesAsk,
-} from "@luke/features/github-repositories-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   PAGE_SHOWER,
@@ -42,12 +36,6 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
-import {
-  TASK_ISSUE_LINK_REFUSAL,
-  TASK_ISSUE_PROVIDER,
-  TASK_ISSUE_RELATION,
-  type TaskIssueLinkView,
-} from "@luke/features/task-issue-wire";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -180,11 +168,6 @@ interface FakeService extends TasksClient {
   pullRequestGate: Deferred.Deferred<void> | undefined;
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
-  /** What a repository's issues read answers, by workspace and repository, and each ask it heard. */
-  repositoryIssues: Record<string, Record<string, GitHubRepositoryIssuesAnswer>>;
-  issueAsks: RepositoryIssuesAsk[];
-  /** Each task's linked issues, by task id; a task with none named is none the account reaches. */
-  issueLinks: Record<string, TaskIssueLinkView[]>;
   /** The newest page of the history, for any task; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -242,8 +225,6 @@ interface FakeService extends TasksClient {
   members: Record<string, WorkspaceMember[]>;
   /** Who each workspace's work names but left, as the service answers beside its members. */
   former: Record<string, FormerMember[]>;
-  /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
-  linearIssues: Record<string, LinearIssueSummary[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -327,7 +308,6 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
       own: each.id === PERSONAL.id,
       personal: each.personal === true,
       role: each.role,
-      linearActive: each.linear?.active ?? null,
       memberCount: each.memberCount ?? 1,
       photoVersion: each.photoVersion ?? null,
       ownerImage: null,
@@ -342,7 +322,6 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
   };
 }
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
-const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -461,9 +440,6 @@ function fakeService(tasks: Task[]): FakeService {
     pullRequestQuota: undefined,
     pullRequestGate: undefined,
     issues: {},
-    repositoryIssues: {},
-    issueAsks: [],
-    issueLinks: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -543,7 +519,6 @@ function fakeService(tasks: Task[]): FakeService {
     renameAnswered: Effect.void,
     members: {},
     former: {},
-    linearIssues: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -685,33 +660,6 @@ function fakeService(tasks: Task[]): FakeService {
             each.id === workspaceId ? now : each,
           );
           return { ok: true, answer: now } as const;
-        }),
-      linearConnect: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-connect:${workspaceId}`);
-          return service.notPermitted
-            ? NOT_PERMITTED_WORKSPACE
-            : ({ ok: true, answer: LINEAR_SIGN_IN_URL } as const);
-        }),
-      linearDisconnect: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-disconnect:${workspaceId}`);
-          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
-          const found = service.memberships.find((each) => each.id === workspaceId);
-          if (found === undefined) return UNANSWERED_WORKSPACE;
-          const { linear: _gone, ...now } = found;
-          service.memberships = service.memberships.map((each) =>
-            each.id === workspaceId ? now : each,
-          );
-          return { ok: true, answer: now } as const;
-        }),
-      linearIssues: ({ workspaceId, query }) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-issues:${workspaceId}:${query ?? ""}`);
-          const issues = service.linearIssues[workspaceId];
-          return issues === undefined
-            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
-            : ({ ok: true, answer: issues } as const);
         }),
       sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
@@ -879,58 +827,8 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
-    readRepositoryIssues: (place, ask) =>
-      Effect.sync(() => {
-        service.issueAsks.push(ask);
-        return service.repositoryIssues[place.workspaceId]?.[place.repository];
-      }),
     readBrowserTabs: () => Effect.succeed({ tabs: [] }),
     openBrowserTab: () => Effect.succeed({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED }),
-    readIssueLinks: (taskId) =>
-      Effect.sync(() => {
-        const issues = service.issueLinks[taskId];
-        return issues === undefined ? { failure: TASK_CALL_FAILURE.NOT_FOUND } : { issues };
-      }),
-    // The service links a Linear issue under its own id, and refuses one the task links already.
-    linkIssue: (taskId, issue) =>
-      Effect.sync(() => {
-        const issues = service.issueLinks[taskId];
-        if (issues === undefined) return { failure: TASK_CALL_FAILURE.NOT_FOUND };
-        const externalId =
-          issue.provider === TASK_ISSUE_PROVIDER.LINEAR ? issue.id : `${issue.number}`;
-        if (issues.some((each) => each.externalId === externalId)) {
-          return { refused: TASK_ISSUE_LINK_REFUSAL.LINKED };
-        }
-        const made: TaskIssueLinkView = {
-          id: randomUUID(),
-          provider: issue.provider,
-          externalId,
-          key: externalId,
-          url: `https://linear.app/acme/issue/${externalId}`,
-          title: externalId,
-          relation: issue.relation ?? TASK_ISSUE_RELATION.CLOSES,
-        };
-        issues.push(made);
-        return { issue: made };
-      }),
-    relateIssue: (taskId, linkId, relation) =>
-      Effect.sync(() => {
-        const link = service.issueLinks[taskId]?.find((each) => each.id === linkId);
-        if (link === undefined) return { failure: TASK_CALL_FAILURE.NOT_FOUND };
-        const related = { ...link, relation };
-        service.issueLinks[taskId] = (service.issueLinks[taskId] ?? []).map((each) =>
-          each.id === linkId ? related : each,
-        );
-        return { issue: related };
-      }),
-    unlinkIssue: (taskId, linkId) =>
-      Effect.sync(() => {
-        const issues = service.issueLinks[taskId] ?? [];
-        if (!issues.some((each) => each.id === linkId))
-          return { failure: TASK_CALL_FAILURE.NOT_FOUND };
-        service.issueLinks[taskId] = issues.filter((each) => each.id !== linkId);
-        return { unlinked: true as const };
-      }),
     historyLive: (taskId, _userId, poll, after) =>
       Effect.suspend((): ReturnType<TasksClient["historyLive"]> => {
         const read = service.historyLives[taskId];
@@ -3057,134 +2955,6 @@ it.effect(
       assert.deepEqual(refused, { failure: TASK_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(stillRefused, { failure: TASK_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(read, titled(8, "Resend an invite"));
-    }),
-);
-
-it.effect(
-  "a repository's issues are read with the number or the words asked, an installation granting none is answered so, a service that did not answer as unanswered, and nothing is told in the view",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      service.repositoryIssues[ACME.id] = {
-        "acme/relay": { issues: [] },
-        "acme/ledger": {
-          ungranted: { settingsUrl: "https://github.com/settings/installations/1" },
-        },
-      };
-      const { call, told } = yield* subject(service);
-      const asked = (repository: string, more: RepositoryIssuesAsk = {}) =>
-        call(GATEWAY_METHOD.TASKS_GITHUB_ISSUES, { workspaceId: ACME.id, repository, ...more });
-
-      const listed = yield* asked("acme/relay");
-      yield* asked("acme/relay", { query: "invite" });
-      yield* asked("acme/relay", { number: 7 });
-      const ungranted = yield* asked("acme/ledger");
-      const unanswered = yield* asked("acme/gone");
-
-      assert.deepEqual(listed, { issues: [] });
-      assert.deepEqual(ungranted, {
-        ungranted: { settingsUrl: "https://github.com/settings/installations/1" },
-      });
-      assert.deepEqual(unanswered, { failure: TASK_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(service.issueAsks, [{}, { query: "invite" }, { number: 7 }, {}, {}]);
-      assert.equal(told.length, 0, "issues are never told in the view");
-    }),
-);
-
-it.effect(
-  "a task's linked issues are read, linked, related, and unlinked through the service and answered to the page that asked, a link refused or a task out of reach answered so, nothing told in the view, and nothing asked behind a closed gate",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      const taskId = randomUUID();
-      service.issueLinks[taskId] = [];
-      const open = yield* subject(service);
-      const shut = yield* subject(service, { signedIn: false });
-      const linear = { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "ENG-42" };
-
-      const linked = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, { taskId, issue: linear });
-      const twice = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, { taskId, issue: linear });
-      const linkId = service.issueLinks[taskId]?.[0]?.id ?? assert.fail("nothing was linked");
-      const related = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
-        taskId,
-        linkId,
-        relation: TASK_ISSUE_RELATION.PART_OF,
-      });
-      const read = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId });
-      const standing = [...(service.issueLinks[taskId] ?? [])];
-      const unlinked = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId, linkId });
-      const elsewhere = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, {
-        taskId: randomUUID(),
-      });
-      const unnamed = yield* Effect.exit(
-        open.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, { taskId, issue: { provider: "jira" } }),
-      );
-      const gated = yield* shut.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId });
-
-      assert.deepEqual(linked, { issue: { ...standing[0], relation: TASK_ISSUE_RELATION.CLOSES } });
-      assert.deepEqual(twice, { refused: TASK_ISSUE_LINK_REFUSAL.LINKED });
-      assert.deepEqual(related, { issue: standing[0] });
-      assert.deepEqual(read, { issues: standing });
-      assert.equal(standing[0]?.relation, TASK_ISSUE_RELATION.PART_OF);
-      assert.deepEqual(unlinked, { unlinked: true });
-      assert.deepEqual(service.issueLinks[taskId], []);
-      assert.deepEqual(elsewhere, { failure: TASK_CALL_FAILURE.NOT_FOUND });
-      assert.ok(Exit.isFailure(unnamed), "an issue is named by a provider the task links");
-      assert.deepEqual(gated, { failure: TASK_CALL_FAILURE.UNANSWERED });
-      assert.equal(open.told.length, 0, "a task's links are never told in the view");
-    }),
-);
-
-it.effect(
-  "a link made, related, and unlinked on a task's page lands on its row of the list in place, as the Board's tags, before Realtime delivers it and with nothing read again",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const service = fakeService([invites]);
-      service.issueLinks[INVITES] = [];
-      const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* listAnswers(service, { plans: [rowOfTask(invites)], agents: [], issues: [] });
-      const reads = [service.reads.length, service.liveListReads];
-      const tagsOf = () => last()?.tasks.find((each) => each.id === INVITES)?.issues;
-
-      yield* call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
-        taskId: INVITES,
-        issue: { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "ENG-42" },
-      });
-      yield* call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
-        taskId: INVITES,
-        issue: { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "ENG-7" },
-      });
-      const [first, second] = service.issueLinks[INVITES] ?? [];
-      assert.ok(first !== undefined && second !== undefined, "both were linked");
-      assert.deepEqual(
-        tagsOf()?.map(({ key, relation }) => [key, relation]),
-        [
-          ["ENG-42", TASK_ISSUE_RELATION.CLOSES],
-          ["ENG-7", TASK_ISSUE_RELATION.CLOSES],
-        ],
-      );
-
-      yield* call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
-        taskId: INVITES,
-        linkId: second.id,
-        relation: TASK_ISSUE_RELATION.PART_OF,
-      });
-      assert.equal(tagsOf()?.[1]?.relation, TASK_ISSUE_RELATION.PART_OF);
-
-      yield* call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId: INVITES, linkId: first.id });
-      assert.deepEqual(
-        tagsOf()?.map(({ key }) => key),
-        ["ENG-7"],
-      );
-      yield* call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId: INVITES, linkId: second.id });
-      assert.equal(tagsOf(), undefined, "a task left linking nothing names no tags");
-      assert.deepEqual(
-        [service.reads.length, service.liveListReads],
-        reads,
-        "the list is not read again",
-      );
     }),
 );
 

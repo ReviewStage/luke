@@ -17,7 +17,7 @@ import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
-import { documentWordsUnder, editsOnClick } from "./plan-document-editor.js";
+import { clickPlacement, documentWordsAt } from "./plan-document-editor.js";
 import {
   PullRequestWriteNote,
   usePullRequestWrites,
@@ -344,9 +344,12 @@ export function PullRequestDescription({
         onPointerEnter={prefetchEditorBundle}
         onFocus={prefetchEditorBundle}
         onPress={({ target, x, y, block: pressed }) => {
-          if (editing.kind !== EDITING.CLOSED || !editsOnClick(target)) return;
+          if (editing.kind !== EDITING.CLOSED) return;
           // Note that the caret is placed by the words the click landed on, since the editor may draw what stands above them at another height, an alert say.
-          open({ x, y, words: documentWordsUnder(pressed, x, y) });
+          const placement = clickPlacement(target, x, y, (range) =>
+            documentWordsAt(pressed, range),
+          );
+          if (placement !== undefined) open(placement);
         }}
         onOpen={() => {
           if (editing.kind === EDITING.CLOSED) open(PLACEMENT_END);

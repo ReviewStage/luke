@@ -143,9 +143,10 @@ const TASKS = [
 ];
 
 /**
- * Main's read of the open items: two questions on the invitations' task;
- * on Safari's a notice and a question of Charles's agent, which wait on no
- * one but him; and one question on billing's.
+ * Main's read of the open items that wait on the reader: two questions on
+ * the invitations' task; on Safari's a notice, beside a question of
+ * Charles's agent that waits on him alone, so main lists it nowhere and
+ * counts it only among the task's items; and one question on billing's.
  */
 const WAITING: readonly AppInboxTask[] = [
   {
@@ -163,10 +164,7 @@ const WAITING: readonly AppInboxTask[] = [
   },
   {
     taskId: "t-42",
-    items: [
-      { id: "i-3", agentId: "a-2", title: "Safari fixed", postedAt: 1, asking: false },
-      { id: "i-4", agentId: "a-3", title: "Which browsers?", postedAt: 1, asking: true },
-    ],
+    items: [{ id: "i-3", agentId: "a-2", title: "Safari fixed", postedAt: 1, asking: false }],
   },
   {
     taskId: "t-40",

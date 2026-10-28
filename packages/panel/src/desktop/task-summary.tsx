@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -7,7 +7,11 @@ import {
   Card,
   cn,
   GAP,
+  GROUP_HEADING,
+  GROUP_SURFACE,
+  GroupHeader,
   IconButton,
+  InlineEdit,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
   List,
@@ -19,14 +23,13 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   Stack,
-  TEXT_VARIANT,
-  Text,
   Tooltip,
   usePressAway,
 } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { Schema } from "effect";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -37,19 +40,22 @@ import {
   useRef,
   useState,
 } from "react";
-import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
+import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { ArchivedAgents, SUMMARY_GLYPH, useAgentArchive } from "./agent-archive.js";
+import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
+import { ArchivedAgents, SUMMARY_GLYPH } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry, ROW_COUNT } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
+import { type CountNoun, foldedCount, sidebarFold } from "./sidebar-fold.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
 
@@ -68,7 +74,10 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * panel on its tab, and an agent chooses its tab in the
  * column. An agent's row offers Archive on a right-click, and the
  * agents archived are folded under Archived at the foot of Coding agents
- * (`agent-archive.tsx`).
+ * (`agent-archive.tsx`). Each heading folds its rows away as the
+ * sidebar's groups fold (`GroupHeader`), counting them while folded, and
+ * which headings are folded is one choice for every task's summary, kept
+ * on this Mac.
  *
  * A plan with nothing yet to list draws no summary at all, rail, card, or
  * toolbar button, rather than one saying so; it stands once the plan holds
@@ -79,8 +88,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * where the column has room to keep the document at its measure beside it,
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
- * agent's transcript, and the call bar's row under them, centred again in
- * the room it leaves, with a chevron at its top right, shown while the
+ * agent's transcript, centred again in the room it leaves, with a chevron at its top right, shown while the
  * pointer or the keys are on it, that collapses it from the very spot the
  * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a
@@ -103,7 +111,11 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * kept from when unpinning hid the summary now reads collapsed, the nearest
  * thing to hidden the summary still has.
  */
-const KEPT = { PINNED: keptKey("luke.summary-pinned", keptFlag) } as const;
+const KEPT = {
+  PINNED: keptKey("luke.summary-pinned", keptFlag),
+  /** The headings the reader folded, one choice for every task's summary. */
+  FOLDED: keptKey("luke.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
+} as const;
 
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
@@ -152,6 +164,19 @@ const SECTION_ORDER = [
   ADD_SECTION.PULL_REQUESTS,
   ADD_SECTION.PAGES,
 ] as const;
+
+type SummaryHeading = (typeof SECTION_ORDER)[number];
+
+/** What a folded heading's count is read as. */
+const SECTION_NOUN = {
+  [TABS_SECTION]: { one: "tab", many: "tabs" },
+  [AGENTS_SECTION]: { one: "agent", many: "agents" },
+  [ADD_SECTION.PULL_REQUESTS]: { one: "pull request", many: "pull requests" },
+  [ADD_SECTION.PAGES]: { one: "page", many: "pages" },
+} as const satisfies Record<SummaryHeading, CountNoun>;
+
+/** No heading folded, as the summary first stands. */
+const NONE_FOLDED: readonly string[] = [];
 
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
@@ -313,7 +338,7 @@ interface SummaryEntry extends AddEntry {
 
 /** A heading and the rows under it. */
 interface SummarySection<Entry extends AddEntry = SummaryEntry> {
-  heading: string;
+  heading: SummaryHeading;
   entries: readonly Entry[];
 }
 
@@ -486,21 +511,35 @@ function SummaryRow({
   entry,
   onPick,
   menu,
+  editor,
+  description,
+  rowRef,
 }: {
   entry: SummaryEntry;
   onPick: () => void;
   menu?: ListRowMenu | undefined;
+  /** The field the row's name is edited in, in its title's place while a Rename is open. */
+  editor?: ReactNode;
+  /** What stands under the title, in the row's own detail's place: a refused rename's note. */
+  description?: ReactNode;
+  rowRef?: ((element: HTMLElement | null) => void) | undefined;
 }) {
+  const editing = editor !== undefined;
   return (
     <RowHintOptions card={entry.card} cardBeside>
       <ListRow
+        ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
-        title={entry.row.label}
-        description={entry.row.detail}
-        meta={entry.endMark}
-        hint={entry.card === undefined ? undefined : { Hint: RowHint, label: entry.row.label }}
-        onPress={onPick}
-        menu={menu}
+        title={editing ? editor : entry.row.label}
+        description={description ?? entry.row.detail}
+        meta={editing ? null : entry.endMark}
+        hint={
+          entry.card === undefined || editing
+            ? undefined
+            : { Hint: RowHint, label: entry.row.label }
+        }
+        onPress={editing ? undefined : onPick}
+        menu={editing ? undefined : menu}
       />
     </RowHintOptions>
   );
@@ -509,7 +548,13 @@ function SummaryRow({
 /** What an agent's row is, naming its ⋯ and menu "Agent actions". */
 const AGENT_THING = "Agent";
 
-/** An agent's row, whose ⋯, right-click and menu key offer Copy link and Archive, asking first while the agent still works. */
+/**
+ * An agent's row, whose ⋯, right-click and menu key offer the agent's one
+ * menu over the doors a row has (`agent-actions.tsx`): Copy link, Rename,
+ * which turns the row into its name's field as the sidebar's rows do, Archive,
+ * asking first while a teammate's agent still works, and Permanently
+ * delete, asked first; Show details among them where the row hangs a card.
+ */
 function AgentSummaryRow({
   entry,
   agent,
@@ -523,20 +568,42 @@ function AgentSummaryRow({
   shown: boolean;
   onPick: () => void;
 }) {
-  const archive = useAgentArchive(agent, agents, shown);
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const row = useRef<HTMLElement | null>(null);
+  const hold = useCallback((element: HTMLElement | null) => {
+    row.current = element;
+  }, []);
+  const actions = useAgentActions(agent, agents, {
+    label: entry.row.label,
+    shown,
+    terminals: { onOpenTerminal: undefined },
+  });
+  const { rename } = actions;
+  const editing = rename?.editing === true;
+  const endedByKey = useRefocusAfterEdit(editing, row);
   return (
     <>
       <SummaryRow
         entry={entry}
         onPick={onPick}
-        menu={rowMenu(
-          AGENT_THING,
-          copyLink === undefined ? [[archive.action]] : [[copyLink], [archive.action]],
-          shown,
-        )}
+        rowRef={hold}
+        menu={rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), shown)}
+        editor={
+          editing && rename !== undefined ? (
+            <InlineEdit
+              value={rename.asked ?? entry.row.label}
+              label="Agent name"
+              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              editing
+              onEnd={(edit) => {
+                endedByKey(edit.byKey);
+                rename.end(edit.value);
+              }}
+            />
+          ) : undefined
+        }
+        description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
       />
-      {archive.dialog}
+      {actions.dialog}
     </>
   );
 }
@@ -556,7 +623,7 @@ function RailRow({ entry }: { entry: AddEntry }) {
   );
 }
 
-/** The summary's headings and rows, as the column and the card list them, an agent's row with its menu and the archived agents' fold under Coding agents; `onPicked` hears a row chosen before it opens. */
+/** The summary's headings and rows, as the column and the card list them, each heading folding its rows as the sidebar's groups fold, an agent's row with its menu and the archived agents' fold under Coding agents; `onPicked` hears a row chosen before it opens. */
 function SummaryList({
   sections,
   agents,
@@ -569,39 +636,53 @@ function SummaryList({
   shown: boolean;
   onPicked?: () => void;
 }): React.JSX.Element {
+  const [folded, , changeFolded] = useKept(KEPT.FOLDED, NONE_FOLDED);
+  const toggle = (heading: SummaryHeading) =>
+    changeFolded((kept) =>
+      kept.includes(heading) ? kept.filter((each) => each !== heading) : [...kept, heading],
+    );
   return (
     <>
-      {sections.map(({ heading, entries }) => (
-        <div key={heading} className="task-summary-section">
-          <Text
-            variant={TEXT_VARIANT.GROUP}
-            className="section-heading m-0 mb-tight-gap px-row-inset"
-          >
-            {heading}
-          </Text>
-          <List label={heading} density={LIST_DENSITY.DENSE}>
-            {entries.map((entry) => {
-              const onPick = () => {
-                onPicked?.();
-                entry.onPick();
-              };
-              return entry.agent === undefined ? (
-                <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
-              ) : (
-                <AgentSummaryRow
-                  key={entry.row.id}
-                  entry={entry}
-                  agent={entry.agent}
-                  agents={agents}
-                  shown={shown}
-                  onPick={onPick}
-                />
-              );
-            })}
-          </List>
-          {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
-        </div>
-      ))}
+      {sections.map(({ heading, entries }) => {
+        const isFolded = folded.includes(heading);
+        return (
+          <div key={heading} className="task-summary-section">
+            <GroupHeader
+              heading={GROUP_HEADING.NONE}
+              surface={GROUP_SURFACE.NARROW}
+              label={heading}
+              fold={sidebarFold(isFolded, () => toggle(heading))}
+              count={
+                entries.length === 0
+                  ? undefined
+                  : foldedCount(isFolded, entries.length, SECTION_NOUN[heading])
+              }
+            >
+              <List label={heading} density={LIST_DENSITY.DENSE}>
+                {entries.map((entry) => {
+                  const onPick = () => {
+                    onPicked?.();
+                    entry.onPick();
+                  };
+                  return entry.agent === undefined ? (
+                    <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
+                  ) : (
+                    <AgentSummaryRow
+                      key={entry.row.id}
+                      entry={entry}
+                      agent={entry.agent}
+                      agents={agents}
+                      shown={shown}
+                      onPick={onPick}
+                    />
+                  );
+                })}
+              </List>
+              {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
+            </GroupHeader>
+          </div>
+        );
+      })}
     </>
   );
 }

@@ -904,7 +904,6 @@ it.layer(getTestDB())("the runner events route", (it) => {
         yield* recordNativeTurnHanded(agent.target, {
           task: "task-key",
           spoken: true,
-          callWords: true,
           opened: true,
         });
 
@@ -921,7 +920,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
           [TURN_STATUS.FAILED, "input_closed"],
         ]);
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
-        // Only the last turn's kind stands, so the next message hands the call's words and the task again.
+        // Only the last turn's kind stands, so the next message says the call's words no longer hold and hands the task again.
         assert.deepEqual(yield* readNativeTurnHanded(agent.target), { spoken: true });
       }),
   );

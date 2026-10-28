@@ -72,7 +72,6 @@ export interface EditComposerDoors {
   readonly doors: PublishedDoors;
   readonly keywords?: readonly string[] | undefined;
   readonly skills?: SkillSource | undefined;
-  readonly dictates: boolean;
   /** Whether messages follow the line, which its send drops, so Send asks first. */
   readonly cuts: boolean;
   /** What the send drops of other members' messages, as "2 messages from Sam"; none where it drops none of theirs. */
@@ -232,7 +231,6 @@ export function EditComposer({
         onStop={() => Promise.resolve()}
         keywords={edit.keywords}
         skills={edit.skills}
-        dictates={edit.dictates}
         sendable={!line.reading}
         onLeave={edit.onCancel}
         beforeSend={() => (

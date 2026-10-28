@@ -23,16 +23,21 @@ import {
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
+  invitationSync,
   macCommandSync,
   memberSync,
+  planRevisionSync,
   repositoryPinSync,
   taskSectionEntrySync,
   taskSectionSync,
   taskSync,
   userSync,
 } from "@luke/database/sync/tables";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { Option } from "effect";
+import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
+import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import {
   accountInboxLiveStatements,
   channelsLiveStatements,
@@ -110,7 +115,7 @@ const ITEM_GATES = [memberSync, githubPersonalTokenSync, githubRepositoryReadSyn
  */
 export const inboxLive = defineLiveQuery({
   name: "inbox",
-  params: ["userId"],
+  params: ["userId", "repositoryless"],
   reads: [
     inboxItemSync,
     inboxItemReadSync,
@@ -121,9 +126,10 @@ export const inboxLive = defineLiveQuery({
     ...ITEM_GATES,
   ],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) =>
+  // Note that an agent with no repository is carried only to a reader that asks (`ACCOUNT_INBOX_REPOSITORYLESS`), since a build before it fails its whole read on one null.
+  statements: ({ userId, repositoryless }) =>
     Option.zipWith(
-      accountInboxLiveStatements(userId),
+      accountInboxLiveStatements(userId, repositoryless === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
       ownFailedRunsLiveStatement(userId),
       (parts, failedRuns) => ({ ...parts, failedRuns }),
     ),
@@ -187,6 +193,45 @@ export const channelsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/**
+ * A workspace's people, its members and who its work names but left, woken
+ * on the workspace's topic by a membership, a member's account, and the work
+ * that names a former member. Note that a plan revision wakes nothing here,
+ * since it only decides who counts as a former member and the change that
+ * moves that, its task deleted, wakes the workspace through the task; nor
+ * does a former member renaming themselves, who is in no membership the
+ * account's write looks up: both show at the hold's end.
+ */
+export const workspaceMembersLive = defineLiveQuery({
+  name: "workspaceMembers",
+  params: ["userId", "workspaceId"],
+  reads: [
+    memberSync,
+    userSync,
+    taskSync,
+    codingAgentSync,
+    automationSync,
+    planRevisionSync,
+    inboxItemSync,
+  ],
+  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
+  statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** A workspace's pending invitations, to an owner or an admin of it, woken on the workspace's topic by an invitation or a membership. */
+export const workspaceInvitationsLive = defineLiveQuery({
+  name: "workspaceInvitations",
+  params: ["userId", "workspaceId"],
+  reads: [invitationSync, memberSync],
+  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
+  statements: ({ userId, workspaceId }) =>
+    Option.map(workspaceInvitationsLiveStatement(userId, workspaceId), (invitations) => ({
+      invitations,
+    })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
   macCommandsLive,
@@ -194,4 +239,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskInboxLive,
   agentInboxLive,
   channelsLive,
+  workspaceMembersLive,
+  workspaceInvitationsLive,
 ]);

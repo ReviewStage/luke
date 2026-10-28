@@ -15,7 +15,7 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { deviceAgentLine } from "../../schemas/device-agent.js";
+import { deviceAgentLine, deviceAgentRequest } from "../../schemas/device-agent.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import {
@@ -43,7 +43,8 @@ import { beatDevice, registerDevice } from "../device-store.js";
  * once with its secrets cleared in the claim, or again under the token its
  * claim carried but never with its secrets twice, and settled once with its
  * runner's exit; a request is claimed once and answered once, its answer
- * read back as the Mac gave it; nothing is queued for, claimed by, or read
+ * read back as the Mac gave it, and one of a kind this build no longer
+ * knows is passed over rather than failing the read; nothing is queued for, claimed by, or read
  * by another account; a discard line goes only to a Mac that registered it
  * takes one; the expiry withdraws old work but a runner still at work; and
  * a device whose lease lapsed has its open launches read, bounded, and
@@ -54,11 +55,9 @@ import { beatDevice, registerDevice } from "../device-store.js";
 
 const SEALED = "sealed:v1:not-a-real-secret";
 
-const COMMAND_ANSWER: DeviceAgentAnswer = {
-  kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-  exitCode: 0,
-  stdout: "line one\n",
-  stderr: "",
+const FILE_ANSWER: DeviceAgentAnswer = {
+  kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+  bytes: new TextEncoder().encode("line one\n"),
 };
 
 /** An account holding a Mac and an agent pinned to it, or running in a sandbox where asked. */
@@ -271,8 +270,8 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         yield* queueDeviceAgentRequest(owner.userId, {
           id: requestId,
           agentId: owner.agentId,
-          kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-          args: { command: "git status" },
+          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+          args: { path: "notes.txt" },
         });
 
         const queuedByOther = yield* queueDeviceAgentLine(
@@ -314,9 +313,9 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           other.userId,
           owner.deviceId,
           requestId,
-          COMMAND_ANSWER,
+          FILE_ANSWER,
         );
-        yield* answerDeviceAgentRequest(owner.userId, owner.deviceId, requestId, COMMAND_ANSWER);
+        yield* answerDeviceAgentRequest(owner.userId, owner.deviceId, requestId, FILE_ANSWER);
 
         assert.deepEqual(queuedByOther, Option.none());
         assert.equal(requestedByOther, false);
@@ -330,7 +329,7 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         assert.deepEqual(yield* deviceAgentRequestAnswer(other.userId, requestId), Option.none());
         assert.deepEqual(
           yield* deviceAgentRequestAnswer(owner.userId, requestId),
-          Option.some(COMMAND_ANSWER),
+          Option.some(FILE_ANSWER),
         );
       }),
   );
@@ -366,79 +365,99 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
     }),
   );
 
+  it.effect("a request is answered once, after its claim, and read back as given", () =>
+    Effect.gen(function* () {
+      const { userId, deviceId, agentId } = yield* openAccount();
+      const id = randomUUID();
+      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+      yield* queueDeviceAgentRequest(userId, {
+        id,
+        agentId,
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+        args: { path: "shot.png" },
+      });
+
+      const answeredUnclaimed = yield* answerDeviceAgentRequest(userId, deviceId, id, {
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+        bytes,
+      });
+      const claimed = yield* claimDeviceAgentRequest(userId, deviceId, id);
+      const claimedAgain = yield* claimDeviceAgentRequest(userId, deviceId, id);
+      const answered = yield* answerDeviceAgentRequest(userId, deviceId, id, {
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+        bytes,
+      });
+      const answeredAgain = yield* answerDeviceAgentRequest(userId, deviceId, id, {
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+        bytes: null,
+      });
+
+      assert.equal(answeredUnclaimed, false, "nothing is answered before a Mac claims it");
+      assert.deepEqual(
+        Option.map(claimed, (request) => request.args),
+        Option.some({ path: "shot.png" }),
+      );
+      assert.deepEqual(claimedAgain, Option.none());
+      assert.equal(answered, true);
+      assert.equal(answeredAgain, false, "the first answer stands");
+      assert.deepEqual(
+        yield* deviceAgentRequestAnswer(userId, id),
+        Option.some({ kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE, bytes }),
+      );
+    }),
+  );
+
   it.effect(
-    "a request is answered once, after its claim, by an answer of its own kind, and read back as given",
+    "a waiting request of a kind this build no longer knows is passed over, so the requests after it still reach the Mac",
     () =>
       Effect.gen(function* () {
         const { userId, deviceId, agentId } = yield* openAccount();
+        const retired = randomUUID();
+        // A command request an earlier build queued and never withdrew, written as that build wrote it.
+        yield* Database.use((db) =>
+          db.insert(deviceAgentRequest).values({
+            id: retired,
+            agentId,
+            userId,
+            deviceId,
+            // SAFETY: the kind is one an earlier build wrote, which this build's type no longer names.
+            kind: "run_command" as never,
+            args: { command: "git status" },
+          }),
+        );
         const id = randomUUID();
-        const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
         yield* queueDeviceAgentRequest(userId, {
           id,
           agentId,
           kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
-          args: { path: "shot.png" },
+          args: { path: "notes.txt" },
         });
 
-        const answeredUnclaimed = yield* answerDeviceAgentRequest(userId, deviceId, id, {
-          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
-          bytes,
-        });
-        const claimed = yield* claimDeviceAgentRequest(userId, deviceId, id);
-        const claimedAgain = yield* claimDeviceAgentRequest(userId, deviceId, id);
-        const answeredAsCommand = yield* answerDeviceAgentRequest(
-          userId,
-          deviceId,
-          id,
-          COMMAND_ANSWER,
-        );
-        const answered = yield* answerDeviceAgentRequest(userId, deviceId, id, {
-          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
-          bytes,
-        });
-        const answeredAgain = yield* answerDeviceAgentRequest(userId, deviceId, id, {
-          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
-          bytes: null,
-        });
-
-        assert.equal(answeredUnclaimed, false, "nothing is answered before a Mac claims it");
         assert.deepEqual(
-          Option.map(claimed, (request) => request.args),
-          Option.some({ path: "shot.png" }),
+          (yield* deviceAgentRequestsWaiting(userId, deviceId)).map((request) => request.id),
+          [id],
         );
-        assert.deepEqual(claimedAgain, Option.none());
-        assert.equal(answeredAsCommand, false, "a command's answer never settles a read");
-        assert.equal(answered, true);
-        assert.equal(answeredAgain, false, "the first answer stands");
-        assert.deepEqual(
-          yield* deviceAgentRequestAnswer(userId, id),
-          Option.some({ kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE, bytes }),
-        );
+        assert.deepEqual(yield* claimDeviceAgentRequest(userId, deviceId, retired), Option.none());
       }),
   );
 
   it.effect("an answer past the bound in bytes is refused and writes nothing", () =>
     Effect.gen(function* () {
       const { userId, deviceId, agentId } = yield* openAccount();
-      // Note that the command's output is under the bound in characters, three bytes each.
-      const oversized: readonly DeviceAgentAnswer[] = [
-        {
-          kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
-          bytes: new Uint8Array(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 2),
-        },
-        { ...COMMAND_ANSWER, stdout: "€".repeat(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES / 2) },
-      ];
+      const oversized: DeviceAgentAnswer = {
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+        bytes: new Uint8Array(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 2),
+      };
+      const id = randomUUID();
+      yield* queueDeviceAgentRequest(userId, { id, agentId, kind: oversized.kind, args: {} });
+      yield* claimDeviceAgentRequest(userId, deviceId, id);
 
-      for (const answer of oversized) {
-        const id = randomUUID();
-        yield* queueDeviceAgentRequest(userId, { id, agentId, kind: answer.kind, args: {} });
-        yield* claimDeviceAgentRequest(userId, deviceId, id);
+      const answered = yield* Effect.exit(
+        answerDeviceAgentRequest(userId, deviceId, id, oversized),
+      );
 
-        const answered = yield* Effect.exit(answerDeviceAgentRequest(userId, deviceId, id, answer));
-
-        assert.equal(answered._tag, "Failure", answer.kind);
-        assert.deepEqual(yield* deviceAgentRequestAnswer(userId, id), Option.none());
-      }
+      assert.equal(answered._tag, "Failure");
+      assert.deepEqual(yield* deviceAgentRequestAnswer(userId, id), Option.none());
     }),
   );
 
@@ -452,8 +471,8 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       yield* queueDeviceAgentRequest(userId, {
         id: randomUUID(),
         agentId,
-        kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-        args: { command: "ls" },
+        kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+        args: { path: "notes.txt" },
       });
       yield* TestClock.adjust("10 minutes");
       const fresh = Option.getOrThrow(yield* queueDeviceAgentLine(userId, message(agentId, "new")));

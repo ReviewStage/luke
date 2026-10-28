@@ -29,7 +29,6 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
@@ -38,6 +37,7 @@ import {
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
+import { TURN_FAILURE } from "@luke/features/turn-run";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
@@ -350,7 +350,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           );
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
-          assert.equal(turn?.failure, BRAIN_REQUEST_FAILURE.SESSION_ENDED);
+          assert.equal(turn?.failure, TURN_FAILURE.SESSION_ENDED);
           assert.equal(
             ranDirectlyFolderOf(turn),
             deviceAgentLayout(DEVICE_LAYOUT.home, agent.id).checkoutPath,

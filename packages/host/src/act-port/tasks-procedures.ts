@@ -2,7 +2,7 @@
  * tasks-procedures.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds.
  *
  * The one check these procedures make is who asked. Only a panel draws the
- * Tasks tab, and the takeover and the hidden voice window draw no task, so
+ * Tasks tab, and the takeover and any other window draw no task, so
  * every one refuses them, in its own sentence. What the host does with an
  * ask (which task is active, what the service answers) is the host's to
  * decide, and comes back as the panel's own answer. Nothing is held here.
@@ -74,7 +74,6 @@ import {
   type TasksTreeParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
@@ -140,8 +139,6 @@ export interface TasksProceduresDependencies {
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
   serviceBaseUrl: string;
-  /** Tells the voice window, which owns the call, that an agent's Call button was pressed. */
-  talkTo: (about: VoiceCallAbout) => void;
 }
 
 /** The refusal a window that draws no Tasks tab hears, or nothing for a panel. */
@@ -366,21 +363,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         );
       },
     ),
-    // The press names its agent, and the task it is on where it is on one,
-    // whatever task the panel has open: a call is keyed by its agent. That
-    // the agent takes calls and is on the task named is checked as the
-    // call's session is created (`compose-live.ts`).
-    [TASKS_ACT_KIND.TASKS_TALK]: actPort[TASKS_ACT_KIND.TASKS_TALK].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      dependencies.talkTo({
-        agentId: input.agentId,
-        ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
-      });
-    }),
     [TASKS_ACT_KIND.TASKS_SET_STANDING]: actPort[TASKS_ACT_KIND.TASKS_SET_STANDING].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

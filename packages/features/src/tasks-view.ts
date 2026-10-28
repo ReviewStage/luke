@@ -10,18 +10,15 @@ import {
   tasklessAgentSchema,
 } from "./coding-agent-wire.js";
 import {
-  GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
   githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
   githubRepositoryIssueAnswerSchema,
-  githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
   pagePlaceSchema,
@@ -43,14 +40,6 @@ import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
-import {
-  taskIssueChoiceSchema,
-  taskIssueLinkAnswerSchema,
-  taskIssueLinkChangedAnswerSchema,
-  taskIssueLinksAnswerSchema,
-  taskIssueRelationSchema,
-  taskIssueUnlinkAnswerSchema,
-} from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   planRevisionAnswerSchema,
@@ -58,7 +47,6 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
-  shownCodeSchema,
   taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
@@ -84,7 +72,6 @@ import {
 } from "./workspace-invitation-wire.js";
 import {
   formerMemberSchema,
-  linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -208,37 +195,6 @@ export type CodeToken = typeof codeTokenSchema.Type;
 export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
 
 export type CodeLines = typeof codeLinesSchema.Type;
-
-/**
- * One code Luke or an agent showed on a task: the `show_code` call that
- * showed it, the turn it ran in and when that turn began writing, the agent
- * whose turn it was, and the place and lines as the call answered them.
- */
-const taskShownCodeFields = {
-  callId: EffectSchema.String,
-  turnId: EffectSchema.String,
-  /** Epoch milliseconds the turn that showed it began. */
-  shownAt: EffectSchema.Finite,
-  /** The agent on the task whose turn showed it; absent for Luke's own, and on a call's frame, which the record's copy names it on. */
-  agentId: EffectSchema.optionalKey(EffectSchema.String),
-};
-
-export const taskShownCodeSchema = EffectSchema.Struct({
-  ...taskShownCodeFields,
-  code: shownCodeSchema,
-});
-
-export type TaskShownCode = typeof taskShownCodeSchema.Type;
-
-/** The code of one showing: what Luke named, where it was read, its lines, and his note on them. */
-export type TaskCode = TaskShownCode["code"];
-
-/** Every code Luke showed on one task, oldest first: the plan-work page's `code`, read on its own. */
-export const taskCodeAnswerSchema = EffectSchema.Struct({
-  code: EffectSchema.Array(taskShownCodeSchema),
-});
-
-export type TaskCodeAnswer = typeof taskCodeAnswerSchema.Type;
 
 /**
  * Whether the account has a GitHub account linked, and its login where the
@@ -408,8 +364,6 @@ export const TASK_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The repository named is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
-  LINEAR_UNAVAILABLE: "linear-unavailable",
   /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
@@ -426,10 +380,9 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
+/** Why a start answered no plan: a repository call's reasons, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
-  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   TASK_CALL_FAILURE.NOT_FOUND,
   TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 ] as const;
@@ -620,58 +573,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/**
- * A repository's issues, as New task's picker asks the host for them: the
- * workspace whose installation reaches the repository, the repository, and
- * the words to search for or the number of the one issue asked, its open
- * issues where neither is named.
- */
-export const tasksGitHubIssuesParamsSchema = EffectSchema.Struct({
-  ...repositoryPlaceFields,
-  query: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_QUERY_CHARS)),
-  ),
-  number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
-});
-
-export type TasksGitHubIssuesParams = typeof tasksGitHubIssuesParamsSchema.Type;
-
-/** A repository's issues, as the window hears them: the issues, that the installation grants none, or that the service did not answer. */
-export const tasksGitHubIssuesAnswerSchema = EffectSchema.Union([
-  githubRepositoryIssuesAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksGitHubIssuesAnswer = typeof tasksGitHubIssuesAnswerSchema.Type;
-
-/** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, or Linear unread. */
-const TASK_ISSUE_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
-] as const;
-
-export type TaskIssueCallFailure = (typeof TASK_ISSUE_CALL_FAILURES)[number];
-
-const taskIssueCallFailed = EffectSchema.Struct({
-  failure: EffectSchema.Literals(TASK_ISSUE_CALL_FAILURES),
-});
-
-/** A task's linked issues, as its page asks the host for them: the task. */
-export const tasksIssueLinksParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
-
-export type TasksIssueLinksParams = typeof tasksIssueLinksParamsSchema.Type;
-
-/** A task's linked issues as the window hears them, each with where it stands now, or why there are none. */
-export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
-  taskIssueLinksAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueLinksAnswer = typeof tasksIssueLinksAnswerSchema.Type;
-
 /** A task's agents' Browser tabs, as its side panel asks the host for them: the task. */
 export const tasksBrowserTabsParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -744,55 +645,6 @@ export const taskBrowserTabsFollowedSchema = EffectSchema.Struct({
 });
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
-
-/** An issue to link to a task, as its page names it: by what its provider finds it by, with its relation. */
-export const tasksIssueLinkParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  issue: taskIssueChoiceSchema,
-});
-
-export type TasksIssueLinkParams = typeof tasksIssueLinkParamsSchema.Type;
-
-/** A link made, why the service made none, or why there is no answer. */
-export const tasksIssueLinkAnswerSchema = EffectSchema.Union([
-  taskIssueLinkAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueLinkAnswer = typeof tasksIssueLinkAnswerSchema.Type;
-
-/** A link's keyword to change: the task, the link, and the keyword. */
-export const tasksIssueRelateParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  linkId: EffectSchema.NonEmptyString,
-  relation: taskIssueRelationSchema,
-});
-
-export type TasksIssueRelateParams = typeof tasksIssueRelateParamsSchema.Type;
-
-/** A link as it stands once changed, or why there is no answer. */
-export const tasksIssueRelateAnswerSchema = EffectSchema.Union([
-  taskIssueLinkChangedAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueRelateAnswer = typeof tasksIssueRelateAnswerSchema.Type;
-
-/** A link to let go: the task and the link. */
-export const tasksIssueUnlinkParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  linkId: EffectSchema.NonEmptyString,
-});
-
-export type TasksIssueUnlinkParams = typeof tasksIssueUnlinkParamsSchema.Type;
-
-/** That the link was let go, or why there is no answer. */
-export const tasksIssueUnlinkAnswerSchema = EffectSchema.Union([
-  taskIssueUnlinkAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueUnlinkAnswer = typeof tasksIssueUnlinkAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({
@@ -1008,19 +860,6 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
-
-/** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
-export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;
-
-export type TasksLinearIssuesParams = typeof tasksLinearIssuesParamsSchema.Type;
-
-/** The Linear issues as the window hears them: the issues the workspace's connection reaches, or why there are none. */
-export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ issues: EffectSchema.Array(linearIssueSummarySchema) }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

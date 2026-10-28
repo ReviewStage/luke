@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { CodingAgentKind } from "@luke/features/coding-agent-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -7,7 +8,6 @@ import type { MicrophoneRoute, MicrophoneStatus } from "@luke/settings/microphon
 import type { NotificationsStatus } from "@luke/settings/settings-controls";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
-import type { OutputAudioState } from "@luke/voice/audio";
 import {
   callTranscriptChangeBetween,
   isVoiceCallTranscriptChange,
@@ -24,20 +24,14 @@ import type { MacCommandAsk } from "./mac-command-ask.js";
 export type { MacCommandAsk } from "./mac-command-ask.js";
 
 /**
- * The launch profiles a window answers to. A capture run stages a
- * conversation it has no voice window for: Luke speaking, that with the
- * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the panel's Tasks tab over a synthetic task, or over its synthetic coding
- * agent and that agent's tabs; or a synthetic account signed in, on a page
- * of Settings, on Admin, on Automations, or with its Inbox and its own page
- * filled. Any other word — the default
- * included — stages nothing.
+ * The launch profiles a window answers to. A fixture run stages the panel's
+ * Tasks tab over a synthetic task, or over its synthetic coding agent and
+ * that agent's tabs; or a synthetic account signed in, on a page of
+ * Settings, on Admin, on Automations, or with its Inbox and its own page
+ * filled. Any other word — the default included — stages nothing.
  */
 export const RUN_PROFILE = {
   IDLE: "idle",
-  SPEAKING: "speaking",
-  MUTED: "muted",
-  DUPLEX: "duplex",
   /** The panel's Tasks tab, opened at launch over a synthetic task. */
   TASKS: "tasks",
   /** The same task mid-call, opened at launch on the transcript of what was said on its calls. */
@@ -79,11 +73,9 @@ export const RUN_PROFILE = {
   AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
   /** The same agent beside a page it showed, open in a tab of its own. */
   AGENT_PAGE: "agent-page",
-  /** The same agent mid-call, the floating call window standing over the panel. */
-  AGENT_CALL: "agent-call",
   /** A synthetic account signed in, Settings opened at launch on its Account page. */
   SETTINGS_ACCOUNT: "settings-account",
-  /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
+  /** The same account, Settings on its team's workspace: its members and an invitation waiting. */
   SETTINGS_WORKSPACE: "settings-workspace",
   /** The same account, Settings on Agents: its Claude plan connected and its ChatGPT sign-in expired. */
   SETTINGS_AGENTS: "settings-agents",
@@ -129,7 +121,6 @@ interface AppRunFacts {
 export interface AppAudioSlice {
   microphoneStatus: MicrophoneStatus;
   microphoneRoute?: MicrophoneRoute;
-  outputAudio?: OutputAudioState;
 }
 
 interface AppVoiceSlice {
@@ -137,8 +128,7 @@ interface AppVoiceSlice {
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
    * Absent until that window has reported once, and in a fixture or capture
-   * run, which raises no voice window, but where a call profile stages one
-   * (`fixture-stage.ts`).
+   * run, which raises no voice window.
    *
    * The loudness beside it is deliberately not here. It is a reading taken
    * twenty times a second that expires in fifty milliseconds, so nothing
@@ -185,6 +175,8 @@ export interface AppInboxWaitingItem {
   postedAt: number;
   /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
   asking?: boolean;
+  /** The channel the thread lives in, which the sidebar counts it under; absent from a service before it. */
+  channelId?: string;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */
@@ -207,14 +199,17 @@ export interface AppInboxTaskHolding {
  * the developer: the item as a task's are, the agent as its row names it
  * now, and the automation and repository standing where a task would; the
  * automation, and its name, null where the reader may not read it or none
- * stands.
+ * stands, and the repository null for an agent that works in none, the
+ * member's operator above all.
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
+  /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
+  agentKind?: CodingAgentKind;
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;
   automationName: string | null;
-  repository: string;
+  repository: string | null;
   /** The workspace the agent belongs to, whose Inbox lists the item; absent from a service before it. */
   workspaceId?: string;
   /** The account that started the agent, whom the item waits on; absent where the service does not say, when it is the reader's own. */

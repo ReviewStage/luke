@@ -19,12 +19,10 @@ import { macCommandActsContract } from "./mac-commands.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
-import { taskIssueActsContract } from "./task-issues.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { thisMacHostActsContract } from "./this-mac-host.js";
 import { updateActsContract } from "./updates.js";
-import { voiceRuntimeActsContract } from "./voice-runtime.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
 import { workspaceActsContract } from "./workspaces.js";
 
@@ -61,12 +59,10 @@ export {
   type PlatformPortActKind,
   type PortActKind,
   SETTINGS_ACT_KIND,
-  TASK_ISSUE_ACT_KIND,
   TASKS_ACT_KIND,
   TERMINAL_ACT_KIND,
   THIS_MAC_HOST_ACT_KIND,
   UPDATE_ACT_KIND,
-  VOICE_RUNTIME_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
@@ -105,11 +101,9 @@ export const actContract = {
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
-  ...taskIssueActsContract,
   ...terminalActsContract,
   ...thisMacHostActsContract,
   ...updateActsContract,
-  ...voiceRuntimeActsContract,
   ...windowSurfaceActsContract,
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;

@@ -107,7 +107,6 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       sectionLinks: {
         workspace: "acme",
         onOpen: () => undefined,

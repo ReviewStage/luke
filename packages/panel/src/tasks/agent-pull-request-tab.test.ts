@@ -440,9 +440,12 @@ function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
         {
           key: action.label,
           type: "button",
-          disabled: action.disabled,
-          onClick: (event: React.MouseEvent<HTMLElement>) =>
-            "onAsk" in action ? action.onAsk(event.currentTarget) : action.onSelect(),
+          disabled: "disabled" in action ? action.disabled : undefined,
+          onClick: (event: React.MouseEvent<HTMLElement>) => {
+            if ("items" in action) return;
+            if ("onAsk" in action) action.onAsk(event.currentTarget);
+            else action.onSelect();
+          },
         },
         action.label,
       ),
@@ -4287,6 +4290,25 @@ test("the title's edit is kept as the focus leaves its field, as it is on Enter"
   assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null, "the field closes");
 });
 
+test("Refresh, the one its screen offers, reads Files changed again once the view was shown", async () => {
+  let changeReads = 0;
+  const readChanges: CodingAgentsControl["readChanges"] = () => {
+    changeReads += 1;
+    return Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } });
+  };
+  const tab = await draw(controlAnswering({}, PULL_REQUEST_STATE.OPEN, readChanges));
+  await pressToolbar(tab, "Refresh");
+  await settle();
+  assert.equal(changeReads, 0, "Files changed is not read before it is shown");
+
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  assert.equal(changeReads, 1);
+  await pressToolbar(tab, "Refresh");
+  await settle();
+  assert.equal(changeReads, 2);
+});
+
 test("Files changed draws each review thread under its line, its comments through the overview's own drawing, and while Minimize inline comments is on, as one chip at the line's end that shows it", async () => {
   const review = {
     kind: CONVERSATION_ENTRY.REVIEW,
@@ -5367,7 +5389,7 @@ function ringEnds(card: Element): void {
 async function threadMenuItem(card: Element, label: string): Promise<void> {
   act(() =>
     (
-      card.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      card.querySelector<HTMLButtonElement>('button[aria-label="Review thread actions"]') ??
       assert.fail("the thread has its ⋯")
     ).click(),
   );
@@ -6254,7 +6276,6 @@ test("on a phone no Preview or Run stands beside the title, and Files changed dr
     "Collapse all files",
     "Copy patch",
     "Download patch",
-    "Refresh changes",
   ]);
 
   await choose(tab, "Conversation");

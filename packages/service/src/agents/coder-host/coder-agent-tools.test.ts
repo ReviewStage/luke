@@ -91,23 +91,22 @@ import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
   sessionKey,
   TOOL_CALL_SETTLEMENT,
+  TURN_FAILURE,
   TURN_ORIGIN,
   TURN_STATUS,
+  TURN_TRIGGER,
   type WireRecord,
 } from "../../core.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { postInboxThread } from "../../inbox/inbox-store.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
   ModelCatalogUnavailable,
@@ -120,7 +119,6 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
-import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
@@ -395,7 +393,6 @@ async function peerCaller(
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
-  linear: Layer.Layer<WorkspaceLinearConnect> = NO_WORKSPACE_LINEAR,
   sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
   const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
@@ -408,7 +405,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear, sentry))),
+        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry))),
     );
 }
 
@@ -443,13 +440,7 @@ async function directMessage(
       })
       .pipe(
         Effect.provide(
-          Layer.mergeAll(
-            services,
-            modelCatalogOf(CATALOG),
-            ANALYTICS.layer,
-            NO_WORKSPACE_LINEAR,
-            SENTRY_CONFIGURED,
-          ),
+          Layer.mergeAll(services, modelCatalogOf(CATALOG), ANALYTICS.layer, SENTRY_CONFIGURED),
         ),
       ),
   );
@@ -465,18 +456,18 @@ async function turnOn(agent: StartedAgent, ended: boolean): Promise<string> {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
       });
       if (!ended) return;
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 2,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: NOW,
       });
@@ -492,9 +483,9 @@ async function cancelledTurnEnds(agent: StartedAgent, turnId: string): Promise<v
     writer.consume(target, {
       conversationId: sessionKey(target.conversationId),
       turnId,
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      kind: RUN_EVENT.TURN_ENDED,
       sequence: 2,
-      status: BRAIN_REQUEST_STATUS.CANCELLED,
+      status: RUN_STATUS.CANCELLED,
       responseIds: [],
       at: NOW,
     }),
@@ -511,23 +502,23 @@ async function answeredTurnOn(agent: StartedAgent, answer: AssistantMessageBuild
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
         sequence: 2,
         message: answer.finish(randomUUID()),
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 3,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: NOW,
       });
@@ -2180,10 +2171,10 @@ test("archive_agent refuses an agent whose turn a Stop was asked of but which st
       yield* writer.consume(target, {
         conversationId: sessionKey(target.conversationId),
         turnId,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
       });
       yield* writer.requestTurnCancel(target, { turnId, at: new Date(NOW) });
@@ -2301,7 +2292,7 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
     BRAIN_HOST_TURN.TYPED,
   ]);
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
-  const settled = [turnId, TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
+  const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
 
   const again = await directMessage(host, agents.caller, agents.teammates, eve.services, "call-2");
@@ -2332,18 +2323,18 @@ async function failedTurnOn(agent: StartedAgent): Promise<void> {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_1" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW + 1,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 2,
-        status: BRAIN_REQUEST_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.MODEL,
+        status: RUN_STATUS.FAILED,
+        failure: TURN_FAILURE.MODEL,
         responseIds: [],
         at: NOW + 2,
       });
@@ -2686,9 +2677,9 @@ test("stop_agent answers a turn eve says ended before its cancel as not stopped 
       {
         conversationId: sessionKey(agents.teammates.conversationId),
         turnId,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 2,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: NOW,
       },
@@ -3996,7 +3987,6 @@ test("create_automation and update_automation take a Sentry trigger once the wor
     agents.caller,
     eve.services,
     modelCatalogOf(CATALOG),
-    NO_WORKSPACE_LINEAR,
     Layer.succeed(SentryApp, sentryAppService(undefined, ["SENTRY_APP_CLIENT_SECRET"])),
   );
   const alerts = {

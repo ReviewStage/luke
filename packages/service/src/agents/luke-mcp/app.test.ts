@@ -39,10 +39,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../../integrations/integration-connect.js";
+import type { IntegrationConnect } from "../../integrations/integration-connect.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -85,7 +82,6 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
-import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
   LUKE_MCP_PATH,
@@ -178,21 +174,17 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
 /** A sandbox no call opens: a tool that reads no file never asks for it. */
 const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-/** A checkout no call opens: a tool that runs no command never asks for it. */
-const NO_CHECKOUT: RepositorySandboxDoor = () =>
-  Promise.reject(new Error("the checkout was opened"));
-
 /** The server's group over the test's database, the sandbox door and the browser given, and any services that stand in for the ones given, as a fetch a client is handed. */
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
-  instead?: Layer.Layer<IntegrationConnect | WorkspaceLinearConnect | HttpClient.HttpClient>,
+  instead?: Layer.Layer<IntegrationConnect | HttpClient.HttpClient>,
   browser: LukeMcpBrowser = noSandboxBrowserLayer,
 ) =>
   Effect.gen(function* () {
     const base = yield* doorServices;
     const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
-      lukeMcpApp({ sandbox: () => ({ files: sandbox, repository: NO_CHECKOUT }), browser }).pipe(
+      lukeMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
         HttpRouter.provideRequest(services),
       ),
       { disableLogger: true },

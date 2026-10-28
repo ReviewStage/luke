@@ -10,7 +10,7 @@ This page covers setup and points at the documents that own the rest.
 [AGENTS.md](AGENTS.md) is the guide for coding agents and holds the rules
 reviewers hold a pull request to; read it to know what review will check, not as
 a setup guide. Its Never section matters most: no credential or account secret
-reaches an answer, an event, the voice window, a trace, or a fixture, and
+reaches an answer, an event, a trace, or a fixture, and
 session replay leaves the machine as layout, never text. A change that widens
 what Luke may read or write, or what leaves the developer's machine, is a
 product decision, so open an issue first rather than a pull request.
@@ -102,7 +102,6 @@ tools/
   claude-code-probe/  proves Claude Code runs inside a Luke sandbox
   codex-probe/    proves Codex runs inside a Luke sandbox
   trace-export/   turns a recorded development trace into a document for a trace viewer
-  voice-samples/  records the clip Settings plays for each Live voice, by hand on a Mac
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
 docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```

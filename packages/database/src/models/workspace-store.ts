@@ -3,7 +3,6 @@ import { pinnedPictureUrl } from "@luke/features/account-picture";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   RESERVED_WORKSPACE_SLUGS,
   roleOf,
@@ -25,7 +24,6 @@ import {
   queryBuilder,
 } from "../core/query.js";
 import { GITHUB_INSTALLATION_STATUS } from "../github-installation-vocabulary.js";
-import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -33,7 +31,6 @@ import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { task } from "../schemas/task.js";
-import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
 import {
   PERSONAL_WORKSPACE_METADATA,
   type WorkspaceCreation,
@@ -119,8 +116,6 @@ const WorkspaceRowSchema = Schema.Struct({
   personal: Schema.Boolean,
   /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
-  /** The status of the workspace's Linear row, or null where it holds none. */
-  linearStatus: Schema.NullOr(Schema.String),
   /** How many members the workspace has, the account among them. */
   memberCount: Schema.Number,
   /** The plugin's `logo` text, which holds the workspace's photo as a `data:` URL where it has one. */
@@ -270,7 +265,6 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       personalOf: personalWorkspace.userId,
       personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
       role: member.role,
-      linearStatus: workspaceIntegrationConnection.status,
       memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
       logo: organization.logo,
       ownerImage: user.image,
@@ -285,13 +279,6 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       ),
     )
     .leftJoin(user, eq(user.id, personalWorkspace.userId))
-    .leftJoin(
-      workspaceIntegrationConnection,
-      and(
-        eq(workspaceIntegrationConnection.organizationId, organization.id),
-        eq(workspaceIntegrationConnection.provider, INTEGRATION_PROVIDER.LINEAR),
-      ),
-    )
     .where(
       and(
         eq(member.userId, userId),
@@ -389,17 +376,6 @@ function faceOfRow(
 }
 
 /**
- * The workspace's Linear as the wire carries it: active while its row
- * stands connected, inactive once Connect refused the grant, and absent for
- * no row or a first sign-in still under way.
- */
-function linearOfRow(status: string | null): Pick<Workspace, "linear"> {
-  if (status === INTEGRATION_ROW_STATUS.CONNECTED) return { linear: { active: true } };
-  if (status === INTEGRATION_ROW_STATUS.EXPIRED) return { linear: { active: false } };
-  return {};
-}
-
-/**
  * One row as the wire carries the workspace, with its installations: every
  * one, and again the first linked that is still active, else the first
  * linked, as the one a desktop from before several reads.
@@ -423,7 +399,6 @@ function workspaceOfRow(
     role: roleOf(row.role),
     github: first === undefined ? null : { login: first.login, active: first.active },
     githubInstallations,
-    ...linearOfRow(row.linearStatus),
     memberCount: row.memberCount,
     ...faceOfRow(row),
   };
@@ -690,11 +665,14 @@ const LOGO_IS_PHOTO = sql<boolean>`case when coalesce(${organization.logo} ~ ${`
  * and rule of who may read them as `listWorkspaces`, each column under the
  * key `live-wire.ts` reads it by. What the held read works out from a row
  * here is worked out in the statement, so a row carries no photo's bytes:
- * its digest, the Linear connection's standing, and an installation's.
- * Note that a photo is told by its `data:` label alone, where the held read
- * also reads its bytes, because a photo is checked when it is set. The
- * order is the reader's to keep, since Realtime keeps none. None where a
- * statement names a value Realtime cannot carry.
+ * its digest, and an installation's standing. Note that a photo is told by
+ * its `data:` label alone, where the held read also reads its bytes,
+ * because a photo is checked when it is set. Note too that `linearActive`
+ * is still answered, as null, because a desktop from v0.22.0 fails its
+ * follow on a row without it: no workspace connects Linear any more. The key
+ * goes with the minimum supported desktop version, not with a service
+ * deploy. The order is the reader's to keep, since Realtime keeps none.
+ * None where a statement names a value Realtime cannot carry.
  */
 export function workspacesLiveStatements(userId: string): Option.Option<WorkspacesLiveStatements> {
   const workspaces = queryBuilder
@@ -706,9 +684,7 @@ export function workspacesLiveStatements(userId: string): Option.Option<Workspac
         own: sql<boolean>`${personalWorkspace.userId} is not null`,
         personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
         role: member.role,
-        linearActive: sql<
-          boolean | null
-        >`case ${workspaceIntegrationConnection.status} when ${INTEGRATION_ROW_STATUS.CONNECTED} then true when ${INTEGRATION_ROW_STATUS.EXPIRED} then false end`,
+        linearActive: sql<null>`null::boolean`,
         memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
         photoVersion: sql<
           string | null
@@ -726,13 +702,6 @@ export function workspacesLiveStatements(userId: string): Option.Option<Workspac
       ),
     )
     .leftJoin(user, eq(user.id, personalWorkspace.userId))
-    .leftJoin(
-      workspaceIntegrationConnection,
-      and(
-        eq(workspaceIntegrationConnection.organizationId, organization.id),
-        eq(workspaceIntegrationConnection.provider, INTEGRATION_PROVIDER.LINEAR),
-      ),
-    )
     .where(eq(member.userId, userId));
   const installations = queryBuilder
     .select(

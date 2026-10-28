@@ -438,16 +438,16 @@ it.effect(
 );
 
 it.effect(
-  "a board's live read polling while Realtime fails asks for its rows inline, and reads them decoded",
+  "a task's pages' live read polling while Realtime fails asks for its rows inline, and reads them decoded",
   () =>
     Effect.gen(function* () {
-      const row = { taskId: TASK_ID, drawingNumber: 2, appliedDrawing: 1, imaged: true };
+      const row = { pageId: "page-1", version: 2 };
       const api = fakeCloudApi({
-        "GET /api/live/task-board": {
+        "GET /api/live/task-pages": {
           answer: () => ({
             url: LIVE_POLL_URL,
             queries: {
-              board: {
+              pages: {
                 capability: LIVE_POLL_URL,
                 queryFingerprint: LIVE_POLL_URL,
                 expiresAt: 0,
@@ -458,29 +458,29 @@ it.effect(
         },
       });
       const polled = yield* Effect.provide(
-        client().boardLive(TASK_ID, "user-dana", true),
+        client().pagesLive({ taskId: TASK_ID }, "user-dana", true),
         api.layer,
       );
       assert.ok(polled.ok);
-      assert.deepEqual(polled.answer.queries.board.rows, [row]);
+      assert.deepEqual(polled.answer.queries.pages.rows, [row]);
       assert.equal(api.requests()[0]?.searchParams.get(LIVE_POLL.QUERY), LIVE_POLL.ON);
-      yield* Effect.provide(client().boardLive(TASK_ID, "user-dana"), api.layer);
+      yield* Effect.provide(client().pagesLive({ taskId: TASK_ID }, "user-dana"), api.layer);
       assert.equal(api.requests()[1]?.searchParams.get(LIVE_POLL.QUERY), null, "a seal asks none");
     }),
 );
 
 it.effect(
-  "a board's live read names the account it is for, and a session the service refuses for it is signed out",
+  "a task's pages' live read names the account it is for, and a session the service refuses for it is signed out",
   () =>
     Effect.gen(function* () {
       const refusing = fakeCloudApi({
-        "GET /api/live/task-board": {
+        "GET /api/live/task-pages": {
           answer: () => ({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
           status: HTTP_STATUS.UNAUTHORIZED,
         },
       });
       const refused = yield* Effect.provide(
-        client().boardLive(TASK_ID, "user-dana", true, "digest"),
+        client().pagesLive({ taskId: TASK_ID }, "user-dana", true, "digest"),
         refusing.layer,
       );
       assert.deepEqual(refused, { ok: false, failure: LIVE_SIGNED_OUT.failure });

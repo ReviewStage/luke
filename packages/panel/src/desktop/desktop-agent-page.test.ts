@@ -45,8 +45,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { CALL_LABEL } from "@luke/ui/call-card-model";
+import { experimentsOn } from "@luke/settings/testing";
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Clock, Context, Effect } from "effect";
@@ -61,7 +60,6 @@ import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -184,8 +182,6 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 let openedOnGitHub: string[] = [];
 /** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
 let pages: CodingAgentPageAnswerView[] = [];
-/** The operator an ensure answers, wherever the account has Luke on. */
-let ensured = AGENT_ID;
 /** Every agent whose page was read, in order. */
 let read: string[] = [];
 /** Whether a read of the agent's page is held open until the test answers it with `answerHeld`. */
@@ -240,7 +236,6 @@ let takeDownTerminal: (() => void) | undefined;
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
-  ensured = AGENT_ID;
   read = [];
   holdPage = false;
   answerHeld = () => undefined;
@@ -383,10 +378,6 @@ beforeEach(() => {
           agent: { ...PAGE, id: STARTED_ID, status: CODING_AGENT_STATUS.STARTING },
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      // Note that the page's agent is the account's operator, Luke, wherever the account has him on.
-      if (request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agentId: ensured } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
@@ -1562,7 +1553,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show terminal, Copy link, the transcript's two copies, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1573,20 +1564,64 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show ter
     (each) => each.textContent,
   );
   assert.deepEqual(offered, [
-    "Rename",
-    "Show terminal⌘J",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
+    "Rename",
+    "Show terminal⌘J",
     "Archive",
     "Permanently delete",
   ]);
 });
 
-test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete", async () => {
-  handState(experimentsOn(EXPERIMENT.OPERATOR), {
-    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
-  });
+test("a taskless agent the sidebar lists gains its row's own items on its page's ⋯: Mark as unread beside Rename, then Pin and Move to section, and Pin pins it", async () => {
+  const pins: { agentId: string; pinned: boolean }[] = [];
+  const listed = {
+    ...PAGE,
+    automationName: "Flaky sweep",
+    activityAt: 2,
+  };
+  const page = mount(
+    tasksControl({
+      listedAgents: { standing: [listed], archived: [] },
+      onPinAgent: (agentId, pinned) => {
+        pins.push({ agentId, pinned });
+      },
+    }),
+  );
+  await settle();
+  const offered = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+  const pin = pageMenuItem(page, "Pin");
+  act(() => pin.click());
+  assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
+
+  const mark = pageMenuItem(page, "Mark as unread");
+  act(() => mark.click());
+  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  assert.deepEqual(offered(), [
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Rename",
+    "Mark as read",
+    "Pin",
+    "Move to section",
+    "Show terminal⌘J",
+    "Archive",
+    "Permanently delete",
+  ]);
+});
+
+test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete, while the account has the experiment off too", async () => {
+  pages = [{ agent: { ...PAGE, kind: CODING_AGENT_KIND.OPERATOR } }];
+  handState(
+    {},
+    {
+      run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
+    },
+  );
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1596,13 +1631,12 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Copy link", "Copy concise transcript", "Copy full transcript", "Show terminal⌘J"],
   );
 });
 
 test("a Luke a Reset retired is still known by his kind: titled Luke, offering neither Rename, Unarchive, nor Permanently delete", async () => {
   pages = [{ agent: { ...PAGE, kind: CODING_AGENT_KIND.OPERATOR, archivedAt: 2 } }];
-  ensured = "0e9d8c7b-0000-4000-8000-0000000000ff";
   handState(experimentsOn(EXPERIMENT.OPERATOR), {
     run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
   });
@@ -2301,38 +2335,6 @@ test("a delete the service refused for an agent still starting says why in the d
   );
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
-});
-
-test("the page offers Call in its agent's composer, whose press asks for a call into that agent on no task, and an agent on a task on its own", async () => {
-  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
-  const pressed: { agentId: string; place: AgentCallPlace }[] = [];
-  const calls = {
-    onPress: (agentId: string, place: AgentCallPlace) => pressed.push({ agentId, place }),
-  };
-  const page = mount(tasksControl({ calls }));
-  await settle();
-
-  const call = page.querySelector<HTMLButtonElement>(`button[aria-label="${CALL_LABEL}"]`);
-  assert.ok(call, "the composer offers Call");
-  act(() => call.click());
-  assert.deepEqual(pressed, [{ agentId: AGENT_ID, place: { taskId: undefined, archived: false } }]);
-
-  act(() => root?.unmount());
-  pages = [{ agent: { ...PAGE, planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" } }];
-  const onTask = mount(tasksControl({ calls }));
-  await settle();
-  act(() => onTask.querySelector<HTMLButtonElement>(`button[aria-label="${CALL_LABEL}"]`)?.click());
-  assert.deepEqual(pressed.at(-1), {
-    agentId: AGENT_ID,
-    place: { taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: false },
-  });
-});
-
-test("a window with no voice hands the page no Call", async () => {
-  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
-  const page = mount(tasksControl({ calls: undefined }));
-  await settle();
-  assert.equal(page.querySelector(`button[aria-label="${CALL_LABEL}"]`), null);
 });
 
 test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {

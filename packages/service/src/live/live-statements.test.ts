@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
-import { boardLiveStatement } from "@luke/database/models/board-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
@@ -43,7 +42,7 @@ function liveStatements() {
       agentFollowedBy(USER_ID, parent, USER_ID),
     ),
   );
-  const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
+  const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID, true));
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
   return {
@@ -51,7 +50,6 @@ function liveStatements() {
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
-    "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
     "task.pages": Option.getOrThrow(taskPagesLiveStatements(USER_ID, randomUUID())).pages,
     "agent.pages": Option.getOrThrow(agentPagesLiveStatements(USER_ID, randomUUID())).pages,
     "task.browserTabs": Option.getOrThrow(taskBrowserTabsLiveStatement(USER_ID, randomUUID())),

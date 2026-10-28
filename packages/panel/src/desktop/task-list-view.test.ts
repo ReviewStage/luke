@@ -748,7 +748,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive, Move to section, and Permanently delete last", async () => {
+test("a one-off agent's row offers the agent's one menu: Copy link, Rename and Mark as unread, Pin, or Unpin once pinned, and Move to section, Archive, and Permanently delete last", async () => {
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, [
     TRIAGE,
     { ...SWEEP, pinnedAt: 950 },
@@ -756,11 +756,11 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
 
   assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
     "Copy link",
-    "Mark as unread",
     "Rename",
+    "Mark as unread",
     "Pin",
-    "Archive",
     "Move to section",
+    "Archive",
     "Show details",
     "Permanently delete",
   ]);
@@ -769,11 +769,11 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
     "Move down",
     "Copy link",
-    "Mark as unread",
     "Rename",
+    "Mark as unread",
     "Unpin",
-    "Archive",
     "Move to section",
+    "Archive",
     "Show details",
     "Permanently delete",
   ]);

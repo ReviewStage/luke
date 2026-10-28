@@ -436,7 +436,7 @@ test("on a phone the tab draws no bar, and the task's header's ⋯ stops, runs, 
 
   assert.equal(tab.bar(), "", "no bar stands over the screen");
   assert.deepEqual(tab.offered(), []);
-  assert.deepEqual(tab.handed.labels(), ["Stop", "Open in Terminal"]);
+  assert.deepEqual(tab.handed.labels(), ["Open in Terminal", "Stop"]);
   assert.deepEqual(tab.handed.item("Stop"), { disabled: false, detail: "Running" });
   assert.deepEqual(tab.handed.item("Open in Terminal"), {
     disabled: false,

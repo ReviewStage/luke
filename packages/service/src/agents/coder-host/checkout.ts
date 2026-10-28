@@ -8,6 +8,7 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import type { CheckoutIdentity } from "@luke/features/checkout-identity";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { automationRun } from "@luke/features/model-label";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -137,10 +138,7 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   target: ConversationTarget,
   agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
-  // Note that the run's origin outlives its automation, whose id goes null once it is deleted.
-  if (agent.automationId !== null || agent.automationOrigin !== null) {
-    return CODING_AGENT_AUTHOR.APP_AUTOMATION;
-  }
+  if (automationRun(agent) !== undefined) return CODING_AGENT_AUTHOR.APP_AUTOMATION;
   if (agent.githubAccess === GITHUB_ACCESS.TOKEN) return CODING_AGENT_AUTHOR.TOKEN;
   const app = yield* GitHubApp;
   return yield* app.userPusher(target.userId, agent.repository).pipe(

@@ -31,7 +31,6 @@
     "./browser-live-port": "./src/tasks/browser-live-port.js",
     "./build-table": "./scripts/build-table.mjs",
     "./bundle-loader": "./src/bundle-loader.js",
-    "./call/call-card": "./src/call/call-card.js",
     "./composer-drafts": "./src/composer-drafts.js",
     "./desktop/luke-identity": "./src/desktop/luke-identity.js",
     "./keyboard-modality": "./src/keyboard-modality.js",
@@ -45,7 +44,6 @@
     "./sources.css": "./src/sources.css",
     "./stage-room": "./src/stage-room.js",
     "./styles/base.css": "./src/styles/base.css",
-    "./styles/call.css": "./src/styles/call.css",
     "./styles/desktop.css": "./src/styles/desktop.css",
     "./styles/index.css": "./src/styles/index.css",
     "./styles/settings.css": "./src/styles/settings.css",
@@ -61,10 +59,7 @@
     "./testing/resize-observer": "./src/testing/resize-observer.js",
     "./testing/tailwind.css": "./src/testing/tailwind.css",
     "./toast": "./src/toast.js",
-    "./use-app-state": "./src/use-app-state.js",
-    "./use-voice-view": "./src/use-voice-view.js",
-    "./voice/live-peer": "./src/voice/live-peer.js",
-    "./voice/voice-level-meter": "./src/voice/voice-level-meter.js"
+    "./use-app-state": "./src/use-app-state.js"
   },
   "scripts": {
     "test:vitest": "vitest run",

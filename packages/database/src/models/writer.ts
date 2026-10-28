@@ -2,17 +2,17 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { isWireUuid } from "@luke/features";
 import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  type BrainRunEvent,
-  type BrainTurnOrigin,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  type RunEvent,
+  type RunTurnOrigin,
   STEP_START_PART,
   settledToolPart,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
-} from "@luke/features/brain";
+} from "@luke/features/turn-run";
 import { causeKind } from "@luke/runtime/effect";
 import {
   type AgentMessageMetadata,
@@ -57,7 +57,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -96,7 +96,7 @@ import { writeOperatorNotice } from "./operator-notices.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
- * written. It consumes the brain's run event stream (`BrainRunEvent`,
+ * written. It consumes the brain's run event stream (`RunEvent`,
  * every kind of turn) and keeps the record the plan describes: a turn row
  * from queued through running to its end, one assistant message per turn
  * that is the turn's journal while it runs — each tool call written in
@@ -248,7 +248,7 @@ export type StoreWriteResult = Result.Result<
   | MessageRefused
 >;
 
-type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUEST_STATUS];
+type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS];
 
 /** A turn queued ahead of its start: what opened it and, where the caller knows them, what it will run under. */
 interface TurnEnqueue {
@@ -469,7 +469,7 @@ type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION
  */
 export interface StoreWriter {
   /** Consumes one event of the run stream for the conversation it names. */
-  consume(target: ConversationTarget, event: BrainRunEvent): Write<StoreWriteResult>;
+  consume(target: ConversationTarget, event: RunEvent): Write<StoreWriteResult>;
   /**
    * Consumes a batch of the run stream's events, in order, as one locked
    * write: the conversation is locked once, each journal is read once, and
@@ -479,7 +479,7 @@ export interface StoreWriter {
    */
   consumeAll(
     target: ConversationTarget,
-    events: readonly BrainRunEvent[],
+    events: readonly RunEvent[],
   ): Write<readonly StoreWriteResult[]>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
@@ -547,7 +547,9 @@ export interface StoreWriter {
    * dispatch claim (`dispatch-claim.ts`) with no transaction open, after
    * the row is written with the claim, so the take of the line into the
    * turn eve opens on it finds the row standing; and a dispatch that
-   * answers nothing withdraws the row. No lock is held while eve answers,
+   * answers nothing withdraws the row, which every read then leaves out
+   * unless a turn eve hands the line to after all takes it, and which a
+   * send repeated under its key writes afresh. No lock is held while eve answers,
    * so the journal of a turn under way, and every other write of the
    * conversation, lands meanwhile. The row stands under the client's key
    * for the send (`sentLineId`), and a line already standing under that key
@@ -577,30 +579,32 @@ export interface StoreWriter {
    * arrived rather than ahead of the turn. Where the receipt also carried a
    * spoken ask (`beside`), the run is the one whose words stand whole among
    * those received. A take by client id takes the one awaiting row written
-   * under it. Answers the rows taken, or none where no such run awaits, which
+   * under it. A withdrawn line is taken as any other, standing again with
+   * what carried it and who sent it, where it lengthens the run the lines
+   * eve did take make. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
 }
 
 /** The plan's turn origin for each origin the brain's stream names: each is written as reported. */
-const TURN_ORIGIN_OF_BRAIN_ORIGIN = {
-  [BRAIN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
-  [BRAIN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [BRAIN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
-} as const satisfies Record<BrainTurnOrigin, TurnOrigin>;
+const TURN_ORIGIN_OF_RUN_ORIGIN = {
+  [RUN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
+  [RUN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
+  [RUN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
+} as const satisfies Record<RunTurnOrigin, TurnOrigin>;
 
-function turnStatusOf(status: BrainRequestStatus): TurnStatus {
+function turnStatusOf(status: RunStatus): TurnStatus {
   switch (status) {
-    case BRAIN_REQUEST_STATUS.SUCCEEDED:
+    case RUN_STATUS.SUCCEEDED:
       return TURN_STATUS.SETTLED;
-    case BRAIN_REQUEST_STATUS.CANCELLED:
+    case RUN_STATUS.CANCELLED:
       return TURN_STATUS.CANCELLED;
-    case BRAIN_REQUEST_STATUS.FAILED:
-    case BRAIN_REQUEST_STATUS.TIMED_OUT:
-    case BRAIN_REQUEST_STATUS.INTERRUPTED:
-    case BRAIN_REQUEST_STATUS.QUEUED:
-    case BRAIN_REQUEST_STATUS.RUNNING:
+    case RUN_STATUS.FAILED:
+    case RUN_STATUS.TIMED_OUT:
+    case RUN_STATUS.INTERRUPTED:
+    case RUN_STATUS.QUEUED:
+    case RUN_STATUS.RUNNING:
       return TURN_STATUS.FAILED;
   }
 }
@@ -1509,7 +1513,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_STARTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TURN_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   const startedAt = new Date(event.at);
@@ -1518,7 +1522,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
       turnId: event.turnId,
       userId: context.target.userId,
       conversationId: context.target.conversationId,
-      origin: TURN_ORIGIN_OF_BRAIN_ORIGIN[event.origin],
+      origin: TURN_ORIGIN_OF_RUN_ORIGIN[event.origin],
       startedAt,
     });
     return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
@@ -1532,7 +1536,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_ENDED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TURN_ENDED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   if (Option.isNone(standing)) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN });
@@ -1582,9 +1586,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   if (Option.isSome(open) && open.value.finishedAt === null) {
     const reason =
-      event.status === BRAIN_REQUEST_STATUS.CANCELLED
-        ? UNANSWERED_REASON.CANCELLED
-        : UNANSWERED_REASON.ENDED;
+      event.status === RUN_STATUS.CANCELLED ? UNANSWERED_REASON.CANCELLED : UNANSWERED_REASON.ENDED;
     const keepsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
     const parts = open.value.parts.flatMap((part): Parts => {
       if (part.type === UI_PART_TYPE.TEXT) return keepsWords ? [part] : [];
@@ -1649,7 +1651,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.STEP_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
@@ -1663,7 +1665,7 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TOOL_CALL_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
@@ -1680,7 +1682,7 @@ const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TOOL_CALL_SETTLED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* journalRow(context, event.turnId);
   if (Option.isNone(standing)) {
@@ -1720,7 +1722,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.REASONING_COMPLETED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const { id } = event.item;
   if (!isWireString(id)) return Result.succeed(STORE_WRITE_EFFECT.IGNORED);
@@ -1746,7 +1748,7 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TEXT_DRAFTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
@@ -1787,7 +1789,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.MESSAGE_COMPLETED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const read = yield* admitted(context, event.message);
   if (Result.isFailure(read)) return Result.fail(read.failure);
@@ -1854,34 +1856,33 @@ function moveJournalBehindWhatFollowed(context: WriterContext, id: string): Writ
   });
 }
 
-function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWriteResult> {
+function consume(context: WriterContext, event: RunEvent): Write<StoreWriteResult> {
   switch (event.kind) {
-    case BRAIN_RUN_EVENT.TURN_STARTED:
+    case RUN_EVENT.TURN_STARTED:
       return turnStarted(context, event);
-    case BRAIN_RUN_EVENT.TURN_ENDED:
+    case RUN_EVENT.TURN_ENDED:
       return turnEnded(context, event);
-    case BRAIN_RUN_EVENT.STEP_STARTED:
+    case RUN_EVENT.STEP_STARTED:
       return stepStarted(context, event);
-    case BRAIN_RUN_EVENT.TOOL_CALL_STARTED:
+    case RUN_EVENT.TOOL_CALL_STARTED:
       return toolCallStarted(context, event);
-    case BRAIN_RUN_EVENT.TOOL_CALL_SETTLED:
+    case RUN_EVENT.TOOL_CALL_SETTLED:
       return toolCallSettled(context, event);
-    case BRAIN_RUN_EVENT.REASONING_COMPLETED:
+    case RUN_EVENT.REASONING_COMPLETED:
       return reasoningCompleted(context, event);
-    case BRAIN_RUN_EVENT.MESSAGE_COMPLETED:
+    case RUN_EVENT.MESSAGE_COMPLETED:
       return messageCompleted(context, event);
-    case BRAIN_RUN_EVENT.TEXT_DRAFTED:
+    case RUN_EVENT.TEXT_DRAFTED:
       return textDrafted(context, event);
     // The rest of the stream is the relay's, about a run's moments rather
     // than the record.
-    case BRAIN_RUN_EVENT.SLOW_STEP:
-    case BRAIN_RUN_EVENT.QUESTION_QUEUED:
-    case BRAIN_RUN_EVENT.QUESTION_WITHDRAWN:
-    case BRAIN_RUN_EVENT.CODE_SHOWN:
-    case BRAIN_RUN_EVENT.CALL_ENDING:
-    case BRAIN_RUN_EVENT.ACTIONS_SETTLED:
-    case BRAIN_RUN_EVENT.REPLY_SENTENCE:
-    case BRAIN_RUN_EVENT.ENDED:
+    case RUN_EVENT.SLOW_STEP:
+    case RUN_EVENT.QUESTION_QUEUED:
+    case RUN_EVENT.QUESTION_WITHDRAWN:
+    case RUN_EVENT.CALL_ENDING:
+    case RUN_EVENT.ACTIONS_SETTLED:
+    case RUN_EVENT.REPLY_SENTENCE:
+    case RUN_EVENT.ENDED:
       return Effect.succeed(Result.succeed(STORE_WRITE_EFFECT.IGNORED));
   }
 }
@@ -2280,11 +2281,17 @@ const findAwaitingLines = SqlSchema.findAll({
     id: Schema.String,
     clientId: Schema.String,
     parts: StoredPartsColumnSchema,
+    withdrawn: Schema.Boolean,
   }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id, clientId: messages.clientId, parts: messages.parts })
+        .select({
+          id: messages.id,
+          clientId: messages.clientId,
+          parts: messages.parts,
+          withdrawn: sql<boolean>`${messages.withdrawnAt} is not null`,
+        })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
         .where(
@@ -2302,7 +2309,7 @@ const findAwaitingLines = SqlSchema.findAll({
     ),
 });
 
-/** A line taken by the turn that received it: the turn on the row in place, with the steps it had begun before it, its revision moved. */
+/** A line taken by the turn that received it: the turn on the row in place, with the steps it had begun before it, its revision moved, and a withdrawn line standing again. */
 const giveLineToTurn = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
@@ -2320,6 +2327,7 @@ const giveLineToTurn = SqlSchema.void({
           turnId: row.turnId,
           takenAfterStep: row.takenAfterStep,
           revision: landedRevision(bumped),
+          withdrawnAt: null,
         })
         .where(eq(messages.id, row.id)),
     );
@@ -2444,6 +2452,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* new DispatchClaimHeld();
   }
   const clientId = sentLineId(line.clientKey);
+  yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
   // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
   if (Option.isSome(standing)) {
@@ -2467,14 +2476,23 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed({ id, txid, claim });
 });
 
-/** Deletes the line its runtime never took, unless a turn took it all the same, answering whether it went. */
-const deleteUntakenLine = SqlSchema.findAll({
-  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
+/**
+ * Stamps the line its runtime never took withdrawn, unless a turn took it
+ * all the same, answering whether it was. Note that the row is kept rather
+ * than deleted, because a runtime that took the line past the hand-over's
+ * deadline, or before a record that failed, still hands it to a turn, which
+ * takes this row with what carried it and who sent it (`takeAwaitingLine`);
+ * the maintenance sweep deletes it once no turn can (`abandoned-turns.ts`'s
+ * `purgeWithdrawnLines`).
+ */
+const withdrawUntakenLine = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String, now: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ conversationId, id }) =>
+  execute: ({ conversationId, id, now }) =>
     Database.use((db) =>
       db
-        .delete(messages)
+        .update(messages)
+        .set({ withdrawnAt: now })
         .where(
           and(
             eq(messages.conversationId, conversationId),
@@ -2487,9 +2505,31 @@ const deleteUntakenLine = SqlSchema.findAll({
 });
 
 /**
+ * Deletes the withdrawn line under a send's key, which a retry of that send
+ * writes afresh at the end of the conversation, as the send it now is,
+ * rather than handing over a row standing among lines sent since.
+ */
+const deleteWithdrawnLine = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
+  execute: ({ conversationId, clientId }) =>
+    Database.use((db) =>
+      db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.clientId, clientId),
+            isNull(messages.turnId),
+            isNotNull(messages.withdrawnAt),
+          ),
+        ),
+    ),
+});
+
+/**
  * Counts the conversation's journal revision up and stamps it as the one a
  * reader holding an older cursor reads the transcript afresh from, as a
- * rewind does, since a row it may already have drawn is gone.
+ * rewind does, since a row it may already have drawn now reads nowhere.
  */
 const markLineWithdrawn = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -2523,9 +2563,10 @@ function recordedLine(
         Effect.gen(function* () {
           yield* releaseDispatchClaim(target.conversationId, claimed.claim);
           if (taken) return;
-          const removed = yield* deleteUntakenLine({
+          const removed = yield* withdrawUntakenLine({
             conversationId: target.conversationId,
             id: claimed.id,
+            now: yield* DateTime.nowAsDate,
           });
           if (removed.length > 0)
             yield* markLineWithdrawn({ conversationId: target.conversationId });
@@ -2566,12 +2607,18 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, StoreFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  const run =
+  const runAmong = (lines: typeof awaiting) =>
     "clientId" in take
-      ? awaiting.filter((line) => line.clientId === take.clientId)
+      ? lines.filter((line) => line.clientId === take.clientId)
       : take.beside
-        ? coalescedRunWithin(awaiting, take.text)
-        : coalescedRun(awaiting, take.text);
+        ? coalescedRunWithin(lines, take.text)
+        : coalescedRun(lines, take.text);
+  // Note that a line whose hand-over answered nothing is taken only where it lengthens the run,
+  // because eve heard one only where its answer was lost, and one it never heard standing among the
+  // lines it took would part a run eve did coalesce; the lines it took win where the two runs tie.
+  const standing = runAmong(awaiting.filter((line) => !line.withdrawn));
+  const widened = runAmong(awaiting);
+  const run = widened.length > standing.length ? widened : standing;
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({

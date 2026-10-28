@@ -227,7 +227,6 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
-  localAgents: true,
   // Each diff setting away from its default, the look a review tool's reader picked.
   lineNumbers: false,
   wordWrap: false,
@@ -386,17 +385,23 @@ test("the Mac commands switch an earlier build stored reads as a mode: on as Ask
   assert.equal(await storeIn(directory).get("macCommands"), MAC_COMMAND_MODE.NEVER);
 });
 
-test("the notifications switch an earlier build stored is let go unread, and the choices beside it stay", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await storeIn(directory).set("theme", THEME.DARK);
-  const file = path.join(directory, SETTINGS_FILE_NAME);
-  const stored = JSON.parse(await readSettingsFile(directory));
-  await fs.writeFile(file, JSON.stringify({ ...stored, agentNotifications: false }));
+test.for([
+  { setting: "the notifications switch", field: "agentNotifications" },
+  { setting: "Run agents on this Mac", field: "localAgents" },
+])(
+  "$setting, which an earlier build stored, is let go unread, and the choices beside it stay",
+  async ({ field }, t) => {
+    const directory = await temporaryDirectory(t, "luke-settings-");
+    await storeIn(directory).set("theme", THEME.DARK);
+    const file = path.join(directory, SETTINGS_FILE_NAME);
+    const stored = JSON.parse(await readSettingsFile(directory));
+    await fs.writeFile(file, JSON.stringify({ ...stored, [field]: false }));
 
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.get("theme"), THEME.DARK);
-  assert.equal("agentNotifications" in appSettingsView(await reopened.snapshot()), false);
-});
+    const reopened = storeIn(directory);
+    assert.equal(await reopened.get("theme"), THEME.DARK);
+    assert.equal(field in appSettingsView(await reopened.snapshot()), false);
+  },
+);
 
 test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");

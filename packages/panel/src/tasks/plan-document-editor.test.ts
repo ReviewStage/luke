@@ -261,7 +261,7 @@ function mount(
       ),
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    draw(createElement(PlanBody, { task, live: false, onEdit: door, onRename }));
+    draw(createElement(PlanBody, { task, onEdit: door, onRename }));
   /** The plan as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
@@ -287,7 +287,7 @@ function TaskPage({
   onRename: (name: string) => Promise<boolean>;
 }): ReactElement {
   const onEdit = usePlanEditDoor(task.id, edit);
-  return createElement(PlanBody, { task, live: false, onEdit, onRename });
+  return createElement(PlanBody, { task, onEdit, onRename });
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {
@@ -1165,6 +1165,34 @@ test("a click hands the editor the words it landed on, so the caret finds them h
     x: 60,
     y: 310,
     words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 300 },
+  });
+});
+
+test("a click whose press selected words in a section hands the editor where they start and end, so it opens with them selected", () => {
+  const body = "## Goal\n\nShip it.\n\nShip the invite flow.\n";
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  const goal = block(container, "Goal");
+  window
+    .getSelection()
+    ?.setBaseAndExtent(wordsNode(goal, "Ship it."), 5, wordsNode(goal, "Ship the invite flow."), 8);
+
+  act(() => {
+    goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+  });
+
+  assert.deepEqual(open().placement, {
+    x: 60,
+    y: 310,
+    from: { section: 0, text: "Ship it.", occurrence: 0, offset: 5, code: false, top: 0 },
+    words: {
+      section: 0,
+      text: "Ship the invite flow.",
+      occurrence: 0,
+      offset: 8,
+      code: false,
+      top: 0,
+    },
   });
 });
 

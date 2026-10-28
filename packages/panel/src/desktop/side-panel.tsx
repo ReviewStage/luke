@@ -6,6 +6,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
@@ -167,7 +168,7 @@ import {
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
-import type { MenuAction } from "./action-menu.js";
+import type { MenuEntry } from "./action-menu.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -205,7 +206,7 @@ import { TabStrip } from "./tab-strip.js";
 export interface ShownTab {
   readonly label: string;
   /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
-  readonly groups: (opener: HTMLElement) => MenuAction[][];
+  readonly groups: (opener: HTMLElement) => MenuEntry[][];
 }
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
@@ -436,9 +437,6 @@ type DrawnCloudBrowser = { readonly id: string; readonly owner: CloudBrowserOwne
 
 /** No cloud Browser tab on the task, the same array every render. */
 const NO_CLOUD_BROWSERS: readonly DrawnCloudBrowser[] = [];
-
-/** Whose browser a cloud Browser tab of the task's own is in. */
-const LUKE_NAME = "Luke";
 
 /** What a draft of a tab in an agent's browser is called, until it opens a page. */
 const NEW_CLOUD_TAB = "New tab";
@@ -2409,7 +2407,10 @@ export function SidePanel({
   const cloudBrowsers = useMemo(() => {
     const ownerOf = (agentId: string | null): CloudBrowserOwner => {
       if (agentId === null) {
-        return { name: LUKE_NAME, icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} /> };
+        return {
+          name: OPERATOR_NAME,
+          icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />,
+        };
       }
       const subject = agentSubject(agents, agentId, drawnTranscripts, false);
       return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
@@ -2736,7 +2737,9 @@ function PanelPhoneHead({
                 : shown
                     .groups(opener)
                     .map((group) =>
-                      group.map((item) => ({ ...item, detail: item.detail ?? shown.label })),
+                      group.map((item) =>
+                        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+                      ),
                     );
             return [
               [{ label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList }],

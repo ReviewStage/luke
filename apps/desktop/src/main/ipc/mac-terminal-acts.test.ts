@@ -54,8 +54,6 @@ const SET: MacRepository = { repository: "acme/app", command: "pnpm dev" };
 const panelOf = (): ActSender<WebContents> => ({
   sender: {} as WebContents,
   panel: true,
-  voice: false,
-  call: false,
 });
 
 interface ScriptedPort {
@@ -331,10 +329,10 @@ it.effect("a closed tab and a gone page close their terminals; only a panel is a
     yield* drain;
     assert.equal(started[1]?.closed, true);
 
-    const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
+    const other: ActSender<WebContents> = { ...panelOf(), panel: false };
     const refused = yield* actPort.perform(
       { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
-      voice,
+      other,
     );
     assert.deepEqual(refused, { refused: REFUSAL[ACT_KIND.MAC_TERMINAL_OPEN] });
     assert.equal(started.length, 2);

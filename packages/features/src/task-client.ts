@@ -9,7 +9,6 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
-import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import type { LocalAgentRefusal } from "./coding-agent-wire.js";
@@ -18,9 +17,7 @@ import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
-  GitHubRepositoryIssuesAnswer,
   GitHubRepositoryPullRequestAnswer,
-  RepositoryIssuesAsk,
 } from "./github-repositories-wire.js";
 import {
   askHosted,
@@ -34,7 +31,6 @@ import { imageBodyOf } from "./image-body.js";
 import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
-  type TaskBoardLiveAnswer,
   type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
@@ -57,7 +53,6 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import type { SidebarLiveAnswer } from "./sidebar-live.js";
-import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
@@ -99,17 +94,11 @@ import {
   type StartCallFailure,
   TASK_CALL_FAILURE,
   type TaskCallFailure,
-  type TaskCodeAnswer,
-  type TaskIssueCallFailure,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
-  type TasksIssueLinkAnswer,
-  type TasksIssueLinksAnswer,
-  type TasksIssueRelateAnswer,
-  type TasksIssueUnlinkAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
 } from "./tasks-view.js";
@@ -185,10 +174,9 @@ const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
-/** The refusals a start can answer with: a repository out of reach, or the Linear issue it was to start from unread. */
+/** The refusals a start can answer with: a repository out of reach, a workspace none of the account's, or a device that would not take its agents. */
 const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } as const;
@@ -233,12 +221,6 @@ function hostedResult<Answer, Failure extends string>(
   });
 }
 
-/** The refusals a call on a task's linked issues can answer with, by the service's own word for each. */
-const TASK_ISSUE_REFUSALS = new Map<HostedApiError, TaskIssueCallFailure>([
-  [HOSTED_API_ERROR.NOT_FOUND, TASK_CALL_FAILURE.NOT_FOUND],
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, TASK_CALL_FAILURE.LINEAR_UNAVAILABLE],
-]);
-
 /** The refusals a Browser tab's open can answer with, by the service's own word for each. */
 const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>([
   [HOSTED_API_ERROR.NOT_FOUND, BROWSER_TAB_OPEN_FAILURE.NOT_FOUND],
@@ -248,24 +230,6 @@ const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>
   [HOSTED_API_ERROR.AGENT_RETIRED, BROWSER_TAB_OPEN_FAILURE.RETIRED],
   [HOSTED_API_ERROR.UPSTREAM_ERROR, BROWSER_TAB_OPEN_FAILURE.UNREACHABLE],
 ]);
-
-/** A call on a task's linked issues as the window hears it: the answer, or why there is none, a refusal it does not name as unanswered. */
-function issueView<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<
-  Answer | { readonly failure: TaskIssueCallFailure },
-  never,
-  HttpClient.HttpClient
-> {
-  return Effect.match(asked, {
-    onSuccess: (answer): Answer | { readonly failure: TaskIssueCallFailure } => answer,
-    onFailure: (failed) => ({
-      failure:
-        (failed._tag === "HostedRefused" ? TASK_ISSUE_REFUSALS.get(failed.refusal) : undefined) ??
-        TASK_CALL_FAILURE.UNANSWERED,
-    }),
-  });
-}
 
 /** A procedure's answer, or nothing where it reached none. */
 function orNothing<Answer>(
@@ -474,37 +438,6 @@ export class HostedTaskClient {
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
   }
 
-  /** One task's whiteboard as it stands; nothing where the service did not answer one. */
-  readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
-    );
-  }
-
-  /**
-   * Where one task's whiteboard stands, sealed for following over Neon
-   * Realtime, or with `poll` its rows inline at the poll address, for a
-   * reader polling while Realtime fails it, for the account `userId`
-   * names: not found where the account reaches no such task, signed out
-   * where the session is no longer that account's, unanswered for anything
-   * else, which the caller answers by sealing it again.
-   */
-  boardLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
   /**
    * Where one task's pages and calls stand, sealed for following over Neon
    * Realtime, or with `poll` their rows inline, for a reader polling while
@@ -593,13 +526,6 @@ export class HostedTaskClient {
       ),
       LIVE_REFUSALS,
     );
-  }
-
-  /** Every code the task's agents showed on it, oldest first; nothing where the service did not answer it. */
-  readCode(
-    taskId: string,
-  ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskFiles.code, { id: taskId }));
   }
 
   /**
@@ -709,13 +635,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** The issues one task links, each with where it stands now, read live by the service; or why there are none. */
-  readIssueLinks(
-    taskId: string,
-  ): Effect.Effect<TasksIssueLinksAnswer, never, HttpClient.HttpClient> {
-    return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
-  }
-
   /**
    * Opens a Browser tab at the address in the browser of the coding agent
    * named on the task, taken over by the account at once, under a deadline
@@ -752,52 +671,6 @@ export class HostedTaskClient {
       onSuccess: (answer): TasksBrowserTabsAnswer => answer,
       onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
     });
-  }
-
-  /** An issue linked to one task, which the service reads from its provider first; or why none was linked. */
-  linkIssue(
-    taskId: string,
-    issue: TaskIssueChoice,
-  ): Effect.Effect<TasksIssueLinkAnswer, never, HttpClient.HttpClient> {
-    return issueView(
-      askHosted(this.#hosted.plans.linkIssue, { params: { id: taskId }, body: issue }),
-    );
-  }
-
-  /** Which keyword one task's pull requests write of one of its links; or why it stands as it was. */
-  relateIssue(
-    taskId: string,
-    linkId: string,
-    relation: TaskIssueRelation,
-  ): Effect.Effect<TasksIssueRelateAnswer, never, HttpClient.HttpClient> {
-    return issueView(
-      askHosted(this.#hosted.plans.relateIssue, {
-        params: { id: taskId, link: linkId },
-        body: { relation },
-      }),
-    );
-  }
-
-  /** One of a task's links let go; or why it stands. */
-  unlinkIssue(
-    taskId: string,
-    linkId: string,
-  ): Effect.Effect<TasksIssueUnlinkAnswer, never, HttpClient.HttpClient> {
-    return issueView(askHosted(this.#hosted.plans.unlinkIssue, { id: taskId, link: linkId }));
-  }
-
-  /** The issues of a repository the workspace's installation reaches, as New task's picker asks for them, or that the installation grants none; nothing where the service did not answer. */
-  readRepositoryIssues(
-    place: RepositoryPlace,
-    ask: RepositoryIssuesAsk,
-  ): Effect.Effect<GitHubRepositoryIssuesAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.github.repositoryIssues, {
-        ...place,
-        ...(ask.number === undefined ? undefined : { number: String(ask.number) }),
-        ...(ask.number !== undefined || ask.query === undefined ? undefined : { query: ask.query }),
-      }),
-    );
   }
 
   /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */
@@ -924,21 +797,6 @@ export class HostedTaskClient {
         askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
         (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
-    );
-  }
-
-  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written and, where the write moved the board's live row, the id of its transaction, or nothing where the service did not answer. */
-  saveBoard(
-    taskId: string,
-    elements: readonly BoardElement[],
-    appliedDrawing: number,
-    image?: string,
-  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.plans.saveBoard, {
-        params: { id: taskId },
-        body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
-      }),
     );
   }
 

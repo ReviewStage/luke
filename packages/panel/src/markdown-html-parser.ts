@@ -7,8 +7,8 @@ import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
  * markdown-html-parser.ts -- the HTML parser a reply's markdown is drawn through (`rehype-raw`), kept out of the bundle every window parses and loaded once per window as the panel first paints.
  *
  * Streamdown runs every reply through `rehype-raw`, which hands the whole
- * tree to parse5, an HTML parser of some 50 KB gzipped, and the voice and
- * call windows, which draw no markdown, would parse it for nothing. So the build answers Streamdown's
+ * tree to parse5, an HTML parser of some 50 KB gzipped, which the window
+ * would otherwise parse before its first paint. So the build answers Streamdown's
  * `import "rehype-raw"` with this module (`scripts/build-table.mjs`'s
  * `redirectOf`, and the same in `vitest.config.ts`), and
  * this module reaches the library through a dynamic `import()`, which the

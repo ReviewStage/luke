@@ -12,7 +12,6 @@ import {
   recordCodingAgentPublished,
   renameCodingAgentCommitted,
 } from "@luke/database/models/coding-agent-store";
-import { linkTaskIssue, unlinkTaskIssue } from "@luke/database/models/task-issue-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
@@ -28,7 +27,6 @@ import { messages, turns } from "@luke/database/schemas/storage";
 import {
   getTestDB,
   joinWorkspace,
-  linearIssueLink,
   mutableFunctionsOf,
   openWorkspace,
   startTask,
@@ -64,7 +62,7 @@ import { SqlClient } from "effect/sql";
 import { codingAgentSummary, summaryAccounts } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
-import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import { TURN_FAILURE } from "../core.js";
 import { taskListLiveStatements } from "./task-list-live.js";
 
 /**
@@ -181,7 +179,6 @@ const liveRowsOf = (userId: string) =>
     return yield* Schema.decodeUnknownEffect(taskListLiveRowsSchema)({
       plans: yield* runLive(statements.plans),
       agents: yield* runLive(statements.agents),
-      issues: yield* runLive(statements.issues),
     });
   });
 
@@ -362,7 +359,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const orphaned = yield* openAgent(owner, { taskId: plan.id }, 25 * 60_000);
         yield* turnOf(orphaned, TURN_STATUS.FAILED, 24 * 60_000, {
           settled: true,
-          failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          failure: TURN_FAILURE.SESSION_ENDED,
         });
         yield* lineOf(orphaned, 1, "Try again.", null, 60_000);
 
@@ -501,56 +498,6 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.equal(listed.get(operator.id)?.kind, CODING_AGENT_KIND.OPERATOR);
         assert.equal(listed.get(operator.id)?.repository, null);
         assert.equal(listed.get(coder.id)?.kind, undefined);
-      }),
-  );
-
-  it.effect(
-    "deliver each plan's linked issues as its tags, oldest linked first, as the held list names them, to every member and to no one else, and a link let go goes",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openUser;
-        const teammate = yield* openUser;
-        const outsider = yield* openUser;
-        yield* openWorkspace(outsider);
-        const plan = yield* startTask(owner, { name: "Teammate invitations" });
-        const bare = yield* startTask(owner, { name: "Billing export" });
-        yield* joinWorkspace(plan.workspaceId, teammate);
-        const link = (n: number) =>
-          Effect.map(
-            linkTaskIssue(
-              owner,
-              plan.id,
-              linearIssueLink({
-                identifier: `ENG-${n}`,
-                title: `Issue ${n}`,
-                url: `https://linear.app/acme/issue/ENG-${n}`,
-                description: "",
-              }),
-            ),
-            Option.getOrThrow,
-          );
-        const first = yield* link(7);
-        yield* link(3);
-        yield* link(12);
-
-        for (const reader of [owner, teammate, outsider]) {
-          assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
-        }
-        const read = yield* liveListOf(teammate, NOW);
-        assert.deepEqual(
-          read.plans.find((each) => each.id === plan.id)?.issues?.map((tag) => tag.key),
-          ["ENG-7", "ENG-3", "ENG-12"],
-        );
-        assert.equal(read.plans.find((each) => each.id === bare.id)?.issues, undefined);
-        assert.deepEqual((yield* liveRowsOf(outsider)).issues, []);
-
-        yield* unlinkTaskIssue(owner, plan.id, first.id);
-        assert.deepEqual(
-          (yield* liveListOf(owner, NOW)).plans
-            .find((each) => each.id === plan.id)
-            ?.issues?.map((tag) => tag.key),
-          ["ENG-3", "ENG-12"],
-        );
       }),
   );
 

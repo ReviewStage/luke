@@ -124,7 +124,6 @@ import {
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
-import { ColumnFoot } from "../call/call-card.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -163,7 +162,12 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, useInboxWaiting, useTasksWaiting } from "./places-waiting.js";
+import {
+  needsYouNoun,
+  useChannelWaiting,
+  useInboxWaiting,
+  useTasksWaiting,
+} from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -1787,6 +1791,7 @@ function SidebarColumn({
   const shownChannelId =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
+  const channelWaiting = useChannelWaiting(tasks);
   const waitingOn = useTasksWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
@@ -1874,7 +1879,7 @@ function SidebarColumn({
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows } = tasks;
   const listedAgents = {
-    standing: withoutLuke(tasks.listedAgents.standing, operator),
+    standing: withoutLuke(tasks.listedAgents.standing),
     archived: tasks.listedAgents.archived,
   };
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
@@ -2127,6 +2132,7 @@ function SidebarColumn({
           <SidebarChannels
             workspaceId={tasks.workspace?.id}
             channels={channels}
+            waiting={channelWaiting}
             currentId={shownChannelId}
             shown={tasks.shown && overlay.inSight}
             onOpen={chosen(openChannel)}
@@ -2188,8 +2194,7 @@ function SidebarColumn({
                     <SidebarLuke
                       operator={operator}
                       agent={tasks.listedAgents.standing.find(
-                        (agent) =>
-                          agent.workspaceId === operator.workspaceId && isLuke(agent, operator),
+                        (agent) => agent.workspaceId === operator.workspaceId && isLuke(agent),
                       )}
                       current={lukeId !== undefined && lukeId === agentShown}
                       unread={lukeId !== undefined && context.unseenAgent(lukeId)}
@@ -2349,16 +2354,14 @@ function SidebarColumn({
         </ScrollArea>
       </Fill>
 
-      <ColumnFoot docked={!sidebar.collapsed}>
-        <SidebarFoot
-          account={account}
-          updates={updates}
-          shown={overlay.inSight}
-          settingsOpen={tab === PANEL_TAB.SETTINGS}
-          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
-          onSignOut={onSignOut}
-        />
-      </ColumnFoot>
+      <SidebarFoot
+        account={account}
+        updates={updates}
+        shown={overlay.inSight}
+        settingsOpen={tab === PANEL_TAB.SETTINGS}
+        onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
+        onSignOut={onSignOut}
+      />
       {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}

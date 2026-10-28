@@ -14,7 +14,7 @@ import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 import { webSocketOrigin } from "./socket-origin.js";
-import { taskActivitySchema, taskShownCodeSchema } from "./tasks-view.js";
+import { taskActivitySchema } from "./tasks-view.js";
 import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
 /**
@@ -135,15 +135,7 @@ export const VOICE_SERVICE_FRAME = {
    */
   TASK_ACTIVITY: "plan.activity",
   /**
-   * The service's fourth frame to the desktop, on a task call alone:
-   * code of the task's repository Luke is about to talk about, with its
-   * lines as the service read them from the agent's checkout,
-   * sent as he starts to speak, so the Tasks tab's code pane draws it as he
-   * says it.
-   */
-  TASK_CODE: "plan.code",
-  /**
-   * The service's fifth frame to the desktop, on a task call alone: the
+   * The service's fourth frame to the desktop, on a task call alone: the
    * developer said they are done and Luke is saying goodbye, so the desktop
    * hangs up through its own hang-up once that goodbye has played, and keeps
    * the call up if the developer speaks first. It carries no words.
@@ -413,21 +405,6 @@ const taskActivityFrameSchema = Schema.Struct({
 
 export type TaskActivityFrame = typeof taskActivityFrameSchema.Type;
 
-/**
- * Code Luke put on screen on the call into the agent named, with its lines
- * as the service read them from the agent's repository, and the `show_code`
- * call and turn that showed it, as the agent's work reads them back, so the
- * desktop holds a call's code and the record's copy of it once. The agent
- * is the shown code's own `agentId`.
- */
-const taskCodeFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CODE),
-  planId: callSubjectFields.planId,
-  ...taskShownCodeSchema.fields,
-});
-
-export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
-
 /** Luke is ending the call into the agent named, once his goodbye has played. */
 const taskCallEndingFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
@@ -644,11 +621,6 @@ export function sessionReportFrameFromWire(
  */
 export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivityFrame | undefined {
   return admittedAnswer(taskActivityFrameSchema, value);
-}
-
-/** The code Luke put on screen on a task call, read the same answering way. */
-export function taskCodeFrameFromWire(value: UnparsedWireValue): TaskCodeFrame | undefined {
-  return admittedAnswer(taskCodeFrameSchema, value);
 }
 
 /** Luke ending a task call, read the same answering way. */

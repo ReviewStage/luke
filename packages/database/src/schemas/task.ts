@@ -1,4 +1,3 @@
-import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
 import { CODING_AGENT_MACHINE, type CodingAgentMachine } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
@@ -172,30 +171,4 @@ export const taskNumberCounter = pgTable("task_number_counter", {
     .primaryKey()
     .references(() => organization.id, { onDelete: "cascade" }),
   lastNumber: integer("last_number").notNull(),
-});
-
-/**
- * A task's whiteboard: the Excalidraw scene the Tasks tab shows, with the
- * number of Luke's drawing it holds, and Luke's latest drawing with its own
- * number. A task has no row until its board is first drawn on, and reads as
- * an empty board until then. Beside them stands the scene as the Mac drew it,
- * a PNG, from the first save that held each new drawing of Luke's, which is
- * what the brain looks at (`look_at_board`). The Mac writes the scene and Luke writes the
- * drawing, each whole and each the last write winning (`board-store.ts`).
- * The row goes with its task.
- */
-export const taskBoard = pgTable("task_board", {
-  taskId: uuid("task_id")
-    .primaryKey()
-    .references(() => task.id, { onDelete: "cascade" }),
-  elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
-  /** The number of Luke's drawing the scene holds; 0 before it holds any. */
-  appliedDrawing: integer("applied_drawing").notNull().default(0),
-  /** Luke's latest drawing; null before he drew. */
-  drawing: jsonb("drawing").$type<readonly DrawingElement[]>(),
-  /** The latest drawing's number, one more for each drawing; 0 before he drew. */
-  drawingNumber: integer("drawing_number").notNull().default(0),
-  /** The scene drawn as a PNG, base64, by the Mac's first save to hold drawing `applied_drawing`; null before one. */
-  image: text("image"),
-  updatedAt: updatedAt(),
 });

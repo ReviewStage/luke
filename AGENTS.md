@@ -70,8 +70,8 @@ component, factored out of the surface where it builds the box by hand.
 
 ## Never
 
-- Never let a credential or account secret enter a Gateway answer or event, the
-  voice window, a counted event, a trace, or a fixture. The repository check
+- Never let a credential or account secret enter a Gateway answer or event, a
+  counted event, a trace, or a fixture. The repository check
   (`scripts/repository-checks.sh`) refuses a tracked literal shaped like a
   provider's credential; nothing else scans for secrets, so past that this rule
   is the whole of the check. The carve-outs: the output of `run_on_mac`, a
@@ -82,17 +82,14 @@ component, factored out of the surface where it builds the box by hand.
   reach the conversation, the model, an agent's transcript, and its traces. And
   a Terminal tab's bytes go only to the tab that opened them: through the
   terminal relay (`apps/web/server/terminal/`) and the host to that panel's
-  window, never into a trace, a counted event, a fixture, app state, or the
-  voice window. And a webhook body an automation's caller sends, or an
+  window, never into a trace, a counted event, a fixture, or app state. And a
+  webhook body an automation's caller sends, or an
   integration trigger's event (a Sentry issue or alert as Luke's Sentry
   integration delivers it), may reach that run's agent task, transcript and
   traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And a host install
   token may be shown once, in the window that minted it, inside the install
-  command or the setup prompt; never anywhere else. And the Keyframe
-  session token for a call's own avatar may reach the panel window, which runs
-  that session, and never the voice window, a Gateway answer or event, app
-  state, a counted event, a trace, or a fixture. And an agent's cloud browser, a
+  command or the setup prompt; never anywhere else. And an agent's cloud browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
@@ -105,7 +102,7 @@ component, factored out of the surface where it builds the box by hand.
   conversation names by id, which that transcript shows to the members who can
   open the task, and which is deleted with the conversation, by its purge seven
   days after a delete or at once with the account. None of it ever goes into a
-  trace, a counted event, a fixture, or the voice window, and session replay
+  trace, a counted event, or a fixture, and session replay
   masks the live view and the transcript's screenshots; the cookies a member
   types into it stay in that agent's sandbox, and its snapshots, for the
   sandbox's life. An agent may record its browser as a video (`record` and
@@ -115,21 +112,21 @@ component, factored out of the surface where it builds the box by hand.
   screenshot (`packages/service/src/agents/browser/browser-tool.ts`), shown and
   deleted on the same terms; the model is never handed the video, the
   transcript's player is left out of session replay, and none of it goes into a
-  trace, a counted event, a fixture, or the voice window. An agent may also
+  trace, a counted event, or a fixture. An agent may also
   post such a recording, or any WebM it recorded in its sandbox, to a thread in
   one of its workspace's channels
   (`packages/service/src/agents/coder-host/inbox-image.ts`), kept beside the
   thread's message, up to 4 MB, as a picture posted there is, shown to whoever
   may read that thread and deleted with it; the thread's player is left out of
-  session replay, and none of it goes into a trace, a counted event, a
-  fixture, or the voice window. Such a recording may also be added to its
+  session replay, and none of it goes into a trace, a counted event, or a
+  fixture. Such a recording may also be added to its
   task's plan, from the file viewer's Add to plan or an agent's `edit_plan`,
   at most ten to a plan, kept beside the plan as its pictures are
   (`packages/database/src/models/plan-attachments.ts`), shown to the members
   who can open the task and deleted with the plan; `look_at_picture` refuses
   it (`packages/service/src/tasks/picture-look.ts`), so no model is handed it,
   the plan's player is left out of session replay, and none of it goes into a
-  trace, a counted event, a fixture, or the voice window. And Sentry's SDKs run
+  trace, a counted event, or a fixture. And Sentry's SDKs run
   with their default data collection, but that the service's and the eve roots'
   leave out model inputs and outputs and request bodies
   (`packages/service/src/observability/sentry.ts`, the eve roots'
@@ -159,9 +156,7 @@ answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
-agent's turn, whose one turn is its whole run), and ends on its owner's own
-OpenAI key every voice session whose device detached and did not come back within the grace. It
-also starts due automation runs, and for coding agents on a member's GitHub
+agent's turn, whose one turn is its whole run). It also starts due automation runs, and for coding agents on a member's GitHub
 token it reads their open pull requests' reviews, comments, and checks on that
 token and wakes the agent with them, as the webhook does for the App.
 

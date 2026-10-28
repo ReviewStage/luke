@@ -47,7 +47,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  *
  * Its search, the words typed in the list's head, is held here too, the item
  * the pane shows keeping its place among the steps, as it does under any
- * scope (`inboxList`); and whether a New thread stands in the pane.
+ * scope (`inboxList`).
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
  * (`channelGroups`), under a scope of the channel's own: All of everyone's
@@ -56,12 +56,6 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * shown, never kept. Its grouping, its order, and the rest of its view are
  * the Inbox's own.
  */
-
-/** A New thread just opened, before the Inbox it opened on has named the item it stands over. */
-const COMPOSE_PENDING = Symbol("compose-pending");
-
-/** What a New thread stands over: the item chosen as it opened, none where none was, or the one about to be named. */
-type ComposeOver = string | undefined | typeof COMPOSE_PENDING;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -207,11 +201,12 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
       ? [
           {
             agentId: pageAgent.id,
+            ...(pageAgent.kind === undefined ? undefined : { agentKind: pageAgent.kind }),
             agentTitle: pageAgent.title,
             agentModel: pageAgent.model,
             automationId: pageAgent.automationId ?? null,
             automationName: null,
-            repository: "",
+            repository: agents.agentRepository ?? null,
             ...(agents.workspaceId === undefined ? undefined : { workspaceId: agents.workspaceId }),
           },
         ]
@@ -227,18 +222,6 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
       : channelGroups(everyChannel, channelId, asked?.opened === true ? asked.itemId : undefined);
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
-  // A New thread stands in the pane over the item chosen as it opened, and gives way as soon as another is chosen.
-  const [composing, setComposing] = useState<{ readonly over: ComposeOver } | undefined>(undefined);
-  const askedId = asked?.itemId;
-  const composeOn =
-    composing !== undefined && (composing.over === COMPOSE_PENDING || composing.over === askedId);
-  useEffect(() => {
-    if (composing?.over === COMPOSE_PENDING) setComposing({ over: askedId });
-    else if (composing !== undefined && composing.over !== askedId) setComposing(undefined);
-  }, [composing, askedId]);
-  const startCompose = useCallback(() => setComposing({ over: COMPOSE_PENDING }), []);
-  const endCompose = useCallback(() => setComposing(undefined), []);
-  const compose = { on: composeOn, onStart: startCompose, onEnd: endCompose };
   // The list's search, which narrows what it lists, never what it counts.
   const [query, setQuery] = useState("");
   const search = searchTokens(query);
@@ -321,12 +304,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   }, [retryLive, retryAgents]);
   // Note that an item a link or a notification asked for is never given way to, found or not, and that only an Inbox standing has an item to stand in.
   const standIn =
-    view.open &&
-    chosen === undefined &&
-    !chosenWaits &&
-    !missing &&
-    asked?.opened !== true &&
-    composing === undefined
+    view.open && chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
       ? firstChoice(list)
       : undefined;
   const { onChoose } = view;
@@ -366,7 +344,6 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     chosen,
     filteredOut,
     search: { query, onQuery: setQuery },
-    compose,
     searched,
     missing,
     chosenFailed,

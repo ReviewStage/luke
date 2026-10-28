@@ -10,8 +10,8 @@
  * - `pressAct` (`press`): a person pressed something and nothing reads the
  *   answer. A refusal, or any other failure, raises a FAILED toast carrying
  *   the act's own refusal sentence, so a press never fails silently.
- * - `tellAct` (`tell`): a report nobody pressed, such as a call's avatar
- *   state or a refresh after a turn. It stays quiet whatever comes back,
+ * - `tellAct` (`tell`): a report nobody pressed, such as a browser view let
+ *   go or a refresh after a turn. It stays quiet whatever comes back,
  *   because a toast nobody asked for is noise.
  *
  * A control's press is a `press`; reach for `tell` only where no person
@@ -127,8 +127,7 @@ async function performAct<Kind extends PortActKind>(
 
 /**
  * An act whose answer nothing reads and no person pressed for, quiet
- * whatever comes back: the call window's avatar reports from the fiber
- * running it, not from a render.
+ * whatever comes back.
  */
 export function tellAct<Kind extends PortActKind>(
   kind: Kind,

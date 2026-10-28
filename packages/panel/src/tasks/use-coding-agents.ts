@@ -19,7 +19,6 @@ import {
   type CodingAgentOrigin,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
-  hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type {
@@ -334,16 +333,6 @@ export interface CodingAgentsControl {
     /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
     pending?: StartingAgent | undefined;
   };
-  /**
-   * A draft's Call: starts the draft's agent for a call to open into, on
-   * eve whatever the account's routing would choose. A draft holding words
-   * or files starts on them under its own key, as a send does, marked
-   * `call`; an empty one starts blank under a key of the press's own, which
-   * needs no repository. Either runs on the draft's chips, lets the draft go
-   * once it lands, and opens the agent's tab as a Start's does. Answers the
-   * agent, or why it did not start. Present exactly while a task is open.
-   */
-  startCall: ((draft: AgentDraft) => Promise<DraftCallStart>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
   /** Takes one agent back to just before one of the developer's lines, stopping it first, and takes the agent as the service answers it. */
@@ -446,7 +435,7 @@ export interface CodingAgentsControl {
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
   messageInbox: InboxMessenger;
-  /** One thread started with an agent, as the Inbox's New thread sends it. */
+  /** One thread started with an agent, as an Inbox item's box sends it when its checkbox is ticked. */
   startInboxThread: InboxThreadStarter;
   /** One read of an inbox item's image, as its card asks it. */
   readInboxImage: InboxImageReader;
@@ -469,9 +458,6 @@ export interface AgentDraft {
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
   readonly refused?: Failure | undefined;
 }
-
-/** What a draft's Call answers: the agent it started, for the call to open into, or why it did not start. */
-export type DraftCallStart = { readonly agentId: string } | { readonly failure: Failure };
 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
 type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "refused">;
@@ -1137,37 +1123,6 @@ export function useCodingAgents(input: {
     pending.current = undefined;
     landed(taskId, answer.agent);
     return undefined;
-  };
-
-  // Note that an empty draft's press mints its own key, because a blank
-  // agent is a new one each time it is asked for, while words go under the
-  // draft's key, so a Call asked again opens the agent the first started.
-  const startCall = async (held: AgentDraft): Promise<DraftCallStart> => {
-    if (taskId === undefined)
-      return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
-    const prompt = held.prompt.trim();
-    const { choice, attachments, disabledServers } = held;
-    const words = hasWordsOrFiles(prompt, attachments);
-    if (words && repository === null) {
-      return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
-    }
-    const answer = await askStart(taskId, {
-      ...(words
-        ? {
-            idempotencyKey: held.id,
-            prompt,
-            ...(attachments.length === 0 ? undefined : { attachments }),
-            call: true,
-          }
-        : { idempotencyKey: mintKey(), blank: true }),
-      ...(disabledServers.length === 0 ? undefined : { disabledServers }),
-      ...(choice === undefined ? undefined : choiceRequest(choice)),
-    });
-    if ("failure" in answer) return { failure: startFailureNote(answer, taskId, input.device) };
-    withDraft(taskId, undefined);
-    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === held.id);
-    landed(taskId, answer.agent);
-    return { agentId: answer.agent.id };
   };
 
   // Note that a press carries the key its agent's last press minted while the
@@ -1957,7 +1912,6 @@ export function useCodingAgents(input: {
       onPress: pressStart,
       pending: pressedHere,
     },
-    startCall: taskId !== undefined ? startCall : undefined,
     onStop,
     onRewind,
     onMessage,

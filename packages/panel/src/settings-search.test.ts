@@ -40,7 +40,6 @@ const FIRST: Workspace = {
 function workspaceFound(query: string, workspace: Workspace): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
-    voiceControlsDrawn: false,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
     workspace,
@@ -73,12 +72,11 @@ test("Members finds the members for every workspace", () => {
   }
 });
 
-test("Workspace connections, Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
+test("Workspace connections, Integrations, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
   const queries = [
     "Workspace connections",
     "Integrations",
-    "Linear",
     "manage",
     "GitHub repositories",
     "GitHub",
@@ -99,7 +97,6 @@ test("Integrations finds the Workspace page's group as Workspace connections, un
     searchSettings(
       settingsSearchEntries({
         settings: settingsView(),
-        voiceControlsDrawn: true,
         accountDrawn: true,
         capabilities: DESKTOP_CAPABILITIES,
         workspace: TEAM,
@@ -123,7 +120,6 @@ test("Integrations finds the Workspace page's group as Workspace connections, un
 test("searching GitHub while signed in finds Integrations' GitHub row and Profile's, and a personal access token finds Profile's alone", () => {
   const entries = settingsSearchEntries({
     settings: settingsView(),
-    voiceControlsDrawn: true,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
   });
@@ -147,14 +143,13 @@ test("searching GitHub while signed in finds Integrations' GitHub row and Profil
   );
 });
 
-test("the OpenAI key a call or dictation runs on is found by those words, on Codex's row in Agents, where it is kept", () => {
+test("the OpenAI key dictation runs on is found by that word, on Codex's row in Agents, where it is kept", () => {
   const entries = settingsSearchEntries({
-    settings: settingsView({ voiceAvailable: true }),
-    voiceControlsDrawn: true,
+    settings: settingsView(),
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
   });
-  for (const query of ["voice key", "call key", "dictation key"]) {
+  for (const query of ["dictation key", "dictate key"]) {
     const agents = (searchSettings(entries, query)?.groups ?? []).find(
       (group) => group.page === SETTINGS_VIEW.CODING_AGENTS,
     );
@@ -170,7 +165,6 @@ test("the OpenAI key a call or dictation runs on is found by those words, on Cod
 function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
-    voiceControlsDrawn: false,
     accountDrawn,
     capabilities: DESKTOP_CAPABILITIES,
   };
@@ -207,7 +201,6 @@ test("an experiment is found by its name, what it brings, and what other apps ca
 test("no two rows the search can land on wear the same id", () => {
   const ids = settingsSearchEntries({
     settings: settingsView(),
-    voiceControlsDrawn: true,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
     workspace: TEAM,
@@ -221,7 +214,6 @@ test("no two rows the search can land on wear the same id", () => {
 test("a writing chord is found by its name and by the Markdown typed for it, on the Keyboard shortcuts page", () => {
   const entries = settingsSearchEntries({
     settings: settingsView(),
-    voiceControlsDrawn: false,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
     workspace: undefined,
@@ -242,7 +234,6 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
       searchSettings(
         settingsSearchEntries({
           settings: settingsView(),
-          voiceControlsDrawn: false,
           accountDrawn: true,
           capabilities: DESKTOP_CAPABILITIES,
           workspace: undefined,
@@ -263,7 +254,6 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
 /** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
 const FULL_INPUT: SettingsSearchInput = {
   settings: settingsView({ voiceAvailable: true }),
-  voiceControlsDrawn: true,
   accountDrawn: true,
   capabilities: DESKTOP_CAPABILITIES,
   workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },

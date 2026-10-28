@@ -4,7 +4,6 @@ import { noDatabase } from "@luke/database/testing/no-database";
 import { Effect, Exit, Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
-import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import {
@@ -17,8 +16,6 @@ import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js"
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
-/** What the sweep over the detached voice sessions answers. */
-const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
 /** What the sweep over the queued sessions' sandboxes answers. */
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 /** What the sweep over the lapsed terminal leases answers. */
@@ -60,7 +57,6 @@ interface Recorded {
   purgedCalls: number[];
   abandoned: number[];
   deviceLeases: number[];
-  voiced: number[];
   sandboxed: number[];
   terminals: number[];
   native: number[];
@@ -68,6 +64,7 @@ interface Recorded {
   retention: number[];
   wakeups: number[];
   operatorWakes: number[];
+  withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -81,7 +78,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     purgedCalls: [],
     abandoned: [],
     deviceLeases: [],
-    voiced: [],
     sandboxed: [],
     terminals: [],
     native: [],
@@ -89,6 +85,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     retention: [],
     wakeups: [],
     operatorWakes: [],
+    withdrawnLines: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -118,11 +115,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.deviceLeases.push(now);
         return { lapsed: 1, busy: 0, failed: 0 };
-      }),
-    sweepVoice: (now) =>
-      Effect.sync(() => {
-        recorded.voiced.push(now);
-        return VOICED;
       }),
     sweepSandboxes: (now) =>
       Effect.sync(() => {
@@ -158,6 +150,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.operatorWakes.push(now);
         return { woken: 1, failed: 0 };
+      }),
+    purgeWithdrawnLines: (now) =>
+      Effect.sync(() => {
+        recorded.withdrawnLines.push(now);
+        return 2;
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -208,7 +205,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       purgedCalls: [],
       abandoned: [],
       deviceLeases: [],
-      voiced: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -216,6 +212,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -240,7 +237,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purgedCalls: [],
       abandoned: [],
       deviceLeases: [],
-      voiced: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -248,6 +244,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -259,7 +256,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       purgedCalls: [],
       abandoned: [],
       deviceLeases: [],
-      voiced: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -267,6 +263,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -302,7 +299,6 @@ it.effect(
         purgedCalls: [instant],
         abandoned: [instant],
         deviceLeases: [instant],
-        voiced: [instant],
         sandboxed: [instant],
         terminals: [instant],
         native: [instant],
@@ -310,6 +306,7 @@ it.effect(
         retention: [instant],
         wakeups: [instant],
         operatorWakes: [instant],
+        withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
@@ -325,7 +322,7 @@ it.effect(
     Effect.gen(function* () {
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
-        sweepVoice: () => Effect.fail(new Error("the voice upstream refused")),
+        sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
         sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
@@ -341,7 +338,7 @@ it.effect(
 
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
-      assert.deepEqual(answer.body.voice, SWEEP_FAILED);
+      assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
