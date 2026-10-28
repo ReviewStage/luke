@@ -93,7 +93,8 @@ import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
-import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { useCopyToast } from "../copy-feedback.js";
+import { copyLinkItem } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -449,8 +450,8 @@ function useMembersRead(workspace: Workspace) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ their profile, where the window offers one, Copy link to
- * their person page, and what the reader may do to them (`memberActs`).
+ * then in its ⋯ Copy link to their person page, their profile, where the
+ * window offers one, and what the reader may do to them (`memberActs`).
  * Make admin and Make member take hold at once, since either is undone by
  * the other; Make owner and Remove from workspace ask first. A role change
  * refused is said under the row. A row with no ⋯ in a list where others
@@ -497,6 +498,7 @@ function MemberRow({
   const openPerson = useOpenPerson();
   const copy = useCopyToast();
   const profileActs = [
+    copyLinkItem(copy, linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId)),
     ...(openPerson === undefined
       ? []
       : [
@@ -506,15 +508,6 @@ function MemberRow({
             onSelect: () => openPerson(userId, member.name, workspaceId),
           },
         ]),
-    {
-      label: LINK_COPY.LABEL,
-      icon: <GLYPH.LINK />,
-      onSelect: () =>
-        copy(
-          linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
-          LINK_COPY.COPIED,
-        ),
-    },
   ];
   const roleActs = [
     ...(may.promote

@@ -121,7 +121,7 @@ import {
   useMenuAsk,
 } from "../desktop/phone-head.js";
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
-import { useTabActions } from "../desktop/strip-tabs.js";
+import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
@@ -1182,21 +1182,22 @@ function ListHead({
   // already names it; its search field stands over the list as on every page.
   const phone = usePhoneRoom();
   const handed = head.tab === true && phone;
-  useTabActions(
-    handed
-      ? [
-          [
-            {
-              label: VIEW_OPTIONS,
-              icon: <SlidersHorizontalIcon />,
-              opens: true,
-              detail: title,
-              onAsk: asked.onAsk,
-            },
-          ],
-        ]
-      : undefined,
-  );
+  const linkGroups = head.tab === true && head.link !== undefined ? [[head.link]] : [];
+  const viewGroups: TabActionGroups = handed
+    ? [
+        [
+          {
+            label: VIEW_OPTIONS,
+            icon: <SlidersHorizontalIcon />,
+            opens: true,
+            detail: title,
+            onAsk: asked.onAsk,
+          },
+        ],
+      ]
+    : [];
+  const tabGroups = [...linkGroups, ...viewGroups];
+  useTabActions(tabGroups.length === 0 ? undefined : tabGroups);
   if (handed) {
     return (
       <>
@@ -1426,6 +1427,8 @@ export interface InboxListHead {
    * search under where the head stood.
    */
   readonly tab?: boolean | undefined;
+  /** Copy link, the open item's, which a task's own Inbox tab hands its ⋯ first (`useTabActions`); none while no item is open, since a link names no task's Inbox whole. */
+  readonly link?: MenuAction | undefined;
   /** The channel the window's Inbox is narrowed to, which names its head; none where it lists every channel. */
   readonly channel?: InboxChannelHead | undefined;
 }

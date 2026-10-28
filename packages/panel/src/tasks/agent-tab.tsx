@@ -1500,10 +1500,14 @@ export function AgentMessage({
           align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
           sender={named}
           at={sentAt}
+          // Note that a line of no words, files alone, still offers its Copy link, though it has nothing to copy or edit.
           actions={
-            shown === "" ? null : (
-              <CopyMessageAction words={shown} messageId={message.id} rewind={REWIND_ACTION.EDIT} />
-            )
+            <CopyMessageAction
+              words={shown}
+              copyable={shown !== ""}
+              messageId={message.id}
+              rewind={shown === "" ? undefined : REWIND_ACTION.EDIT}
+            />
           }
         />
       </Message>

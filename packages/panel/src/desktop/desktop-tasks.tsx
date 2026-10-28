@@ -1,5 +1,6 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
@@ -33,7 +34,7 @@ import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
-import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -455,6 +456,12 @@ function TaskInboxTab({
     listed.length === 0 &&
     items.length > 0;
   const columns = useInboxColumns(chosen?.item.id);
+  // The tab's ⋯ copies the open item's link, and none while the list stands alone, since no link names a task's Inbox whole.
+  const linkItem = useCopyLinkItem();
+  const link =
+    chosen === undefined || columns.shown === INBOX_COLUMNS.LIST
+      ? undefined
+      : linkItem({ kind: LINK_PLACE.INBOX_ITEM, planId: task.id, itemId: chosen.item.id });
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -517,6 +524,7 @@ function TaskInboxTab({
           view: undefined,
           search: { query, onQuery: setQuery },
           tab: true,
+          link,
         }}
         models={tasks.agents.models}
         readerId={tasks.me}

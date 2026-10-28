@@ -470,8 +470,8 @@ test("a reply whose answer was lost is sent again under the same key, and the ne
   assert.notEqual(keys[1], keys[2]);
 });
 
-/** The menu items the first comment's Comment actions offers, over a thread `thread` of the page the reader u-dean reads. */
-function threadMenuItems(thread: PlanCommentThread): string[] {
+/** The menu items the first comment's Comment actions offers, over a thread `thread` of the page the reader u-dean reads; none where it draws no ⋯. */
+function threadMenuItems(thread: PlanCommentThread): string[] | undefined {
   const { container } = drawn(
     "page",
     [thread],
@@ -487,8 +487,9 @@ function threadMenuItems(thread: PlanCommentThread): string[] {
       ?.click(),
   );
   const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
-  const actions = card?.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]');
-  assert.ok(actions, "the thread's card is open and has its menu");
+  assert.ok(card, "the thread's card is open");
+  const actions = card.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]');
+  if (actions === null) return undefined;
   act(() => actions.click());
   return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
     (each) => each.textContent ?? "",
@@ -503,7 +504,7 @@ function startedBy(writer: PlanCommentWriter): PlanCommentThread {
   return { ...thread, entries: [{ ...entry, writer }] };
 }
 
-test("a thread's menu offers no Delete thread over a teammate's thread", () => {
+test("a teammate's thread, with no link to copy here, draws no ⋯ rather than an empty menu, so offers no Delete thread", () => {
   const items = threadMenuItems(
     startedBy({
       actor: PLAN_COMMENT_ACTOR.MEMBER,
@@ -511,7 +512,7 @@ test("a thread's menu offers no Delete thread over a teammate's thread", () => {
     }),
   );
 
-  assert.ok(!items.includes("Delete thread"));
+  assert.equal(items, undefined);
 });
 
 test("a thread's menu offers Delete thread over the reader's own thread", () => {
@@ -519,13 +520,13 @@ test("a thread's menu offers Delete thread over the reader's own thread", () => 
     startedBy({ actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-dean", name: "Dean" } }),
   );
 
-  assert.ok(items.includes("Delete thread"));
+  assert.ok(items?.includes("Delete thread"));
 });
 
 test("a thread's menu offers Delete thread to any member over a thread an agent started", () => {
   const items = threadMenuItems(startedBy({ actor: PLAN_COMMENT_ACTOR.AGENT }));
 
-  assert.ok(items.includes("Delete thread"));
+  assert.ok(items?.includes("Delete thread"));
 });
 
 test("deleting a thread asks first, and only the confirm deletes it", async () => {

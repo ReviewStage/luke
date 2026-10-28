@@ -4,7 +4,6 @@
   "packages/panel/src/admin/chrome/controls.tsx": 1,
   "packages/panel/src/ai-elements/conversation.tsx": 1,
   "packages/panel/src/ai-elements/reasoning.tsx": 1,
-  "packages/panel/src/copy-link-item.tsx": 1,
   "packages/panel/src/desktop/action-menu.test.ts": 1,
   "packages/panel/src/desktop/automation-editor.tsx": 1,
   "packages/panel/src/desktop/automation-runs-panel.tsx": 1,
