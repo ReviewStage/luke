@@ -819,7 +819,10 @@ export function SidebarTask({
   const endedByKey = useRefocusAfterEdit(rename.editing, row);
   // S opens the row's menu on its Status, each press counted so it opens it again.
   const [statusAsks, setStatusAsks] = useState(0);
-  const statusDrawn = task.status !== undefined && task.priority !== undefined;
+  // Note that a row chosen among several opens the selection's Status, which every chosen task has.
+  const statusDrawn =
+    chosen !== undefined || (task.status !== undefined && task.priority !== undefined);
+  const statusAsked = { count: statusAsks, submenu: STANDING_WORDS.STATUS };
   useFocusedRowKeys(
     item,
     () => reads.mark(task, !unread),
@@ -891,9 +894,9 @@ export function SidebarTask({
                 ? {
                     ...rowMenu("Task", actions.groups(), tasks.shown),
                     footer: actions.footer,
-                    openRequest: { count: statusAsks, submenu: STANDING_WORDS.STATUS },
+                    openRequest: statusAsked,
                   }
-                : chosenRowMenu("Task", chosen, tasks.shown)
+                : { ...chosenRowMenu("Task", chosen, tasks.shown), openRequest: statusAsked }
           }
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={

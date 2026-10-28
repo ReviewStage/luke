@@ -123,18 +123,19 @@ export function useRowMenu(
   };
   // Each ask from elsewhere hangs the menu under the row as the menu key does, on the submenu it names.
   const [openOn, setOpenOn] = useState<string | undefined>(undefined);
+  // Note that a menu closed by any door forgets the submenu it was asked to open on, so the next door opens it on its own items.
+  if (state.open === undefined && openOn !== undefined) setOpenOn(undefined);
+  // Note that only an ask newer than the last answered opens it, so one made while the row offered no menu, or another, never replays.
+  const answered = useRef(menu?.openRequest?.count ?? 0);
   const asked = live?.openRequest;
   useEffect(() => {
-    if (asked === undefined || asked.count === 0) return;
+    if (asked === undefined || asked.count <= answered.current) return;
+    answered.current = asked.count;
     const from = opener?.current ?? moreElement.current;
     if (from === null) return;
     setOpenOn(asked.submenu);
     state.show(dropBelowStart(from), from);
   }, [asked?.count]);
-  const close = (returnFocus: boolean) => {
-    setOpenOn(undefined);
-    state.close(returnFocus);
-  };
   const doors = offered ? state.contextMenu(opener ?? moreElement) : undefined;
   const open = state.open !== undefined;
   // Note that a row's ⋯ lights its glyph alone at any size, because the row is already lit and, while its menu stands, ringed.
@@ -161,7 +162,7 @@ export function useRowMenu(
         footer={live.footer}
         groups={details === undefined ? live.groups : withDetails(live.groups, details)}
         openOn={openOn}
-        onClose={close}
+        onClose={state.close}
       />
     ) : null;
   return {
