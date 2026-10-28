@@ -961,6 +961,9 @@ test("a Luke link to another plan's section opens that plan and asks its page to
 test("a Luke link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page", async () => {
   const ELSEWHERE = "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d";
   const TASKLESS = "2b7c9e4d-1f3a-4b6e-8d2c-9a1e5f7b3c40";
+  const UNREAD = "6d4e2c1b-9a8f-4e7d-b6c5-3a2f1e0d9c8b";
+  const SLOW = "1a9b8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d";
+  let answerSlow: () => void = () => undefined;
   const read = (agentId: unknown) => ({
     agent: {
       ...RUNNING_AGENT,
@@ -975,8 +978,17 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
     { shown: true, tasks: OPEN },
     {
       [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      [ACT_KIND.CODING_AGENTS_PAGE]: (payload) =>
-        Promise.resolve(read((payload as { agentId: string }).agentId)),
+      [ACT_KIND.CODING_AGENTS_PAGE]: (payload) => {
+        const { agentId } = payload as { agentId: string };
+        if (agentId === SLOW) {
+          return new Promise((resolve) => {
+            answerSlow = () => resolve(read(ELSEWHERE));
+          });
+        }
+        return agentId === UNREAD
+          ? Promise.reject(new Error("Unread."))
+          : Promise.resolve(read(agentId));
+      },
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
   );
@@ -988,6 +1000,15 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
   assert.equal(tab.control().agentView.agentId, undefined, "the open task's agent opens on it");
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 
+  open({ kind: LINK_PLACE.CHANGES, agentId: UNREAD });
+  await settle();
+  assert.equal(tab.control().agentView.agentId, UNREAD, "an agent not read stands on its page");
+  assert.notDeepEqual(
+    panelOf(tab).tab,
+    { changes: UNREAD },
+    "and opens no tab of a panel it may not hold",
+  );
+
   open({ kind: LINK_PLACE.CHANGES, agentId: TASKLESS });
   await settle();
   assert.equal(tab.control().agentView.agentId, TASKLESS, "an agent on no task opens on its page");
@@ -997,6 +1018,15 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
   await settle();
   assert.equal(tab.control().agentView.agentId, undefined);
   assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT, "an agent on another task opens that task");
+
+  // A link opened at once, to the open task's own agent, wins over an earlier read answering late.
+  open({ kind: LINK_PLACE.AGENT, agentId: SLOW });
+  open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
+  const told = tab.told.length;
+  answerSlow();
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.told.length, told, "the late read opens no other task");
 });
 
 test("a Luke link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages read and held for it", async () => {

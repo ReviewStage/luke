@@ -2720,13 +2720,13 @@ export function useTasksTab(input: {
       openOnTask(open, place);
     else if (tasklessAgents?.some((agent) => agent.id === place.agentId)) openOnAgentPage(place);
     else {
-      navigations.current += 1;
       const mine = navigations.current;
       readAgentById(act, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
-        const planId = agent?.planId ?? null;
-        if (planId === null) openOnAgentPage(place);
-        else openOnTask(planId, place);
+        // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
+        if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
+        else if (agent.planId === null) openOnAgentPage(place);
+        else openOnTask(agent.planId, place);
       });
     }
   };
@@ -2740,6 +2740,8 @@ export function useTasksTab(input: {
    * all the same, and its read says it is not there.
    */
   const openLink = ({ workspace, place }: ReadLink) => {
+    // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
+    navigations.current += 1;
     switch (place.kind) {
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
@@ -2783,7 +2785,6 @@ export function useTasksTab(input: {
         const home = viewed.workspaces.find(
           (each) => each.slug === workspace || each.id === workspace,
         );
-        navigations.current += 1;
         listLinked(workspace);
         standInFor({
           kind: STAND_IN.PERSON,

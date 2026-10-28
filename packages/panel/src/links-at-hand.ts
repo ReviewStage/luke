@@ -132,8 +132,9 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
 /**
  * The place a tab of the side panel shows, on the task or the agent's page
  * that holds the panel; none for a tab whose thing has no link of its own:
- * a file's, the board, the code, the Inbox, a terminal, and a worker of
- * Luke's own, which is drawn nowhere a link opens. Note that a Changes or a
+ * a file's, the board, the code, the Inbox, a terminal, a pull request
+ * the agent did not open, and a worker of Luke's own, which is drawn
+ * nowhere a link opens. Note that a Changes or a
  * worker's tab is the agent's, so it is linked by the agent, the task still
  * named on a task's panel until its writers move to the agent's form.
  */
@@ -151,7 +152,12 @@ export function panelTabPlace(
       ? { kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: tab.page }
       : { kind: LINK_PLACE.PAGE, agentId: holder.agentId, pageId: tab.page };
   }
-  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, ...task, agentId: tab.changes };
+  // A Changes tab on another pull request of the agent's repository, by its number, is no place a link names.
+  if (isChangesTab(tab)) {
+    return tab.number === undefined
+      ? { kind: LINK_PLACE.CHANGES, ...task, agentId: tab.changes }
+      : undefined;
+  }
   if (!isSubagentTab(tab)) return undefined;
   const agent = tab.delegation?.agent ?? ("agentId" in holder ? holder.agentId : undefined);
   return agent === undefined
