@@ -91,10 +91,10 @@ import { codingAgentStatusOf } from "./status.js";
  * a sign-in that lapsed is refused here rather than failing the turn's
  * first step; a GitHub that could not be asked refuses nothing, since an
  * outage or a rate limit says nothing of that standing. The caller is any
- * member of the agent's workspace, whose task read gates the send, or for
- * an agent with no task whose membership of its
- * workspace does, and whose standing with GitHub is asked (the starter
- * alone, for an agent on its starter's own GitHub token), while the line
+ * member who reaches the agent and, for an agent on a task, its task too,
+ * which together gate the send, and whose standing with GitHub is asked
+ * (the starter alone, for an agent on its starter's own GitHub token),
+ * while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
  * A teammate's words, a member's other than the starter, are handed to eve
@@ -284,8 +284,8 @@ const settledEnded = (
 
 /**
  * Why the agent takes no message now, read again as the hand-over runs:
- * its task gone, or the agent archived or gone; nothing while it still
- * takes one.
+ * its task out of the sender's reach, or the agent archived or gone;
+ * nothing while it still takes one.
  */
 const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -343,7 +343,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
           sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
         ),
       ),
-      // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
+      // The sender reaches the agent, as the routing read holds, and an agent on a task its task too, read as the sender.
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)

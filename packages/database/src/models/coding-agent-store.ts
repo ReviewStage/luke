@@ -88,6 +88,7 @@ import {
   AGENT_WORKSPACE,
   agentReachableBy,
   agentSeenBy,
+  agentVisibleTo,
   reachableTask,
   taskReachableBy,
   workspaceReachableBy,
@@ -1195,6 +1196,19 @@ const findAgentRouting = SqlSchema.findOneOption({
         .from(codingAgent)
         .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
         .where(reachableAgent(userId, agentId))
+        .limit(1),
+    ),
+});
+
+const findVisibleAgentWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: codingAgent.organizationId })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId)))
         .limit(1),
     ),
 });
@@ -3184,6 +3198,17 @@ export function readCodingAgentRouting(
   return Effect.map(
     findAgentRouting({ userId, agentId }),
     Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
+  );
+}
+
+/** The workspace of the agent under this id, where the account sees it whole (`agentVisibleTo`); nothing otherwise. */
+export function readVisibleAgentWorkspace(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findVisibleAgentWorkspace({ userId, agentId }),
+    Option.map((row) => row.organizationId),
   );
 }
 
