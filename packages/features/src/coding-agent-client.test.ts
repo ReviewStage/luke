@@ -693,7 +693,6 @@ it.effect(
       const answer = {
         pullRequest: {
           number: 7,
-          headSha: "c0ffee1",
           generatable: true,
           chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
         },

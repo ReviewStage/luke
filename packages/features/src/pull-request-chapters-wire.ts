@@ -10,13 +10,14 @@ import { countedNumber } from "./service-wire.js";
  * do: the coding agent by its id in the path, and, where the tab shows a
  * pull request of the agent's repository other than the agent's own, that
  * pull request's number in the `number` query, as the query spells it
- * (`pullRequestChaptersRequestSchema`). Each answers the same way
+ * (`pullRequestChaptersRequestSchema`); a read always names the number, the
+ * one the tab's own read of the pull request found. Each answers the same way
  * (`pullRequestChaptersAnswerSchema`): none where the agent published no pull
- * request, or the number names none; else the pull request's head as GitHub
- * holds it now, or as the tab named it where a read named one, whether this deployment can generate chapters at all, and
- * the workspace's newest chapters for the pull request, whatever head they
- * were made for, so the panel draws chapters made for an older head as
- * stale beside a Regenerate.
+ * request, or the number names none; else whether this deployment can
+ * generate chapters at all, and the workspace's newest chapters for the pull
+ * request with the head they were made for, whatever it is, which the panel
+ * holds against the heads its own reads hold, drawing chapters made for
+ * another as stale beside a Regenerate.
  */
 
 /** Where a pull request's newest chapters stand for its workspace: never asked for, being made, given up on, or made. */
@@ -73,35 +74,21 @@ const pullRequestChaptersStateSchema = EffectSchema.Union([
 
 export type PullRequestChaptersState = typeof pullRequestChaptersStateSchema.Type;
 
-/** A pull request's head as a tab holds it: GitHub's forty hex digits. */
-export const pullRequestHeadSchema = EffectSchema.String.check(
-  EffectSchema.isPattern(/^[0-9a-f]{40}$/u),
-);
-
-/**
- * A read or a Generate of a pull request's chapters: the agent in the path,
- * and the number in the query where the tab names one. A read may name the
- * head the tab already holds beside its number, which the service then
- * answers as the head rather than asking GitHub for the pull request again;
- * a Generate names none.
- */
+/** A read or a Generate of a pull request's chapters: the agent in the path, and the number in the query, which a read always names and a Generate names where the tab names one. */
 export const pullRequestChaptersRequestSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   number: EffectSchema.optionalKey(EffectSchema.String),
-  head: EffectSchema.optionalKey(pullRequestHeadSchema),
 });
 
 /**
  * A pull request's chapters as the service answers a read or a Generate:
- * none where there is no pull request to tell; else its head as GitHub
- * holds it now, which chapters made for another head are stale against,
- * whether this deployment can generate chapters, and the newest chapters.
+ * none where there is no pull request to tell; else whether this deployment
+ * can generate chapters, and the newest chapters.
  */
 export const pullRequestChaptersAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       number: githubPullRequestNumberSchema,
-      headSha: commitSchema,
       generatable: EffectSchema.Boolean,
       chapters: pullRequestChaptersStateSchema,
     }),

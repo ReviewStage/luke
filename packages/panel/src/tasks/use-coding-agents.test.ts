@@ -741,7 +741,6 @@ test("a pull request's chapters are read and generated for the agent's own pull 
   const none = {
     pullRequest: {
       number: 41,
-      headSha: "c0ffee1",
       generatable: true,
       chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
     },

@@ -53,8 +53,8 @@ import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedure
  *
  * The caller is resolved before anything is read; an agent of a workspace
  * the caller is not in is not found, and GitHub is never asked; a read
- * answers the pull request's head now beside the workspace's newest
- * chapters; a Generate claims the head, tells the chapters on a scripted
+ * answers the workspace's newest chapters for the number it names, asking
+ * GitHub for no pull request; a Generate claims the head, tells the chapters on a scripted
  * model, lands them or the kind they failed with, and counts the outcome by
  * counts alone, on the model the member who pressed it chose in Settings,
  * Haiku where they never chose or stored one no build offers; a claim another request holds answers as generating without
@@ -292,8 +292,6 @@ const standing = (
       init: {
         readonly method?: string;
         readonly number?: number;
-        /** The head the tab already holds, named beside its number. */
-        readonly head?: string;
         /** Each `number` the query names, repeated as a client might send them. */
         readonly numbers?: readonly string[];
         readonly body?: string;
@@ -302,7 +300,6 @@ const standing = (
       Effect.gen(function* () {
         const url = new URL(`/api/agents/${agent.id}/chapters`, ORIGIN);
         if (init.number !== undefined) url.searchParams.set("number", String(init.number));
-        if (init.head !== undefined) url.searchParams.set("head", init.head);
         for (const more of init.numbers ?? []) url.searchParams.append("number", more);
         const headers = new Headers({ "content-type": "application/json" });
         if (as !== undefined) headers.set("authorization", `Bearer ${as}`);
@@ -378,18 +375,18 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a read before any Generate answers the pull request's head and no chapters, and whether the reader can generate them: not where they saved no API key, since Luke's own key tells no chapters",
+    "a read before any Generate answers no chapters, and whether the reader can generate them, asking GitHub for no pull request: not where they saved no API key, since Luke's own key tells no chapters",
     () =>
       Effect.gen(function* () {
-        const { owner, ask } = yield* standing();
+        const { owner, github, ask } = yield* standing();
         assert.deepEqual(chaptersOf(yield* ask(owner, { number: NUMBER })), {
           pullRequest: {
             number: NUMBER,
-            headSha: HEAD,
             generatable: true,
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
+        assert.ok(!github.sent.some((sent) => new URL(sent.url).pathname.includes("/pulls")));
         const keyless = yield* standing({ keys: [] });
         const read = chaptersOf(yield* keyless.ask(keyless.owner, { number: NUMBER }));
         assert.equal(read.pullRequest?.generatable, false);
@@ -397,38 +394,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "the agent's own pull request is the one read where the tab names no number, as Files changed reads it",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* standing();
-        const read = chaptersOf(yield* ask(owner));
-        assert.equal(read.pullRequest?.number, NUMBER);
-        assert.equal(read.pullRequest?.headSha, HEAD);
-      }),
-  );
-
-  it.effect(
-    "a read naming the number and the head its tab already holds answers the workspace's chapters against that head, and asks GitHub for no pull request",
-    () =>
-      Effect.gen(function* () {
-        const { owner, teammate, github, ask } = yield* standing();
-        chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
-        const before = github.sent.length;
-        const held = "d".repeat(40);
-        const read = chaptersOf(yield* ask(teammate, { number: NUMBER, head: held }));
-        assert.equal(read.pullRequest?.number, NUMBER);
-        assert.equal(read.pullRequest?.headSha, held);
-        assert.equal(read.pullRequest?.generatable, true);
-        assert.equal(read.pullRequest?.chapters.status, PULL_REQUEST_CHAPTERS_STATE.READY);
-        assert.equal(read.pullRequest?.chapters.headSha, HEAD);
-        assert.ok(
-          !github.sent.slice(before).some((sent) => new URL(sent.url).pathname.includes("/pulls")),
-        );
-      }),
-  );
-
-  it.effect(
-    "a Generate tells the chapters for the head, every member of the workspace reads them, and they stand stale once the head moves",
+    "a Generate tells the chapters for the head, every member of the workspace reads them, and a read once the head moves answers them made for the head they were",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, analytics, ask, moveHead } = yield* standing();
@@ -441,7 +407,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           chapters: [{ kind: CHAPTER_KIND.STORY, ...TOLD.chapters[0] }],
         };
         assert.deepEqual(generated, {
-          pullRequest: { number: NUMBER, headSha: HEAD, generatable: true, chapters: ready },
+          pullRequest: { number: NUMBER, generatable: true, chapters: ready },
         });
         assert.deepEqual(chaptersOf(yield* ask(teammate, { number: NUMBER })), generated);
         assert.deepEqual(
@@ -459,7 +425,6 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
 
         moveHead("d00d000");
         const stale = chaptersOf(yield* ask(teammate, { number: NUMBER }));
-        assert.equal(stale.pullRequest?.headSha, "d00d000");
         assert.deepEqual(stale.pullRequest?.chapters, ready);
       }),
   );
@@ -522,7 +487,6 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         assert.deepEqual(chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER })), {
           pullRequest: {
             number: NUMBER,
-            headSha: "d00d000",
             generatable: true,
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },

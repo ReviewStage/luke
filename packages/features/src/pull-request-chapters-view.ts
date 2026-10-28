@@ -1,10 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { chaptersModelSchema } from "./chapters-model-choice.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
-import {
-  pullRequestChaptersAnswerSchema,
-  pullRequestHeadSchema,
-} from "./pull-request-chapters-wire.js";
+import { pullRequestChaptersAnswerSchema } from "./pull-request-chapters-wire.js";
 
 /**
  * pull-request-chapters-view.ts -- a pull request's chapters as one Mac's window hears them: the answer whole, or why there is none.
@@ -36,11 +33,10 @@ export const PULL_REQUEST_CHAPTERS_CALL_FAILURE = {
   UNAVAILABLE: "unavailable",
 } as const;
 
-/** One agent's Pull request tab, as the panel names the pull request whose chapters it reads or generates: the agent's own, or the one of its repository by number; and, for a read, the head the tab already holds beside its number. */
+/** One agent's Pull request tab, as the panel names the pull request whose chapters it reads or generates: the agent's own, or the one of its repository by number. */
 export const pullRequestChaptersParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
-  head: EffectSchema.optionalKey(pullRequestHeadSchema),
 });
 
 export type PullRequestChaptersParams = typeof pullRequestChaptersParamsSchema.Type;

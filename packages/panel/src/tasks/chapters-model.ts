@@ -23,8 +23,8 @@ import type { DiffLineSpan } from "../diff-view/contract.js";
  * window's own Generate or someone else's; a generation that failed; or the
  * chapters ready, stale where they were made for a head the pull request
  * has moved on from, or for another push than the files drawn, as the tab's
- * own reads now hold them where they do (`chaptersStale`). "Other changes" is always read last
- * (`orderedChapters`). A chapter is viewed once every file it holds is
+ * own reads now hold them where they do (`chaptersStale`). "Other changes"
+ * is always read last (`orderedChapters`). A chapter is viewed once every file it holds is
  * marked viewed on GitHub (`chapterViewed`), and marking it marks each of
  * them, or unmarks them all where all were (`chapterMarks`), so a file two
  * chapters hold is shared by both. A key change's press brings its first
@@ -88,17 +88,13 @@ export function chaptersModelLabel(model: string): string {
   return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;
 }
 
-/** Whether chapters were made for a head other than any the tab holds, else than the answer's: the pull request moved on, or the files drawn are of another push. */
+/** Whether chapters were made for a head other than any the tab holds: the pull request moved on, or the files drawn are of another push. */
 function chaptersStale(
-  pullRequest: Pick<Answer, "headSha" | "chapters">,
+  chapters: Answer["chapters"],
   heads: readonly (string | undefined)[],
 ): boolean {
-  const { chapters } = pullRequest;
   if (chapters.status === PULL_REQUEST_CHAPTERS_STATE.NONE) return false;
-  const held = heads.filter((head) => head !== undefined);
-  return (held.length === 0 ? [pullRequest.headSha] : held).some(
-    (head) => head !== chapters.headSha,
-  );
+  return heads.some((head) => head !== undefined && head !== chapters.headSha);
 }
 
 /** The chapters in reading order: the story's own as told, then "Other changes", wherever the answer put it. */
@@ -147,7 +143,7 @@ export function chaptersShown(
         kind: CHAPTERS_SHOWN.READY,
         chapters: orderedChapters(chapters.chapters),
         model: chapters.model,
-        stale: chaptersStale(pullRequest, heads),
+        stale: chaptersStale(chapters, heads),
         generatable,
       };
   }

@@ -783,12 +783,12 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS]: (params) =>
       Effect.gen(function* () {
-        const { agentId, number, head } = yield* readParams(
+        const { agentId, number } = yield* readParams(
           pullRequestChaptersParamsSchema,
           params,
           "reading a pull request's chapters names one agent",
         );
-        const answer = yield* asked(client.chapters(agentId, number, head));
+        const answer = yield* asked(client.chapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE]: (params) =>

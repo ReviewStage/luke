@@ -208,12 +208,12 @@ const CONVERSATION: CodingAgentOverviewConversation = {
   earlier: 0,
 };
 
-/** The read answering the pull request at `HEAD` with these newest chapters. */
+/** The read answering these newest chapters. */
 function answering(
   chapters: PullRequestChaptersState,
   generatable = true,
 ): PullRequestChaptersAnswerView {
-  return { pullRequest: { number: 42, headSha: HEAD, generatable, chapters } };
+  return { pullRequest: { number: 42, generatable, chapters } };
 }
 
 /** Ready chapters made for `headSha`, "Other changes" put first, as no reader reads it. */
@@ -720,16 +720,10 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
   const tab = await draw(
     controlAnswering({
       head: () => head,
-      // The read answers the head it was named, as the service does where the tab names one.
-      readChapters: (_agentId, _number, named) =>
-        Promise.resolve({
-          pullRequest: {
-            number: 42,
-            headSha: named ?? HEAD,
-            generatable: true,
-            chapters: generated ? ready() : { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
-          },
-        }),
+      readChapters: () =>
+        Promise.resolve(
+          answering(generated ? ready() : { status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
+        ),
       generateChapters: () => {
         // A push the tab has not read yet, which the Generate tells the chapters for.
         head = HEAD;

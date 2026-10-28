@@ -2837,8 +2837,7 @@ function PullRequestTabBody({
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
   const overview = landed(parts.pullRequest);
-  // The chapters, read as their view is first shown once the pull request's own read has answered, naming the number and head it holds, which its tab counts once they are ready.
-  const overviewHead = overview?.merging?.headSha;
+  // The chapters, read as their view is first shown once the pull request's own read has answered, naming the number it found, which its tab counts once they are ready.
   const chapters = useChaptersRead(
     agentId,
     control,
@@ -2846,9 +2845,9 @@ function PullRequestTabBody({
       !none &&
       parts.pullRequest.kind !== PART.PENDING &&
       view === PULL_REQUEST_VIEW.CHAPTERS,
-    overview === undefined || overviewHead === undefined
+    overview === undefined
       ? undefined
-      : { number: overview.number, head: overviewHead },
+      : { number: overview.number, head: overview.merging?.headSha },
     () => refreshAllNow.current(),
   );
   const title = overview ?? published;

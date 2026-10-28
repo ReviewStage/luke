@@ -42,7 +42,6 @@ const MODEL_WRITE_REFUSAL = "Could not change the chapters model on this system.
 const READY: PullRequestChaptersAnswerView = {
   pullRequest: {
     number: 11,
-    headSha: "c0ffee1",
     generatable: true,
     chapters: {
       status: PULL_REQUEST_CHAPTERS_STATE.READY,
@@ -147,7 +146,18 @@ it("a failure word crosses as the answer, and an answer the schema does not admi
   // A head no service names, an empty commit, which the kind's schema refuses.
   const broken = windowPort(PANEL, {
     // SAFETY: the answer is off its schema on purpose, to be refused at the port; its type is the one the host's seam declares.
-    answer: { pullRequest: { ...READY.pullRequest, headSha: "" } } as PullRequestChaptersAnswerView,
+    answer: {
+      pullRequest: {
+        number: 11,
+        generatable: true,
+        chapters: {
+          status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
+          headSha: "",
+          baseSha: "ba5e000",
+          startedAt: 1,
+        },
+      },
+    } as PullRequestChaptersAnswerView,
   });
   assert.deepEqual(await broken.read({ agentId: AGENT_ID }), { refused: READ_REFUSAL });
 });

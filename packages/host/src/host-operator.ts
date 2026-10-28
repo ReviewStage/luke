@@ -993,11 +993,9 @@ function pullRequestRead(
 
 /** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
 function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
-  return {
-    agentId: params.agentId,
-    ...(params.number === undefined ? undefined : { number: params.number }),
-    ...(params.head === undefined ? undefined : { head: params.head }),
-  };
+  return params.number === undefined
+    ? { agentId: params.agentId }
+    : { agentId: params.agentId, number: params.number };
 }
 
 /**

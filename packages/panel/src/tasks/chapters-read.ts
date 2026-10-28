@@ -23,10 +23,10 @@ const UNANSWERED: PullRequestChaptersAnswerView = {
   failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
 };
 
-/** The pull request as the tab's own read of it holds it: its number and its head now. */
+/** The pull request as the tab's own read of it holds it: its number, and its head now where the read says it. */
 export interface ChaptersHeld {
   readonly number: number;
-  readonly head: string;
+  readonly head: string | undefined;
 }
 
 /** A pull request's chapters as the Pull request tab holds them: the read, its door, and this window's own Generate. */
@@ -46,10 +46,11 @@ export interface ChaptersRead {
  * The agent's pull request's chapters, read as the Chapters view is first
  * shown, again the moment the agent ends, since its last push is when the
  * head settles (`useAgentRead`), and again after a Generate. A read names the
- * number and the head the tab's own read of the pull request holds, where it
- * holds them, so the service answers from what it keeps rather than asking
- * GitHub for the pull request again; a Generate that finds the head moved
- * past it reads the tab again, so its files catch up. A Generate's own
+ * number the tab's own read of the pull request found, so the service
+ * answers from what it keeps rather than asking GitHub for the pull request
+ * again, and answers as failed where that read found none to name; a
+ * Generate that tells the chapters for a head other than the tab's reads the
+ * tab again, so its files catch up. A Generate's own
  * answer is drawn as soon as it lands and stands until the read asked after
  * it does, so the chapters made never give way to what was there before.
  */
@@ -69,9 +70,7 @@ export function useChaptersRead(
     shown,
     ended,
     (id: string) =>
-      held === undefined
-        ? control.readChapters(id, number)
-        : control.readChapters(id, held.number, held.head),
+      held === undefined ? Promise.resolve(UNANSWERED) : control.readChapters(id, held.number),
     UNANSWERED,
   );
   const [generated, setGenerated] = useState<
@@ -95,13 +94,14 @@ export function useChaptersRead(
         setGenerating(undefined);
         setGenerated({ of: latest.current.read.answer, answer });
         latest.current.read.ask();
-        // Note that GitHub was asked for the head just now, so one other than the tab's means a push its reads have not seen.
+        // Note that a Generate tells the chapters for the head GitHub holds now, so one other than the tab's means a push its reads have not seen.
         const { held, onMoved } = latest.current;
+        const made = "pullRequest" in answer ? answer.pullRequest?.chapters : undefined;
         const moved =
-          held !== undefined &&
-          "pullRequest" in answer &&
-          answer.pullRequest !== null &&
-          answer.pullRequest.headSha !== held.head;
+          held?.head !== undefined &&
+          made !== undefined &&
+          made.status !== PULL_REQUEST_CHAPTERS_STATE.NONE &&
+          made.headSha !== held.head;
         if (moved) onMoved();
       });
   }, [agentId]);

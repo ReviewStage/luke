@@ -113,7 +113,6 @@ const PUBLISHED = {
 const CHAPTERS = {
   pullRequest: {
     number: 11,
-    headSha: "c0ffee1",
     generatable: true,
     chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
   },
