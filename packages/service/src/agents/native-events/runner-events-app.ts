@@ -521,7 +521,9 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
         state = withTurnServers(state, write.turnId, taken);
       }
     }
-    for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
+    // Note that a call left out of the record is the harness's own tool (ToolSearch, TaskStop),
+    // left out by design on every turn that calls one, so it is logged at debug, not as a warning.
+    for (const said of reports) yield* Effect.logDebug(`runner-events: ${said}`);
     const stops = yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
     const ends = runnerEventsOf(batch, held.sequence, RUNNER_EVENT.END);
