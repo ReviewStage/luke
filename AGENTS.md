@@ -155,8 +155,8 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (the root `vercel.jso
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
-`TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
-agent's turn, whose one turn is its whole run). It also starts due automation runs, and for coding agents on a member's GitHub
+`TURN_ABANDON`: an hour after it started, or twenty-five hours for an
+agent's turn, whose one turn is its whole run). It also starts due automation runs, and for agents on a member's GitHub
 token it reads their open pull requests' reviews, comments, and checks on that
 token and wakes the agent with them, as the webhook does for the App.
 
@@ -175,7 +175,7 @@ reader alone. Move a rule from `[review]` to a check wherever one can hold it.
 pnpm exec vitest run <path>              # the file you changed
 pnpm check:affected                      # what changed since origin/main, from cache
 ./scripts/check.sh                       # everything CI runs bar Postgres
-pnpm --filter @luke/web test:agent       # offline brain eval, by hand
+pnpm --filter @luke/web test:agent       # the coder's offline eval, by hand
 ```
 
 - `[review]` Run the test files you touched, then push: CI runs the rest and
