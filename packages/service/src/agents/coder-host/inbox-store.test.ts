@@ -51,6 +51,7 @@ import {
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import {
+  accountInboxItemsLiveRowsSchema,
   accountInboxLiveRowSchemas,
   accountInboxOfLiveRows,
   FAILED_RUN_WINDOW_MILLIS,
@@ -59,12 +60,13 @@ import {
 } from "@luke/features/live-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
-import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
+import { Clock, DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
   accountInboxLiveStatements,
   accountInboxTasks,
+  accountItemsLiveStatements,
   accountWaitingItems,
   accountWaitingStamps,
   acknowledgeInboxItem,
@@ -287,7 +289,78 @@ const liveAnswerOf = (userId: string, readAt: number) =>
     );
   });
 
+/** The ids the account's items read carries as the desktop decodes its rows: those it stamps, and those it carries whole, read since the instants given. */
+const accountItemIdsOf = (userId: string, since: number, settledSince: number) =>
+  Effect.gen(function* () {
+    const parts = Option.getOrThrow(
+      accountItemsLiveStatements(userId, new Date(since), new Date(settledSince)),
+    );
+    const sql = yield* SqlClient.SqlClient;
+    const rowsOf = (statement: LiveStatement) => sql.unsafe(statement.sql, [...statement.params]);
+    const rows = yield* Schema.decodeUnknownEffect(accountInboxItemsLiveRowsSchema)(
+      yield* Effect.all({
+        stamps: rowsOf(parts.stamps),
+        items: rowsOf(parts.items),
+        messages: rowsOf(parts.messages),
+        files: rowsOf(parts.files),
+      }),
+    );
+    return {
+      stamps: rows.stamps.map((stamp) => stamp.id).toSorted(),
+      items: inboxOfLiveRows(rows)
+        .map((item) => item.id)
+        .toSorted(),
+    };
+  });
+
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "the account's items read a teammate's item on a shared task and an agent's with no task in a shared workspace, and none of another workspace",
+    () =>
+      Effect.gen(function* () {
+        const shared = yield* openAgentIn;
+        const { agent: taskless, workspaceId } = yield* openTasklessAgent;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(shared.workspaceId, teammate);
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openAgentIn;
+        const onTask = yield* post(shared.agent);
+        const ofTaskless = yield* post(taskless);
+        const elsewhere = yield* post(outsider.agent);
+
+        const both = [onTask.id, ofTaskless.id].toSorted();
+        assert.deepEqual(yield* accountItemIdsOf(teammate, 0, 0), { stamps: both, items: both });
+        assert.deepEqual(yield* accountItemIdsOf(outsider.agent.userId, 0, 0), {
+          stamps: [elsewhere.id],
+          items: [elsewhere.id],
+        });
+      }),
+  );
+
+  it.effect(
+    "the account's items stamp every open item and the settled ones of the last week, and carry whole only those changed since the reader's instant",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* openAgentIn;
+        yield* post(agent, { ...SETTINGS, key: "stale" });
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "stale", "Not needed after all")));
+        const waiting = yield* post(agent, { ...SETTINGS, key: "waiting" });
+        yield* TestClock.adjust(Duration.days(8));
+        const lately = yield* post(agent, { ...SETTINGS, key: "lately" });
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "lately", "Done another way")));
+        const fresh = yield* post(agent, { ...SETTINGS, key: "fresh" });
+        const now = yield* Clock.currentTimeMillis;
+
+        assert.deepEqual(
+          yield* accountItemIdsOf(agent.userId, now, now - Duration.toMillis(Duration.days(7))),
+          {
+            stamps: [waiting.id, lately.id, fresh.id].toSorted(),
+            items: [lately.id, fresh.id].toSorted(),
+          },
+        );
+      }),
+  );
+
   it.effect(
     "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
     () =>

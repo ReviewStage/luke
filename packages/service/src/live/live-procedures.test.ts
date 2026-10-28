@@ -10,13 +10,17 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
+import { INBOX_ASK } from "@luke/features/inbox-wire";
 import {
+  ACCOUNT_INBOX_ITEMS,
+  accountInboxItemsLiveAnswerSchema,
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
   LIVE_USER_QUERY,
   liveDigestOf,
+  liveDigestOn,
   macCommandsLiveAnswerSchema,
   macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
@@ -44,6 +48,7 @@ import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { postInboxThread } from "../inbox/inbox-store.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
@@ -540,6 +545,61 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
         );
         assert.equal(held.queries.pages.rows, undefined, "the rows answered stand at their digest");
         assert.equal(liveDigestOf(held.queries), standing);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the account's inbox items' live read", (it) => {
+  it.effect(
+    "a poll held on where the items stand stays held when only the reader's `since` moved past the items it was answered",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const task = yield* startTask(dana, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(dana, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        yield* postInboxThread(
+          { userId: dana, taskId: task.id, agentId: started.value.agent.id },
+          {
+            key: "review",
+            title: "Review the invite flow",
+            body: "It is up.",
+            ask: { type: INBOX_ASK.DO, steps: [] },
+          },
+        );
+        const itemsPath = (query: Readonly<Record<string, string>>) =>
+          `/api/live/inbox-items?${new URLSearchParams(query)}`;
+
+        const first = yield* ask({ bearer: dana, path: itemsPath({}) });
+        assert.equal(first.status, HOSTED_HTTP_STATUS.OK);
+        const seen = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(first.body);
+        assert.equal(seen.queries.items.rows?.length, 1, "the item is carried whole");
+        const after = liveDigestOn(seen.queries, ACCOUNT_INBOX_ITEMS.HELD_ON);
+        assert.ok(after !== undefined);
+
+        // The reader holds every item now, so it asks only for those changed from here on.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const since = String(yield* Clock.currentTimeMillis);
+        const poll = yield* Effect.forkChild(
+          ask({
+            bearer: dana,
+            path: itemsPath({ since, [LIVE_POLL.QUERY]: LIVE_POLL.ON, [LIVE_POLL.AFTER]: after }),
+          }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(
+          (yield* Fiber.join(poll)).body,
+        );
+        assert.equal(held.queries.stamps.rows, undefined, "the poll was held to its end");
+        assert.equal(liveDigestOn(held.queries, ACCOUNT_INBOX_ITEMS.HELD_ON), after);
       }),
   );
 });

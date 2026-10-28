@@ -82,6 +82,7 @@ import {
   eq,
   exists,
   getTableName,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -1490,10 +1491,20 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
     .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
     .orderBy(...LATEST_FIRST)
     .limit(INBOX_BOUNDS.MAX_ITEMS_READ);
-  const read = and(
-    inScope(scope),
-    or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+  return itemsLiveStatements(
+    scope.userId,
+    and(
+      inScope(scope),
+      or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+    ),
   );
+}
+
+/** The items `read` names, whole as a scope's inbox carries them, with their threads and files, each unread or not for the reader (`scopeLiveStatements`). */
+function itemsLiveStatements(
+  readerId: string,
+  read: SQL | undefined,
+): Option.Option<ScopeInboxLiveStatements> {
   const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
   const ofItem = eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId));
   const latest = queryBuilder
@@ -1544,7 +1555,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             closedBy: inboxItem.closedBy,
             closedByName: INBOX_ITEM_COLUMNS.closedByName,
             openAskMessageId: inboxItem.openAskMessageId,
-            unread: unreadFor(scope.userId),
+            unread: unreadFor(readerId),
             channelId: inboxItem.channelId,
           },
           {
@@ -1598,6 +1609,83 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
       ),
   );
   return Option.all({ items, messages, files });
+}
+
+/** The statements the account's inbox items are subscribed to live: where each item stands, and those changed since the reader's instant whole. */
+export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
+  readonly stamps: LiveStatement;
+}
+
+/**
+ * The condition that the account reaches the item a statement reads, as
+ * its read of what waits names them (`accountWaiting`, `tasklessWaiting`):
+ * one on a task it reaches whose agent it sees, or one of an agent with no
+ * task in its workspaces. Note that the task is read by its own subquery
+ * rather than a join, because the items statement it shares with a scope's
+ * inbox joins nothing.
+ */
+function accountItemReach(userId: string): SQL | undefined {
+  const onTask = exists(
+    queryBuilder
+      .select({ one: task.id })
+      .from(task)
+      .where(and(eq(task.id, inboxItem.taskId), taskReachableBy(userId))),
+  );
+  return or(
+    and(onTask, itemAgentSeenBy(userId)),
+    and(isNull(inboxItem.taskId), itemReachableBy(userId)),
+  );
+}
+
+/**
+ * Every inbox item the account reaches written for Neon Realtime: where
+ * each stands (`stamps`), every open item and every settled one changed at
+ * or after `settledSince`, and the items among those changed at or after
+ * `since` whole, with their threads and files, as a scope's inbox carries
+ * them (`itemsLiveStatements`). A stamp carries what moves an item without
+ * moving its last change: whether it is unread for the reader, who it waits
+ * on, and how many messages its thread holds, which a withdrawn message
+ * moves. Note that the instants are bound rather than read from the clock,
+ * because a live read measures nothing from it. None where a statement
+ * names a value Realtime cannot carry.
+ */
+export function accountItemsLiveStatements(
+  userId: string,
+  since: Date,
+  settledSince: Date,
+): Option.Option<AccountItemsLiveStatements> {
+  const carried = and(
+    accountItemReach(userId),
+    or(eq(inboxItem.status, INBOX_STATUS.OPEN), gte(inboxItem.updatedAt, settledSince)),
+  );
+  const stamps = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: inboxItem.id,
+            planId: inboxItem.taskId,
+            agentId: inboxItem.agentId,
+            revision: inboxItem.revision,
+            version: inboxItem.version,
+            status: inboxItem.status,
+            unread: unreadFor(userId),
+            waitsOn: WAITS_ON,
+            messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
+          },
+          { updatedAt: inboxItem.updatedAt },
+        ),
+      )
+      .from(inboxItem)
+      .where(carried),
+  );
+  return Option.map(
+    Option.all({
+      stamps,
+      changed: itemsLiveStatements(userId, and(carried, gte(inboxItem.updatedAt, since))),
+    }),
+    ({ stamps, changed }) => ({ stamps, ...changed }),
+  );
 }
 
 /** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */
