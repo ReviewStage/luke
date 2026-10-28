@@ -112,8 +112,8 @@ const WORDS = {
   ADD: "Add hosts",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
-  READ_FAILED: "Could not read your machines.",
-  SIGNED_OUT: "Sign in to see your machines.",
+  READ_FAILED: "Could not read your hosts.",
+  SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
@@ -201,7 +201,7 @@ function HostRow({
   return (
     <>
       <MenuRow
-        thing="Machine"
+        thing="Host"
         alone
         actions={[
           {
@@ -485,7 +485,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label={readingWords("your machines")} rows={HOSTS_SKELETON} />
+        <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
       )}
     </SettingsSection>
   );
