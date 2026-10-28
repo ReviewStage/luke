@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
-import { Clock, Duration, Effect, Exit, Fiber, Random, Stream } from "effect";
+import { Clock, Duration, Effect, Exit, Fiber, Random, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { confirmWrite, liveRows, type SealedRead, type TxWait } from "./live-follow.js";
+import {
+  confirmWrite,
+  decodedLiveRows,
+  liveRows,
+  type SealedRead,
+  type TxWait,
+} from "./live-follow.js";
 import { polledLive } from "./testing/polled-live.js";
 
 /**
@@ -82,6 +88,69 @@ it.effect(
         { left: [{ id: "b" }], right: [] },
       ]);
       assert.deepEqual(asked.slice(0, 3), ["left-1,right-1", "left-2,right-2", "left-2,right-2"]);
+      yield* Fiber.interrupt(following);
+    }),
+);
+
+/** A read whose `left` part the reader follows by cursor: its rows past `past`, or whole where none is named, and the cursor to read past next; its `right` part as a snapshot's. */
+function cursorRead(
+  left: readonly unknown[] | undefined,
+  cursor: { readonly past?: string; readonly next: string },
+): SealedRead<Part> {
+  return {
+    url: LIVE_POLL_URL,
+    queries: {
+      left: { ...sealed("left"), cursor, ...(left === undefined ? undefined : { rows: left }) },
+      right: {
+        ...sealed("right"),
+        digest: "right",
+        ...(left === undefined ? undefined : { rows: [] }),
+      },
+    },
+  };
+}
+
+const IdRows = Schema.Array(Schema.Struct({ id: Schema.String }));
+
+it.effect(
+  "a read followed by cursor polls past the cursor its last answer named, joins an answer past it onto the rows held, and takes one past no cursor whole",
+  () =>
+    Effect.gen(function* () {
+      const asked: (string | undefined)[] = [];
+      const answers = [
+        cursorRead([{ id: "b" }], { past: "1", next: "2" }),
+        cursorRead([{ id: "c" }], { next: "3" }),
+      ];
+      const rows: unknown[] = [];
+      const following = yield* Effect.forkChild(
+        Stream.runForEach(
+          decodedLiveRows<
+            Part,
+            { readonly left: typeof IdRows.Type; readonly right: typeof IdRows.Type }
+          >(
+            {
+              poll: (_after, cursor) =>
+                Effect.sync(() => {
+                  asked.push(cursor);
+                  return answers.shift() ?? cursorRead(undefined, { past: "3", next: "3" });
+                }),
+            },
+            cursorRead([{ id: "a" }], { past: "0", next: "1" }),
+            Schema.Struct({ left: IdRows, right: IdRows }),
+            (held, past) => ({ ...past, left: [...held.left, ...past.left] }),
+          ),
+          (whole) => Effect.sync(() => void rows.push(whole)),
+        ),
+      );
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.deepEqual(rows, [
+        { left: [{ id: "a" }], right: [] },
+        { left: [{ id: "a" }, { id: "b" }], right: [] },
+        { left: [{ id: "c" }], right: [] },
+      ]);
+      assert.deepEqual(asked.slice(0, 3), ["1", "2", "3"]);
       yield* Fiber.interrupt(following);
     }),
 );

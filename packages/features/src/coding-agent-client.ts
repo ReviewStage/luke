@@ -113,6 +113,7 @@ import {
 import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
+  LIVE_POLL,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   TRANSCRIPT_NOW_QUERY,
@@ -868,9 +869,10 @@ export class HostedCodingAgentClient {
    * named, sealed for following over Neon Realtime, answered at once: not
    * found where the account reaches no such agent, unanswered for anything
    * else, which the caller answers by sealing it again; with `poll`, its
-   * rows inline, for a reader polling while Realtime fails it. Sealed for
-   * the account `userId` names, and signed out where the session is no
-   * longer that account's.
+   * rows inline, for a reader polling while Realtime fails it; with
+   * `cursor`, its newest messages only past where the reader holds them.
+   * Sealed for the account `userId` names, and signed out where the session
+   * is no longer that account's.
    */
   agentTranscriptLive(
     agentId: string,
@@ -878,12 +880,17 @@ export class HostedCodingAgentClient {
     callId?: string,
     poll = false,
     after?: string,
+    cursor?: string,
   ): Effect.Effect<
     AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
     never,
     HttpClient.HttpClient
   > {
-    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    const read = {
+      id: agentId,
+      [LIVE_USER_QUERY]: userId,
+      ...(cursor === undefined ? undefined : { [LIVE_POLL.CURSOR]: cursor }),
+    };
     const named = callId === undefined ? read : { ...read, call: callId };
     return Effect.catchIf(
       askLive(this.#hosted.live.agentTranscript, named, poll, after),

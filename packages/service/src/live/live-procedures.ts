@@ -63,7 +63,10 @@
  * account, each statement joined through the caller's membership of the
  * agent's workspace. A worker's delegation may not be recorded yet, as a
  * tab opened on its call is read before it is, so its statements name the
- * conversation the call will open rather than wait for it.
+ * conversation the call will open rather than wait for it. It is woken by
+ * Luke Sync (`agentTranscriptLive`), and a reader that names where it holds
+ * the newest messages (`cursor`) is answered only those written or amended
+ * past it (`liveCursorParts`).
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
@@ -85,7 +88,7 @@ import {
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
-import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { codingAgentCallIdSchema, codingAgentCursorSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
   LIVE_USER_QUERY,
@@ -97,7 +100,6 @@ import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   automationRunsLiveStatements,
   automationsLiveStatements,
@@ -116,6 +118,7 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentInboxLive,
   agentPagesLive,
+  agentTranscriptLive,
   channelsLive,
   inboxLive,
   macCommandsLive,
@@ -131,7 +134,7 @@ import {
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
-import { type LiveSealer, pollSealer } from "./poll-sealer.js";
+import { pollSealer } from "./poll-sealer.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -175,29 +178,17 @@ function wokenBy<Part extends string>(
   ) as Record<Part, SealedLiveQueryWire>;
 }
 
-/**
- * Each part's rows read inline at the poll address (`pollSealer`); where
- * the reader names where they last stood (`after`), held until they move
- * past it, waiting between looks on a watch of the topics (or, where none
- * wakes it, the look), or answered unchanged at the hold's end. An answer a
- * write woke carries that write's txid, which is how the desktop confirms a
- * write once the read it follows shows it. Unavailable where the rows could
- * not be read.
- */
-const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
+/** A read's parts as answered: the address it was read at, and each part's rows and digest. */
+interface ReadParts<Part extends string> {
+  readonly url: string;
+  readonly queries: Record<Part, SealedLiveQueryWire>;
+}
+
+/** Each part's rows read now, inline at the poll address (`pollSealer`); unavailable where they could not be read. */
+function readParts<Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
-  asked: { readonly [LIVE_POLL.AFTER]?: string },
-  topics: readonly SyncTopic[] = NO_TOPICS,
-  look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
-): Effect.fn.Return<
-  {
-    readonly url: string;
-    readonly queries: Record<Part, Effect.Success<ReturnType<LiveSealer["seal"]>>>;
-  },
-  HostedRefusal,
-  SqlClient.SqlClient
-> {
-  const polled = Effect.flatMap(SqlClient.SqlClient, (sql) => {
+): Effect.Effect<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) => {
     const sealer = pollSealer(sql);
     return Effect.map(
       Effect.forEach(
@@ -209,29 +200,32 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
       (sealed) => ({
         url: sealer.url,
         // SAFETY: every part of `statements` is read above, and no other.
-        queries: Object.fromEntries(sealed) as Record<
-          Part,
-          Effect.Success<ReturnType<LiveSealer["seal"]>>
-        >,
+        queries: Object.fromEntries(sealed) as Record<Part, SealedLiveQueryWire>,
       }),
     );
   }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
-  const after = asked[LIVE_POLL.AFTER];
-  if (after === undefined) return yield* polled;
-  // A poll past `after` is held until the rows move past it, or answered unchanged: its digests and no rows.
-  const moved = yield* heldUntil(
-    polled,
-    (read) => liveDigestOf(read.queries) !== after,
-    topics,
-    look,
-    LIVE_POLL_HOLD.HOLD,
-  );
-  if (Option.isSome(moved)) {
-    const { read, txids } = moved.value;
+}
+
+/**
+ * A read held until `moved` says it moved, waiting between looks on a
+ * watch of the topics (or, where none wakes it, the look), and answered
+ * then, carrying the txids of the writes that woke it, which is how the
+ * desktop confirms a write once the read it follows shows it; or answered
+ * unchanged at the hold's end, every part with its rows left out.
+ */
+const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string, R>(
+  polled: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
+  moved: (read: ReadParts<Part>) => boolean,
+  topics: readonly SyncTopic[],
+  look: Duration.Duration,
+): Effect.fn.Return<ReadParts<Part>, HostedRefusal, R> {
+  const woken = yield* heldUntil(polled, moved, topics, look, LIVE_POLL_HOLD.HOLD);
+  if (Option.isSome(woken)) {
+    const { read, txids } = woken.value;
     return { ...read, queries: wokenBy(read.queries, txids) };
   }
   const standing = yield* polled;
-  if (liveDigestOf(standing.queries) !== after) return standing;
+  if (moved(standing)) return standing;
   return {
     ...standing,
     // SAFETY: every part is kept, each with its rows left out.
@@ -240,8 +234,29 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
         const { rows: _rows, ...unchanged } = sealed;
         return [part, unchanged];
       }),
-    ) as typeof standing.queries,
+    ) as Record<Part, SealedLiveQueryWire>,
   };
+});
+
+/**
+ * Each part's rows read inline at the poll address (`pollSealer`); where
+ * the reader names where they last stood (`after`), held until they move
+ * past it (`heldParts`). Unavailable where the rows could not be read.
+ */
+const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
+  statements: Readonly<Record<Part, LiveStatement>>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+  topics: readonly SyncTopic[] = NO_TOPICS,
+  look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
+): Effect.fn.Return<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
+  const after = asked[LIVE_POLL.AFTER];
+  if (after === undefined) return yield* readParts(statements);
+  return yield* heldParts(
+    readParts(statements),
+    (read) => liveDigestOf(read.queries) !== after,
+    topics,
+    look,
+  );
 });
 
 /**
@@ -263,6 +278,71 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   return yield* sealedParts(statements.value, asked, query.topics(params), look);
+});
+
+/**
+ * Whether a cursor read moved for its reader: its cursor no longer stands,
+ * so its cursor parts are answered whole, a cursor part read a row past it,
+ * or its other parts moved past `after`.
+ */
+function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string | undefined) {
+  const pastCursor = Object.values<SealedLiveQueryWire>(read.queries).some(
+    ({ cursor, rows }) =>
+      cursor !== undefined && (cursor.past === undefined || (rows?.length ?? 0) > 0),
+  );
+  return pastCursor || liveDigestOf(read.queries) !== after;
+}
+
+/**
+ * A defined live read's parts in cursor mode (`LIVE_MODE.CURSOR`) for a
+ * reader that names where it holds them (`cursor`): where the read stands
+ * is read first (`standing`), then its cursor parts past the reader's
+ * cursor, or whole where a rewind left it behind, each carrying where it
+ * stands and the cursor to read past next, and its other parts whole, as
+ * a snapshot's are. Held until any of that moves (`cursorMoved`). A reader
+ * that names no cursor, or a read with no cursor parts, is answered as a
+ * snapshot is (`liveQueryParts`), which is how a released desktop reads it.
+ * Unavailable where its statements can't be built or read.
+ */
+export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+  Param extends string,
+  Part extends string,
+>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
+  look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
+) {
+  const following = query.cursor;
+  const cursor = asked[LIVE_POLL.CURSOR];
+  if (following === undefined || cursor === undefined) {
+    return yield* liveQueryParts(query, params, asked, look);
+  }
+  const followed: ReadonlySet<string> = new Set(following.parts);
+  const polled = Effect.gen(function* () {
+    // Note that where it stands is read before its rows, so a write that lands between the two is read again past the next cursor rather than missed.
+    const standing = yield* following
+      .standing(params)
+      .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+    const past = standing.stands(cursor) ? cursor : undefined;
+    const statements = query.statements(params, past);
+    if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    const read = yield* readParts(statements.value);
+    const at = { ...(past === undefined ? undefined : { past }), next: standing.next };
+    return {
+      ...read,
+      // SAFETY: every part is kept, each cursor part with where it stands beside it.
+      queries: Object.fromEntries(
+        Object.entries<SealedLiveQueryWire>(read.queries).map(([part, sealed]) => [
+          part,
+          followed.has(part) ? { ...sealed, cursor: at } : sealed,
+        ]),
+      ) as Record<Part, SealedLiveQueryWire>,
+    };
+  });
+  const after = asked[LIVE_POLL.AFTER];
+  if (after === undefined) return yield* polled;
+  return yield* heldParts(polled, (read) => cursorMoved(read, after), query.topics(params), look);
 });
 
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
@@ -384,21 +464,30 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
-      const { target } = yield* reachedAgentById(context.userId, input.id);
-      const read =
-        callId === undefined
-          ? target
-          : {
-              userId: target.userId,
-              conversationId: childConversationId(target.conversationId, callId),
-            };
-      const statements = transcriptLiveStatements(
-        read,
-        target.conversationId,
-        agentFollowedBy(target.userId, target.conversationId, context.userId),
+      const cursor = input[LIVE_POLL.CURSOR];
+      if (
+        cursor !== undefined &&
+        Result.isFailure(readEither(codingAgentCursorSchema)(unparsedWire(cursor)))
+      ) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const { agent, target } = yield* reachedAgentById(context.userId, input.id);
+      const params = {
+        ownerId: target.userId,
+        conversationId:
+          callId === undefined
+            ? target.conversationId
+            : childConversationId(target.conversationId, callId),
+        parentConversationId: target.conversationId,
+        agentId: agent.id,
+        readerId: context.userId,
+      };
+      return yield* liveCursorParts(
+        agentTranscriptLive,
+        params,
+        input,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
       );
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input, NO_TOPICS, LIVE_POLL_HOLD.WATCHED_LOOK);
     }),
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

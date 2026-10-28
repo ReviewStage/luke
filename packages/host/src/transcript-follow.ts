@@ -6,6 +6,7 @@ import {
 import {
   applyMessagesPage,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_CURSOR_START,
   type CodingAgentMessage,
   type CodingAgentNewestAnswer,
 } from "@luke/features/coding-agent-wire";
@@ -15,7 +16,7 @@ import {
   LIVE_SIGNED_OUT,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
-import { windowMessagesOf } from "@luke/features/transcript-window";
+import { joinedWindowRows, windowMessagesOf } from "@luke/features/transcript-window";
 import {
   Data,
   Duration,
@@ -45,7 +46,11 @@ import { decodedLiveRows, LIVE_STATE } from "./live-follow.js";
  * last came back full. A page with fewer than a page's most is caught up.
  * From then on the newest messages are the statements' own rows (`window`,
  * `windowParts`), which the follow draws (`windowMessagesOf`) and tells as
- * they change, with no page read again; a page is read again only when the
+ * they change, with no page read again. The live read answers those rows
+ * only past the cursor it last named, so the follow joins each answer onto
+ * the rows it holds by message id (`joinedWindowRows`), and takes an answer whole
+ * where it names no cursor of the follow's, as after a rewind; a page is
+ * read again only when the
  * turns, the titles, or the workers move, since what it carries beside its
  * messages, the agent's status, its usage priced from the model catalog,
  * its context and its workers, is still the service's.
@@ -107,12 +112,13 @@ interface Failed {
 }
 
 export interface TranscriptFollowDependencies<Key = TranscriptKey> {
-  /** The transcript's live read, its rows inline, held past `after` where it names one; not found, or a failure where the service answered none. */
+  /** The transcript's live read, its rows inline, held past `after` where it names one, its newest messages past `cursor`; not found, or a failure where the service answered none. */
   readonly seal: (
     key: Key,
     poll: boolean,
     userId: string,
     after?: string,
+    cursor?: string,
   ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>;
   /** The account signed in now, which a follow is read for from its first read on; none where nobody is. */
   readonly accountId: () => string | undefined;
@@ -186,11 +192,15 @@ function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswe
   return "failure" in answer ? answer : followedRead(answer);
 }
 
-/** The transcript's first read, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
+/** The transcript's first read, its newest messages past the start, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
 function sealedOf(
-  seal: (poll: boolean, after?: string) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
+  seal: (
+    poll: boolean,
+    after?: string,
+    cursor?: string,
+  ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
 ): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>, SealUnanswered> {
-  return seal(false).pipe(
+  return seal(false, undefined, CODING_AGENT_CURSOR_START).pipe(
     Effect.flatMap((answer) => {
       if (!("failure" in answer)) return Effect.succeed(Option.some(answer));
       if (
@@ -215,10 +225,10 @@ export function transcriptFollows<Key = TranscriptKey>(
       Effect.gen(function* () {
         // The account the follow starts for, which every poll names, so one under another's session is refused as signed out.
         const userId = dependencies.accountId();
-        const seal = (poll: boolean, after?: string) =>
+        const seal = (poll: boolean, after?: string, cursor?: string) =>
           userId === undefined
             ? Effect.succeed(LIVE_SIGNED_OUT)
-            : dependencies.seal(key, poll, userId, after);
+            : dependencies.seal(key, poll, userId, after, cursor);
         const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: LIVE_STATE.REFUSED } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
@@ -226,9 +236,10 @@ export function transcriptFollows<Key = TranscriptKey>(
         yield* Effect.forkScoped(
           Stream.runForEach(
             decodedLiveRows(
-              { poll: (after) => Effect.map(seal(true, after), followedAnswer) },
+              { poll: (after, cursor) => Effect.map(seal(true, after, cursor), followedAnswer) },
               followedRead(first.value),
               agentTranscriptLiveRowsSchema,
+              joinedWindowRows,
             ),
             (decoded) =>
               SubscriptionRef.set(state, {

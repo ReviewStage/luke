@@ -19,6 +19,7 @@ import {
   writeDelegation,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
+import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
@@ -39,13 +40,14 @@ import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/datab
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_STATUS, INBOX_TOOL } from "@luke/features/inbox-wire";
-import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
+import { agentTranscriptLiveRowsSchema, LIVE_POLL } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -82,7 +84,9 @@ import {
   unparsedWire,
   type WireRecord,
 } from "../../core.js";
+import { liveCursorParts } from "../../live/live-procedures.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
+import { agentTranscriptLive } from "../../sync/live-queries.js";
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { saveNotes } from "../../tasks/plan-notes.js";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
@@ -820,6 +824,119 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           const stranger = yield* openGithubUser();
           assert.deepEqual(yield* windowOf(target, stranger), []);
+        }),
+    );
+
+    it.effect(
+      "a transcript's cursor answer carries every message written or amended past the reader's cursor, the journal its turn moved past a later line included, and nothing else, and its newest messages whole once a rewind leaves the cursor behind",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+          const state = memoryRelayState();
+          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          const db = yield* Database;
+          const line = (text: string) =>
+            writer.writeAwaitingLine(
+              target,
+              { text, clientKey: randomUUID(), sender: { kind: MESSAGE_SENDER.MEMBER, userId } },
+              Effect.succeed(true),
+            );
+          const relayed = (events: readonly MessageStreamEvent[]) =>
+            Effect.forEach(
+              events,
+              // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+              (event) => host.relay(event, admitted, session as never, state, {}),
+              { discard: true },
+            );
+          /** Every message of the conversation as the table holds it: its place and the revision it was last amended at, by id. */
+          const standing = Effect.map(
+            db
+              .select({ id: messages.id, seq: messages.seq, revision: messages.revision })
+              .from(messages)
+              .where(eq(messages.conversationId, target.conversationId)),
+            (rows) =>
+              new Map(rows.map((row) => [row.id, { seq: row.seq, revision: row.revision }])),
+          );
+          type Standing = Effect.Success<typeof standing>;
+          /** The messages written, moved, or amended between two readings of the table, by id. */
+          const changed = (from: Standing, to: Standing) =>
+            [...to]
+              .filter(([id, now]) => {
+                const was = from.get(id);
+                return was?.seq !== now.seq || was.revision !== now.revision;
+              })
+              .map(([id]) => id)
+              .toSorted();
+          /** The transcript's live read for a reader holding its newest messages at `cursor`: where they stand, and the messages it answers, by id. */
+          const answered = (cursor: string) =>
+            Effect.map(
+              liveCursorParts(
+                agentTranscriptLive,
+                {
+                  ownerId: target.userId,
+                  conversationId: target.conversationId,
+                  parentConversationId: target.conversationId,
+                  agentId: agent.id,
+                  readerId: userId,
+                },
+                { [LIVE_POLL.CURSOR]: cursor },
+              ),
+              ({ queries }) => ({
+                at: queries.window.cursor,
+                ids: Schema.decodeUnknownSync(Schema.Array(transcriptWindowRowSchema))(
+                  queries.window.rows,
+                )
+                  .map((row) => row.id)
+                  .toSorted(),
+              }),
+            );
+          const turn = codingTurn("turn_0", "turn.completed");
+          const opening = turn.findIndex((event) => event.type === "actions.requested");
+          const stepsBegun = turn.findIndex((event) => event.type === "message.completed") - 1;
+
+          yield* line("Start on the invites.");
+          const opened = yield* standing;
+          const whole = yield* answered(CODING_AGENT_CURSOR_START);
+          assert.deepEqual(whole.ids, [...opened.keys()].toSorted());
+
+          // The turn opens its journal.
+          yield* relayed(turn.slice(0, opening));
+          const begun = yield* standing;
+          const first = yield* answered(whole.at?.next ?? assert.fail("no cursor"));
+          assert.equal(first.at?.past, whole.at?.next);
+          assert.deepEqual(first.ids, changed(opened, begun));
+
+          // The journal grows a step in place, where it stands.
+          yield* relayed(turn.slice(opening, stepsBegun));
+          const working = yield* standing;
+          const second = yield* answered(first.at?.next ?? assert.fail("no cursor"));
+          const grown = changed(begun, working);
+          assert.ok(
+            grown.length > 0 && grown.every((id) => working.get(id)?.seq === begun.get(id)?.seq),
+            "the journal was amended where it stood",
+          );
+          assert.deepEqual(second.ids, grown);
+
+          // A line lands while the turn runs, and the closing journal moves past it.
+          yield* line("Use the settings page.");
+          yield* relayed(turn.slice(stepsBegun));
+          const settled = yield* standing;
+          const third = yield* answered(second.at?.next ?? assert.fail("no cursor"));
+          const journal = [...working].find(([id, was]) => settled.get(id)?.seq !== was.seq);
+          assert.ok(journal !== undefined, "the closed journal moved to a later place");
+          assert.ok(third.ids.includes(journal[0]));
+          assert.deepEqual(third.ids, changed(working, settled));
+          assert.ok(third.ids.length < settled.size, "nothing standing as the cursor held it");
+
+          // A rewind to the later line drops it and the journal behind it.
+          const later = changed(working, settled).find((id) => !working.has(id));
+          assert.ok(later !== undefined);
+          assert.ok(Result.isSuccess(yield* rewindConversation(target, later)));
+          const rewound = yield* answered(third.at?.next ?? assert.fail("no cursor"));
+          assert.equal(rewound.at?.past, undefined, "answered whole, past no cursor");
+          assert.deepEqual(rewound.ids, [...(yield* standing).keys()].toSorted());
         }),
     );
 

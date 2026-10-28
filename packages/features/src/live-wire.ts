@@ -64,8 +64,13 @@ import { transcriptWindowPartRowSchema, transcriptWindowRowSchema } from "./tran
  */
 export const LIVE_POLL_URL = "luke-poll:";
 
-/** How a reader asks for a live read's rows inline rather than sealed, while Realtime fails it. */
-export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after" } as const;
+/**
+ * How a reader asks for a live read's rows inline rather than sealed, while
+ * Realtime fails it; where they last stood (`AFTER`); and, for a read whose
+ * parts it follows by cursor, the cursor it holds them at (`CURSOR`), past
+ * which those parts are answered rather than whole.
+ */
+export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after", CURSOR: "cursor" } as const;
 
 /**
  * The query every live read names the account it was started for under, as
@@ -81,15 +86,30 @@ export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
 /**
  * Where a polled read's rows stand as one value: each part's digest, in
  * the parts' name order. A reader sends the one it last saw as `after`, and
- * the service holds the poll until the rows move past it.
+ * the service holds the poll until the rows move past it. Note that a part
+ * answered past a cursor (`cursor`) is left out, because its reader holds it
+ * at the cursor instead, and its rows are only what moved past it.
  */
 export function liveDigestOf(
-  queries: Readonly<Record<string, { readonly digest?: string }>>,
+  queries: Readonly<Record<string, { readonly digest?: string; readonly cursor?: unknown }>>,
 ): string | undefined {
-  const parts = Object.keys(queries).toSorted();
+  const parts = Object.keys(queries)
+    .filter((part) => queries[part]?.cursor === undefined)
+    .toSorted();
   const digests = parts.map((part) => queries[part]?.digest);
   return digests.every((digest) => digest !== undefined) ? digests.join(",") : undefined;
 }
+
+/**
+ * Where a part a reader follows by cursor stands: the cursor its rows were
+ * read past, absent where they are its rows whole, as for a reader whose
+ * cursor a rewind left behind; and the cursor to read past next, where
+ * every row read stands at least.
+ */
+const liveCursorAnswerSchema = EffectSchema.Struct({
+  past: EffectSchema.optionalKey(EffectSchema.String),
+  next: EffectSchema.String,
+});
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
@@ -118,6 +138,13 @@ export const sealedLiveQuerySchema = EffectSchema.Struct({
    * read that shows it carries the write's txid.
    */
   txids: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
+  /**
+   * Where a part the reader follows by cursor (`LIVE_POLL.CURSOR`) stands,
+   * answered only to a reader that named one: its rows are then only those
+   * written or amended past `past`, which the reader joins onto the rows it
+   * holds, or its rows whole where `past` is absent.
+   */
+  cursor: EffectSchema.optionalKey(liveCursorAnswerSchema),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
@@ -353,7 +380,9 @@ export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
  * messages, its turns, its conversation's journal revision and title, the
  * agent's title, and its workers' titles and delegations; and its newest
  * messages themselves as rows (`window`, `windowParts`), which the reader
- * draws as they arrive. What stands beside them on a page, the agent's
+ * draws as they arrive; to a reader that names a cursor, only those written
+ * or amended past it, which it joins by message id onto the ones it holds.
+ * What stands beside them on a page, the agent's
  * status, cost, and workers, is still read from the service, once the
  * turns, titles, or workers move. The service answers
  * `not-found` for an agent the account does not reach, and `unavailable`

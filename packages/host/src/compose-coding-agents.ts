@@ -265,9 +265,16 @@ export function composeCodingAgents(
     const asked = askedOf(dependencies, http);
     const { client } = dependencies;
     const transcripts = yield* transcriptFollows({
-      seal: (key, poll, userId, after) =>
+      seal: (key, poll, userId, after, cursor) =>
         asked(
-          dependencies.client.agentTranscriptLive(key.agentId, userId, key.callId, poll, after),
+          dependencies.client.agentTranscriptLive(
+            key.agentId,
+            userId,
+            key.callId,
+            poll,
+            after,
+            cursor,
+          ),
         ),
       accountId: dependencies.accountId,
     });
