@@ -859,10 +859,11 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
     ),
     ["In progress"],
   );
-  const doneItem = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]'),
-  ].find((item) => itemLabel(item) === "Done");
-  act(() => (doneItem ?? assert.fail("Status offers Done")).click());
+  // A press on the row closes the menu, and the next right-click opens it on its own items, not on Status.
+  act(() => rowButton.click());
+  rightClick(rowButton, 40, 60);
+  assert.equal(document.querySelector('[role="menu"][aria-label="Status"]'), null);
+  chooseIn("Status", "Done");
   rightClick(rowButton, 40, 60);
   chooseIn("Status", "Canceled");
   assert.equal(asking(), false, "no status asks anything");
