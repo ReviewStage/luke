@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -135,9 +135,7 @@ test("a plan that could not be read says so only while it is listed, is let go, 
   // The service refuses Personal's task, until it is asked again, and answers Acme's with nothing waiting.
   let refuse = true;
   const main = followedInboxes(({ id }) =>
-    id === "personal-plan" && refuse
-      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-      : { items: [] },
+    id === "personal-plan" && refuse ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { items: [] },
   );
   bridge(main);
   const { control, list } = mount([holding("personal-plan")]);

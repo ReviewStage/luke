@@ -25,11 +25,11 @@ import {
   taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { attachment } from "@luke/database/schemas/attachment";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { channel } from "@luke/database/schemas/channel";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
@@ -42,12 +42,8 @@ import type {
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
+import { AGENT_KIND, type AgentAttachment, type AgentKind } from "@luke/features/agent-wire";
 import type { ChannelThreadAgent } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_KIND,
-  type CodingAgentAttachment,
-  type CodingAgentKind,
-} from "@luke/features/coding-agent-wire";
 import type { ConversationMediaType } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -555,11 +551,11 @@ const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 function itemAgentSeenBy(userId: string): SQL {
   const seen = exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
+      .select({ one: agentTable.id })
+      .from(agentTable)
       .where(
         and(
-          eq(codingAgent.id, inboxItem.agentId),
+          eq(agentTable.id, inboxItem.agentId),
           agentSeenBy(userId),
           agentNoTeammatesOperator(userId),
         ),
@@ -602,24 +598,20 @@ const lockAgent = SqlSchema.findOneOption({
     id: Schema.String,
     organizationId: Schema.String,
     workspaceStep: Schema.String,
-    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+    kind: Schema.Literals(Object.values(AGENT_KIND)),
   }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
         .select({
-          id: codingAgent.id,
+          id: agentTable.id,
           organizationId: AGENT_WORKSPACE,
           workspaceStep: AGENT_WORKSPACE_STEP,
-          kind: codingAgent.kind,
+          kind: agentTable.kind,
         })
-        .from(codingAgent)
+        .from(agentTable)
         .where(
-          and(
-            eq(codingAgent.id, agentId),
-            eq(codingAgent.userId, userId),
-            agentReachableBy(userId),
-          ),
+          and(eq(agentTable.id, agentId), eq(agentTable.userId, userId), agentReachableBy(userId)),
         )
         .for("update"),
     ),
@@ -1122,7 +1114,7 @@ function tasklessWaiting(userId: string) {
  * so one null would fail its whole read.
  */
 function repositoryCarried(repositoryless: boolean): SQL | undefined {
-  return repositoryless ? undefined : isNotNull(codingAgent.repository);
+  return repositoryless ? undefined : isNotNull(agentTable.repository);
 }
 
 /** How many of a group's items are questions waiting on the reader (`askingReader`), as a number rather than a `bigint`. */
@@ -1190,9 +1182,9 @@ const findWaitingItems = SqlSchema.findAll({
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-          agentModel: codingAgent.model,
-          startedBy: codingAgent.userId,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentModel: agentTable.model,
+          startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
           title: inboxItem.title,
           revision: inboxItem.revision,
@@ -1204,7 +1196,7 @@ const findWaitingItems = SqlSchema.findAll({
           channelId: inboxItem.channelId,
         })
         .from(inboxItem)
-        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
         .where(accountWaiting(userId))
         .orderBy(...LATEST_FIRST),
     ),
@@ -1214,7 +1206,7 @@ const findWaitingItems = SqlSchema.findAll({
 const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
-  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   startedBy: Schema.String,
@@ -1242,18 +1234,18 @@ const findTasklessWaitingItems = SqlSchema.findAll({
         .select({
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          agentKind: codingAgent.kind,
+          agentKind: agentTable.kind,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-          agentModel: codingAgent.model,
-          startedBy: codingAgent.userId,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentModel: agentTable.model,
+          startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
           automationId: automation.id,
           automationName: automation.name,
-          repository: codingAgent.repository,
-          workspaceId: codingAgent.organizationId,
+          repository: agentTable.repository,
+          workspaceId: agentTable.organizationId,
           title: inboxItem.title,
           revision: inboxItem.revision,
           status: inboxItem.status,
@@ -1264,11 +1256,11 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           channelId: inboxItem.channelId,
         })
         .from(inboxItem)
-        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
         // The automation, its id as its name, is told only to an account that may read the automation itself.
         .leftJoin(
           automation,
-          and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+          and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
         )
         .where(and(tasklessWaiting(userId), repositoryCarried(repositoryless)))
         .orderBy(...LATEST_FIRST),
@@ -1348,11 +1340,11 @@ const findAutomationsWithItems = SqlSchema.findAll({
       db
         .select({ automationId: automation.id, items: count(), updatedAt: LATEST_ITEM })
         .from(inboxItem)
-        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
         // An automation the account may not read groups with the agents no standing automation names.
         .leftJoin(
           automation,
-          and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+          and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
         )
         .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
         .groupBy(automation.id)
@@ -1456,9 +1448,9 @@ export function accountInboxLiveStatements(
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-          agentModel: codingAgent.model,
-          startedBy: codingAgent.userId,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentModel: agentTable.model,
+          startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
           title: inboxItem.title,
           revision: inboxItem.revision,
@@ -1470,7 +1462,7 @@ export function accountInboxLiveStatements(
       ),
     )
     .from(inboxItem)
-    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
     .where(accountWaiting(userId));
   const planless = queryBuilder
     .select(
@@ -1478,18 +1470,18 @@ export function accountInboxLiveStatements(
         {
           id: inboxItem.id,
           agentId: inboxItem.agentId,
-          agentKind: codingAgent.kind,
+          agentKind: agentTable.kind,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-          agentModel: codingAgent.model,
-          startedBy: codingAgent.userId,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+          agentModel: agentTable.model,
+          startedBy: agentTable.userId,
           waitsOn: WAITS_ON,
           automationId: automation.id,
           automationName: automation.name,
-          repository: codingAgent.repository,
-          workspaceId: codingAgent.organizationId,
+          repository: agentTable.repository,
+          workspaceId: agentTable.organizationId,
           title: inboxItem.title,
           revision: inboxItem.revision,
           unread: unreadFor(userId),
@@ -1500,10 +1492,10 @@ export function accountInboxLiveStatements(
       ),
     )
     .from(inboxItem)
-    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
     .leftJoin(
       automation,
-      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+      and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
     )
     .where(and(tasklessWaiting(userId), repositoryCarried(repositoryless)));
   const plans = queryBuilder
@@ -1523,10 +1515,10 @@ export function accountInboxLiveStatements(
       updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
     })
     .from(inboxItem)
-    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
     .leftJoin(
       automation,
-      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+      and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
     )
     .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
     .groupBy(automation.id);
@@ -2363,7 +2355,7 @@ const findWorkspaceChannel = SqlSchema.findOneOption({
  */
 function placeOf(
   agent: InboxAgent,
-  locked: LockedWorkspace & { readonly kind: CodingAgentKind },
+  locked: LockedWorkspace & { readonly kind: AgentKind },
   post: InboxThreadPost,
 ): InboxStoreEffect<
   Result.Result<
@@ -2378,7 +2370,7 @@ function placeOf(
       if (Option.isNone(found)) return Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL);
     }
     if (post.addresseeId !== undefined) {
-      const operator = locked.kind === CODING_AGENT_KIND.OPERATOR;
+      const operator = locked.kind === AGENT_KIND.OPERATOR;
       if (operator && post.addresseeId !== agent.userId) {
         return Result.fail(INBOX_POST_REFUSAL.NOT_ITS_MEMBER);
       }
@@ -2689,7 +2681,7 @@ const ChannelThreadRowSchema = Schema.Struct({
  * that a channel holds threads of every task of the workspace, which no
  * read of one task's agents the window holds can name.
  */
-const THREAD_AGENT = sql<unknown>`(select jsonb_build_object('title', coalesce(${agentGivenNameSql({ kind: qualified(codingAgent, codingAgent.kind) })}, ${qualified(codingAgent, codingAgent.title)}), 'model', ${qualified(codingAgent, codingAgent.model)}, 'automationName', ${agentAutomationNameSql({ automationOrigin: qualified(codingAgent, codingAgent.automationOrigin) })}) from ${codingAgent} where ${qualified(codingAgent, codingAgent.id)} = ${qualified(inboxItem, inboxItem.agentId)})`;
+const THREAD_AGENT = sql<unknown>`(select jsonb_build_object('title', coalesce(${agentGivenNameSql({ kind: qualified(agentTable, agentTable.kind) })}, ${qualified(agentTable, agentTable.title)}), 'model', ${qualified(agentTable, agentTable.model)}, 'automationName', ${agentAutomationNameSql({ automationOrigin: qualified(agentTable, agentTable.automationOrigin) })}) from ${agentTable} where ${qualified(agentTable, agentTable.id)} = ${qualified(inboxItem, inboxItem.agentId)})`;
 
 /** Whether the item holds an ask open that waits on the reader: what a channel's count counts and its stream always carries. */
 function askingReader(userId: string): SQL<boolean> {
@@ -3305,7 +3297,7 @@ export function withdrawInboxClose(
 }
 
 /** A file's base64 as the bytes it spells; the wire held it to standard padded base64 already. */
-function bytesOf(file: CodingAgentAttachment): Uint8Array {
+function bytesOf(file: AgentAttachment): Uint8Array {
   return new Uint8Array(Buffer.from(file.data, "base64"));
 }
 
@@ -3315,7 +3307,7 @@ interface AnswerWrite {
   readonly itemId: string;
   readonly answerKey: string;
   readonly words: string;
-  readonly files: readonly CodingAgentAttachment[];
+  readonly files: readonly AgentAttachment[];
   /** The message whose ask the answer settles. */
   readonly askId: string;
   /** The answer to the ask as a member's message carries it. */
@@ -3467,7 +3459,7 @@ export function answerInboxAsk(
     readonly answers: InboxAnswers;
     readonly text: string;
     readonly clientKey: string;
-    readonly files?: readonly CodingAgentAttachment[] | undefined;
+    readonly files?: readonly AgentAttachment[] | undefined;
   },
 ): InboxStoreEffect<Option.Option<InboxAskAnswered>> {
   const files = sent.files ?? [];
@@ -3752,7 +3744,7 @@ export function postInboxMessage(
   message: {
     readonly text: string;
     readonly clientKey: string;
-    readonly files?: readonly CodingAgentAttachment[] | undefined;
+    readonly files?: readonly AgentAttachment[] | undefined;
     /** The revision of the notice the member was shown, which the message settles where it still stands there. */
     readonly revision?: number | undefined;
   },
@@ -3826,9 +3818,9 @@ const findReachedAgent = SqlSchema.findOneOption({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId))),
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentVisibleTo(userId))),
     ),
 });
 
@@ -3942,7 +3934,7 @@ export function startInboxThread(
     readonly title: string;
     readonly text: string;
     readonly clientKey: string;
-    readonly files?: readonly CodingAgentAttachment[] | undefined;
+    readonly files?: readonly AgentAttachment[] | undefined;
   },
 ): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
   const { title, text, clientKey } = thread;
@@ -4228,7 +4220,7 @@ const MemberAskRowSchema = Schema.Struct({
   key: Schema.String,
   title: Schema.String,
   agentId: Schema.String,
-  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   agentAutomationName: Schema.NullOr(Schema.String),
@@ -4280,10 +4272,10 @@ const findMemberOpenAsks = SqlSchema.findAll({
           key: inboxItem.key,
           title: inboxItem.title,
           agentId: inboxItem.agentId,
-          agentKind: codingAgent.kind,
-          agentTitle: codingAgent.title,
-          agentModel: codingAgent.model,
-          agentAutomationName: agentAutomationNameSql(codingAgent),
+          agentKind: agentTable.kind,
+          agentTitle: agentTable.title,
+          agentModel: agentTable.model,
+          agentAutomationName: agentAutomationNameSql(agentTable),
           taskId: inboxItem.taskId,
           taskName: task.name,
           askType: sql<string | null>`${inboxMessage.ask}->>'type'`,
@@ -4291,7 +4283,7 @@ const findMemberOpenAsks = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
         })
         .from(inboxItem)
-        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
         .leftJoin(task, eq(task.id, inboxItem.taskId))
         .leftJoin(inboxMessage, eq(inboxMessage.id, inboxItem.openAskMessageId))
         .where(

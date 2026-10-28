@@ -5,10 +5,10 @@ import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import {
-  createCodingAgent,
-  readCodingAgentRouting,
+  createAgent,
+  readAgentRouting,
   readRunnerTokenConversation,
-} from "../../models/coding-agent-store.js";
+} from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import {
   getTestDB,
@@ -48,7 +48,7 @@ const agentHolding = () =>
     const organizationId = yield* openWorkspace(userId);
     const task = yield* createTask(userId, { organizationId, name: "Teammate invitations" });
     const agent = Option.getOrThrow(
-      yield* createCodingAgent(userId, {
+      yield* createAgent(userId, {
         taskId: task.id,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
@@ -80,7 +80,7 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
 
         const routing = (agent: { userId: string; agentId: string }) =>
           Effect.map(
-            readCodingAgentRouting(agent.userId, agent.agentId),
+            readAgentRouting(agent.userId, agent.agentId),
             (read) => Option.getOrThrow(read).runnerTokenHash,
           );
         assert.deepEqual([yield* routing(holding), yield* routing(bare)], [digest, null]);

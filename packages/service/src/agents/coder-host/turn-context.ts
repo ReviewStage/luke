@@ -21,7 +21,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { CodingAgentContextRow } from "@luke/database/models/coding-agent-store";
+import type { AgentContextRow } from "@luke/database/models/agent-store";
 import type { StoredTask } from "@luke/database/models/task-store";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
@@ -80,7 +80,7 @@ export const FLUSH_LINE = `Your history is nearly full, and soon it will be summ
  * none, because it measured the history the summary replaced.
  */
 export function flushDue(
-  context: CodingAgentContextRow,
+  context: AgentContextRow,
   windowTokens: number,
   handed: TurnHanded,
 ): boolean {

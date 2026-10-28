@@ -9,11 +9,8 @@
  * the refusal a route answers.
  */
 
-import {
-  type CodingAgent,
-  forgetCodingAgentPublishedRead,
-} from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_STATUS, type CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import { type Agent, forgetAgentPublishedRead } from "@luke/database/models/agent-store";
+import { AGENT_STATUS, type AgentPullRequest } from "@luke/features/agent-wire";
 import { githubPullRequestNumberSchema } from "@luke/features/github-repositories-wire";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Effect, Result } from "effect";
@@ -62,11 +59,11 @@ export function githubReadRefusal<A, R>(
 const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: PublishedCache,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
 ) {
   // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
   const status = yield* statusOf(agent);
-  const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
+  const ended = status !== AGENT_STATUS.STARTING && status !== AGENT_STATUS.RUNNING;
   return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
     // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
     Effect.catch((failure) =>
@@ -101,7 +98,7 @@ export const pullRequestNumberOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: PublishedCache,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   number: number | undefined,
 ) {
   if (number === undefined) return yield* keptPublished(published, userId, agent);
@@ -112,12 +109,12 @@ export const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const askedPullRequest = (
   published: PublishedCache,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   number: number | undefined,
 ) =>
   Effect.map(
     askedPublished(published, userId, agent, number),
-    (answer): CodingAgentPullRequest | null => answer.pullRequest,
+    (answer): AgentPullRequest | null => answer.pullRequest,
   );
 
 /**
@@ -136,7 +133,5 @@ export const forgetPublished = (published: PublishedCache, userId: string, agent
       { discard: true },
     ),
   ).pipe(
-    Effect.andThen(
-      forgetCodingAgentPublishedRead(userId, agentId).pipe(Effect.catch(logStoreFailure)),
-    ),
+    Effect.andThen(forgetAgentPublishedRead(userId, agentId).pipe(Effect.catch(logStoreFailure))),
   );

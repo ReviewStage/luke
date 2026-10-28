@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  type CodingAgentInboxScope,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  type AgentInboxScope,
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -26,17 +26,17 @@ import { heldInboxes } from "./held-inboxes.js";
  * root, which holds the account's feed of every item.
  */
 
-type ScopeKind = CodingAgentInboxScope["kind"];
+type ScopeKind = AgentInboxScope["kind"];
 
 /** A followed inbox as the window hears it: its items whole, or why there are none. */
-type Heard = CodingAgentInboxChanged["inbox"];
+type Heard = AgentInboxChanged["inbox"];
 
 /** How the window follows an inbox: hearing each change until the stop it answers is called. */
 export interface InboxFollower {
-  readonly follow: (scope: CodingAgentInboxScope, hear: (inbox: Heard) => void) => () => void;
+  readonly follow: (scope: AgentInboxScope, hear: (inbox: Heard) => void) => () => void;
 }
 
-const UNANSWERED: Heard = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+const UNANSWERED: Heard = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /**
  * The window's own follower: one stream on its act port per follow, closed

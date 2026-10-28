@@ -1098,7 +1098,7 @@ function lineOfTheAgents(): SQL {
  * written in the coding-agent conversation `conversationId` names, by the
  * same rule `awaitingLinesOfReached` reads, or null where none stands: what
  * a live statement selects so its reader judges the line's grace
- * (`@luke/features/coding-agent-status`) without the statement reading the
+ * (`@luke/features/agent-status`) without the statement reading the
  * clock.
  */
 export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | null> {

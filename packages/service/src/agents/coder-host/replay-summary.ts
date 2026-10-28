@@ -9,10 +9,10 @@ import {
   summaryBytes,
 } from "@luke/features/agent-replay";
 import {
+  AGENT_ATTACHMENT_TYPE,
+  type AgentAttachment,
   base64Bytes,
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@luke/features/models-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { generateText, type LanguageModel } from "ai";
@@ -198,11 +198,11 @@ export function measuredBoundBytes(
  * own, since eve is handed it inlined, and an image's or a PDF's counted at
  * `REPLAY_FIT.FILE_TOKENS`, since its bytes tell nothing of its tokens.
  */
-export function filesBytes(files: readonly CodingAgentAttachment[]): number {
+export function filesBytes(files: readonly AgentAttachment[]): number {
   return files.reduce(
     (sum, file) =>
       sum +
-      (file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
+      (file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT
         ? base64Bytes(file.data)
         : REPLAY_FIT.FILE_TOKENS * BYTES_PER_TOKEN),
     0,

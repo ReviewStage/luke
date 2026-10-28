@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -36,24 +36,24 @@ import {
  * where the transcript no longer holds it. Synthetic agent.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
 };
 
 /** One of the developer's messages. */
-function line(id: string, text: string): CodingAgentMessage {
+function line(id: string, text: string): AgentTranscriptMessage {
   return { id, role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] };
 }
 
-const MESSAGES: readonly CodingAgentMessage[] = [
+const MESSAGES: readonly AgentTranscriptMessage[] = [
   line("task-1", "Add the invite flow."),
   line("msg-7", "Use seven days."),
 ];
@@ -76,8 +76,8 @@ afterEach(() => {
 /** The agent's tab under a task in Acme, its transcript read page by page as `pages`, then to its end; the reveal standing as given, every ask it let go kept. */
 async function drawn(
   reveal: MessageReveal | undefined,
-  pages: readonly (readonly CodingAgentMessage[])[] = [MESSAGES],
-  agent: CodingAgentSummary = AGENT,
+  pages: readonly (readonly AgentTranscriptMessage[])[] = [MESSAGES],
+  agent: AgentSummary = AGENT,
   /** A page held until the test lets it land, by its place among `pages`. */
   held?: { readonly page: number; readonly release: Promise<void> },
 ): Promise<{
@@ -209,7 +209,7 @@ test("a link to the plan an agent was handed, its first message, brings the plan
   const { container, revealed } = await drawn(
     { agentId: AGENT.id, messageId: "task-1", ask: 1 },
     [MESSAGES],
-    { ...AGENT, brief: CODING_AGENT_BRIEF.PLAN },
+    { ...AGENT, brief: AGENT_BRIEF.PLAN },
   );
 
   assert.equal(messageNamed(container, "task-1").hasAttribute("data-landed"), true);
@@ -232,7 +232,7 @@ test("a link to a message a working agent wrote since its last idle page waits f
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const working = { ...AGENT, status: CODING_AGENT_STATUS.RUNNING };
+  const working = { ...AGENT, status: AGENT_STATUS.RUNNING };
   const { container, revealed, redraw } = await drawn(
     undefined,
     [[line("task-1", "Add the invite flow.")], [], [line("msg-7", "Use seven days.")]],

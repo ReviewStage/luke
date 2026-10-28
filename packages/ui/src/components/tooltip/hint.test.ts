@@ -9,7 +9,8 @@ import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { Button } from "../button/button.js";
-import { Tooltip } from "./hint.js";
+import { List, ListRow } from "../list-row/list-row.js";
+import { RowHint, RowHintOptions, Tooltip } from "./hint.js";
 
 /**
  * hint.test.ts -- a card hung beside a row that names its row hangs past
@@ -90,35 +91,30 @@ function boxed(element: Element, left: number, right: number): void {
   element.getBoundingClientRect = () => new DOMRect(left, 10, right - left, 28);
 }
 
-/** A row whose press hangs a card beside it, the row named as its region, with acts after the press. */
+/** A list row handed only a card for its hint, with an act after its press, as a sidebar row draws one. */
 function Row(): React.JSX.Element {
-  const item = useRef<HTMLLIElement>(null);
-  return createElement(
-    "li",
-    { ref: item, "data-row": "" },
-    createElement(Tooltip, {
-      label: "Fix the refresh",
+  return createElement(List, {
+    label: "Tasks",
+    children: createElement(RowHintOptions, {
       card: createElement("p", null, "Fix the refresh"),
-      cardBeside: true,
-      cardRegion: item,
-      children: createElement(
-        "button",
-        { type: "button", "data-press": "", "aria-describedby": undefined },
-        "Fix the refresh",
-      ),
+      children: createElement(ListRow, {
+        title: "Fix the refresh",
+        hint: { Hint: RowHint, label: "Fix the refresh" },
+        actions: createElement("button", { type: "button" }, "Archive"),
+        onPress: () => undefined,
+      }),
     }),
-    createElement("button", { type: "button" }, "Archive"),
-  );
+  });
 }
 
-test("a card hung from a row hangs past the row's end, not its press's, which the row's acts cut short", async () => {
+test("a list row's card, handed no place to hang, hangs past the row's end, not its press's, which the row's acts cut short", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Row))));
-  const row = container.querySelector("[data-row]");
-  const press = container.querySelector("[data-press]");
+  const row = container.querySelector("li");
+  const press = row?.querySelector(":scope > button");
   assert.ok(row && press);
   boxed(row, 8, 260);
   boxed(press, 8, 200);

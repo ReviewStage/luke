@@ -1,23 +1,23 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import {
-  type CodingAgent,
+  type Agent,
   hasRepository,
   lineSendersOf,
-  readCodingAgentContext,
-  readCodingAgentOfConversation,
+  readAgentContext,
+  readAgentOfConversation,
   readDelegation,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+  recordAgentCompaction,
+  recordAgentStep,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -200,7 +200,7 @@ export interface CoderHost extends HostAdmission {
    */
   admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
-  agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
+  agent(admitted: AdmittedConversation): HostEffect<Result.Result<Agent, CoderRefusal>>;
   /** The model one step of the turn named runs on, read from the agent's row now, with the window the catalog lists for it. */
   model(
     admitted: AdmittedConversation,
@@ -231,12 +231,12 @@ export interface CoderHost extends HostAdmission {
   /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are, neither asked of GitHub for an agent with no repository; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
-    agent: CodingAgent,
+    agent: Agent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
   /** The skills offered to the session as it starts: its repository's, none for an agent with no repository, then those its member installed, each source none where it could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
-    agent: CodingAgent,
+    agent: Agent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
   /**
    * The conversation so far, for a session opened over a conversation with
@@ -506,7 +506,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   const research = new ResearchBudget();
   const agentOf = (admitted: AdmittedConversation) =>
     Effect.map(
-      readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
+      readAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
       (found) =>
         Option.match(found, {
           onNone: () => Result.fail(CODER_REFUSAL.NO_AGENT),
@@ -555,7 +555,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
   /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
   const promptOf = (
-    agent: CodingAgent,
+    agent: Agent,
     ciReadable: boolean,
     coAuthor: string | undefined,
     workspace: string,
@@ -581,7 +581,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   const recordContext = (
     event: MessageStreamEvent,
     userId: string,
-    agent: CodingAgent,
+    agent: Agent,
     prompt: CoderSessionPromptRecord,
   ) => {
     const written = Effect.suspend(() => {
@@ -601,10 +601,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             },
             seams.now(),
           );
-          return step === undefined ? Effect.void : recordCodingAgentStep(userId, agent.id, step);
+          return step === undefined ? Effect.void : recordAgentStep(userId, agent.id, step);
         }
         case "compaction.completed":
-          return recordCodingAgentCompaction(userId, agent.id, new Date(seams.now()));
+          return recordAgentCompaction(userId, agent.id, new Date(seams.now()));
         default:
           return Effect.void;
       }
@@ -622,7 +622,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    * a read failed, which is logged, so the turn still opens.
    */
   const flushOf = (
-    agent: CodingAgent,
+    agent: Agent,
     handed: TurnHanded,
   ): Effect.Effect<boolean, never, DatabaseServices | ModelCatalog> =>
     !isOperator(agent) || handed.opened !== true || handed.flushTold === true
@@ -631,7 +631,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           if (!(yield* memoryOnFor(agent.userId))) return false;
           // A turn an automation opens may keep nothing, so it is not told, and a member's later turn is.
           if (yield* newestLineIsAutomation(agent)) return false;
-          const context = yield* readCodingAgentContext(agent.userId, agent.id);
+          const context = yield* readAgentContext(agent.userId, agent.id);
           if (Option.isNone(context)) return false;
           const { model, contextWindow } = context.value;
           const windowTokens = contextWindowOf(yield* catalogNow, model, contextWindow);
@@ -808,7 +808,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // request's, so standing on it is recorded as no branch of its own: no pull request
         // and no GitHub delivery on that branch is taken for this agent's.
         const own = branch === agent.startBranch ? null : branch;
-        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, own);
+        yield* updateAgentBranch(admitted.target.userId, agent.id, own);
       }).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
@@ -950,11 +950,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
         }
         // An operator goes by Luke and is never titled, so no title model is asked for one.
-        if (
-          agent.title !== null ||
-          agent.kind === CODING_AGENT_KIND.OPERATOR ||
-          !asksTitle(event)
-        ) {
+        if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR || !asksTitle(event)) {
           return;
         }
         // Note that the title is awaited here rather than forked, because eve's step, and the

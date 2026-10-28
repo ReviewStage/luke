@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -37,19 +37,23 @@ import { AgentTab } from "./agent-tab.js";
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const AGENT_SUMMARY: CodingAgentSummary = {
+const AGENT_SUMMARY: AgentSummary = {
   id: AGENT,
   planId: TASK,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Fix the tile",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.PLAN,
 };
 
-function line(id: string, role: CodingAgentMessage["role"], text: string): CodingAgentMessage {
+function line(
+  id: string,
+  role: AgentTranscriptMessage["role"],
+  text: string,
+): AgentTranscriptMessage {
   return {
     id,
     role,
@@ -58,7 +62,7 @@ function line(id: string, role: CodingAgentMessage["role"], text: string): Codin
   };
 }
 
-const MESSAGES: readonly CodingAgentMessage[] = [
+const MESSAGES: readonly AgentTranscriptMessage[] = [
   line("plan", MESSAGE_ROLE.USER, "# Fix the tile"),
   line("reply-1", MESSAGE_ROLE.ASSISTANT, "Looking at the tile."),
   line("middle", MESSAGE_ROLE.USER, "Use the dark variant."),
@@ -66,7 +70,7 @@ const MESSAGES: readonly CodingAgentMessage[] = [
   line("last", MESSAGE_ROLE.USER, "Now ship it."),
 ];
 
-const REWOUND: CodingAgentAgentAnswer = {
+const REWOUND: AgentAgentAnswer = {
   agent: {
     id: AGENT,
     planId: TASK,
@@ -74,7 +78,7 @@ const REWOUND: CodingAgentAgentAnswer = {
     effort: "high",
     title: null,
     createdAt: 1_000,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   },
 };
@@ -119,7 +123,7 @@ async function drawnTab(holdSends = false) {
       {
         messages: [...MESSAGES],
         cursor: "5:0",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         title: null,
       },
     ]),

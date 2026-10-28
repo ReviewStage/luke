@@ -14,7 +14,7 @@ import { and, desc, eq, isNull, or, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -33,7 +33,7 @@ import { agentReachableBy, reachableTask, taskReachableBy } from "./workspace-st
  * rule of who may read it (`taskReachableBy`, `agentReachableBy`), so a member
  * reads and writes the pages a teammate's agent wrote, and an owner the
  * account does not reach reads and writes as no owner, exactly as in
- * `task-store.ts` and `coding-agent-store.ts`. A version a coding agent showed
+ * `task-store.ts` and `agent-store.ts`. A version a coding agent showed
  * names it in `agent_id` whichever it stands on. A write is read against the
  * wire's own bounds before it touches a row, so nothing is stored that the
  * desktop could not read back. Pages written in the same millisecond list in
@@ -97,9 +97,9 @@ const lockOwner = SqlSchema.findOneOption({
             .where(reachableTask(userId, owner.taskId))
             .for("update")
         : db
-            .select({ id: codingAgent.id })
-            .from(codingAgent)
-            .where(and(eq(codingAgent.id, owner.agentId), agentReachableBy(userId)))
+            .select({ id: agentTable.id })
+            .from(agentTable)
+            .where(and(eq(agentTable.id, owner.agentId), agentReachableBy(userId)))
             .for("update"),
     ),
 });
@@ -145,7 +145,7 @@ const findPageLines = SqlSchema.findAll({
       .selectDistinctOn([planPageVersion.pageId], PAGE_LINE_COLUMNS)
       .from(planPageVersion)
       .leftJoin(task, eq(task.id, planPageVersion.taskId))
-      .leftJoin(codingAgent, eq(codingAgent.id, planPageVersion.agentId))
+      .leftJoin(agentTable, eq(agentTable.id, planPageVersion.agentId))
       .where(and(ownedBy(owner), ownerReachableBy(userId)))
       .orderBy(planPageVersion.pageId, desc(planPageVersion.version))
       .as("newest");
@@ -166,7 +166,7 @@ const findVersion = SqlSchema.findOneOption({
         .select({ ...PAGE_LINE_COLUMNS, html: planPageVersion.html })
         .from(planPageVersion)
         .leftJoin(task, eq(task.id, planPageVersion.taskId))
-        .leftJoin(codingAgent, eq(codingAgent.id, planPageVersion.agentId))
+        .leftJoin(agentTable, eq(agentTable.id, planPageVersion.agentId))
         .where(
           and(
             ownedBy(owner),
@@ -203,7 +203,7 @@ const findPageById = SqlSchema.findOneOption({
         })
         .from(planPageVersion)
         .leftJoin(task, eq(task.id, planPageVersion.taskId))
-        .leftJoin(codingAgent, eq(codingAgent.id, planPageVersion.agentId))
+        .leftJoin(agentTable, eq(agentTable.id, planPageVersion.agentId))
         .where(
           and(
             eq(planPageVersion.pageId, pageId),

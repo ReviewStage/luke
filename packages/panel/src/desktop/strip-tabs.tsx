@@ -1,4 +1,4 @@
-import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentStatus, AgentSummary } from "@luke/features/agent-wire";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   IconButton,
@@ -503,7 +503,7 @@ export interface AddEntry {
   card?: React.ReactNode;
   onPick: () => void;
   /** The agent the row names, for a row of the task's agents, whose menu archives it. */
-  agent?: CodingAgentSummary | undefined;
+  agent?: AgentSummary | undefined;
 }
 
 /** An entry as a menu draws its row: its end mark and its card drawn where `MenuRow` draws them, so a "+" menu, ⌘K and the summary say the same of a row. */
@@ -660,7 +660,7 @@ export interface HeldTranscripts {
 }
 
 /** Where the open delegated workers stand, by the call that started each, as their tabs' pages last said. */
-export type WorkerStandings = ReadonlyMap<string, CodingAgentStatus>;
+export type WorkerStandings = ReadonlyMap<string, AgentStatus>;
 
 /** What the agents' and the workers' tabs last drew and said, and the presses that keep it. */
 export interface TabViews {
@@ -671,7 +671,7 @@ export interface TabViews {
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: (callId: string, held: HeldTranscript) => void;
   /** A delegated worker's page said where it stands now. */
-  onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
+  onWorkerStatus: (callId: string, status: AgentStatus) => void;
 }
 
 /** Whether two readings name the same workers by the same titles. */
@@ -708,7 +708,7 @@ export function useTabViews(): TabViews {
     () => setHeld({ agents: kept.agents, workers: kept.workers }),
     [kept],
   );
-  const onWorkerStatus = useCallback((callId: string, status: CodingAgentStatus) => {
+  const onWorkerStatus = useCallback((callId: string, status: AgentStatus) => {
     setStandings((was) => (was.get(callId) === status ? was : new Map(was).set(callId, status)));
   }, []);
   const onAgentHeld = useCallback(

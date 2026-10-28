@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { AGENT_FAILURE } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import { type AdminReliabilitySource, buildAdminReliability } from "./admin-reliability.js";
 
@@ -26,9 +26,9 @@ function source(overrides: Partial<AdminReliabilitySource["daily"]> = {}): Admin
       ...overrides,
     },
     agentFailures: new Map([
-      [CODING_AGENT_FAILURE.SANDBOX, 2],
-      [CODING_AGENT_FAILURE.MODEL, 5],
-      [CODING_AGENT_FAILURE.GITHUB, 0],
+      [AGENT_FAILURE.SANDBOX, 2],
+      [AGENT_FAILURE.MODEL, 5],
+      [AGENT_FAILURE.GITHUB, 0],
     ]),
     automationReasons: new Map([
       [AUTOMATION_RUN_REASON.CONCURRENCY, { skipped: 1, failed: 0 }],
@@ -91,8 +91,8 @@ test("the breakdowns come most first, a class with nothing counted left out", ()
   const answer = buildAdminReliability(source(), NOW, ADMIN_METRICS_WINDOW.WEEK);
 
   assert.deepEqual(answer.agentFailures, [
-    { failure: CODING_AGENT_FAILURE.MODEL, count: 5 },
-    { failure: CODING_AGENT_FAILURE.SANDBOX, count: 2 },
+    { failure: AGENT_FAILURE.MODEL, count: 5 },
+    { failure: AGENT_FAILURE.SANDBOX, count: 2 },
   ]);
   assert.deepEqual(answer.automationReasons, [
     { reason: AUTOMATION_RUN_REASON.UNAVAILABLE, skipped: 0, failed: 3 },

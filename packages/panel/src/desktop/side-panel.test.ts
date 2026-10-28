@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -30,7 +30,7 @@ import {
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** An agent at rest on the task, named by its title. */
-function agent(id: string, title: string, createdAt: number): CodingAgentSummary {
+function agent(id: string, title: string, createdAt: number): AgentSummary {
   return {
     id,
     planId: TASK,
@@ -38,13 +38,13 @@ function agent(id: string, title: string, createdAt: number): CodingAgentSummary
     effort: "high",
     title,
     createdAt,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
 }
 
 /** An open pull request, numbered. */
-function pullRequest(number: number, title: string): CodingAgentPullRequest {
+function pullRequest(number: number, title: string): AgentPullRequest {
   return {
     number,
     title,

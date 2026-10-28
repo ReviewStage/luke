@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_ARCHIVER, CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_ARCHIVER, AGENT_KIND } from "@luke/features/agent-wire";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -13,11 +13,11 @@ import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
+import { agentTable, type StoredArchive } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent, type StoredArchive } from "../../schemas/coding-agent.js";
 import { messages, turns } from "../../schemas/storage.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
-import { type CodingAgent, createCodingAgent } from "../coding-agent-store.js";
+import { type Agent, createAgent } from "../agent-store.js";
 import { dueStarterNotices, STARTER_NOTICE_ENDING } from "../starter-notices.js";
 
 /**
@@ -39,17 +39,17 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** A member's agent in a fresh workspace, of the kind given, and an agent it started. */
-const openStarted = (kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_KIND.OPERATOR) =>
+const openStarted = (kind: typeof AGENT_KIND.CODER | typeof AGENT_KIND.OPERATOR) =>
   Effect.gen(function* () {
     const member = yield* openAccount;
     const organizationId = yield* openWorkspace(member);
     const choice = { model: "anthropic/claude-opus-5.5", effort: "high", repository: null };
     const starter = Option.getOrThrow(
-      yield* createCodingAgent(member, {
+      yield* createAgent(member, {
         taskId: null,
         organizationId,
         planSnapshot: null,
-        ...(kind === CODING_AGENT_KIND.OPERATOR
+        ...(kind === AGENT_KIND.OPERATOR
           ? { prompt: null, kind }
           : { prompt: "Orchestrate the rollout." }),
         idempotencyKey: randomUUID(),
@@ -57,7 +57,7 @@ const openStarted = (kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_
       }),
     ).agent;
     const agent = Option.getOrThrow(
-      yield* createCodingAgent(member, {
+      yield* createAgent(member, {
         taskId: null,
         organizationId,
         planSnapshot: null,
@@ -72,7 +72,7 @@ const openStarted = (kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_
 
 /** A turn of the agent's, settled in the status given at `at`; its id. */
 const settledTurn = (
-  agent: CodingAgent,
+  agent: Agent,
   status: TurnStatus,
   at: number,
   patch: {
@@ -99,22 +99,22 @@ const settledTurn = (
   });
 
 /** The agent archived at `at` by the archiver given. */
-const archivedAt = (agent: CodingAgent, at: number, archivedBy: StoredArchive) =>
+const archivedAt = (agent: Agent, at: number, archivedBy: StoredArchive) =>
   Effect.flatMap(Database, (db) =>
     db
-      .update(codingAgent)
+      .update(agentTable)
       .set({ archivedAt: new Date(at), archivedBy })
-      .where(eq(codingAgent.id, agent.id)),
+      .where(eq(agentTable.id, agent.id)),
   );
 
 /** The endings due within a minute of `T0`, of the agent's alone, as their ending and key. */
-const dueOf = (agent: CodingAgent) =>
+const dueOf = (agent: Agent) =>
   Effect.map(dueStarterNotices(new Date(T0), new Date(T0 + 60_000), 100), (due) =>
     due.filter((each) => each.agentId === agent.id).map((each) => [each.ending, each.key]),
   );
 
 /** A line in the starter's conversation under the key given at the seq given, standing as a sent one stands or withdrawn as one eve refused stands. */
-const lineUnder = (starter: CodingAgent, key: string, seq: number, withdrawn = false) =>
+const lineUnder = (starter: Agent, key: string, seq: number, withdrawn = false) =>
   Effect.flatMap(Database, (db) =>
     db.insert(messages).values({
       userId: starter.userId,
@@ -133,55 +133,39 @@ const lineUnder = (starter: CodingAgent, key: string, seq: number, withdrawn = f
 const UNTOLD = [
   {
     name: "a Stop the starter made itself",
-    kind: CODING_AGENT_KIND.CODER,
-    end: ({ starter, agent }: { starter: CodingAgent; agent: CodingAgent }) =>
+    kind: AGENT_KIND.CODER,
+    end: ({ starter, agent }: { starter: Agent; agent: Agent }) =>
       settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestedBy: starter.id }),
   },
   {
     name: "a Stop under a call's key from before a Stop named its agent",
-    kind: CODING_AGENT_KIND.CODER,
-    end: ({ agent }: { agent: CodingAgent }) =>
+    kind: AGENT_KIND.CODER,
+    end: ({ agent }: { agent: Agent }) =>
       settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestKey: "call_stop" }),
   },
   {
     name: "an archive by the starter itself",
-    kind: CODING_AGENT_KIND.CODER,
-    end: ({
-      member,
-      starter,
-      agent,
-    }: {
-      member: string;
-      starter: CodingAgent;
-      agent: CodingAgent;
-    }) =>
+    kind: AGENT_KIND.CODER,
+    end: ({ member, starter, agent }: { member: string; starter: Agent; agent: Agent }) =>
       archivedAt(agent, T0 + 1_000, {
-        by: CODING_AGENT_ARCHIVER.AGENT,
+        by: AGENT_ARCHIVER.AGENT,
         userId: member,
         agentId: starter.id,
       }),
   },
   {
     name: "a failure under a starter since archived",
-    kind: CODING_AGENT_KIND.CODER,
-    end: ({
-      member,
-      starter,
-      agent,
-    }: {
-      member: string;
-      starter: CodingAgent;
-      agent: CodingAgent;
-    }) =>
+    kind: AGENT_KIND.CODER,
+    end: ({ member, starter, agent }: { member: string; starter: Agent; agent: Agent }) =>
       Effect.andThen(
         settledTurn(agent, TURN_STATUS.FAILED, T0 + 1_000),
-        archivedAt(starter, T0 + 2_000, { by: CODING_AGENT_ARCHIVER.MEMBER, userId: member }),
+        archivedAt(starter, T0 + 2_000, { by: AGENT_ARCHIVER.MEMBER, userId: member }),
       ),
   },
   {
     name: "a failure under a starter whose own newest turn failed",
-    kind: CODING_AGENT_KIND.CODER,
-    end: ({ starter, agent }: { starter: CodingAgent; agent: CodingAgent }) =>
+    kind: AGENT_KIND.CODER,
+    end: ({ starter, agent }: { starter: Agent; agent: Agent }) =>
       Effect.andThen(
         settledTurn(starter, TURN_STATUS.FAILED, T0 + 500),
         settledTurn(agent, TURN_STATUS.FAILED, T0 + 1_000),
@@ -189,8 +173,8 @@ const UNTOLD = [
   },
   {
     name: "a failure under a member's operator",
-    kind: CODING_AGENT_KIND.OPERATOR,
-    end: ({ agent }: { agent: CodingAgent }) => settledTurn(agent, TURN_STATUS.FAILED, T0 + 1_000),
+    kind: AGENT_KIND.OPERATOR,
+    end: ({ agent }: { agent: Agent }) => settledTurn(agent, TURN_STATUS.FAILED, T0 + 1_000),
   },
 ] as const;
 
@@ -199,7 +183,7 @@ it.layer(getTestDB())("the endings an agent's starter is due to hear of", (it) =
     "a failed turn, one another agent stopped, and an archive by a member are each due the starter until a line stands under its key, a withdrawn one not standing, and a completed turn is due nothing",
     () =>
       Effect.gen(function* () {
-        const { member, starter, agent } = yield* openStarted(CODING_AGENT_KIND.CODER);
+        const { member, starter, agent } = yield* openStarted(AGENT_KIND.CODER);
         const failed = yield* settledTurn(agent, TURN_STATUS.FAILED, T0 + 1_000, {
           failure: "abandoned",
         });
@@ -207,7 +191,7 @@ it.layer(getTestDB())("the endings an agent's starter is due to hear of", (it) =
         const stopped = yield* settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 3_000, {
           cancelRequestedBy: randomUUID(),
         });
-        yield* archivedAt(agent, T0 + 4_000, { by: CODING_AGENT_ARCHIVER.MEMBER, userId: member });
+        yield* archivedAt(agent, T0 + 4_000, { by: AGENT_ARCHIVER.MEMBER, userId: member });
 
         assert.deepEqual(yield* dueOf(agent), [
           [STARTER_NOTICE_ENDING.FAILED, failed],

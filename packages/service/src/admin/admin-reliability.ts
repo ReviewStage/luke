@@ -30,8 +30,8 @@ import {
   adminMetricsScope,
   adminMetricsWindow,
 } from "@luke/features/admin-wire";
+import type { AgentFailure } from "@luke/features/agent-wire";
 import type { AutomationRunReason } from "@luke/features/automation-wire";
-import type { CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { Clock, Effect } from "effect";
 import { lastNDayKeys, sum } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
@@ -52,7 +52,7 @@ export interface AdminReliabilitySource {
     abandonedTurns: ReadonlyMap<string, number>;
     automationRuns: ReadonlyMap<string, AdminAutomationCount>;
   };
-  agentFailures: ReadonlyMap<CodingAgentFailure, number>;
+  agentFailures: ReadonlyMap<AgentFailure, number>;
   automationReasons: ReadonlyMap<
     AutomationRunReason | null,
     { readonly skipped: number; readonly failed: number }

@@ -1,12 +1,12 @@
+import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/agent-wire";
 import {
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
   chaptersModelFrom,
 } from "@luke/features/chapters-model-choice";
-import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
 import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
   accountPreferencesFromStored,
@@ -171,7 +171,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
           effort: row.codingAgentEffort,
           ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
         }
-      : CODING_AGENT_DEFAULT_CHOICE;
+      : AGENT_DEFAULT_CHOICE;
   return {
     preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
     codingAgent,

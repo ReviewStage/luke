@@ -13,7 +13,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../coding-agent-wire.js";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agent-wire.js";
 import {
   PLAN_COMMENT_BOUNDS,
   planCommentActionRequestSchema,

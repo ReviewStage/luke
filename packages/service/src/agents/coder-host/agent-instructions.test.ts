@@ -4,14 +4,14 @@
  */
 
 import assert from "node:assert/strict";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import type { Agent } from "@luke/database/models/agent-store";
+import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { test } from "vitest";
 import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 
 /** An agent on a repository, handed what the test names, started by hand on no task. */
-function agentHanded(handed: Pick<CodingAgent, "planSnapshot" | "prompt">): CodingAgent {
+function agentHanded(handed: Pick<Agent, "planSnapshot" | "prompt">): Agent {
   return {
     id: "agent-1",
     userId: "user-1",
@@ -34,7 +34,7 @@ function agentHanded(handed: Pick<CodingAgent, "planSnapshot" | "prompt">): Codi
     disabledServers: [],
     author: null,
     githubAccess: GITHUB_ACCESS.APP,
-    kind: CODING_AGENT_KIND.CODER,
+    kind: AGENT_KIND.CODER,
     createdAt: new Date(0),
     ...handed,
   };

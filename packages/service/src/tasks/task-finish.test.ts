@@ -2,16 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import {
-  createCodingAgent,
-  recordCodingAgentPublished,
-} from "@luke/database/models/coding-agent-store";
+import { createAgent, recordAgentPublished } from "@luke/database/models/agent-store";
 import { readTask } from "@luke/database/models/task-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
@@ -56,7 +53,7 @@ const pullRequestIn = (
 /** An agent the account started on the task an hour ago, past the starting grace. */
 const openAgent = (userId: string, taskId: string) =>
   Effect.gen(function* () {
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId,
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
@@ -69,9 +66,9 @@ const openAgent = (userId: string, taskId: string) =>
     const now = yield* Clock.currentTimeMillis;
     const db = yield* Database;
     yield* db
-      .update(codingAgent)
+      .update(agentTable)
       .set({ createdAt: new Date(now - 60 * 60_000) })
-      .where(eq(codingAgent.id, agent.id));
+      .where(eq(agentTable.id, agent.id));
     return agent;
   });
 
@@ -140,11 +137,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         const worker = yield* openAgent(userId, task.id);
         const orchestrator = yield* openAgent(userId, task.id);
         yield* reopenTaskForWork(userId, task.id);
-        yield* recordCodingAgentPublished(
-          userId,
-          worker.id,
-          pullRequestIn(PULL_REQUEST_STATE.MERGED),
-        );
+        yield* recordAgentPublished(userId, worker.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         yield* turnOf(orchestrator, TURN_STATUS.SETTLED);
         const running = yield* turnOf(worker, TURN_STATUS.RUNNING);
 
@@ -182,11 +175,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const agent = yield* openAgent(userId, task.id);
         yield* turnOf(agent, TURN_STATUS.SETTLED);
-        yield* recordCodingAgentPublished(
-          userId,
-          agent.id,
-          pullRequestIn(PULL_REQUEST_STATE.MERGED),
-        );
+        yield* recordAgentPublished(userId, agent.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         const poster = { userId, taskId: task.id, agentId: agent.id };
         const posted = yield* postInboxThread(poster, {
           key: "branch-protection",

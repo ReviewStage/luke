@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { AGENT_FAILURE, AGENT_STATUS } from "./agent-wire.js";
 import {
   AUTOMATION_NEXT,
   AUTOMATION_RUN_STANDING,
@@ -26,7 +27,6 @@ import {
   GITHUB_TRIGGER_EVENT,
   PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
-import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
 /**
@@ -162,7 +162,7 @@ test("a GitHub event is said as what happens, by whom, where, and the labels, br
 });
 
 test("a newest run is working while its agent works, failed where it could not start or its agent failed, and at rest otherwise", () => {
-  const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
+  const agent = (status: (typeof AGENT_STATUS)[keyof typeof AGENT_STATUS]) => ({
     id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
     title: null,
     status,
@@ -170,11 +170,11 @@ test("a newest run is working while its agent works, failed where it could not s
 
   assert.equal(automationRunStanding(null), AUTOMATION_RUN_STANDING.REST);
   assert.equal(
-    automationRunStanding(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })),
+    automationRunStanding(run({ agent: agent(AGENT_STATUS.RUNNING) })),
     AUTOMATION_RUN_STANDING.WORKING,
   );
   assert.equal(
-    automationRunStanding(run({ agent: agent(CODING_AGENT_STATUS.STARTING) })),
+    automationRunStanding(run({ agent: agent(AGENT_STATUS.STARTING) })),
     AUTOMATION_RUN_STANDING.WORKING,
   );
   assert.equal(
@@ -182,11 +182,11 @@ test("a newest run is working while its agent works, failed where it could not s
     AUTOMATION_RUN_STANDING.FAILED,
   );
   assert.equal(
-    automationRunStanding(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })),
+    automationRunStanding(run({ agent: agent(AGENT_STATUS.FAILED) })),
     AUTOMATION_RUN_STANDING.FAILED,
   );
   assert.equal(
-    automationRunStanding(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })),
+    automationRunStanding(run({ agent: agent(AGENT_STATUS.COMPLETED) })),
     AUTOMATION_RUN_STANDING.REST,
   );
   assert.equal(
@@ -232,7 +232,7 @@ test("a run is titled by its agent where the agent has a title, else by what fir
   const agent = {
     id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
     title: "Fix the flaky test",
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
   };
 
   assert.equal(automationRunTitle(run({ agent })), "Fix the flaky test");
@@ -272,7 +272,7 @@ test("a run is titled by its agent where the agent has a title, else by what fir
 
 test("an agent's run is placed among the runs that started an agent, each agent once, counted from the oldest", () => {
   const started = (id: string, agentId: string) =>
-    run({ id, agent: { id: agentId, title: null, status: CODING_AGENT_STATUS.COMPLETED } });
+    run({ id, agent: { id: agentId, title: null, status: AGENT_STATUS.COMPLETED } });
   // Newest first, as the runs are read: a skipped run, and an agent handed two runs.
   const runs = [
     started("r5", "agent-c"),
@@ -296,7 +296,7 @@ test("an agent's run is placed among the runs that started an agent, each agent 
 });
 
 test("a run's line says why it did not start, else where its agent stands, or that it waits", () => {
-  const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
+  const agent = (status: (typeof AGENT_STATUS)[keyof typeof AGENT_STATUS]) => ({
     id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
     title: null,
     status,
@@ -319,23 +319,23 @@ test("a run's line says why it did not start, else where its agent stands, or th
     "Waiting to start",
   );
   assert.equal(automationRunLine(run({ status: AUTOMATION_RUN_STATUS.FAILED })), "Couldn't start");
-  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.STARTING) })), "Starting…");
+  assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.STARTING) })), "Starting…");
   assert.equal(
     automationRunLine(
       run({ status: AUTOMATION_RUN_STATUS.FAILED, reason: AUTOMATION_RUN_REASON.GITHUB_SIGN_IN }),
     ),
     "Its GitHub sign-in expired.",
   );
-  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })), "Working");
-  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })), "Finished");
+  assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.RUNNING) })), "Working");
+  assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.COMPLETED) })), "Finished");
   assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
-  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.FAILED) })), "Failed");
+  assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.FAILED) })), "Failed");
   assert.equal(
     automationRunLine(
       run({
         agent: {
-          ...agent(CODING_AGENT_STATUS.FAILED),
-          failureReason: CODING_AGENT_FAILURE.SANDBOX,
+          ...agent(AGENT_STATUS.FAILED),
+          failureReason: AGENT_FAILURE.SANDBOX,
         },
       }),
     ),
@@ -343,8 +343,8 @@ test("a run's line says why it did not start, else where its agent stands, or th
   );
   const keyRefused = run({
     agent: {
-      ...agent(CODING_AGENT_STATUS.FAILED),
-      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+      ...agent(AGENT_STATUS.FAILED),
+      failureReason: AGENT_FAILURE.PROVIDER_KEY,
     },
   });
   assert.equal(
@@ -359,8 +359,8 @@ test("a run's line says why it did not start, else where its agent stands, or th
   );
   const onTeammatesAgent = run({
     agent: {
-      ...agent(CODING_AGENT_STATUS.FAILED),
-      failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+      ...agent(AGENT_STATUS.FAILED),
+      failureReason: AGENT_FAILURE.PROVIDER_KEY,
       ownKey: false,
     },
   });
@@ -373,8 +373,8 @@ test("a run's line says why it did not start, else where its agent stands, or th
     automationRunLine(
       run({
         agent: {
-          ...agent(CODING_AGENT_STATUS.FAILED),
-          failureReason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+          ...agent(AGENT_STATUS.FAILED),
+          failureReason: AGENT_FAILURE.PROVIDER_KEY,
           ownKey: true,
         },
       }),

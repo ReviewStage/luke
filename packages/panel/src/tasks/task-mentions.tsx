@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -194,7 +194,7 @@ export function mentionablePullRequests(
 
 /** One agent of the workspace's list as a menu offers it: by its tab's name, wearing its tile, with its task named from `names`, the tasks' names by id. */
 export function mentionableAgent(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   names: ReadonlyMap<string, string>,
   models: readonly CatalogModel[] | undefined,
 ): MentionableAgent {

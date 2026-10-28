@@ -3,13 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "@effect/vitest";
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
   type ChangedFileStatus,
-  type CodingAgentChangedFile,
   PATCH_OMITTED,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   CHAPTER_KIND,
@@ -92,7 +92,7 @@ function changed(
   path: string,
   patch: string | null,
   status: ChangedFileStatus = CHANGED_FILE_STATUS.MODIFIED,
-): CodingAgentChangedFile {
+): AgentChangedFile {
   return {
     path,
     previousPath: null,
@@ -133,7 +133,7 @@ const APP_SECOND = { path: "src/app.ts", oldStart: 20 };
 const UTIL = { path: "src/util.ts", oldStart: 0 };
 
 /** The pull request's words around its files. */
-function pullRequest(files: readonly CodingAgentChangedFile[]): ChaptersInput {
+function pullRequest(files: readonly AgentChangedFile[]): ChaptersInput {
   return { files, title: "Tidy the app", body: "Small changes." };
 }
 

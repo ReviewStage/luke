@@ -1,4 +1,4 @@
-import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
+import { DEVICE_STANDING } from "@luke/features/agent-wire";
 import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   HOST_WIRE,

@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { TERMINAL_STATE, type TerminalState } from "@luke/features/terminal-model";
 import { sandboxRead } from "@luke/features/terminal-store";
@@ -401,7 +401,7 @@ export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.El
  * sandbox stopped or not yet up; nothing before the first read. Whether the
  * agent works is the row's glyph's to say.
  */
-export function TerminalStanding({ agent }: { agent: CodingAgentSummary }): React.JSX.Element {
+export function TerminalStanding({ agent }: { agent: AgentSummary }): React.JSX.Element {
   const listed = useAtomValue(sandboxRead(agent.id));
   const sandbox =
     listed === undefined

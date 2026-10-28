@@ -2,22 +2,22 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@luke/brand";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentChangedFile,
+  type AgentOverviewConversation,
+  type AgentOverviewPullRequest,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
-  type CodingAgentChangedFile,
-  type CodingAgentOverviewConversation,
-  type CodingAgentOverviewPullRequest,
-  type CodingAgentSummary,
   DIFF_SIDE,
   MERGE_STATE,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -72,14 +72,14 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * Synthetic people, files, and chapters throughout.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -88,7 +88,7 @@ const HEAD = "b".repeat(40);
 const OLDER = "a".repeat(40);
 const BASE = "c".repeat(40);
 
-const PULL_REQUEST: CodingAgentOverviewPullRequest = {
+const PULL_REQUEST: AgentOverviewPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: PAGE,
@@ -104,7 +104,7 @@ const PULL_REQUEST: CodingAgentOverviewPullRequest = {
 };
 
 /** A file of two hunks: the read at its top, the write further down. */
-const STORE: CodingAgentChangedFile = {
+const STORE: AgentChangedFile = {
   path: "src/store.ts",
   previousPath: null,
   status: CHANGED_FILE_STATUS.MODIFIED,
@@ -114,7 +114,7 @@ const STORE: CodingAgentChangedFile = {
   patch: ["@@ -1,2 +1,2 @@", " a", "-b", "+B", "@@ -10,1 +10,2 @@", " j", "+k"].join("\n"),
 };
 
-const SWEEP: CodingAgentChangedFile = {
+const SWEEP: AgentChangedFile = {
   path: "src/sweep.ts",
   previousPath: null,
   status: CHANGED_FILE_STATUS.ADDED,
@@ -124,7 +124,7 @@ const SWEEP: CodingAgentChangedFile = {
   patch: ["@@ -0,0 +1,1 @@", "+sweep();"].join("\n"),
 };
 
-const LOCK: CodingAgentChangedFile = {
+const LOCK: AgentChangedFile = {
   path: "pnpm-lock.yaml",
   previousPath: null,
   status: CHANGED_FILE_STATUS.MODIFIED,
@@ -191,7 +191,7 @@ const ON_WRITE: ReviewThread = {
   id: "PRRT_onwrite",
 };
 
-const CONVERSATION: CodingAgentOverviewConversation = {
+const CONVERSATION: AgentOverviewConversation = {
   reviewers: [],
   conversation: [
     {
@@ -363,7 +363,7 @@ function controlAnswering(answers: Answers): CodingAgentsControl {
     readPullRequestViewed: () =>
       Promise.resolve(
         answers.viewed === undefined
-          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
           : {
               outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
               files: answers.viewed.map((path) => ({ path, state: FILE_VIEWED_STATE.VIEWED })),

@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createAutomation } from "@luke/database/models/automation-store";
 import {
-  type CodingAgent,
-  createCodingAgent,
+  type Agent,
+  createAgent,
   hasRepository,
-  readCodingAgent,
-} from "@luke/database/models/coding-agent-store";
+  readAgent,
+} from "@luke/database/models/agent-store";
+import { createAutomation } from "@luke/database/models/automation-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -18,7 +19,6 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
-import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Effect, Option, Redacted } from "effect";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
@@ -133,7 +133,7 @@ const openTokenAgent = Effect.gen(function* () {
     name: "Teammate invitations",
     repository: RELAY_FULL_NAME,
   });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: "start-1",
     model: "anthropic/claude-opus-5.5",
@@ -198,7 +198,7 @@ const openAgent = (
             }),
           )
         : undefined;
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
@@ -226,10 +226,10 @@ const openAgent = (
   });
 
 /** Who the agent's row says it writes as now. */
-const authorOf = (userId: string, agent: CodingAgent) =>
+const authorOf = (userId: string, agent: Agent) =>
   Effect.map(
-    readCodingAgent(userId, agent.id),
-    (read): CodingAgentAuthor | null => Option.getOrThrow(read).author,
+    readAgent(userId, agent.id),
+    (read): AgentAuthor | null => Option.getOrThrow(read).author,
   );
 
 /** The sandbox's checkout as an agent's first write leaves it: opened shallow, then deepened; answers the policy standing at the firewall after. */
@@ -323,7 +323,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         );
         assert.ok(stepAt(DEEPEN_STEP.FETCH) >= 0 && identity > stepAt(DEEPEN_STEP.FETCH));
         assert.ok(stepAt(DEEPEN_STEP.MARK) > identity);
-        assert.equal(yield* authorOf(target.userId, agent), CODING_AGENT_AUTHOR.APP_NO_PUSH);
+        assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.APP_NO_PUSH);
         // The write mint asked for exactly what a push and a pull request need.
         assert.deepEqual(repositoryMints(github.sent).at(-1), {
           repositories: [RELAY.name],
@@ -449,7 +449,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
         assert.equal(coAuthor, `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`);
-        assert.equal(yield* authorOf(target.userId, agent), CODING_AGENT_AUTHOR.DEVELOPER);
+        assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.DEVELOPER);
       }),
   );
 
@@ -481,7 +481,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
             yield* authorOf(automated.target.userId, automated.agent),
             yield* authorOf(google.target.userId, google.agent),
           ],
-          [CODING_AGENT_AUTHOR.APP_AUTOMATION, CODING_AGENT_AUTHOR.APP_UNLINKED],
+          [AGENT_AUTHOR.APP_AUTOMATION, AGENT_AUTHOR.APP_UNLINKED],
         );
         assert.ok(
           github.sent.every(
@@ -526,7 +526,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           },
         ]);
         assert.equal(coAuthor, `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`);
-        assert.equal(yield* authorOf(target.userId, agent), CODING_AGENT_AUTHOR.TOKEN);
+        assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.TOKEN);
         for (const run of sandbox.runs) {
           assert.equal(JSON.stringify(run).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
         }

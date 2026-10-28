@@ -4,12 +4,12 @@ import {
   type ShownPicture,
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
-import type { FileChip } from "@luke/features/attachment-model";
 import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-  type CodingAgentMessage,
-} from "@luke/features/coding-agent-wire";
+  AGENT_ATTACHMENT_TYPE,
+  type AgentAttachment,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
+import type { FileChip } from "@luke/features/attachment-model";
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { formatBytes } from "@luke/features/number-format";
 import { ACT_KIND } from "@luke/host/acts";
@@ -474,10 +474,10 @@ export function CallPictures({
 }
 
 /** The media types a message may carry a file of, as the wire takes them. */
-const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(AGENT_ATTACHMENT_TYPE));
 
 /** A file's bytes as a message carries them, read off a `data:` address; none for any other address. */
-function attachmentOfData(name: string, url: string): CodingAgentAttachment | undefined {
+function attachmentOfData(name: string, url: string): AgentAttachment | undefined {
   const read = /^data:([^;,]+);base64,(.+)$/u.exec(url);
   const mediaType = read?.[1];
   const data = read?.[2];
@@ -485,13 +485,13 @@ function attachmentOfData(name: string, url: string): CodingAgentAttachment | un
     return undefined;
   }
   // SAFETY: the type was just found among the wire's own.
-  return { name, mediaType: mediaType as CodingAgentAttachment["mediaType"], data };
+  return { name, mediaType: mediaType as AgentAttachment["mediaType"], data };
 }
 
 /** One of a line's files as Edit carries it again, by its place on the line, which never changes. */
 export interface LineAttachment {
   readonly key: string;
-  readonly attachment: CodingAgentAttachment;
+  readonly attachment: AgentAttachment;
 }
 
 /**
@@ -501,7 +501,7 @@ export interface LineAttachment {
  * picture is still being read, which joins them once it lands
  * (`LinePicturesWatch`). One that is gone is left out.
  */
-export function useLineAttachments(message: CodingAgentMessage): {
+export function useLineAttachments(message: AgentTranscriptMessage): {
   readonly attachments: readonly LineAttachment[];
   readonly reading: boolean;
 } {
@@ -535,7 +535,7 @@ export function LinePicturesWatch({
   message,
   onSettled,
 }: {
-  message: CodingAgentMessage;
+  message: AgentTranscriptMessage;
   onSettled: () => void;
 }): ReactNode {
   const door = useContext(AgentPicturesContext);
@@ -559,7 +559,7 @@ export function MessageFileChips({
   message,
   sending = false,
 }: {
-  message: CodingAgentMessage;
+  message: AgentTranscriptMessage;
   /** Whether the line is still on its way, its row not yet read back. */
   sending?: boolean;
 }): ReactNode {

@@ -52,12 +52,12 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
-import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgentRouting } from "@luke/database/models/agent-store";
 import { deviceLayout } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import type { DeviceSignedIn } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
@@ -114,7 +114,7 @@ function effortOf(effort: string): CodexEffort | undefined {
 }
 
 /** The model Codex is asked for: the agent's own, where it is one of OpenAI's. */
-function codexModelOf(agent: CodingAgent): string | undefined {
+function codexModelOf(agent: Agent): string | undefined {
   const model = providerModelOf(agent.model);
   return model?.provider === MODEL_PROVIDER.OPENAI ? model.modelId : undefined;
 }
@@ -130,8 +130,8 @@ const MAC_LOGIN: { readonly env: Readonly<Record<string, string>>; readonly ownL
  * said of it: the one rule the launch's environment and its config are both
  * written by.
  */
-function onMacLoginOf(agent: CodingAgent, signedIn: DeviceSignedIn): boolean {
-  return agent.machine === CODING_AGENT_MACHINE.DEVICE && signedIn.codex === true;
+function onMacLoginOf(agent: Agent, signedIn: DeviceSignedIn): boolean {
+  return agent.machine === AGENT_MACHINE.DEVICE && signedIn.codex === true;
 }
 
 /**
@@ -140,8 +140,8 @@ function onMacLoginOf(agent: CodingAgent, signedIn: DeviceSignedIn): boolean {
  * leaves alone, since Codex's own sign-in is kept there
  * (https://learn.chatgpt.com/docs/auth).
  */
-function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
-  return agent.machine === CODING_AGENT_MACHINE.DEVICE ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
+function homeOf(agent: Agent): Readonly<Record<string, string>> {
+  return agent.machine === AGENT_MACHINE.DEVICE ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
 }
 
 /**
@@ -149,8 +149,8 @@ function homeOf(agent: CodingAgent): Readonly<Record<string, string>> {
  * there holds a sign-in of its own (`device.signed_in`), as a launch's
  * `config` reads it off the layout too (`onMacLoginOf`).
  */
-const onMacCodexLogin = (userId: string, agent: CodingAgent) =>
-  agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null
+const onMacCodexLogin = (userId: string, agent: Agent) =>
+  agent.machine !== AGENT_MACHINE.DEVICE || agent.deviceId == null
     ? Effect.succeed(false)
     : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
         Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
@@ -188,12 +188,12 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
   });
 
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers were. */
-  const payerOf = (agent: CodingAgent) =>
-    Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+  const payerOf = (agent: Agent) =>
+    Effect.map(readAgentRouting(userId, agent.id), (routing) =>
       Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
 
-  const onMacLogin = (agent: CodingAgent) => onMacCodexLogin(userId, agent);
+  const onMacLogin = (agent: Agent) => onMacCodexLogin(userId, agent);
 
   /**
    * Where the account's saved credential pays for the agent: its own API key
@@ -202,25 +202,25 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
    * where it keeps only that, and the plan's refusal where it keeps neither;
    * the plan for every other.
    */
-  const savedPayer = (agent: CodingAgent) =>
+  const savedPayer = (agent: Agent) =>
     Effect.gen(function* () {
       const payer = yield* payerOf(agent);
-      if (payer === CODING_AGENT_PAYER.API_KEY) return CODING_AGENT_PAYER.API_KEY;
-      if (payer !== CODING_AGENT_PAYER.MAC_SIGN_IN) return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+      if (payer === AGENT_PAYER.API_KEY) return AGENT_PAYER.API_KEY;
+      if (payer !== AGENT_PAYER.MAC_SIGN_IN) return AGENT_PAYER.CHATGPT_SUBSCRIPTION;
       const openai = (rows: readonly { readonly provider: string }[]) =>
         rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.OPENAI);
       if (openai(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH))) {
-        return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+        return AGENT_PAYER.CHATGPT_SUBSCRIPTION;
       }
       // Note that an account that saved neither is refused in the plan's words, as signed out, which its Mac now is.
       return openai(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY))
-        ? CODING_AGENT_PAYER.API_KEY
-        : CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+        ? AGENT_PAYER.API_KEY
+        : AGENT_PAYER.CHATGPT_SUBSCRIPTION;
     });
 
   /** Whether the agent's saved credential is its starter's own OpenAI API key rather than the plan. */
-  const onApiKey = (agent: CodingAgent) =>
-    Effect.map(savedPayer(agent), (payer) => payer === CODING_AGENT_PAYER.API_KEY);
+  const onApiKey = (agent: Agent) =>
+    Effect.map(savedPayer(agent), (payer) => payer === AGENT_PAYER.API_KEY);
 
   /**
    * The account's OpenAI API key opened, as `OPENAI_API_KEY`, which the
@@ -228,7 +228,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
    * token command; refused where the key is gone or unreadable, and never
    * turned to the plan.
    */
-  const apiKeyEnv = (agent: CodingAgent) =>
+  const apiKeyEnv = (agent: Agent) =>
     Effect.gen(function* () {
       const environment = yield* HostedEnvironment;
       const ring = environment.providerKeyEncryptionKeys;
@@ -259,7 +259,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       return { env };
     });
 
-  const planEnv = (agent: CodingAgent) => Effect.as(standingPlan, { env: homeOf(agent) });
+  const planEnv = (agent: Agent) => Effect.as(standingPlan, { env: homeOf(agent) });
 
   /**
    * The credential a launch starts with, chosen here alone: on a Mac whose
@@ -268,14 +268,14 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
    * otherwise the account's saved credential (`savedPayer`), its key in the
    * environment or the plan's token asked of Luke's route over HTTPS.
    */
-  const launch = (agent: CodingAgent) =>
+  const launch = (agent: Agent) =>
     Effect.gen(function* () {
       if (yield* onMacLogin(agent)) return MAC_LOGIN;
       return yield* (yield* onApiKey(agent)) ? apiKeyEnv(agent) : planEnv(agent);
     });
 
   const config = (
-    agent: CodingAgent,
+    agent: Agent,
     layout: MachineLayout,
     resume: string | undefined,
     firstSequence: number,
@@ -284,7 +284,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.gen(function* () {
       const model = codexModelOf(agent);
       if (model === undefined) return yield* new LaunchRefused({ reason: "model" });
-      const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
+      const local = agent.machine === AGENT_MACHINE.DEVICE;
       // Note that a Mac runs only the Codex it checked against the pin, and one that checked none runs no Codex agent.
       if (local && layout.codexExecutable === undefined) {
         return yield* new LaunchRefused({ reason: "no codex" });
@@ -317,7 +317,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     });
 
   // The agent's model and effort as they stand, once the plan is asked, as a launch asks it.
-  const ahead = (agent: CodingAgent) => {
+  const ahead = (agent: Agent) => {
     const model = codexModelOf(agent);
     const effort = effortOf(agent.effort);
     const choice: InputLine = {

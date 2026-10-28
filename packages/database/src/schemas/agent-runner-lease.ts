@@ -1,9 +1,9 @@
 import { pgTable, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
+import { agentTable } from "./agent.js";
 
 /**
- * coding-agent-runner-lease.ts -- the lease one call holds on a native agent's runner while it reads whether the runner runs and then writes to it or launches it.
+ * agent-runner-lease.ts -- the lease one call holds on a native agent's runner while it reads whether the runner runs and then writes to it or launches it.
  *
  * A message, a change of model, a Stop, and an open each read the runner's
  * place from its sandbox and then write to its stdin or launch it anew
@@ -16,10 +16,10 @@ import { codingAgent } from "./coding-agent.js";
  * holder was killed before it let go. The row names an agent, a holder's
  * random id, and an instant alone, and goes with its agent.
  */
-export const codingAgentRunnerLease = pgTable("coding_agent_runner_lease", {
+export const agentRunnerLeaseTable = pgTable("coding_agent_runner_lease", {
   agentId: uuid("agent_id")
     .primaryKey()
-    .references(() => codingAgent.id, { onDelete: "cascade" }),
+    .references(() => agentTable.id, { onDelete: "cascade" }),
   /** The holder's own id, minted for the one call, so only that call lets the lease go. */
   holder: uuid("holder").notNull(),
   /** The instant the lease lapses, so a holder killed mid-launch holds it no longer. */

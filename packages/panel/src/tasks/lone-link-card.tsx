@@ -1,4 +1,4 @@
-import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY } from "@luke/features/agent-wire";
 import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";

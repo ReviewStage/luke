@@ -27,7 +27,7 @@ import {
   sweepAbandonedTurns,
   TURN_ABANDON,
 } from "../abandoned-turns.js";
-import { latestTurnsOfReached } from "../coding-agent-store.js";
+import { latestTurnsOfReached } from "../agent-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "../writer.js";
 
 /**

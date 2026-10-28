@@ -28,8 +28,8 @@
 
 import { describeWire } from "@luke/wire/effect";
 import { Schema } from "effect";
+import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "./agent-wire.js";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "./browser-acts.js";
-import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { CONVERSATION_MEDIA_TYPE, PICTURE_OMISSION } from "./conversation-picture-wire.js";
 
 /** The actions an agent takes on a browser's tabs. */
@@ -127,13 +127,13 @@ const SCREENSHOT_MAX_BASE64 = Math.ceil(BROWSER_SCREENSHOT.MAX_BYTES / 3) * 4;
  * carries; none where nothing fits.
  */
 export const BROWSER_KEPT_SCREENSHOT = {
-  JPEG: CODING_AGENT_ATTACHMENT_TYPE.JPEG,
-  PNG: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+  JPEG: AGENT_ATTACHMENT_TYPE.JPEG,
+  PNG: AGENT_ATTACHMENT_TYPE.PNG,
   /** The longest side, in pixels: a page drawn at twice its CSS size fits whole; a smaller page is never scaled up. */
   LONGEST_SIDE: 2_560,
   /** The JPEG qualities tried in order, the PNG beside each, until the smaller of the two fits. */
   QUALITIES: [85, 70, 50],
-  MAX_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  MAX_BYTES: AGENT_BOUNDS.MAX_IMAGE_BYTES,
 } as const;
 
 /** The longest base64 a kept screenshot's bytes are carried as. */

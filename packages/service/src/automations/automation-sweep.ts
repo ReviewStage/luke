@@ -1,4 +1,9 @@
 import {
+  archiveUnmovedAgent,
+  awaitingLinesOfReached,
+  latestTurnsOfReached,
+} from "@luke/database/models/agent-store";
+import {
   type AutomationRun,
   archivableRunAgents,
   type ClaimedFiring,
@@ -8,12 +13,8 @@ import {
   settleRunArchive,
   strandedAutomationRuns,
 } from "@luke/database/models/automation-store";
-import {
-  archiveUnmovedCodingAgent,
-  awaitingLinesOfReached,
-  latestTurnsOfReached,
-} from "@luke/database/models/coding-agent-store";
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
+import { AGENT_STATUS, type AgentStatus } from "@luke/features/agent-wire";
 import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_RUN_REASON,
@@ -22,7 +23,6 @@ import {
   type AutomationRunStatus,
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { Effect } from "effect";
 import type { StartServices } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
@@ -125,9 +125,9 @@ function byAutomation(runs: readonly AutomationRun[]): readonly (readonly Automa
 }
 
 /** The statuses an agent ends on that its automation never archives: it failed, or it was stopped. */
-const ENDED_UNWELL: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.FAILED,
-  CODING_AGENT_STATUS.CANCELLED,
+const ENDED_UNWELL: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.FAILED,
+  AGENT_STATUS.CANCELLED,
 ]);
 
 /** The agents of runs that finished well archived for automations that ask it, as above, answering how many. */
@@ -146,16 +146,12 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
       });
-      const finishedWell = agent.archivedAt === null && status === CODING_AGENT_STATUS.COMPLETED;
+      const finishedWell = agent.archivedAt === null && status === AGENT_STATUS.COMPLETED;
       // Note that the archive takes only while the agent's lines stand where they were read, so
       // one woken since, or whose starter left, stands and is read again by a later sweep.
       const archived =
         finishedWell &&
-        (yield* archiveUnmovedCodingAgent(
-          agent.userId,
-          agent.codingAgentId,
-          agent.conversationSeq,
-        ));
+        (yield* archiveUnmovedAgent(agent.userId, agent.codingAgentId, agent.conversationSeq));
       // A local agent archived is let go of on its device, as an archive by hand lets it go, and
       // its run stays unsettled until the discard is queued, so a later sweep asks again.
       const discarded =

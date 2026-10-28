@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
-  type CodingAgentChangedFile,
   DIFF_SIDE,
   PATCH_OMITTED,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { createPatch } from "diff";
 import { test } from "vitest";
 import { DIFF_SELECTION_SIDE } from "../diff-view/contract.js";
@@ -268,10 +268,7 @@ test("every thread on a file whose diff is not drawn stands above where its diff
 });
 
 /** A changed file, modified, a few lines changed, unless told otherwise. */
-function changed(
-  path: string,
-  overrides: Partial<CodingAgentChangedFile> = {},
-): CodingAgentChangedFile {
+function changed(path: string, overrides: Partial<AgentChangedFile> = {}): AgentChangedFile {
   return {
     path,
     previousPath: null,
@@ -400,8 +397,8 @@ test("no comment is offered where GitHub takes none: a line no row stands for, a
 function changedFrom(
   before: string,
   after: string,
-  overrides: Partial<CodingAgentChangedFile> = {},
-): CodingAgentChangedFile {
+  overrides: Partial<AgentChangedFile> = {},
+): AgentChangedFile {
   const whole = createPatch("src/a.ts", before, after, "", "", { context: 3 });
   return changed("src/a.ts", { patch: whole.slice(whole.indexOf("@@")), ...overrides });
 }

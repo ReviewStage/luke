@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import {
   LINK_PLACE,
@@ -569,14 +569,14 @@ function panelOf(tab: ReturnType<typeof mount>) {
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const RUNNING_AGENT: CodingAgentSummary = {
+const RUNNING_AGENT: AgentSummary = {
   id: AGENT_ID,
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: null,
   createdAt: 3,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
@@ -670,7 +670,7 @@ function namingRow(lines: readonly string[], total: number) {
         title: null,
         model: RUNNING_AGENT.model,
         effort: RUNNING_AGENT.effort,
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       })),
       pullRequestTotal: 0,
       pullRequests: [],
@@ -760,7 +760,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
 });
 
 test("a column whose last agent is archived shows a new agent's draft standing alone", async () => {
-  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+  let listed: readonly AgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -1074,7 +1074,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
       changedFiles: 2,
     },
   };
-  let listed: readonly CodingAgentSummary[] = [EARLIER, RUNNING_AGENT];
+  let listed: readonly AgentSummary[] = [EARLIER, RUNNING_AGENT];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -2604,7 +2604,7 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
   });
   const first = asked();
   // The first is answered as refused, which is no matter to the order the second is asked in.
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
 
   assert.deepEqual(first, [true]);
   assert.deepEqual(asked(), [true, false]);
@@ -2618,7 +2618,7 @@ test("an agent with no task is renamed and archived in the sidebar's list at onc
     effort: "high",
     title: "Nightly triage",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2650,8 +2650,8 @@ test("an agent with no task is renamed and archived in the sidebar's list at onc
   assert.deepEqual(listed(), { standing: [], archived: ["Morning triage"] });
 
   await act(async () => {
-    renamed.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-    archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    renamed.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
+    archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
   });
   await settle();
   assert.deepEqual(listed(), { standing: ["Nightly triage"], archived: [] });
@@ -2675,7 +2675,7 @@ test("an agent's pin still waiting its turn when the account changes is never as
 
   tab.stand({ signedIn: false });
   tab.stand({ signedIn: true, account: "teammate@example.com" });
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
 
   assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
 });
@@ -2897,7 +2897,7 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
   assert.deepEqual(tab.control().mainTabs.tabs, [], "the agent leaves at once");
   assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
 
-  await act(async () => archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await act(async () => archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.equal(tab.control().agents.draft, undefined);
@@ -3136,14 +3136,14 @@ test("Create with an agent opens New task's card for an automation's agent over 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   // The service holds the agent once its own Start made it.
-  let agents: CodingAgentSummary[] = [];
+  let agents: AgentSummary[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({
           planId: OTHER_TASK_ID,
-          agentStart: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          agentStart: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         }),
       [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents }),
       [ACT_KIND.CODING_AGENTS_START]: () => {
@@ -3469,10 +3469,10 @@ const FINISHED_ID = "4f6e2a1b-7c3d-4e5f-8a9b-0c1d2e3f4a5b";
 const UNSEEN_ID = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d";
 
 /** Two agents beside the running one: one whose turn ended and was seen, and one whose turn ended unseen. */
-const IDLE_AGENTS: readonly CodingAgentSummary[] = [
+const IDLE_AGENTS: readonly AgentSummary[] = [
   RUNNING_AGENT,
-  { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: CODING_AGENT_STATUS.COMPLETED },
-  { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: CODING_AGENT_STATUS.COMPLETED },
+  { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: AGENT_STATUS.COMPLETED },
+  { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: AGENT_STATUS.COMPLETED },
 ];
 
 /** An item waiting in the open task's Inbox, posted by the agent given. */

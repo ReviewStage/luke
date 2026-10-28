@@ -1,4 +1,4 @@
-import type { CodingAgentOverviewPullRequest } from "@luke/features/coding-agent-wire";
+import type { AgentOverviewPullRequest } from "@luke/features/agent-wire";
 import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
@@ -88,12 +88,12 @@ type Editing =
       /** Each opening's own, so a reload opens a new editor rather than keeping the old one's words. */
       readonly generation: number;
       /** The read standing when the last write went out, which a newer read closes the editor after. */
-      readonly written?: CodingAgentOverviewPullRequest | undefined;
+      readonly written?: AgentOverviewPullRequest | undefined;
     }
   | {
       readonly kind: typeof EDITING.RELOADING;
       /** The read standing when Reload was chosen, which a newer read opens the editor after. */
-      readonly read: CodingAgentOverviewPullRequest;
+      readonly read: AgentOverviewPullRequest;
       readonly generation: number;
     };
 
@@ -186,7 +186,7 @@ export function PullRequestDescription({
   onRead,
 }: {
   agentId: string;
-  pullRequest: CodingAgentOverviewPullRequest;
+  pullRequest: AgentOverviewPullRequest;
   /** The description as written, Markdown, empty where it has none. */
   body: string;
   /** GitHub's rendering of it; none where it has none. */

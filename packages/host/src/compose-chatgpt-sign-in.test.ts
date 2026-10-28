@@ -10,7 +10,7 @@ import {
   grantedCallback,
   returnToLoopback,
 } from "@luke/credentials/testing";
-import { fixedBearer, HostedCodingAgentClient } from "@luke/features";
+import { fixedBearer, HostedAgentClient } from "@luke/features";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -91,7 +91,7 @@ function harness(
         readAccountKey: () => Effect.sync(() => signedIn.key),
       },
     },
-    client: new HostedCodingAgentClient({
+    client: new HostedAgentClient({
       serviceBaseUrl: SERVICE,
       credential: fixedBearer("account-bearer"),
     }),

@@ -1,13 +1,13 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import {
   listMemories,
   MEMORY_OUTCOME,
   rememberMemory,
   type StoredMemory,
 } from "@luke/database/models/memory-store";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { MEMORY_BOUNDS, memoryIdSchema } from "@luke/features/memory-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { describeWire } from "@luke/wire/effect";
@@ -361,9 +361,7 @@ export function runRecall(
 function agentMemory(
   call: CodingAgentCall,
   run: (memory: MemoryCall) => Effect.Effect<WireRecord, never, DatabaseServices>,
-  refusal?: (
-    agent: CodingAgent,
-  ) => Effect.Effect<string | undefined, StoreFailure, DatabaseServices>,
+  refusal?: (agent: Agent) => Effect.Effect<string | undefined, StoreFailure, DatabaseServices>,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return orUnavailable(
     Effect.gen(function* () {
@@ -374,7 +372,7 @@ function agentMemory(
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) return rejected(MEMORY_REFUSAL.UNAVAILABLE);
       // Note that only an operator reaches private memories, because a coder's transcript is read by every member of the workspace.
-      const readsPrivate = call.caller.agent.kind === CODING_AGENT_KIND.OPERATOR;
+      const readsPrivate = call.caller.agent.kind === AGENT_KIND.OPERATOR;
       return yield* run({ workspaceId: workspace.value, userId, readsPrivate });
     }),
   );
@@ -409,7 +407,7 @@ const SEED_MEMORY_MARKER =
  * seeds none, so the session still opens.
  */
 export function seedMemoryText(
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<string | undefined, never, DatabaseServices> {
   return Effect.gen(function* () {
     if (!(yield* memoryOnFor(agent.userId))) return undefined;

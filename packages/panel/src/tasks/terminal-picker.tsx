@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
@@ -43,7 +43,7 @@ function RowDetail({
   agent,
   last,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   last: boolean;
 }): React.JSX.Element | null {
   const listed = useAtomValue(sandboxRead(agent.id));
@@ -59,7 +59,7 @@ function RowDetail({
 
 /** One agent's row: its look, its failed mark, and the card its hover hangs, with its standing read from what the window last read of its sandbox. */
 function agentItem(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   agents: CodingAgentsControl,
   last: boolean,
   onPick: () => void,

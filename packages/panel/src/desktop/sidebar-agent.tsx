@@ -1,4 +1,4 @@
-import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type TasklessAgent } from "@luke/features/agent-wire";
 import { automationRun } from "@luke/features/model-label";
 import {
   InlineEdit,
@@ -144,7 +144,7 @@ export function SidebarAgent({
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, which its card counts as its control.
+  // Note that the row's item is its press's parent, whose keys it hears while focused.
   const hold = useCallback((press: HTMLElement | null) => {
     row.current = press;
     item.current = press?.parentElement ?? null;
@@ -210,7 +210,7 @@ export function SidebarAgent({
   const card = useMemo(() => <SidebarAgentCard agent={agent} agents={agents} />, [agent, agents]);
   return (
     <>
-      <RowHintOptions card={card} cardBeside cardRegion={item}>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={agent.id}
@@ -226,7 +226,7 @@ export function SidebarAgent({
               <InlineEdit
                 value={rename.asked ?? name}
                 label="Agent name"
-                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
                   endedByKey(edit.byKey);

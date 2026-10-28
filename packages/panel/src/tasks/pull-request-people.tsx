@@ -1,9 +1,9 @@
 import {
-  type CodingAgentChangesPeople,
+  type AgentChangesPeople,
   type GitHubPerson,
   REVIEW_STATE,
   type ReviewState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { type Actor, githubActor } from "@luke/ui/actor-model";
 import {
   CheckIcon,
@@ -137,7 +137,7 @@ function ReviewerPile({
   reviewers,
   drawn = 5,
 }: {
-  reviewers: NonNullable<CodingAgentChangesPeople["reviewers"]>;
+  reviewers: NonNullable<AgentChangesPeople["reviewers"]>;
   /** How many faces stand before the rest are counted. */
   drawn?: number;
 }): React.JSX.Element {
@@ -170,7 +170,7 @@ export function OpenedBy({ person }: { person: GitHubPerson }): React.JSX.Elemen
 export function ReviewersLine({
   reviewers,
 }: {
-  reviewers: NonNullable<CodingAgentChangesPeople["reviewers"]>;
+  reviewers: NonNullable<AgentChangesPeople["reviewers"]>;
 }): React.JSX.Element {
   return (
     <ActorLine>
@@ -225,7 +225,7 @@ const HEADER_FACES = 3;
 export function HeaderReviewers({
   reviewers,
 }: {
-  reviewers: NonNullable<CodingAgentChangesPeople["reviewers"]>;
+  reviewers: NonNullable<AgentChangesPeople["reviewers"]>;
 }): React.JSX.Element {
   return <ReviewerPile reviewers={reviewers} drawn={HEADER_FACES} />;
 }

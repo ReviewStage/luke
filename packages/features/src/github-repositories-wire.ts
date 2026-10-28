@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { PULL_REQUEST_STATE } from "./coding-agent-wire.js";
+import { PULL_REQUEST_STATE } from "./agent-wire.js";
 import { GITHUB_REPOSITORY_BOUNDS, GITHUB_REPOSITORY_PATTERN } from "./link-grammar.js";
 import { countedNumber } from "./service-wire.js";
 

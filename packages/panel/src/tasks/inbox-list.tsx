@@ -90,15 +90,7 @@ import {
   UsersIcon,
 } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import {
-  type RefObject,
-  useCallback,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -488,24 +480,13 @@ export function InboxItemRow({
     shown: true,
     keyed: chosen,
   });
-  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
-  const region = useRef<HTMLElement | null>(null);
-  const hold = useCallback(
-    (element: HTMLElement | null) => {
-      region.current = element?.parentElement ?? null;
-      ref?.(element);
-    },
-    [ref],
-  );
   return (
     <>
       <RowHintOptions
         card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
-        cardBeside
-        cardRegion={region}
       >
         <ListRow
-          ref={hold}
+          ref={ref}
           motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={<UnreadMark unread={unread} />}
@@ -1558,6 +1539,7 @@ export function InboxList({
   onMark,
   onClose,
   onAskMove,
+  onPointing,
 }: {
   view: InboxListView;
   /** The id of the item the pane shows. */
@@ -1582,6 +1564,8 @@ export function InboxList({
   onClose?: InboxCloser | undefined;
   /** Asks which channel a row's thread moves to, from its ⋯; none where the rows offer no move. */
   onAskMove?: ((listed: InboxListed) => void) | undefined;
+  /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
+  onPointing?: ((pointing: boolean) => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const regionId = useId();
@@ -1731,6 +1715,8 @@ export function InboxList({
       hidden={columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
+      onPointerEnter={() => onPointing?.(true)}
+      onPointerLeave={() => onPointing?.(false)}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} />

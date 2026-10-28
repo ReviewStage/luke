@@ -4,9 +4,9 @@ import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
-import { HostedCodingAgentClient } from "./coding-agent-client.js";
-import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
-import { CODING_AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./coding-agent-wire.js";
+import { HostedAgentClient } from "./agent-client.js";
+import { AGENT_CALL_FAILURE } from "./agent-view.js";
+import { AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./agent-wire.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
@@ -31,14 +31,14 @@ const AGENT = {
   effort: "high",
   title: null,
   createdAt: 1_800_000_000_000,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
 const CHOICE = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
 
-function client(): HostedCodingAgentClient {
-  return new HostedCodingAgentClient({
+function client(): HostedAgentClient {
+  return new HostedAgentClient({
     serviceBaseUrl: "https://tryluke.dev",
     credential: accountBearer({
       readAccessToken: () => Effect.succeed("token-1"),
@@ -59,14 +59,11 @@ it.effect(
         },
       });
       const refusals = [
-        [HOSTED_API_ERROR.NO_REPOSITORY, CODING_AGENT_CALL_FAILURE.NO_REPOSITORY],
-        [
-          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-          CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-        ],
-        [HOSTED_API_ERROR.INVALID_REQUEST, CODING_AGENT_CALL_FAILURE.INVALID_CHOICE],
-        [HOSTED_API_ERROR.GITHUB_UNANSWERED, CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
-        [HOSTED_API_ERROR.UNAVAILABLE, CODING_AGENT_CALL_FAILURE.UNANSWERED],
+        [HOSTED_API_ERROR.NO_REPOSITORY, AGENT_CALL_FAILURE.NO_REPOSITORY],
+        [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE],
+        [HOSTED_API_ERROR.INVALID_REQUEST, AGENT_CALL_FAILURE.INVALID_CHOICE],
+        [HOSTED_API_ERROR.GITHUB_UNANSWERED, AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
+        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
       ] as const;
 
       const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
@@ -142,13 +139,13 @@ it.effect(
       );
 
       assert.deepEqual(named, {
-        failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
         unreached,
       });
-      assert.deepEqual(newer, { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+      assert.deepEqual(newer, { failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
       // A settings page off GitHub is not one the desktop would open.
       assert.deepEqual(elsewhere, {
-        failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       });
     }),
 );
@@ -171,7 +168,7 @@ it.effect("a Start the task's device refused carries why, as the service named i
     );
 
     assert.deepEqual(refused, {
-      failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+      failure: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
       localAgentRefusal: LOCAL_AGENT_REFUSAL.MAC_AWAY,
     });
   }),
@@ -198,7 +195,7 @@ it.effect(
         refusedDevice: { name: "Studio", owner: "Charles" },
       });
       assert.deepEqual(named, {
-        failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+        failure: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
         localAgentRefusal: LOCAL_AGENT_REFUSAL.NOT_OWNER,
         refusedDevice: { name: "Studio", owner: "Charles" },
       });
@@ -209,7 +206,7 @@ it.effect(
         localAgentRefusal: "a-reason-from-a-newer-service",
         refusedDevice: { name: "Studio" },
       });
-      assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED });
+      assert.deepEqual(unread, { failure: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED });
     }),
 );
 
@@ -237,10 +234,10 @@ it.effect(
       );
 
       assert.deepEqual(named, {
-        failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
+        failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
         resetsAt,
       });
-      assert.deepEqual(bare, { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED });
+      assert.deepEqual(bare, { failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED });
     }),
 );
 
@@ -325,7 +322,7 @@ it.effect(
       const refused = yield* Effect.provide(client().agent(AGENT_ID), refusing.layer);
 
       assert.deepEqual(read, { agent: page });
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
 
@@ -382,8 +379,8 @@ it.effect(
       );
 
       assert.deepEqual(sent, { item });
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
-      assert.deepEqual(empty, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.AGENT_NOT_READY });
+      assert.deepEqual(empty, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(answered, { item });
       assert.deepEqual(
         api.requests().map((request) => JSON.parse(request.body ?? "null")),
@@ -433,8 +430,8 @@ it.effect(
         api.requests().map((sent) => sent.body),
         [undefined, undefined, JSON.stringify({ workspaceId: WORKSPACE_ID }), "{}"],
       );
-      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(malformed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(missing, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(malformed, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 4, "nothing is sent for a workspace that is no id");
     }),
 );
@@ -467,7 +464,7 @@ it.effect(
         ["workspace-1", "acme/relay"],
       );
       assert.equal(refusing.requests()[0]?.searchParams.get("repository"), null);
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
 
@@ -493,7 +490,7 @@ it.effect(
         base64: "JVBERg==",
       });
       assert.deepEqual(yield* read("text/html"), {
-        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
     }),
 );
@@ -529,7 +526,7 @@ it.effect(
       );
       assert.deepEqual(read, { contentType: "image/png", base64: "iVBORw==" });
       assert.deepEqual(worker, read);
-      assert.deepEqual(unexpected, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unexpected, { failure: AGENT_CALL_FAILURE.UNANSWERED });
     }),
 );
 
@@ -565,7 +562,7 @@ it.effect(
       assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
       yield* TestClock.adjust("1 second");
       assert.deepEqual(yield* Fiber.join(unanswered), {
-        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
     }),
 );
@@ -603,7 +600,7 @@ it.effect(
       assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
       yield* TestClock.adjust("1 second");
       assert.deepEqual(yield* Fiber.join(unanswered), {
-        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
     }),
 );
@@ -627,7 +624,7 @@ it.effect(
       );
 
       assert.deepEqual(started, { agent: AGENT });
-      assert.deepEqual(nowhere, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(nowhere, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(
         api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
         [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
@@ -680,8 +677,8 @@ it.effect(
       assert.equal(polling?.get("poll"), "true");
       assert.equal(polling?.get("after"), "d-1");
       assert.deepEqual(signedOut, LIVE_SIGNED_OUT);
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unread, { failure: AGENT_CALL_FAILURE.UNANSWERED });
     }),
 );
 
@@ -759,7 +756,7 @@ it.effect(
 
       assert.deepEqual(ensured, { agentId: AGENT_ID, txid: "9103" });
       assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { reset: true });
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
 
@@ -775,8 +772,8 @@ it.effect(
       assert.deepEqual(heard, { text: "Run the tests" });
 
       const refusals = [
-        [HOSTED_API_ERROR.OPENAI_KEY_MISSING, CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING],
-        [HOSTED_API_ERROR.UNAVAILABLE, CODING_AGENT_CALL_FAILURE.UNANSWERED],
+        [HOSTED_API_ERROR.OPENAI_KEY_MISSING, AGENT_CALL_FAILURE.OPENAI_KEY_MISSING],
+        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
       ] as const;
       for (const [error, failure] of refusals) {
         const refusing = fakeCloudApi({

@@ -1,16 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type {
-  CodingAgentMessagesAnswerView,
-  CodingAgentTranscriptPage,
-} from "@luke/features/coding-agent-view";
+import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -60,7 +57,7 @@ afterEach(() => {
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const DELEGATE_CALL = "call-delegate";
 
-function listed(id: string, title: string): CodingAgentSummary {
+function listed(id: string, title: string): AgentSummary {
   return {
     id,
     planId: "plan-1",
@@ -68,7 +65,7 @@ function listed(id: string, title: string): CodingAgentSummary {
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
   };
 }
@@ -80,14 +77,14 @@ function tool(tool: string, callId: string, input: WireRecord, output: WireRecor
 }
 
 /** The plan the agent was handed, which its transcript opens on as the task's card. */
-const PLAN: CodingAgentMessage = {
+const PLAN: AgentTranscriptMessage = {
   id: "plan",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Wire the retry audit." }],
 };
 
 /** The agent's first turn, finished: a message to another agent, one refused, and a worker it started. */
-const EARLIER: CodingAgentMessage = {
+const EARLIER: AgentTranscriptMessage = {
   id: "earlier",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
@@ -113,7 +110,7 @@ const EARLIER: CodingAgentMessage = {
 };
 
 /** The turn the agent is still writing, as a page reads it: a message to a third agent, then its words so far. */
-function newest(words: string): CodingAgentMessage {
+function newest(words: string): AgentTranscriptMessage {
   return {
     id: "newest",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -133,14 +130,14 @@ function newest(words: string): CodingAgentMessage {
 }
 
 function page(
-  messages: readonly CodingAgentMessage[],
-  worker: CodingAgentStatus,
+  messages: readonly AgentTranscriptMessage[],
+  worker: AgentStatus,
   cursor: string,
-): CodingAgentMessagesAnswerView {
+): AgentMessagesAnswerView {
   return {
     messages,
     cursor,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: null,
     subagents: [
       {
@@ -173,12 +170,10 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
 /** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
-  let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
+  let hear: ((page: AgentTranscriptPage) => void) | undefined;
   const transcripts: TranscriptFollower = (_transcript, heard) => {
     hear = heard;
-    heard(
-      pushedPage(page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1")),
-    );
+    heard(pushedPage(page([PLAN, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1")));
     return () => {
       hear = undefined;
     };
@@ -226,7 +221,7 @@ function runningTab() {
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
     },
-    async answer(next: CodingAgentMessagesAnswerView) {
+    async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
         hear?.(pushedPage(next));
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -268,9 +263,7 @@ test("a message a page did not touch hangs the card the window hands now, and it
   assert.match(refused(), /Invoice export, retried/u);
 
   // A page touches the newest turn alone, and says the worker has finished.
-  await tab.answer(
-    page([newest("Reading the retry audit.")], CODING_AGENT_STATUS.COMPLETED, "1:2"),
-  );
+  await tab.answer(page([newest("Reading the retry audit.")], AGENT_STATUS.COMPLETED, "1:2"));
   assert.match(
     tab.container.querySelector('[data-message-id="newest"]')?.textContent ?? "",
     /Reading the retry audit\./u,
@@ -313,7 +306,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
 
 test("a page that adds a call to a running turn draws that call alone, the calls before it standing as drawn", async () => {
   fakeAppBridge({});
-  const messaged = (count: number): CodingAgentMessage => ({
+  const messaged = (count: number): AgentTranscriptMessage => ({
     id: "newest",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: Array.from({ length: count }, (_, at) => [
@@ -327,10 +320,10 @@ test("a page that adds a call to a running turn draws that call alone, the calls
     ]).flat(),
     startedAt: 3_000,
   });
-  let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
+  let hear: ((page: AgentTranscriptPage) => void) | undefined;
   const transcripts: TranscriptFollower = (_transcript, heard) => {
     hear = heard;
-    heard(pushedPage(page([PLAN, messaged(5)], CODING_AGENT_STATUS.RUNNING, "1:1")));
+    heard(pushedPage(page([PLAN, messaged(5)], AGENT_STATUS.RUNNING, "1:1")));
     return () => {
       hear = undefined;
     };
@@ -369,7 +362,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
 
   asked.length = 0;
   await act(async () => {
-    hear?.(pushedPage(page([messaged(6)], CODING_AGENT_STATUS.RUNNING, "1:2")));
+    hear?.(pushedPage(page([messaged(6)], AGENT_STATUS.RUNNING, "1:2")));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   assert.deepEqual(asked, ["agent-5"]);

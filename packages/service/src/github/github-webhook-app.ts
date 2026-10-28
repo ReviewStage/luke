@@ -4,7 +4,7 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { listAgentsOnBranches } from "@luke/database/models/agent-store";
 import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -297,7 +297,7 @@ const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgai
   target: DeliveryTarget,
 ): Effect.fn.Return<number, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   const agents = yield* hostedStoreOrUnavailable(
-    listCodingAgentsOnBranches(target.repository, target.branches, MAXIMUM_AGENTS_PER_DELIVERY),
+    listAgentsOnBranches(target.repository, target.branches, MAXIMUM_AGENTS_PER_DELIVERY),
   );
   const landed = yield* Effect.forEach(
     agents,

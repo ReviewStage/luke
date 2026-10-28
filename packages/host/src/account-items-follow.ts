@@ -1,9 +1,9 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountItems,
-  type CodingAgentScopeItems,
+  AGENT_CALL_FAILURE,
+  type AgentAccountItems,
+  type AgentScopeItems,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -194,7 +194,7 @@ function scopesOf(held: Held): Scopes {
 }
 
 /** A scope's items as the window is told them. */
-function toldScope(scope: InboxScopeKey, items: readonly InboxItem[]): CodingAgentScopeItems {
+function toldScope(scope: InboxScopeKey, items: readonly InboxItem[]): AgentScopeItems {
   return { scope: { kind: scope.kind, id: scope.id }, items };
 }
 
@@ -206,11 +206,11 @@ function sameItems(one: readonly InboxItem[], other: readonly InboxItem[]): bool
 }
 
 /** What the window is told of `now`: every scope where nothing was told before, else the scopes that moved since `before`, one gone with no items. */
-function toldOf(before: Scopes | undefined, now: Scopes): CodingAgentAccountItems {
+function toldOf(before: Scopes | undefined, now: Scopes): AgentAccountItems {
   if (before === undefined) {
     return { whole: true, scopes: [...now].map(([scope, items]) => toldScope(scope, items)) };
   }
-  const moved: CodingAgentScopeItems[] = [];
+  const moved: AgentScopeItems[] = [];
   for (const [scope, items] of now) {
     const was = MutableHashMap.get(before, scope);
     if (Option.isNone(was) || !sameItems(was.value, items)) moved.push(toldScope(scope, items));
@@ -307,7 +307,7 @@ export function accountItems(
 export function followAccountItems(
   items: AccountItems,
   userId: string,
-  tell: (told: CodingAgentAccountItems) => Effect.Effect<void>,
+  tell: (told: AgentAccountItems) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   const attempt = Effect.scoped(
     Effect.gen(function* () {
@@ -339,7 +339,7 @@ export function followAccountItems(
 export function followSignedInItems(
   items: AccountItems,
   signedIn: () => string | undefined,
-  tell: (told: CodingAgentAccountItems) => Effect.Effect<void>,
+  tell: (told: AgentAccountItems) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   const account: Effect.Effect<string> = Effect.suspend(() => {
     const userId = signedIn();
@@ -349,9 +349,7 @@ export function followSignedInItems(
   });
   return Effect.suspend(() =>
     Effect.andThen(
-      signedIn() === undefined
-        ? tell({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED })
-        : Effect.void,
+      signedIn() === undefined ? tell({ failure: AGENT_CALL_FAILURE.UNANSWERED }) : Effect.void,
       Effect.flatMap(account, (userId) => followAccountItems(items, userId, tell)),
     ),
   );

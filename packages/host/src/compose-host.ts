@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAdminClient,
+  HostedAgentClient,
   HostedAutomationClient,
   HostedChannelClient,
-  HostedCodingAgentClient,
   HostedDeviceAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -135,7 +135,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       credential: account.credential,
       sessionCredential: account.sessionCredential,
     });
-    const codingAgentClient = new HostedCodingAgentClient({
+    const codingAgentClient = new HostedAgentClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });

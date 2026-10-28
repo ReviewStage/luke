@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { CODING_AGENT_KIND } from "./coding-agent-wire.js";
+import { AGENT_KIND } from "./agent-wire.js";
 import { agentName } from "./model-label.js";
 
 /**
@@ -13,10 +13,7 @@ import { agentName } from "./model-label.js";
 const MODEL = "anthropic/claude-opus-5.5";
 
 test("an operator is Luke, whatever else it holds", () => {
-  assert.equal(
-    agentName({ kind: CODING_AGENT_KIND.OPERATOR, title: "Desk", model: MODEL }),
-    "Luke",
-  );
+  assert.equal(agentName({ kind: AGENT_KIND.OPERATOR, title: "Desk", model: MODEL }), "Luke");
 });
 
 test("an untitled agent an automation's run started is named by its automation, as the wire or the row carries it", () => {

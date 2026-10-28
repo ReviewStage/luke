@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
+import { AGENT_KIND } from "./agent-wire.js";
 import { automationRunReasonSchema } from "./automation-wire.js";
-import { CODING_AGENT_KIND } from "./coding-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -133,7 +133,7 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   agentId: wireUuidSchema,
   /** What kind of agent posted it: a coder, or the member's operator, Luke; absent from a service before it, which reads as a coder. */
-  agentKind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
+  agentKind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.String,
   /** The account that started the agent, as an item of a task's agent says it, and on the same terms. */

@@ -1,12 +1,12 @@
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
+  AGENT_BOUNDS,
   AGENT_MESSAGE_LEAD,
+  AGENT_STATUS,
   agentMessageReplyLine,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import type { WireRecord } from "@luke/wire";
@@ -60,7 +60,7 @@ import { agentLineSender, steerCodingAgent } from "./steer.js";
 const MESSAGE_FRAME_ROOM_CHARS = 1_000;
 
 /** The most characters a message's own words may spell. */
-const MAX_MESSAGE_WORDS_CHARS = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - MESSAGE_FRAME_ROOM_CHARS;
+const MAX_MESSAGE_WORDS_CHARS = AGENT_BOUNDS.MAX_MESSAGE_CHARS - MESSAGE_FRAME_ROOM_CHARS;
 
 /** Why `message_agent` sent nothing, in words the model can act on. */
 export const MESSAGE_AGENT_REFUSAL = {
@@ -143,7 +143,7 @@ function refusalWords(refusal: HostedRefusal): string {
 }
 
 /** The line the other agent receives: who sent it, by its mention link, the words, and how to answer. */
-function messageLine(sender: CodingAgent, senderMention: string, text: string): string {
+function messageLine(sender: Agent, senderMention: string, text: string): string {
   const head = `${AGENT_MESSAGE_LEAD} · ${senderMention} to you:`;
   return [head, text, agentMessageReplyLine(sender.id)].join("\n\n");
 }
@@ -197,7 +197,7 @@ export function runMessageAgent(
           id: target.id,
           title: agentName(target),
           model: target.model,
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
           onYourTask: target.taskId !== null && target.taskId === callerTask(caller),
         },
       };

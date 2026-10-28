@@ -1,4 +1,4 @@
-import type { ReviewThread } from "@luke/features/coding-agent-wire";
+import type { ReviewThread } from "@luke/features/agent-wire";
 import { DISCLOSURE_SUMMARY, DisclosureSummary, Tooltip } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { CircleCheckIcon, CircleIcon } from "lucide-react";

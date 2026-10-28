@@ -1,10 +1,10 @@
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BOUNDS,
+  AGENT_STATUS,
+  type AgentAttachment,
+  type AgentStatus,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -194,7 +194,7 @@ export function AgentMenuTab({
   slot,
   onShown,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   agents: CodingAgentsControl;
   look: TabLook;
   doors: TabDoors;
@@ -238,7 +238,7 @@ export function AgentMenuTab({
         look={look}
         doors={whole}
         rename={actions.rename}
-        field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
+        field={{ label: "Agent name", maxLength: AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
         onShown={onShown}
       />
@@ -253,7 +253,7 @@ interface DrawnTab {
   look: TabLook;
   /** Closes the tab, as its × does; none for a Start's still making its agent, which only its answer closes. */
   close: (() => void) | undefined;
-  agent?: CodingAgentSummary | undefined;
+  agent?: AgentSummary | undefined;
 }
 
 /**
@@ -312,7 +312,7 @@ function agentTabs(input: {
               tabLook({
                 kind: TAB_KIND.AGENT,
                 name: undefined,
-                agent: { model: pending?.model ?? "", status: CODING_AGENT_STATUS.STARTING },
+                agent: { model: pending?.model ?? "", status: AGENT_STATUS.STARTING },
               }),
             ),
             close: undefined,
@@ -646,12 +646,7 @@ export function MainTabContent({
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
   views: TabViews;
-  onOpenDelegation: (
-    agentId: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => void;
+  onOpenDelegation: (agentId: string, callId: string, task: string, status: AgentStatus) => void;
   /** Opens the agent's pull request in the side panel, by the agent; none where no side panel stands to show it. */
   onOpenPullRequest?: ((agentId: string) => void) | undefined;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
@@ -662,7 +657,7 @@ export function MainTabContent({
   onFork?: ((fork: AgentFork) => void) | undefined;
   /** Opens the task's draft as a continue of an agent with the words and files its closed box held; none where no draft opens, as on an agent no task holds. */
   onContinue?:
-    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {

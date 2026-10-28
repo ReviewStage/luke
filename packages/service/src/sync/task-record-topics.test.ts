@@ -9,7 +9,7 @@ import {
   takeOverBrowserTab,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
-import { createCodingAgent, renameCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent, renameAgent } from "@luke/database/models/agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { readGitHubTokenRow, removeGitHubToken } from "@luke/database/models/github-token-store";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -130,7 +130,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           woken,
         );
         yield* wakes(
-          renameCodingAgent(owner, agentId, "Spike"),
+          renameAgent(owner, agentId, "Spike"),
           [
             [TOPIC.AGENT, agentId],
             [TOPIC.WORKSPACE, task.workspaceId],
@@ -146,7 +146,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const task = yield* startTask(owner, { name: "Checkout flow" });
-        const started = yield* createCodingAgent(owner, {
+        const started = yield* createAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -194,7 +194,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
         yield* wakes(handBackBrowserTab(tabId, owner), onTask, tabs);
         yield* wakes(closeBrowserTab(agent.conversationId, tabId), onTask, tabs);
         yield* wakes(
-          renameCodingAgent(owner, agent.id, "Checkout"),
+          renameAgent(owner, agent.id, "Checkout"),
           [...onTask, [TOPIC.AGENT, agent.id], [TOPIC.WORKSPACE, task.workspaceId]],
           [...tabs, taskHistoryLive.topics(params)],
         );

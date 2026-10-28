@@ -13,13 +13,13 @@
  * agent's pull request, so a new one is polled afresh.
  */
 
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { type StoredPollEtags, tokenPullRequestPoll } from "../schemas/token-pull-request-poll.js";
 
 type PollEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
@@ -68,13 +68,13 @@ const DueRowSchema = Schema.Struct({
 });
 
 /** The pull request's number as the agent's row keeps it. */
-const publishedNumber = () => sql<number>`(${codingAgent.published}->>'number')::int`;
+const publishedNumber = () => sql<number>`(${agentTable.published}->>'number')::int`;
 
 /** An agent polled: on its starter's token, not archived, its pull request open or a draft. */
 const polledAgent = and(
-  eq(codingAgent.githubAccess, GITHUB_ACCESS.TOKEN),
-  isNull(codingAgent.archivedAt),
-  inArray(sql`${codingAgent.published}->>'state'`, [
+  eq(agentTable.githubAccess, GITHUB_ACCESS.TOKEN),
+  isNull(agentTable.archivedAt),
+  inArray(sql`${agentTable.published}->>'state'`, [
     PULL_REQUEST_STATE.OPEN,
     PULL_REQUEST_STATE.DRAFT,
   ]),
@@ -89,11 +89,11 @@ const insertMissing = SqlSchema.void({
         .select(
           db
             .select({
-              agentId: codingAgent.id,
+              agentId: agentTable.id,
               pullRequest: publishedNumber().as("pull_request"),
               nextPollAt: sql<Date>`${now.toISOString()}::timestamptz`.as("next_poll_at"),
             })
-            .from(codingAgent)
+            .from(agentTable)
             .where(polledAgent),
         )
         .onConflictDoNothing({ target: tokenPullRequestPoll.agentId }),
@@ -108,7 +108,7 @@ const lockDue = SqlSchema.findAll({
       db
         .select({
           agentId: tokenPullRequestPoll.agentId,
-          userId: codingAgent.userId,
+          userId: agentTable.userId,
           polled: tokenPullRequestPoll.pullRequest,
           published: publishedNumber(),
           etags: tokenPullRequestPoll.etags,
@@ -118,7 +118,7 @@ const lockDue = SqlSchema.findAll({
           checkConclusion: tokenPullRequestPoll.checkConclusion,
         })
         .from(tokenPullRequestPoll)
-        .innerJoin(codingAgent, eq(codingAgent.id, tokenPullRequestPoll.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, tokenPullRequestPoll.agentId))
         .where(and(polledAgent, lte(tokenPullRequestPoll.nextPollAt, now)))
         .orderBy(asc(tokenPullRequestPoll.nextPollAt), asc(tokenPullRequestPoll.agentId))
         .limit(limit)

@@ -1,4 +1,4 @@
-import type { StoredAgentStep } from "@luke/database/schemas/coding-agent";
+import type { StoredAgentStep } from "@luke/database/schemas/agent";
 import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";

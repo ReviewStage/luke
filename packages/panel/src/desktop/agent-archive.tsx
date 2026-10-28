@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -148,10 +148,7 @@ export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl):
  * about while it works. The question goes with the surface it was asked on.
  */
 export function useAgentArchive(
-  agent: Pick<
-    CodingAgentSummary,
-    "id" | "status" | "title" | "automationName" | "model" | "startedBy"
-  >,
+  agent: Pick<AgentSummary, "id" | "status" | "title" | "automationName" | "model" | "startedBy">,
   agents: CodingAgentsControl,
   shown: boolean,
 ): AgentArchive {
@@ -200,7 +197,7 @@ function ArchivedAgentRow({
   agents,
   shown,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
 }): React.JSX.Element {

@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { workspaceOf } from "@luke/database/models/workspace-store";
 import { MENTION_KIND, type Mention, mentionMarkdown } from "@luke/features/mention-link";
 import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
@@ -66,7 +66,7 @@ export const pageStepOf = (
   owner: PageOwner,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> => {
   if (owner.kind === PAGE_OWNER.TASK) return taskStepOf(userId, owner.taskId);
-  return Effect.flatMap(readCodingAgent(userId, owner.agentId), (agent) =>
+  return Effect.flatMap(readAgent(userId, owner.agentId), (agent) =>
     Option.match(agent, {
       onNone: () => Effect.succeed(Option.none<string>()),
       onSome: ({ organizationId }) =>

@@ -11,12 +11,12 @@ import {
   type ReplayValueForm,
 } from "@luke/features/agent-replay";
 import {
-  CODING_AGENT_SENDER,
-  type CodingAgentMessage,
-  type CodingAgentSender,
-  type CodingAgentSummary,
-  type CodingAgentTodos,
-} from "@luke/features/coding-agent-wire";
+  AGENT_SENDER,
+  type AgentSender,
+  type AgentSummary,
+  type AgentTodos,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
@@ -104,7 +104,7 @@ export type StepView =
       /** Who sent it by name, as its summary says, which a step written before its marker named its sender is drawn under. */
       readonly sender: string;
       /** Who sent it as a transcript's line names its sender, where its marker said; none for the developer's own and a step written before. */
-      readonly sentBy: CodingAgentSender | undefined;
+      readonly sentBy: AgentSender | undefined;
       /** Whether the developer sent it, drawn as the reader's own. */
       readonly own: boolean;
       /** When it was sent, where its marker said; none for a step written before. */
@@ -143,10 +143,10 @@ export interface ReplayPage {
 /** An agent's opening, read out of its first message: the brief as a message of its own, the replay, and the note as a line of its own where one was written. */
 export interface ReplayOpening {
   /** The first message with only the brief for its words, and its files kept. */
-  readonly brief: CodingAgentMessage;
+  readonly brief: AgentTranscriptMessage;
   readonly replay: Replay;
   /** The note as the developer's line: the first message with the note for its words and no files; none where no note was written. */
-  readonly note: CodingAgentMessage | undefined;
+  readonly note: AgentTranscriptMessage | undefined;
 }
 
 /**
@@ -166,10 +166,10 @@ export interface StepLine {
 
 /** The message with the words given in place of its own words, its files kept or dropped. */
 function withWords(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   words: string,
-  files: CodingAgentMessage["parts"],
-): CodingAgentMessage {
+  files: AgentTranscriptMessage["parts"],
+): AgentTranscriptMessage {
   return { ...message, parts: [...files, { type: "text", text: words }] };
 }
 
@@ -181,14 +181,14 @@ const TEXT_FILE_TYPE = "text/plain";
  * once rather than parsing the whole replay again: a transcript's messages
  * are the same objects until a read hands new ones, which then read afresh.
  */
-const OPENINGS = new WeakMap<CodingAgentMessage, ReplayOpening | undefined>();
+const OPENINGS = new WeakMap<AgentTranscriptMessage, ReplayOpening | undefined>();
 
 /**
  * The first message's files parted between the brief and the note: the
  * note's are the last of each group the service hands files in, text files
  * and the rest, as many as its marker counts, since the brief's go first.
  */
-function filesOf(message: CodingAgentMessage, noteFiles: NoteFiles) {
+function filesOf(message: AgentTranscriptMessage, noteFiles: NoteFiles) {
   const kinds = agentParts(message);
   const files = message.parts.filter((_, index) => kinds[index]?.kind !== AGENT_PART.TEXT);
   const isText = (part: (typeof files)[number]) =>
@@ -206,7 +206,7 @@ function filesOf(message: CodingAgentMessage, noteFiles: NoteFiles) {
 }
 
 /** The opening read afresh from the first message. */
-function readOpening(first: CodingAgentMessage): ReplayOpening | undefined {
+function readOpening(first: AgentTranscriptMessage): ReplayOpening | undefined {
   const parts = firstMessageParts(messageWords(first));
   if (parts.replay === undefined) return undefined;
   const files = filesOf(first, parts.note?.files ?? { text: 0, other: 0 });
@@ -226,7 +226,7 @@ function readOpening(first: CodingAgentMessage): ReplayOpening | undefined {
  * is then drawn as any first message is. The same message answers the same
  * opening, read once (`OPENINGS`).
  */
-export function replayOpening(first: CodingAgentMessage): ReplayOpening | undefined {
+export function replayOpening(first: AgentTranscriptMessage): ReplayOpening | undefined {
   if (OPENINGS.has(first)) return OPENINGS.get(first);
   const opening = readOpening(first);
   OPENINGS.set(first, opening);
@@ -327,10 +327,7 @@ export function stepLine(step: ReplayStep): StepLine {
  * afresh; the agent itself where it was started afresh, or where a link of
  * its chain is not listed.
  */
-function briefSource(
-  agent: CodingAgentSummary,
-  agents: readonly CodingAgentSummary[],
-): CodingAgentSummary {
+function briefSource(agent: AgentSummary, agents: readonly AgentSummary[]): AgentSummary {
   let at = agent;
   for (let link = 0; link < MAX_CHAIN && at.from !== undefined; link += 1) {
     const sourceId: string = at.from.agentId;
@@ -348,10 +345,7 @@ function briefSource(
  * under the automation as the run's did. Note that the agent is still no
  * run of the automation: only what its opening is drawn from changes.
  */
-export function briefAgent(
-  agent: CodingAgentSummary,
-  agents: readonly CodingAgentSummary[],
-): CodingAgentSummary {
+export function briefAgent(agent: AgentSummary, agents: readonly AgentSummary[]): AgentSummary {
   const source = briefSource(agent, agents);
   if (source === agent) return agent;
   const { automationId, automationName } = source;
@@ -472,7 +466,7 @@ function toolView(
   };
 }
 
-type Todos = CodingAgentTodos["todos"];
+type Todos = AgentTodos["todos"];
 
 /** A tool call's step whose marker named its tool, which is read as the transcript reads a call of that tool. */
 type MarkedToolStep = ReplayStep & {
@@ -547,7 +541,7 @@ function callView(step: ReplayStep, todos: Todos | undefined): StepView {
  * account, Luke, an automation, GitHub's login, or another agent; none for
  * the developer's own line and for a step whose marker names no sender.
  */
-function sentByOf(step: ReplayStep, name: string): CodingAgentSender | undefined {
+function sentByOf(step: ReplayStep, name: string): AgentSender | undefined {
   const sent = step.sender;
   switch (sent?.kind) {
     case undefined:
@@ -555,14 +549,14 @@ function sentByOf(step: ReplayStep, name: string): CodingAgentSender | undefined
       return undefined;
     case REPLAY_SENDER.MEMBER:
       return sent.memberId === undefined
-        ? { kind: CODING_AGENT_SENDER.MEMBER, name }
-        : { kind: CODING_AGENT_SENDER.MEMBER, userId: sent.memberId, name };
+        ? { kind: AGENT_SENDER.MEMBER, name }
+        : { kind: AGENT_SENDER.MEMBER, userId: sent.memberId, name };
     case REPLAY_SENDER.LUKE:
-      return { kind: CODING_AGENT_SENDER.LUKE, name };
+      return { kind: AGENT_SENDER.LUKE, name };
     case REPLAY_SENDER.AUTOMATION:
-      return { kind: CODING_AGENT_SENDER.AUTOMATION, name };
+      return { kind: AGENT_SENDER.AUTOMATION, name };
     case REPLAY_SENDER.GITHUB:
-      return { kind: CODING_AGENT_SENDER.GITHUB, name };
+      return { kind: AGENT_SENDER.GITHUB, name };
     case REPLAY_SENDER.AGENT:
       return { name, agent: true };
   }

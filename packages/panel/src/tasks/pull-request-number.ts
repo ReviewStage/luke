@@ -1,4 +1,4 @@
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { AgentPullRequest } from "@luke/features/agent-wire";
 import { createContext, useContext } from "react";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
@@ -70,7 +70,7 @@ export function withPullRequestTab<V>(
 export function pullRequestOfTab(
   control: Pick<CodingAgentsControl, "pullRequests" | "numberedPullRequests">,
   tab: { readonly changes: string; readonly number?: number | undefined },
-): CodingAgentPullRequest | undefined {
+): AgentPullRequest | undefined {
   return tab.number === undefined
     ? control.pullRequests.get(tab.changes)
     : ofPullRequestTab(control.numberedPullRequests, tab);

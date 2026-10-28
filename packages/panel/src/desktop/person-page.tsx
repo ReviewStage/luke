@@ -1,10 +1,10 @@
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import {
   automationOwner,
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { inboxWaitsOn } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -224,7 +224,7 @@ function AgentRow({
   const endedByKey = useRefocusAfterEdit(editing, row);
   return (
     <>
-      <RowHintOptions card={card} cardBeside>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={agent.id}
@@ -238,7 +238,7 @@ function AgentRow({
               <InlineEdit
                 value={rename.asked ?? subject.name}
                 label="Agent name"
-                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
                   endedByKey(edit.byKey);
@@ -454,20 +454,10 @@ function AutomationRow({
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const nextWords = automationNextText(automation, now);
-  const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, which its card counts as its control.
-  const hold = useCallback((press: HTMLElement | null) => {
-    item.current = press?.parentElement ?? null;
-  }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
-    <RowHintOptions
-      card={<AutomationCard automation={automation} workspaceName={workspaceName} />}
-      cardBeside
-      cardRegion={item}
-    >
+    <RowHintOptions card={<AutomationCard automation={automation} workspaceName={workspaceName} />}>
       <ListRow
-        ref={hold}
         motionKey={automation.id}
         leading={
           <span className={HOME_ROW_PICTURE}>

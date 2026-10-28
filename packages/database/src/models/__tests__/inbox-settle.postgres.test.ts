@@ -18,7 +18,7 @@ import {
   openWorkspace,
   STORE_TEST_DATABASE_ENVIRONMENT,
 } from "../../testing/index.js";
-import { archiveCodingAgent } from "../coding-agent-store.js";
+import { archiveAgent } from "../agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
 
 /**
@@ -122,7 +122,7 @@ it.layer(getTestDB())("an inbox item's undo racing the other act that settles it
         yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE });
         yield* TestClock.adjust("1 minute");
 
-        const archive = yield* heldOnAnother(onAnother, archiveCodingAgent(dean, agentId, true));
+        const archive = yield* heldOnAnother(onAnother, archiveAgent(dean, agentId, true));
         const reopening = yield* Effect.forkChild(
           onAnother(updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS })),
         );
@@ -144,16 +144,14 @@ it.layer(getTestDB())("an inbox item's undo racing the other act that settles it
       Effect.gen(function* () {
         const onAnother = yield* anotherConnection;
         const { dean, taskId, agentId, itemId } = yield* openQuestion;
-        yield* archiveCodingAgent(dean, agentId, true);
+        yield* archiveAgent(dean, agentId, true);
         yield* TestClock.adjust("1 minute");
 
         const done = yield* heldOnAnother(
           onAnother,
           updateTask(dean, taskId, { status: TASK_STATUS.DONE }),
         );
-        const unarchiving = yield* Effect.forkChild(
-          onAnother(archiveCodingAgent(dean, agentId, false)),
-        );
+        const unarchiving = yield* Effect.forkChild(onAnother(archiveAgent(dean, agentId, false)));
         yield* untilWaitingOrDone(unarchiving);
         yield* Deferred.succeed(done.release, undefined);
         yield* Fiber.join(done.fiber);
