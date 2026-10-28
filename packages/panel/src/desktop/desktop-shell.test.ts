@@ -515,17 +515,6 @@ test("the window is called by what stands in it: the plan on screen in its own w
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   });
   assert.equal(document.title, "Automations — Acme");
-  act(() => root?.unmount());
-
-  // With Channels on the Inbox's place is the Inbox until a channel is chosen, and the window is called for its stream then.
-  await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
-  mount(true, false, { workspaces: [ACME], workspace: ACME });
-  await settle();
-  assert.equal(document.title, "Inbox — Acme");
-  act(() => chooseChannel("c1000001-6d9f-4ab7-92df-000000000001"));
-  await settle();
-  assert.equal(document.title, "Channels — Acme");
-  act(() => leaveChannel());
 });
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
@@ -715,7 +704,7 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("with Channels on, the sidebar keeps the Inbox's row among the places and the Tasks section, the channels under them, and the Inbox's row marks the Inbox until a channel is chosen", async () => {
+test("with Channels on, the sidebar keeps the Tasks section and stands the channels right under the Inbox's row, which marks the Inbox until a channel is chosen", async () => {
   await handBridge(experimentsOn(EXPERIMENT.CHANNELS));
   const page = mount(true, false, { workspaces: [ACME], workspace: ACME });
   await settle();
@@ -724,16 +713,18 @@ test("with Channels on, the sidebar keeps the Inbox's row among the places and t
     nav.getAttribute("aria-label"),
   );
   assert.ok(groups.includes("Tasks"), `the Tasks section stands: ${groups.join(", ")}`);
-  assert.ok(
-    groups.indexOf("Tasks") < groups.indexOf("Channels"),
-    `the channels stand under the tasks: ${groups.join(", ")}`,
-  );
+  assert.ok(!groups.includes("Channels"), "the channels head no section of their own");
   const inbox = () => placeRow(page, "Inbox") ?? assert.fail("the Inbox's row stands");
+  assert.equal(
+    inbox().nextElementSibling?.getAttribute("aria-label"),
+    "Channels",
+    "the channels stand right under the Inbox's row",
+  );
   assert.equal(inbox().getAttribute("aria-current"), "page");
 
   act(() => chooseChannel("c1000001-6d9f-4ab7-92df-000000000001"));
   await settle();
-  assert.equal(inbox().getAttribute("aria-current"), null, "a channel's stream is no Inbox");
+  assert.equal(inbox().getAttribute("aria-current"), null, "a channel marks its own row");
   act(() => leaveChannel());
 });
 
@@ -1264,7 +1255,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   });
 });
 
-test("the side panel's toggle stands for the Inbox's chosen item, and not over a channel's stream with no thread of it open unless a panel is left open beside it", async () => {
+test("the side panel's toggle stands for the Inbox's chosen item, in the Inbox narrowed to a channel too", async () => {
   const control = tasksControl();
   const chosen = {
     inboxView: {
@@ -1273,13 +1264,10 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
       chosen: { taskId: DOCUMENT_TASK.id, itemId: "inbox-item-1" },
     },
   };
-  const panelOpen = { ...chosen, sidePanel: { ...control.sidePanel, open: true } };
   const toggled: Record<string, boolean> = {};
   for (const [shown, experiments, patch, stream] of [
     ["the Inbox", {}, chosen, false],
-    ["the Inbox with Channels on", experimentsOn(EXPERIMENT.CHANNELS), chosen, false],
     ["a channel", experimentsOn(EXPERIMENT.CHANNELS), chosen, true],
-    ["a channel with a panel open", experimentsOn(EXPERIMENT.CHANNELS), panelOpen, true],
   ] as const) {
     await handBridge(experiments);
     if (stream) chooseChannel("c1000001-6d9f-4ab7-92df-000000000001");
@@ -1303,12 +1291,7 @@ test("the side panel's toggle stands for the Inbox's chosen item, and not over a
     container.remove();
   }
   leaveChannel();
-  assert.deepEqual(toggled, {
-    "the Inbox": true,
-    "the Inbox with Channels on": true,
-    "a channel": false,
-    "a channel with a panel open": true,
-  });
+  assert.deepEqual(toggled, { "the Inbox": true, "a channel": true });
 });
 
 test("⌘F opens a find over every page that stands in the window, and Settings keeps it for its own search", async () => {

@@ -34,8 +34,7 @@
  * What a page shows within it is a step too: the tab the task's column
  * shows, the tab its side panel shows while open (a narrow room's panel
  * standing over the plan being a step of its own already), and the
- * Inbox's item, or with Channels on the channel its stream shows and the
- * thread open in it, no thread open being a step of its own, so Back goes back to what the window was
+ * Inbox's item, and with Channels on the channel it is narrowed to, so Back goes back to what the window was
  * just showing rather than past it to the page before. Such a choice is a
  * step only where a press or a key led to it: one the window makes by
  * itself, as a task's tabs arriving after it opens, an agent's tab shown as
@@ -99,8 +98,8 @@ import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
 import {
   standChannelPlace,
   useChannelPlace,
-  useChannelStreaming,
   useChannels,
+  useInboxNarrowed,
   useShownChannel,
 } from "./tasks/use-channels.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
@@ -171,9 +170,9 @@ type Place =
   | {
       readonly kind: typeof PLACE_KIND.INBOX;
       readonly listed?: boolean | undefined;
-      /** The item standing alone, while one does; with Channels on, the thread open in the channel, while one is. */
+      /** The item standing alone, while one does. */
       readonly chosen?: InboxChoice | undefined;
-      /** The channel the stream shows, with Channels on once the channels are read. */
+      /** The channel the Inbox is narrowed to, with Channels on. */
       readonly channelId?: string | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
@@ -401,10 +400,8 @@ function sameShown(one: Place, other: Place): boolean {
     );
   }
   if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    // Note that the Inbox and each channel's stream are steps of their own, so moving between them is a visit rather than filling in the step.
+    // Note that the Inbox and each channel it is narrowed to are steps of their own, so moving between them is a visit rather than filling in the step.
     if (one.channelId !== other.channelId) return false;
-    // Note that in a channel's stream no thread open is a step of its own, so opening one is a visit rather than filling in the step.
-    if (one.channelId !== undefined) return sameInboxChoice(one.chosen, other.chosen);
     return one.chosen === undefined || other.chosen === undefined
       ? true
       : sameInboxChoice(one.chosen, other.chosen);
@@ -1068,15 +1065,11 @@ export function useWindowHistory(input: {
   // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
   const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
   const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
-  // With a channel chosen, the Inbox's place shows its stream, its item shown only while its thread stands open; the channel is the step's from the moment it is chosen, before its name is read.
+  // With a channel chosen, the Inbox is narrowed to it; the channel is the step's from the moment it is chosen, before its name is read.
   const shown = useShownChannel(tasks.workspace?.id);
-  const streaming = useChannelStreaming();
+  const narrowed = useInboxNarrowed();
   const { channelId: chosenChannel } = useChannelPlace();
-  const inboxChannel = inboxOpen && streaming ? chosenChannel : undefined;
-  const inboxShown =
-    shown !== undefined && inboxChosen !== undefined && shown.threadId !== inboxChosen.itemId
-      ? undefined
-      : inboxChosen;
+  const inboxChannel = inboxOpen && narrowed ? chosenChannel : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
@@ -1142,7 +1135,7 @@ export function useWindowHistory(input: {
     // The page the window rests on with no task open is where no page stands, so a step to it is a step home.
     if (tasks.resting) return { kind: PLACE_KIND.HOME };
     if (inboxOpen) {
-      const inbox = { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxShown } as const;
+      const inbox = { kind: PLACE_KIND.INBOX, listed: inboxListed, chosen: inboxChosen } as const;
       return inboxChannel === undefined ? inbox : { ...inbox, channelId: inboxChannel };
     }
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
@@ -1191,7 +1184,7 @@ export function useWindowHistory(input: {
     sideTab,
     inboxOpen,
     inboxListed,
-    inboxShown,
+    inboxChosen,
     inboxChannel,
     pageAgent,
     pagePerson,
@@ -1206,7 +1199,7 @@ export function useWindowHistory(input: {
   ]);
   // Note that a channel's step is named by its channel, and by the thread's task while one stands open in it.
   const channelName = inboxChannel === undefined ? undefined : shown?.channel.name;
-  const channelDetail = inboxShown === undefined ? undefined : titleDetail;
+  const channelDetail = inboxChosen === undefined ? undefined : titleDetail;
   const place = useMemo((): Titled | undefined => {
     if (untitled === undefined || titleLabel === undefined) return untitled;
     if (channelName !== undefined) {
@@ -1258,8 +1251,13 @@ export function useWindowHistory(input: {
     const historyStanding = tab === PANEL_TAB.TASKS && historyOpen && spot !== undefined;
     if (tab !== PANEL_TAB.TASKS) input.onTabChange(PANEL_TAB.TASKS);
     if (to.kind === PLACE_KIND.INBOX) {
-      tasks.inboxView.onOpen();
-      if (to.channelId !== undefined) standChannelPlace(to.channelId, to.chosen?.itemId);
+      // Note that a channel's step holding no item opens the channel afresh, so no item chosen in a later step stands over it.
+      if (to.channelId !== undefined && to.chosen === undefined) {
+        tasks.inboxView.onOpenChannel(to.channelId);
+      } else {
+        tasks.inboxView.onOpen();
+      }
+      standChannelPlace(to.channelId);
       if (to.chosen !== undefined) tasks.inboxView.onChoose(to.chosen);
       if (to.listed !== undefined) tasks.inboxView.onListed(to.listed);
       return;

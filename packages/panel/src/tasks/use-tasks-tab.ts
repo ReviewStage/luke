@@ -186,7 +186,6 @@ import {
   listChannelWorkspace,
   openChannelThread,
   standChannelPlace,
-  useChannelPlace,
 } from "./use-channels.js";
 import {
   type CodingAgentsControl,
@@ -303,10 +302,10 @@ interface InboxViewControl {
    */
   readonly onOpenItem: (chosen: InboxChoice, channelId?: string) => void;
   /**
-   * Opens the Inbox on a channel's stream with Channels on, from wherever
-   * the window stands: the sidebar's row, the command palette. A thread
-   * open in it stays open where it is the channel already shown, but on a
-   * phone, which shows the stream alone.
+   * Opens the Inbox narrowed to a channel with Channels on, from wherever
+   * the window stands: the sidebar's row, the command palette. It chooses
+   * no item, so the channel's first stands chosen, and one column opens on
+   * its list, as the Inbox's own row opens it.
    */
   readonly onOpenChannel: (channelId: string) => void;
   /**
@@ -1608,14 +1607,7 @@ export function useTasksTab(input: {
     pageAgent !== undefined &&
     viewed.agentCallCode?.agentId === pageAgent &&
     viewed.agentCallCode.shownCode.length > 0;
-  // A channel's thread opened beside its stream stands in the panel beside it, as its Inbox tab, while the Inbox's choice is that thread; a phone shows it in the stream's place instead (`desktop-inbox.tsx`).
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const channelThread = useChannelPlace().threadId;
-  const threadBeside =
-    channelsOn &&
-    input.room !== SHELL_ROOM.NARROW &&
-    channelThread !== undefined &&
-    inboxChosen?.itemId === channelThread;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -1623,7 +1615,6 @@ export function useTasksTab(input: {
           id: inboxTask ?? inboxAgent,
           holds: NO_HOLDS,
           bare: true,
-          thread: threadBeside ? true : undefined,
         }
       : pageAgents === undefined
         ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
@@ -2969,7 +2960,7 @@ export function useTasksTab(input: {
           }));
           return;
         }
-        // Note that a link names the thread and not its channel, which its item names once read (`useThreadChannel`).
+        // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
         if (channelsOn) openChannelThread(place.itemId);
         standInFor({
           kind: STAND_IN.INBOX,
@@ -2981,18 +2972,16 @@ export function useTasksTab(input: {
         });
         return;
       }
-      // A channel's link opens its stream in the Inbox's place, on no thread; one archived or unknown says so there (`desktop-inbox.tsx`).
+      // A channel's link opens the Inbox narrowed to it; one archived or unknown says so there (`desktop-inbox.tsx`).
       case LINK_PLACE.CHANNEL: {
-        const workspaceId = listLinked(workspace);
+        listLinked(workspace);
         if (!channelsOn) return;
-        standChannelPlace(place.channelId, undefined);
+        standChannelPlace(place.channelId);
+        // Note that a channel's link opens it as its row does: on no item, and on its list in a narrow room.
         standInFor({
           kind: STAND_IN.INBOX,
-          chosen: rememberedChoice(lastInboxChoice.current, {
-            account: input.account,
-            workspaceId,
-          }),
-          listed: false,
+          chosen: undefined,
+          listed: input.room === SHELL_ROOM.NARROW,
         });
         return;
       }
@@ -3386,7 +3375,7 @@ export function useTasksTab(input: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
       // Note that it opens on the list though it keeps the item last chosen, so one column shows the list and two stand that item beside it (`inbox-columns.ts`).
-      // With Channels on, it leaves any channel shown, so the place shows the Inbox rather than a stream.
+      // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
@@ -3420,20 +3409,8 @@ export function useTasksTab(input: {
       }),
       onOpenChannel: guard((channelId: string) => {
         setHistoryFor(undefined);
-        if (input.room === SHELL_ROOM.NARROW) standChannelPlace(channelId, undefined);
-        else chooseChannel(channelId);
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, listed: false }
-            : {
-                kind: STAND_IN.INBOX,
-                chosen: rememberedChoice(lastInboxChoice.current, {
-                  account: input.account,
-                  workspaceId: listedWorkspaceId,
-                }),
-                listed: false,
-              },
-        );
+        chooseChannel(channelId);
+        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined, listed: true });
       }),
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>

@@ -1,13 +1,21 @@
 /**
- * host-store.ts -- an account's install tokens and the hosts they enrolled: minted, revoked, traded for a device, resolved by a device secret, listed, and removed.
+ * host-store.ts -- an account's install tokens and the machines enrolled with a device secret: minted, revoked, traded for a device, an own device enrolled, resolved by a device secret, listed, and removed.
  *
  * Every function is an effect over the ambient `SqlClient`. Tokens and
  * secrets arrive here as their SHA-256 alone (the service mints both and
  * hashes them), so nothing here ever holds one. Every read and write the
- * account names is keyed by it, so no account lists, revokes, or removes
- * another's; the enroll is keyed by the token, whose own account it writes
- * under, and the secret read by the secret's hash alone, which names one
- * standing host (`../schemas/device.ts`, `../schemas/host-install-token.ts`).
+ * account names is keyed by it, so no account lists, revokes, removes, or
+ * enrolls another's; the token enroll is keyed by the token, whose own
+ * account it writes under, and the secret read by the secret's hash alone,
+ * which names one standing machine (`../schemas/device.ts`,
+ * `../schemas/host-install-token.ts`).
+ *
+ * A machine is enrolled where its row holds a secret and was not removed
+ * (`enrolled`), whatever its kind or platform: a Linux box that traded an
+ * install token, and a member's own desktop converted in place by its
+ * signed-in session (`enrollOwnDevice`), are read, listed, refused below
+ * the floor, and removed alike. A device that never enrolled, a desktop on
+ * its sign-in alone, is none of this file's business.
  */
 
 import {
@@ -46,10 +54,11 @@ const HostCallerSchema = Schema.Struct({
 
 export type HostCaller = typeof HostCallerSchema.Type;
 
-/** One of the account's hosts, as Settings lists it. */
+/** One of the account's enrolled machines, as Settings lists it. */
 const HostRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
+  platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
   lastSeenAt: Schema.Date,
   version: Schema.NullOr(Schema.String),
 });
@@ -68,11 +77,16 @@ export interface HostEnrollment {
 
 const KeptSchema = Schema.Struct({ id: Schema.String });
 
+/** Whether a device row is enrolled: it holds a secret and was not removed, whatever its kind. */
+function enrolled() {
+  return and(isNotNull(device.secretHash), isNull(device.removedAt));
+}
+
 /** Why an enroll wrote nothing. */
 export const HOST_ENROLL_REFUSAL = {
-  /** The token is unknown, revoked, or expired, or the id is another account's device or the account's own desktop. */
+  /** The token is unknown, revoked, or expired, or the id is another account's device or one of the account's own that never enrolled. */
   REFUSED: "refused",
-  /** The id is one of the token account's standing hosts, which only a Remove lets enroll again. */
+  /** The id is one of the token account's enrolled machines, which only a Remove lets a token enroll again. */
   STILL_ENROLLED: "still-enrolled",
 } as const;
 
@@ -171,9 +185,18 @@ const upsertHost = SqlSchema.findAll({
         })
         .onConflictDoUpdate({
           target: device.id,
-          set: { name, platform, arch, version, secretHash, removedAt: null, lastSeenAt: now },
-          // Note that only the account's own removed host is keyed again: never a standing host, whose secret a token holder could otherwise take over, another account's device, or its own desktop.
-          setWhere: sql`${device.userId} = ${userId} and ${device.kind} = ${DEVICE_KIND.HOST} and ${device.removedAt} is not null`,
+          set: {
+            name,
+            kind: DEVICE_KIND.HOST,
+            platform,
+            arch,
+            version,
+            secretHash,
+            removedAt: null,
+            lastSeenAt: now,
+          },
+          // Note that only the account's own removed machine is keyed again: never a standing one, whose secret a token holder could otherwise take over, another account's device, or one of its own that never enrolled, which only its signed-in session enrolls.
+          setWhere: sql`${device.userId} = ${userId} and ${device.removedAt} is not null`,
         })
         .returning({ id: device.id }),
     ),
@@ -187,14 +210,26 @@ const findStanding = SqlSchema.findAll({
       db
         .select({ id: device.id })
         .from(device)
-        .where(
-          and(
-            eq(device.id, id),
-            eq(device.userId, userId),
-            eq(device.kind, DEVICE_KIND.HOST),
-            isNull(device.removedAt),
-          ),
-        ),
+        .where(and(eq(device.id, id), eq(device.userId, userId), enrolled())),
+    ),
+});
+
+/** The account's own device keyed with a new secret in place, under the same id, so its agents keep it. */
+const keyOwnDevice = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    id: Schema.String,
+    version: Schema.String,
+    secretHash: Schema.String,
+  }),
+  Result: KeptSchema,
+  execute: ({ userId, id, version, secretHash }) =>
+    Database.use((db) =>
+      db
+        .update(device)
+        .set({ kind: DEVICE_KIND.HOST, version, secretHash, removedAt: null })
+        .where(and(eq(device.id, id), eq(device.userId, userId)))
+        .returning({ id: device.id }),
     ),
 });
 
@@ -218,14 +253,7 @@ const findRemoved = SqlSchema.findAll({
       db
         .select({ id: device.id })
         .from(device)
-        .where(
-          and(
-            eq(device.id, id),
-            eq(device.userId, userId),
-            eq(device.kind, DEVICE_KIND.HOST),
-            isNotNull(device.removedAt),
-          ),
-        ),
+        .where(and(eq(device.id, id), eq(device.userId, userId), isNotNull(device.removedAt))),
     ),
 });
 
@@ -237,13 +265,7 @@ const findBySecret = SqlSchema.findOneOption({
       db
         .select({ deviceId: device.id, userId: device.userId, version: device.version })
         .from(device)
-        .where(
-          and(
-            eq(device.secretHash, secretHash),
-            eq(device.kind, DEVICE_KIND.HOST),
-            isNull(device.removedAt),
-          ),
-        ),
+        .where(and(eq(device.secretHash, secretHash), isNull(device.removedAt))),
     ),
 });
 
@@ -262,17 +284,12 @@ const findHosts = SqlSchema.findAll({
         .select({
           id: device.id,
           name: device.name,
+          platform: device.platform,
           lastSeenAt: device.lastSeenAt,
           version: device.version,
         })
         .from(device)
-        .where(
-          and(
-            eq(device.userId, userId),
-            eq(device.kind, DEVICE_KIND.HOST),
-            isNull(device.removedAt),
-          ),
-        )
+        .where(and(eq(device.userId, userId), enrolled()))
         .orderBy(asc(device.name), asc(device.id)),
     ),
 });
@@ -285,14 +302,7 @@ const stampRemoved = SqlSchema.findAll({
       db
         .update(device)
         .set({ removedAt: now, secretHash: null })
-        .where(
-          and(
-            eq(device.id, id),
-            eq(device.userId, userId),
-            eq(device.kind, DEVICE_KIND.HOST),
-            isNull(device.removedAt),
-          ),
-        )
+        .where(and(eq(device.id, id), eq(device.userId, userId), enrolled()))
         .returning({ id: device.id }),
     ),
 });
@@ -320,14 +330,15 @@ export function revokeHostInstallToken(userId: string, id: string): HostEffect<b
 /**
  * Trades an install token for a host: the box, under the token's account,
  * as a device of kind host keyed by the id it minted, with the new secret's
- * hash, seen now. The id of a host the account removed may be enrolled
- * again, which brings that host back with the new secret, so a box is never
- * listed twice; a standing host's id may not, so a token alone never takes
- * over a box already enrolled. Answers the account, or why nothing was
- * written: still enrolled where the id is one of the token account's
- * standing hosts, which is said apart so a rerun on an enrolled box can keep
- * its enrollment, and refused for an unknown, revoked, or expired token, or
- * an id that is another account's device or the account's own desktop.
+ * hash, seen now. The id of a machine the account removed may be enrolled
+ * again, which brings that machine back with the new secret, so a box is
+ * never listed twice; an enrolled machine's id may not, so a token alone
+ * never takes over a box already enrolled. Answers the account, or why
+ * nothing was written: still enrolled where the id is one of the token
+ * account's enrolled machines, which is said apart so a rerun on an
+ * enrolled box can keep its enrollment, and refused for an unknown,
+ * revoked, or expired token, or an id that is another account's device or
+ * one of the account's own that never enrolled, which a token never takes.
  */
 export function enrollHost(
   tokenHash: string,
@@ -354,7 +365,26 @@ export function enrollHost(
   );
 }
 
-/** The standing host a device secret's hash names, its account, and the version it last called with; nothing for a removed host, an old secret, or none. */
+/**
+ * Enrolls one of the account's own devices with a new secret, on its
+ * signed-in session: the row it registered, converted in place under the
+ * same id, so every agent pinned to it keeps it, keyed with the new
+ * secret's hash, of kind host from now on (the program that runs its
+ * agents is the host program), with the version it enrolled with. A
+ * device already enrolled is keyed again, its old secret refused from
+ * now on, and a removed one brought back, since the session holds the
+ * account's whole say over its devices, as no install token does; when to
+ * ask is its caller's. False where the account holds no device of the id,
+ * another account's included, and nothing was written.
+ */
+export function enrollOwnDevice(
+  userId: string,
+  enrollment: { readonly id: string; readonly version: string; readonly secretHash: string },
+): HostEffect<boolean> {
+  return Effect.map(keyOwnDevice({ userId, ...enrollment }), (rows) => rows.length > 0);
+}
+
+/** The standing machine a device secret's hash names, of any kind, its account, and the version it last called with; nothing for a removed machine, an old secret, or none. */
 export function hostBySecret(secretHash: string): HostEffect<Option.Option<HostCaller>> {
   return findBySecret({ secretHash });
 }
@@ -364,12 +394,12 @@ export function recordHostVersion(id: string, version: string): HostEffect<void>
   return writeVersion({ id, version });
 }
 
-/** The account's standing hosts, by name. */
+/** The account's enrolled machines, of every kind and platform, by name. */
 export function hostsOf(userId: string): HostEffect<readonly HostRow[]> {
   return findHosts({ userId });
 }
 
-/** Removes the account's host and refuses its secret from now on; false where the account holds no such standing host. */
+/** Removes the account's enrolled machine and refuses its secret from now on; false where the account holds no such enrolled machine. */
 export function removeHost(userId: string, id: string): HostEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(stampRemoved({ userId, id, now }), (rows) => rows.length > 0),
@@ -386,7 +416,7 @@ export function hostAgentConversations(
   );
 }
 
-/** Whether the account removed its host of the id given, so an agent pinned to it is refused by name rather than as unavailable. */
+/** Whether the account removed its machine of the id given, so an agent pinned to it is refused by name rather than as unavailable. */
 export function hostRemoved(userId: string, id: string): HostEffect<boolean> {
   return Effect.map(findRemoved({ userId, id }), (rows) => rows.length > 0);
 }

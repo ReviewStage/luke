@@ -2729,8 +2729,7 @@ svg.lucide {
 }
 
 @media (hover: hover) {
-  .comment-entry:hover .comment-tools,
-  .channel-post:hover .comment-tools {
+  .comment-entry:hover .comment-tools {
     opacity: 1;
   }
 }

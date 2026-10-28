@@ -123,13 +123,27 @@ export const hostEnrollAnswerSchema = EffectSchema.Struct({
 
 export type HostEnrollAnswer = typeof hostEnrollAnswerSchema.Type;
 
+/**
+ * An own device's enroll: the id of a device the member's account already
+ * registered, a Mac its desktop signed in on. The desktop's own sign-in is
+ * its credential, as its bearer and never a browser's session, and the
+ * version of the host program it enrolls for rides in
+ * `HOST_WIRE.VERSION_HEADER`, as on a token's enroll. It answers as a
+ * token's enroll does (`hostEnrollAnswerSchema`), the device converted in
+ * place under the same id so its agents keep it; a device already enrolled
+ * is keyed again, its old secret refused from then on.
+ */
+export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({ deviceId: wireUuidSchema });
+
 /** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes. */
 export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
   minimumVersion: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /**
- * One of the member's hosts, as Settings lists it: its name, the epoch
+ * One of the member's enrolled machines, as Settings lists it: its name,
+ * its platform, which its copy and glyph follow, absent from a service
+ * older than it, which listed only Linux boxes, the epoch
  * milliseconds it was last seen, which a reader holds against its own clock
  * as a Mac's, which a window does not judge by (`deviceStanding`), the daemon version it last called with, none before its
  * first call that carried one, and whether that version is below the
@@ -138,6 +152,7 @@ export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
 const hostSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   name: EffectSchema.String,
+  platform: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_PLATFORM))),
   seenAt: countedNumber,
   version: EffectSchema.NullOr(EffectSchema.String),
   upgradeNeeded: EffectSchema.Boolean,
@@ -145,7 +160,7 @@ const hostSchema = EffectSchema.Struct({
 
 export type Host = typeof hostSchema.Type;
 
-/** The member's hosts (GET), by name, and the install script's address on the service's own origin, which the upgrade command names. */
+/** The member's enrolled machines (GET), Linux boxes and Macs alike, by name, and the install script's address on the service's own origin, which the upgrade command names. */
 export const hostsAnswerSchema = EffectSchema.Struct({
   hosts: EffectSchema.Array(hostSchema),
   installScriptUrl: EffectSchema.String,

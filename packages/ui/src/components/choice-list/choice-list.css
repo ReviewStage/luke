@@ -15,12 +15,8 @@
    back to an outline in muted words; a read-only one keeps the open look
    at full strength.
 
-   The fill is laid over `--luke-choice-ground`, which is nothing unless a
-   region names one (`control-ground.css`): on a tinted ground a row lays
-   its translucent fill over the window's own, so it reads as it does on the
-   column. The fill is a registered colour, so it eases (the row lists it
-   among its transitions) even drawn as a gradient, which no transition
-   reaches. */
+   The fill is a registered colour, so it eases as the row lists it among
+   its transitions. */
 
 @property --luke-choice-fill {
   syntax: "<color>";
@@ -31,8 +27,7 @@
 @layer components {
   .luke-choice {
     --luke-choice-fill: var(--luke-color-fill-hover);
-    background: linear-gradient(var(--luke-choice-fill), var(--luke-choice-fill))
-      var(--luke-choice-ground, transparent);
+    background: var(--luke-choice-fill);
     color: var(--luke-color-text);
   }
 

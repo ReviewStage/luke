@@ -32,8 +32,8 @@ import { useArchivedChannels } from "../tasks/use-channels.js";
  * its own name, for everyone, as archiving it closed it; it asks nothing,
  * since it reaches nobody who loses anything, and a refusal, as where an
  * open channel now goes by its name, stands under the list. A press on a
- * row opens the channel in the Inbox's place and puts the dialog away; the
- * stream there draws an archived channel's threads to read, not to post in.
+ * row narrows the Inbox to the channel and puts the dialog away, its head
+ * offering Unarchive.
  */
 
 /** What the dialog is asked for: the section it lists, in the workspace it was asked in. */

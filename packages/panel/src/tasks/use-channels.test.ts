@@ -20,9 +20,9 @@ import {
 } from "./use-channels.js";
 
 /**
- * use-channels.test.ts -- the channel the window shows: none at launch,
- * the Inbox standing in its place, none of the last workspace's once
- * another is listed, and a thread opened by its item alone moved to its own
+ * use-channels.test.ts -- the channel the Inbox is narrowed to: none at
+ * launch, none of the last workspace's once another is listed, and a
+ * thread opened by its item alone into a channel followed to its own
  * channel once read.
  *
  * Note that the place is the window's, held by the module across this
@@ -86,14 +86,13 @@ fakeActPort({
     }),
 });
 
-test("at launch the place shows no channel once the workspace's channels are read, so the Inbox stands in it, and a thread opened by its item alone names none there", async () => {
+test("at launch the Inbox is narrowed to no channel once the workspace's channels are read, and a thread opened by its item alone narrows it to none", async () => {
   listChannelWorkspace(ACME);
   act(() => openChannelThread("c1000001-6d9f-4ab7-92df-000000000008"));
 
   const place = await placeAfterRead(ACME);
 
   assert.equal(place().channelId, undefined);
-  assert.equal(place().threadId, undefined);
 });
 
 test("another workspace listed shows none of the last one's channels, the Inbox standing in", async () => {
@@ -103,10 +102,9 @@ test("another workspace listed shows none of the last one's channels, the Inbox 
   const place = await placeAfterRead(LABS);
 
   assert.equal(place().channelId, undefined);
-  assert.equal(place().threadId, undefined);
 });
 
-test("a thread opened by its item alone stands in the channel shown until its item is read, then in its own channel", async () => {
+test("a thread opened by its item alone into a channel narrows the Inbox to its own channel once its item is read", async () => {
   listChannelWorkspace(ACME);
   act(() => chooseChannel(ACME_GENERAL.id));
   const itemId = "c1000001-6d9f-4ab7-92df-000000000009";
@@ -115,5 +113,4 @@ test("a thread opened by its item alone stands in the channel shown until its it
   const place = await placeAfterRead(ACME, { id: itemId, channelId: ACME_APP.id });
 
   assert.equal(place().channelId, ACME_APP.id);
-  assert.equal(place().threadId, itemId);
 });

@@ -79,7 +79,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { useChannelPlace, useChannelStreaming, useChannels } from "../tasks/use-channels.js";
+import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -135,7 +135,7 @@ const PLACE_LOOK = {
 /** What a task's card is called where the window lists no name for it. */
 const TASK_WORDS = "Task";
 
-/** What a channel's stream is called before the window has read the channel it shows. */
+/** What the Inbox narrowed to a channel is called before the window has read the channel. */
 const CHANNELS_WORDS = "Channels";
 
 /** What a person's page is called where the name is not known. */
@@ -271,16 +271,16 @@ function cardLook(
 }
 
 /**
- * What the Inbox's place shows with a channel chosen, which its card goes
- * back to: the channel's stream, or Channels before the window has read its
- * channels; none while the place is the Inbox. Note that it reads the
- * channels the window holds rather than reading them again.
+ * The channel the Inbox is narrowed to, which its card goes back to, or
+ * Channels before the window has read its channels; none while it lists
+ * every channel. Note that it reads the channels the window holds rather
+ * than reading them again.
  */
 function useChannelsLook(tasks: TasksControl): KindLook | undefined {
-  const streaming = useChannelStreaming();
-  const { channels } = useChannels(streaming ? tasks.workspace?.id : undefined, false);
+  const narrowed = useInboxNarrowed();
+  const { channels } = useChannels(narrowed ? tasks.workspace?.id : undefined, false);
   const { channelId } = useChannelPlace();
-  if (!streaming) return undefined;
+  if (!narrowed) return undefined;
   const shown = channelShown(channels, channelId);
   return shown.kind === CHANNEL_SHOWN.CHANNEL
     ? { icon: <GLYPH.CHANNEL />, label: shown.channel.name }
@@ -467,8 +467,7 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const streaming = useChannelStreaming();
-  const title = stepTitle(tab, tasks, false, streaming);
+  const title = stepTitle(tab, tasks, false);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;

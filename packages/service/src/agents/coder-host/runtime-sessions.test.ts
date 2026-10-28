@@ -11,7 +11,7 @@ import {
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import { type DeviceRegistration, registerDevice } from "@luke/database/models/device-store";
-import { removeHost } from "@luke/database/models/host-store";
+import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -26,7 +26,6 @@ import {
 } from "@luke/database/models/recorded-session";
 import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
 import { task as taskTable } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -38,7 +37,7 @@ import {
   type CodingAgentPayer,
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import { DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -1595,7 +1594,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.equal(retried.success.agent.id, owned.success.agent.id);
 
           // A continue from an agent on a host its starter removed is refused by name, not as away, and no agent is made.
-          yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
+          yield* enrollOwnDevice(owner, {
+            id: deviceId,
+            version: "0.1.0",
+            secretHash: `secret-${randomUUID()}`,
+          });
           assert.equal(yield* removeHost(owner, deviceId), true);
           const fromRemoved = {
             taskId: task.id,

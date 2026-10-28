@@ -65,7 +65,6 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
-import { useChannelStreaming } from "./tasks/use-channels.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
@@ -392,7 +391,6 @@ function AppWindow(): React.JSX.Element {
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
   const experiments = useExperimentChoices();
-  const streaming = useChannelStreaming();
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
@@ -481,7 +479,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
-    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW, streaming),
+    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

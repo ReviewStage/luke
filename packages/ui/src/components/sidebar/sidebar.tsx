@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from "react";
 
 /**
- * sidebar.tsx -- the parts of the app's sidebar every surface that draws it shares: the head naming whose it is, the places under it, the rule that parts them from a list, and the foot with the account's row.
+ * sidebar.tsx -- the parts of the app's sidebar every surface that draws it shares: the head naming whose it is, the places under it and the rows that narrow one, the rule that parts them from a list, and the foot with the account's row.
  *
  * The panel's sidebar, Settings' page list, a version history's versions,
  * and the web's admin dashboard all stand these in the column the app's
@@ -75,6 +75,31 @@ export function SidebarPlaces({
     <nav aria-label={label} className={className}>
       {children}
     </nav>
+  );
+}
+
+/**
+ * The rows that narrow the place over them, as a channel narrows the Inbox:
+ * a group named for what they are (`label`), each row standing in under the
+ * place's name, a list's gap apart as the places are. It stands among the
+ * places, right after the row it narrows.
+ */
+export function SidebarFilters({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: the rows are places to go, not a form's fields, so it is no `<fieldset>`.
+    <div
+      role="group"
+      aria-label={label}
+      className="sidebar-filters flex flex-col gap-list-gap ps-nav-nest"
+    >
+      {children}
+    </div>
   );
 }
 

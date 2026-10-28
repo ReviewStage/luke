@@ -9,7 +9,9 @@
  * that account's rows and no other's. A read that names where its rows
  * last stood (`after`) is held until they move past it, or answered
  * unchanged at the hold's end, its digests and no rows, and the desktop
- * asks again (`sealedParts`).
+ * asks again (`sealedParts`). The hold looks again every second, or, for a
+ * read Luke Sync wakes (`../sync/live-queries.ts`), whenever a write to its
+ * topics lands, and then answers with that write's txid (`liveQueryParts`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
  * account reaches and every agent of them and with no task, as two
@@ -80,6 +82,7 @@ import {
   workspaceOf as workspaceOfAccount,
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
+import type { SyncTopic } from "@luke/database/sync/notification";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -117,6 +120,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
@@ -129,24 +133,44 @@ export interface LiveProcedureSeams {
 }
 
 /**
- * How a poll past the reader's digest is held: looked at again every
- * second, and answered unchanged after 25, well inside a function's limit
- * and the client's held deadline.
+ * How a poll past the reader's digest is held: looked at again each time a
+ * write to its rows wakes it where it has a definition (`LIVE_QUERIES`),
+ * and every second where it has none or nothing wakes it, and answered
+ * unchanged after 25, well inside a function's limit and the client's held
+ * deadline.
  */
 const LIVE_POLL_HOLD = { LOOK: Duration.seconds(1), HOLD: Duration.seconds(25) } as const;
 
 /** How many of a read's parts are read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
 
+/** Each part as it was read, carrying the ids of the transactions whose writes woke the hold that answered it, where any did. */
+function wokenBy<Part extends string>(
+  queries: Record<Part, SealedLiveQueryWire>,
+  txids: readonly string[],
+): Record<Part, SealedLiveQueryWire> {
+  if (txids.length === 0) return queries;
+  // SAFETY: every part is kept, each with the txids beside it.
+  return Object.fromEntries(
+    Object.entries<SealedLiveQueryWire>(queries).map(([part, sealed]) => [
+      part,
+      { ...sealed, txids },
+    ]),
+  ) as Record<Part, SealedLiveQueryWire>;
+}
+
 /**
  * Each part's rows read inline at the poll address (`pollSealer`); where
  * the reader names where they last stood (`after`), held until they move
- * past it, or answered unchanged at the hold's end. Unavailable where the
- * rows could not be read.
+ * past it, waiting between looks on a watch of the topics, or answered
+ * unchanged at the hold's end. An answer a write woke carries that write's
+ * txid, which is how the desktop confirms a write once the read it follows
+ * shows it. Unavailable where the rows could not be read.
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
+  topics: readonly SyncTopic[] = NO_TOPICS,
 ): Effect.fn.Return<
   {
     readonly url: string;
@@ -180,11 +204,14 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   const moved = yield* heldUntil(
     polled,
     (read) => liveDigestOf(read.queries) !== after,
-    NO_TOPICS,
+    topics,
     LIVE_POLL_HOLD.LOOK,
     LIVE_POLL_HOLD.HOLD,
   );
-  if (Option.isSome(moved)) return moved.value;
+  if (Option.isSome(moved)) {
+    const { read, txids } = moved.value;
+    return { ...read, queries: wokenBy(read.queries, txids) };
+  }
   const standing = yield* polled;
   if (liveDigestOf(standing.queries) !== after) return standing;
   return {
@@ -197,6 +224,25 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
       }),
     ) as typeof standing.queries,
   };
+});
+
+/**
+ * A defined live read's parts (`defineLiveQuery`), built from the params
+ * its procedure bound once it admitted the caller, and held on a watch of
+ * the topics those params name. This is how a procedure answers a read
+ * Luke Sync wakes; unavailable where its statements can't be built.
+ */
+export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+  Param extends string,
+  Part extends string,
+>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+) {
+  const statements = query.statements(params);
+  if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return yield* sealedParts(statements.value, asked, query.topics(params));
 });
 
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */

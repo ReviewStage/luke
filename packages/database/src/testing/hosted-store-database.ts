@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { PGlite } from "@electric-sql/pglite";
 import { atInstant } from "@luke/wire/testing";
 import { Effect, type Layer, ManagedRuntime } from "effect";
-import { runWebMigrations } from "../core/migrator.js";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { sqlClientOverUrl } from "../core/sql-client.js";
 import { type HostedStore, hostedStore } from "../models/hosted-store.js";
 import { user } from "../schemas/auth.js";
-import { sqlClientOverPglite } from "./sql-client.js";
+import { openMigratedPglite, sqlClientOverPglite } from "./sql-client.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
 /**
@@ -15,8 +13,8 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-
  * Postgres dialect: PGlite in process by default, so `check.sh` needs no
  * service, or the Postgres named by `LUKE_STORE_TEST_DATABASE_URL`, which the
  * CI job points at its service container after `db:migrate` has run there. A
- * PGlite is migrated here, through the same `runWebMigrations` the production
- * runner applies, because it is opened empty; a Postgres is not, because
+ * PGlite is opened through `openMigratedPglite`, migrated by the same
+ * `runWebMigrations` the production runner applies; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied. Each opening
  * is a database of its own on either dialect: a fresh PGlite, or a clone of
  * the migrated Postgres that `close` drops (`@luke/database/testing`), so a
@@ -92,15 +90,12 @@ interface OpenedDatabase {
 }
 
 async function openPglite(): Promise<OpenedDatabase> {
-  const client = new PGlite();
-  const sql = sqlClientOverPglite(client);
-  const migrationRuntime = ManagedRuntime.make(sql);
-  try {
-    await migrationRuntime.runPromise(runWebMigrations());
-  } finally {
-    await migrationRuntime.dispose();
-  }
-  return { sql, anotherConnection: undefined, close: () => client.close() };
+  const client = await openMigratedPglite();
+  return {
+    sql: sqlClientOverPglite(client),
+    anotherConnection: undefined,
+    close: () => client.close(),
+  };
 }
 
 /** Migrates nothing: `db:migrate` is what applies the migrations to the Postgres this clones. */

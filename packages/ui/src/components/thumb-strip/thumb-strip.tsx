@@ -7,7 +7,8 @@ import { PAGE_THUMB_SIZE, PageThumb } from "../page-thumb/page-thumb.js";
  * Each file stands as a row's `PageThumb`: its picture where it is one, or
  * the glyph its place hands for any other file. The one shown stands at
  * full strength in a ring of the text's ink; the rest are dimmed until the
- * pointer is on them. The strip is centred in its room and scrolls across
+ * pointer is on them, darkened rather than faded, so nothing behind the strip
+ * shows through them. The strip is centred in its room and scrolls across
  * where its files outrun it, keeping the one shown in sight as the walk
  * moves.
  *
@@ -36,11 +37,13 @@ export interface ThumbStripItem {
 
 /**
  * A thumb's press: no box of its own, so the thumb draws the box and the ring
- * takes its corners; dimmed while another is shown and lit under the
+ * takes its corners, a flex box so it is exactly the thumb's height (an inline
+ * thumb would leave a line's descent of ground under it), on a card's opaque ground so a thumb with no picture
+ * hides what is behind the strip too; darkened while another is shown and lit under the
  * pointer, the shown one ringed.
  */
 const THUMB =
-  "luke-thumb-strip-thumb flex-none cursor-press rounded-control border-0 bg-transparent p-0 opacity-60 transition-opacity duration-(--luke-duration-hover) ease-motion-exit hover:opacity-100 aria-[current=true]:opacity-100 aria-[current=true]:[&>.luke-page-thumb]:outline-2 aria-[current=true]:[&>.luke-page-thumb]:outline-offset-1 aria-[current=true]:[&>.luke-page-thumb]:outline-foreground aria-[current=true]:[&>.luke-page-thumb]:outline-solid";
+  "luke-thumb-strip-thumb flex flex-none cursor-press rounded-control border-0 bg-popover p-0 brightness-60 transition-[filter] duration-(--luke-duration-hover) ease-motion-exit hover:brightness-100 aria-[current=true]:brightness-100 aria-[current=true]:[&>.luke-page-thumb]:outline-2 aria-[current=true]:[&>.luke-page-thumb]:outline-offset-1 aria-[current=true]:[&>.luke-page-thumb]:outline-foreground aria-[current=true]:[&>.luke-page-thumb]:outline-solid";
 
 /** A strip of the files `items`, the one at `at` shown, `onPick` showing another. */
 export function ThumbStrip({

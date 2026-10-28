@@ -15,7 +15,10 @@ import { Deferred, Effect } from "effect";
  * `derive` is given, every answer reads the rows from it, as a service reads
  * its own tables, and `move` says they moved; a change it is not told of is
  * missed until a later one, as a follow that missed it would. Rows `set` on
- * such a read stand over what it reads until the next `move`.
+ * such a read stand over what it reads until the next `move`. A `set` may
+ * name the txids of the writes that moved it, which every part of each
+ * answer carries until the next `set` or `move`, as an answer Luke Sync woke
+ * does.
  */
 export function polledLive<
   Part extends string,
@@ -23,6 +26,7 @@ export function polledLive<
 >(parts: readonly Part[], derive?: () => Partial<Record<Part, readonly unknown[]>>) {
   let version = 0;
   const rows = new Map<Part, readonly unknown[]>();
+  let woken: readonly string[] | undefined;
   let moved = Deferred.makeUnsafe<void>();
   let refusal: Refused | undefined;
   let polls = 0;
@@ -43,6 +47,7 @@ export function polledLive<
           expiresAt: 0,
           digest: String(version),
           ...(carried === undefined ? undefined : { rows: carried }),
+          ...(woken === undefined ? undefined : { txids: woken }),
         };
         return [part, query];
       }),
@@ -73,18 +78,20 @@ export function polledLive<
         }),
         poll(after),
       ),
-    /** Sets the parts named to the rows given, the rest as they stand, and moves the read once. */
-    set: (next: Partial<Record<Part, readonly unknown[]>>) => {
+    /** Sets the parts named to the rows given, the rest as they stand, and moves the read once, woken by the writes `txids` names where it names any. */
+    set: (next: Partial<Record<Part, readonly unknown[]>>, txids?: readonly string[]) => {
       for (const part of parts) {
         const carried = next[part];
         if (carried !== undefined) rows.set(part, carried);
       }
+      woken = txids;
       version += 1;
       wake();
     },
     /** Moves the read, its rows as `derive` reads them now. */
     move: () => {
       rows.clear();
+      woken = undefined;
       version += 1;
       wake();
     },

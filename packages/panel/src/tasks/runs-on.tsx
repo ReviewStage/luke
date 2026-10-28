@@ -3,7 +3,12 @@ import {
   DEVICE_STANDING,
   type DeviceStanding,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND, DEVICE_SETUP, type DeviceKind } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_PLATFORM,
+  DEVICE_SETUP,
+  type DeviceKind,
+  type DevicePlatform,
+} from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
 import type { TaskRunsOn, TaskRunsOnRequest } from "@luke/features/task-wire";
 import {
@@ -18,6 +23,7 @@ import {
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
+import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
 import { ExperimentTag } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
@@ -72,9 +78,17 @@ const KEPT = { PICK: keptKey("luke.newTaskRunsOn", Schema.String) } as const;
 /** The cloud, as a request names it. */
 const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: CODING_AGENT_MACHINE.VERCEL };
 
-/** A device's glyph by its kind; a Mac's where a service before kinds said none. */
-function DeviceGlyph({ kind }: { kind: DeviceKind | undefined }): React.JSX.Element {
-  return kind === DEVICE_KIND.HOST ? <GLYPH.HOST /> : <GLYPH.DESKTOP />;
+/** A device's glyph by its platform (`devicePlatformOf`): a server's for Linux, a Mac's otherwise. */
+function DeviceGlyph({
+  device,
+}: {
+  device: { readonly platform?: DevicePlatform; readonly kind?: DeviceKind } | undefined;
+}): React.JSX.Element {
+  return devicePlatformOf(device ?? {}) === DEVICE_PLATFORM.LINUX ? (
+    <GLYPH.HOST />
+  ) : (
+    <GLYPH.DESKTOP />
+  );
 }
 
 /** Where a device offered stands now; one a service before beats said nothing of is online, as it listed only those, and one the presence read does not name, though it is the account's own, is gone. */
@@ -112,7 +126,7 @@ function offerDetail(device: MacOffer, book: PresenceBook): Pick<MenuRow, "detai
   return { detail: STANDING_WORDS[standing] };
 }
 
-/** Cloud, then each device by name under its kind's glyph, one that takes an agent saying it is online and any other muted, unpicked, saying why. */
+/** Cloud, then each device by name under its platform's glyph, one that takes an agent saying it is online and any other muted, unpicked, saying why. */
 function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
@@ -120,7 +134,7 @@ function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly 
       (device): MenuRow => ({
         id: device.deviceId,
         label: device.name,
-        icon: <DeviceGlyph kind={device.kind} />,
+        icon: <DeviceGlyph device={device} />,
         ...offerDetail(device, book),
       }),
     ),
@@ -181,7 +195,7 @@ export function NewTaskRunsOnChip({
         label={RUNS_ON_WORDS.LABEL}
         value={device?.deviceId ?? CLOUD_ROW}
         valueLabel={device === undefined ? RUNS_ON_WORDS.CLOUD : offerStateWords(device, book)}
-        valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={device.kind} />}
+        valueIcon={device === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
         rows={runsOnRows(devices, book)}
         noMatch={RUNS_ON_WORDS.NO_MATCH}
         align={POPOVER_ALIGN.START}
@@ -223,7 +237,7 @@ export function TaskRunsOnChip({ runsOn }: { runsOn: TaskRunsOn | undefined }): 
         aria-label={`${RUNS_ON_WORDS.LABEL}: ${words}`}
         aria-disabled
       >
-        {runsOn === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph kind={runsOn.device?.kind} />}
+        {runsOn === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={runsOn.device} />}
         <ChipName>{words}</ChipName>
       </Chip>
     </Tooltip>

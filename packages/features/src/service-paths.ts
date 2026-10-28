@@ -155,7 +155,9 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_REQUEST_CLAIM: "/api/device-agents/requests/claim",
   /** A host's enroll: an install token traded for a device of kind host and its device secret, answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
-  /** The account's hosts, as Settings lists them (GET). `host-wire.ts` declares the bodies. */
+  /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
+  DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
+  /** The account's enrolled machines, as Settings lists them (GET). `host-wire.ts` declares the bodies. */
   HOSTS: "/api/hosts",
   /** How long ago the account's own devices last beat, read to keep a label's online state true while it is drawn (GET). */
   DEVICE_PRESENCE: "/api/hosts/presence",
