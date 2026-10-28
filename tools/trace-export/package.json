@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@luke/gateway": "workspace:*",
     "@luke/live": "workspace:*",
     "@luke/wire": "workspace:*",
     "effect": "catalog:"

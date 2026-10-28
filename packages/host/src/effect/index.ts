@@ -57,5 +57,4 @@ export {
   TerminalSocket,
   ThisMacHost,
   type ThisMacHostSeam,
-  VoiceSocket,
 } from "./seams.js";

@@ -20,9 +20,8 @@ import {
   SignInConsent,
   StateRoot,
   TerminalSocket,
-  VoiceSocket,
 } from "@luke/host/effect";
-import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node";
+import { openTerminalSocketOverWs } from "@luke/host/node";
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
@@ -52,7 +51,6 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord(config.environment)),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
-    Layer.succeed(VoiceSocket, openVoiceSocketOverWs),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
     thisMacHostLayer({ packaged: config.packaged, stateRoot: config.stateRoot }),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's

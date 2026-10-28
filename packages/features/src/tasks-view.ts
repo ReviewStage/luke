@@ -92,9 +92,8 @@ import {
  * The host reads the service for these and tells the desktop the whole view
  * whenever it moves; the desktop writes it into the document the tasks
  * window draws from. Exactly one task is ever active, the one the window has
- * open, and it is the task a voice session binds to. The view carries task
- * names, documents, and what was said on the active task's calls from the
- * service, and nothing of this Mac's own: a task's repository is the
+ * open. The view carries task names and documents from the service, and
+ * nothing of this Mac's own: a task's repository is the
  * service's, named on the task itself. Beside the tasks it carries the
  * workspaces the account is a member of, and the shapes the window asks a
  * workspace made, a GitHub organization connected or disconnected, a
@@ -242,19 +241,10 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
-  /** What each part of Luke is doing on the call about the active task, as last told; absent with no task open or no word yet. */
-  activity: EffectSchema.optionalKey(taskActivitySchema),
-  /**
-   * What each part of Luke is doing on the standing call, whichever task it
-   * is about, as last told: what the floating call window draws while the
-   * call's task is not the one open. Absent before the first word and once
-   * the call has ended.
-   */
-  callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
-   * none, and cleared with the activity. Their HTML is never held here: the
+   * none, and cleared as the task is left. Their HTML is never held here: the
    * frame that draws a page reads it alone (`brain.page`).
    */
   pages: EffectSchema.optionalKey(EffectSchema.Array(pageLineSchema)),

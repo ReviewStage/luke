@@ -4,12 +4,7 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@luke/credentials/snapshot";
-import {
-  type AccountToken,
-  type CallCredential,
-  hostedVoiceServiceOrigin,
-  VOICE_SERVICE_ORIGIN_VARIABLE,
-} from "@luke/features";
+import type { AccountToken, CallCredential } from "@luke/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@luke/features/words";
 import {
@@ -20,20 +15,14 @@ import {
   invalid,
   RefusedRefusal,
 } from "@luke/gateway";
-import { VoiceCapabilityAssembler } from "@luke/voice";
-import type { OpenSocket } from "@luke/voice/live-socket";
-import { Config, Effect, FiberSet, Option, type Scope, Stream } from "effect";
-import type * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
+import { Effect, FiberSet, type Scope, Stream } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AccountSession } from "./account-source.js";
 import type { AppAccessSlice } from "./app-state.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
-import { agentTraceDirectory } from "./devtrace/trace-directory.js";
-import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AccountSource, AppIdentity, Environment, ServiceOrigin } from "./effect/seams.js";
+import { AccountSource } from "./effect/seams.js";
 
 /** What a refused account step says, worded by the step alone. */
 const SIGN_IN_REFUSED = "the sign-in did not finish";
@@ -54,8 +43,6 @@ interface AccountLinks {
 export interface AccountComposer extends Composer {
   /** The account's session, as the shell's account source opened it. */
   readonly session: AccountSession;
-  readonly voiceCapabilities: VoiceCapabilityAssembler;
-  readonly agentTrace: AgentTraceWriter | undefined;
   snapshot: () => AccountSnapshot;
   signedIn: () => boolean;
   capabilitiesActive: () => boolean;
@@ -73,7 +60,6 @@ export interface AccountComposer extends Composer {
    * none, as it reads no token.
    */
   readonly sessionCredential: CallCredential;
-  applyVoiceCredential: Effect.Effect<void>;
   sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
   /** What the signed-in account may open in the app, as last read for it; no admin for anyone else. */
   accessState: Effect.Effect<AppAccessSlice>;
@@ -90,8 +76,6 @@ export interface AccountComposer extends Composer {
 
 interface AccountDependencies {
   settings: SettingsComposer;
-  /** How the voice sideband's socket is opened; the platform's own WebSocket, handed in. */
-  openSocket: OpenSocket;
 }
 
 /**
@@ -104,21 +88,9 @@ interface AccountDependencies {
  */
 export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(function* (
   dependencies: AccountDependencies,
-): Effect.fn.Return<
-  AccountComposer,
-  never,
-  | HostKernelTag
-  | Environment
-  | AppIdentity
-  | AccountSource
-  | FileSystem.FileSystem
-  | Path.Path
-  | Scope.Scope
-> {
-  const { settings, openSocket } = dependencies;
+): Effect.fn.Return<AccountComposer, never, HostKernelTag | AccountSource | Scope.Scope> {
+  const { settings } = dependencies;
   const kernel = yield* HostKernelTag;
-  const environment = yield* Environment;
-  const identity = yield* AppIdentity;
   const source = yield* AccountSource;
   const { runMode, report } = kernel;
   const late = yield* lateService<AccountLinks>();
@@ -191,49 +163,9 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     if (signedIn && !wasSignedIn) settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
   });
 
-  /**
-   * The development trace, gated so it cannot exist for a user: a packaged
-   * build never reads the variable, a fixture or evidence run has no traffic to
-   * tap and constructs no writer.
-   */
-  const traceDirectory =
-    identity.packaged || !runMode.sendsNetwork
-      ? Option.none<string>()
-      : yield* Effect.orDie(agentTraceDirectory.parse(environment));
-  const agentTrace = Option.isSome(traceDirectory)
-    ? yield* AgentTraceWriter.make({ directory: traceDirectory.value, report })
-    : undefined;
-  if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
-
-  const voiceServiceOrigin = yield* Effect.orDie(
-    Config.option(Config.String(VOICE_SERVICE_ORIGIN_VARIABLE)).parse(environment),
-  );
-  const serviceOrigin = yield* Effect.serviceOption(ServiceOrigin);
-
   function capabilitiesActive(): boolean {
     return accountGateOpen(runMode, session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN);
   }
-
-  const voiceCapabilities = new VoiceCapabilityAssembler({
-    settings: settings.store,
-    credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
-    fixtureRun: () => !runMode.sendsNetwork,
-    accountSignedIn: () => session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN,
-    // The voice functions live on the account service's origin, so its
-    // development override reaches them too; a voice override of its own stands
-    // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
-    // A service origin the shell named stands over all of them.
-    hostedVoiceServiceOrigin: hostedVoiceServiceOrigin(
-      Option.isSome(serviceOrigin)
-        ? { packaged: false, override: kernel.hostedServiceBaseUrl }
-        : {
-            packaged: identity.packaged,
-            override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
-          },
-    ),
-    openSocket,
-    refreshAccount: session.token.refreshAccount,
-  });
 
   /**
    * Whether an account was deleted in this run, which stands recording down
@@ -261,14 +193,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   const emitSessionReplay: Effect.Effect<void> = Effect.map(sessionReplayState, (replay) => {
     kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
   });
-
-  // The application's own `PlatformError` reads as a defect, exactly as the
-  // promise this replaced rejected on the same failure. Nothing is built
-  // over the applied capability on this side: the assembler's publication
-  // is the whole of the transition.
-  const applyVoiceCredential: Effect.Effect<void> = Effect.orDie(
-    Effect.asVoid(voiceCapabilities.apply()),
-  );
 
   /**
    * A step the account source could not carry, answered as the protocol's
@@ -386,15 +310,12 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   return {
     methods,
     session,
-    voiceCapabilities,
-    agentTrace,
     snapshot: session.snapshot,
     signedIn: () => session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN,
     capabilitiesActive,
     token: session.token,
     credential: session.credential,
     sessionCredential: session.sessionCredential,
-    applyVoiceCredential,
     sessionReplayState,
     accessState: Effect.sync(access.current),
     refreshAccess: Effect.asVoid(FiberSet.run(accessReads, access.refresh)),

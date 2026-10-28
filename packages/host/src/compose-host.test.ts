@@ -7,7 +7,6 @@ import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { HOST_CAPABILITY } from "@luke/settings";
-import { scriptedOpenSocket } from "@luke/voice/testing";
 import { noNetwork } from "@luke/wire/testing";
 import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { hostAssemblyLayer } from "./compose-host.js";
@@ -25,7 +24,6 @@ import {
   StateRoot,
   TerminalSocket,
   ThisMacHost,
-  VoiceSocket,
 } from "./effect/seams.js";
 import {
   ALL_CLIENT_CAPABILITIES,
@@ -63,7 +61,6 @@ const machineOver = (stateRoot: string) =>
       Layer.succeed(IdSource, { create: () => "id" }),
       reporterLayer(() => undefined),
       Layer.succeed(ShutdownSignal, { notify: undefined }),
-      Layer.succeed(VoiceSocket, scriptedOpenSocket([]).openSocket),
       NodeFileSystem.layer,
       NodePath.layer,
       noNetwork,
@@ -176,7 +173,6 @@ describe("the host's platform concerns", () => {
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
       assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
-        HOST_CAPABILITY.VOICE,
         HOST_CAPABILITY.UPDATES,
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,

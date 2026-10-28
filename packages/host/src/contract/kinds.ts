@@ -278,9 +278,9 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, and a call about the open task. And
+ * GitHub connected or disconnected. And
  * what one task holds, read as its tabs draw it: its
- * earlier work and conversation, a call's messages, its repository's files,
+ * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
  * status and priority.

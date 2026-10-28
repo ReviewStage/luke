@@ -16,15 +16,14 @@ import {
 } from "./quit.js";
 
 /**
- * The quit and every way out beside it, as main composes them: while a call
- * stands, a panel holds unsaved words, or a Mac terminal is open, a quit, a
- * restart to update, and a sign-out ask first, with Cancel the default and
+ * The quit and every way out beside it, as main composes them: while a panel
+ * holds unsaved words or a Mac terminal is open, a quit, a restart to update, and a sign-out ask first, with Cancel the default and
  * each thing that would be lost named; while nothing would be, none of them
  * asks; and the updater's own quit, behind a finished teardown, is never
  * held. Synthetic windows throughout.
  */
 
-const NOTHING: AtStake = { call: false, unsavedWork: false, macTerminals: 0 };
+const NOTHING: AtStake = { unsavedWork: false, macTerminals: 0 };
 
 /** One question put, and the answer the developer gives it. */
 interface Asked {
@@ -127,7 +126,7 @@ it("a window that is gone holds no unsaved work, whatever it last said", () => {
 });
 
 it("a quit, a restart to update, and a sign-out ask under the same conditions, naming what each would lose", () => {
-  const stakes: AtStake = { call: true, unsavedWork: true, macTerminals: 2 };
+  const stakes: AtStake = { unsavedWork: true, macTerminals: 2 };
   const asks = (leave: Leave) => {
     const question = leaveQuestion(leave, stakes);
     assert.ok(question !== undefined);
@@ -142,21 +141,21 @@ it("a quit, a restart to update, and a sign-out ask under the same conditions, n
   assert.deepEqual(asks(LEAVE.QUIT), {
     message: "Quit Luke?",
     detail:
-      "Your call with Luke will end. Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
+      "Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
     act: "Quit",
     returnPresses: "Cancel",
   });
   assert.deepEqual(asks(LEAVE.RESTART), {
     message: "Restart Luke to update?",
     detail:
-      "Your call with Luke will end. Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
+      "Edits that haven't saved will be lost. 2 Mac terminals will close, with what's running in them.",
     act: "Restart",
     returnPresses: "Cancel",
   });
   // Note that a sign-out leaves this Mac's terminals open, so it does not name them.
   assert.deepEqual(asks(LEAVE.SIGN_OUT), {
     message: "Sign out of Luke?",
-    detail: "Your call with Luke will end. Edits that haven't saved will be lost.",
+    detail: "Edits that haven't saved will be lost.",
     act: "Sign out",
     returnPresses: "Cancel",
   });
@@ -187,7 +186,7 @@ it("a restart to update asks while a panel holds unsaved words, goes at once whi
 
 it("a question that could not be put is a no", async () => {
   const askFirst = leaveGate({
-    atStake: () => ({ ...NOTHING, call: true }),
+    atStake: () => ({ ...NOTHING, unsavedWork: true }),
     ask: () => Promise.reject(new Error("no window to ask on")),
   });
 
@@ -195,7 +194,7 @@ it("a question that could not be put is a no", async () => {
 });
 
 it("the updater's own quit, behind the teardown it runs first, is never held, though words stand unsaved", async () => {
-  const { quit, asked, tell } = composedQuit({ call: true, macTerminals: 1 });
+  const { quit, asked, tell } = composedQuit({ macTerminals: 1 });
   tell(true);
 
   // Note that this is what Restart to update does once the developer said to:

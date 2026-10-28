@@ -133,19 +133,16 @@ export function publishAppStateChanges(
 
 /**
  * One host bootstrap as a patch of this document. What each slice carries is
- * the host's own answer; the readings of it are this client's. The trace gate
- * is a fact of the run rather than of the launch's arguments. And a halt
+ * the host's own answer; the readings of it are this client's. A halt
  * outlives a host read: the account it was raised for is going, the host
  * still answers `permitted` until its own change event lands, and only that
  * event stands the halt down.
  */
 export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePatch {
   return {
-    run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
     settings: boot.settings,
     account: boot.account,
     access: boot.access,
-    voice: held.voice,
     sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
   };
 }
@@ -187,13 +184,11 @@ export function initialAppState(
       captureMode: launch.captureMode,
       fixtureMode: launch.fixtureMode,
       accountRequired: runMode.requiresAccount,
-      agentTraceEnabled: false,
     },
     account: { status: ACCOUNT_STATUS.SIGNED_OUT },
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    voice: {},
     tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },

@@ -178,11 +178,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
-    // The development trace is the host's: a tapped wire event crosses to its
-    // writer, which alone knows whether this run records anything.
-    recordAgentTrace: (_context, trace) => {
-      void run(operator.host.recordAgentTrace(trace));
-    },
     notifyReady: async (context) => {
       windows.panelReady();
       if (!launch.captureOutput) return;

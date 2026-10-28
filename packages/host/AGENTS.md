@@ -48,26 +48,6 @@ reverse, store closed. The drain runs once whichever door asks for it.
 and there is none to run. A shutdown never fabricates a completion for work it
 cut off.**
 
-## The live session is the service's exchange, held open from here
-
-**The host reaches no eve host and writes no record for a voice session.** The
-exchange stands on the voice service: every spoken ask is admitted through
-`acceptAsk` there, every reply is appended there over the same socket the
-relay pipes, and the account's record is the service's. What this package
-keeps is `LiveSessionHolder`, which creates the task call about the open
-task for the peer's offer, ends it on the peer's hang-up or the
-drain, and carries the peer's idle and the stop key to the service as
-`session.activity` and `session.stop`, since the idle decision is made against
-appends only the service made and the stop's instruction is the service's to
-append. It appends nothing at all, and nothing on this side speaks unprompted:
-a call is only ever opened by a press about a task. The sessions route closes a
-desktop socket that sends any other frame, so a re-wired local exchange is
-refused at the relay rather than heard twice.
-
-The stop is asked for only while Luke is speaking, since the instruction the
-service appends for it is standing text a silent model would read as a rule for
-its next answer.
-
 ## One door that exists for the graph
 
 `account-preferences-client.ts` would belong beside the task client in
@@ -78,10 +58,9 @@ and `settings` already reaches `features`. This is the lowest package holding bo
 
 `@luke/host/acts` and `@luke/host/app-state` are the desktop's
 renderer-and-main vocabulary, kept here because this is the lowest package that
-reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
-already depends on it), and `@luke/host/bridge` is the window's bridge contract
-built from the app state, which the preload builds its bridge from and the web
-bridge does too; `@luke/host/contract` is the act port's oRPC contract that the
+reaches every package they name, and `@luke/host/bridge` is the window's bridge
+contract built from the app state, which the preload builds its bridge from and
+the web bridge does too; `@luke/host/contract` is the act port's oRPC contract that the
 window's client is typed by. The panel reads these four, and `@luke/host/act-port`
 beside them.
 

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
-import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
@@ -97,7 +96,7 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
     const seen = yield* watchChanges(app, 2, () => {
       app.update({});
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
-      app.update({ voice: {} });
+      app.update({ network: { online: true } });
       // The one real patch is the second document `changes` ever carries; the
       // three no-ops before it wrote nothing for a collector to see.
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
@@ -112,10 +111,10 @@ it("two slices in one patch are one version", () => {
   const app = store();
   app.update({
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: { view: IDLE_VOICE_VIEW },
+    network: { online: false },
   });
   assert.equal(app.snapshot().version, 1);
-  assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
+  assert.equal(app.snapshot().network.online, false);
 });
 
 it("a slice that moved keeps every part of it that did not, so what a reader held of it is the object it still holds", () => {
@@ -172,15 +171,12 @@ const BOOT: HostBootstrap = {
   account: inert(),
   sessionReplay: { permitted: true, accountId: "person" },
   access: { admin: true },
-  voiceAvailable: true,
-  agentTraceEnabled: true,
 };
 
 it("a host bootstrap lands in the document as the host answered it", () => {
   const app = store();
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   const held = app.snapshot();
-  assert.equal(held.run.agentTraceEnabled, true);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
   assert.deepEqual(held.access, { admin: true });
 });

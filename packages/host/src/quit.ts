@@ -39,8 +39,8 @@ export interface DesktopQuit {
   readonly beforeTeardown: (step: () => void) => void;
   /**
    * A check every quit asked for passes before its teardown begins,
-   * answering whether it holds the quit back: a call standing asks the
-   * developer first (`confirmingHold`).
+   * answering whether it holds the quit back: something that would be lost
+   * asks the developer first (`confirmingHold`).
    */
   readonly holdWhile: (hold: () => boolean) => void;
   /**
@@ -99,7 +99,7 @@ export function desktopQuit(): DesktopQuit {
 
 /**
  * A hold that asks before a quit while `standing` says something would be
- * lost, as a Mac app asks before it ends a call: the quit is held while the
+ * lost, as a Mac app asks before it loses anything: the quit is held while the
  * question stands, a second quit asked meanwhile asks nothing more, and a
  * yes asks for the quit `again`, which this hold then lets through. Nothing
  * standing holds nothing, so an ordinary quit asks nothing at all.
@@ -116,8 +116,7 @@ export function confirmingHold(options: {
     if (agreed || !standing()) return false;
     if (asking) return true;
     asking = true;
-    // A question that could not be asked is a no: the call is not ended
-    // without one.
+    // A question that could not be asked is a no: nothing is lost without one.
     void confirm()
       .then(
         (yes) => {
@@ -144,9 +143,8 @@ export const LEAVE = {
 
 export type Leave = (typeof LEAVE)[keyof typeof LEAVE];
 
-/** What a way out would lose: the call standing, edits the panel holds unsaved, and the terminals of this Mac Luke has open. */
+/** What a way out would lose: edits the panel holds unsaved, and the terminals of this Mac Luke has open. */
 export interface AtStake {
-  readonly call: boolean;
   readonly unsavedWork: boolean;
   readonly macTerminals: number;
 }
@@ -182,7 +180,6 @@ const MAC_TERMINAL: Noun = { one: "Mac terminal", many: "Mac terminals" };
 
 /** What goes, one sentence for each thing at stake. */
 const STAKE_WORDS = {
-  CALL: "Your call with Luke will end.",
   UNSAVED_WORK: "Edits that haven't saved will be lost.",
   terminals: (count: number) =>
     `${countWords(count, MAC_TERMINAL)} will close, with what's running in ${count === 1 ? "it" : "them"}.`,
@@ -192,14 +189,13 @@ const STAKE_WORDS = {
  * The question `leave` asks while something is at stake, naming each thing
  * that would be lost; none while nothing is, so an ordinary quit asks
  * nothing at all. Note that Cancel is the default, because Dean decided on
- * Oct 23 that a Return pressed out of habit must never end a call or lose
- * words; the act stands first, where macOS draws a sheet's leading button.
+ * Oct 23 that a Return pressed out of habit must never lose words; the act
+ * stands first, where macOS draws a sheet's leading button.
  */
 export function leaveQuestion(leave: Leave, atStake: AtStake): LeaveQuestion | undefined {
   const words = LEAVE_WORDS[leave];
   const terminals = words.closesTerminals ? atStake.macTerminals : 0;
   const lost = [
-    ...(atStake.call ? [STAKE_WORDS.CALL] : []),
     ...(atStake.unsavedWork ? [STAKE_WORDS.UNSAVED_WORK] : []),
     ...(terminals > 0 ? [STAKE_WORDS.terminals(terminals)] : []),
   ];
@@ -251,9 +247,8 @@ export function leaveGate(options: {
 /**
  * The ask a window's reload goes through, on the same terms as a way out of
  * Luke: yes at once unless that page holds edits that haven't saved. Note
- * that a call is never at stake, because it stands in the voice window,
- * which no reload reaches, and neither are this Mac's terminals, which main
- * keeps open across a page's reload.
+ * that this Mac's terminals are never at stake, because main keeps them open
+ * across a page's reload.
  */
 export function reloadGate<Page>(options: {
   holds: (page: Page) => boolean;
@@ -262,10 +257,7 @@ export function reloadGate<Page>(options: {
   const { holds, ask } = options;
   const asked = askingOneAtATime(ask);
   return (page) =>
-    asked(
-      page,
-      leaveQuestion(LEAVE.RELOAD, { call: false, unsavedWork: holds(page), macTerminals: 0 }),
-    );
+    asked(page, leaveQuestion(LEAVE.RELOAD, { unsavedWork: holds(page), macTerminals: 0 }));
 }
 
 /** Which windows say they hold unsaved work. */

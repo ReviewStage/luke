@@ -13,7 +13,6 @@ export default defineConfig({
       "packages/live",
       "packages/gateway",
       "packages/settings",
-      "packages/voice",
       "packages/features",
       "packages/credentials",
       "packages/database",

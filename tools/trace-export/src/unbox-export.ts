@@ -17,13 +17,9 @@
 
 import { randomUUID } from "node:crypto";
 import {
-  TRACE_DIRECTION,
-  TRACE_ENTRY_KIND,
-  TRACE_LIVE_EVENT,
-  TraceEntryKindSchema,
-} from "@luke/gateway/devtrace";
-import {
+  LIVE_CLIENT_EVENT,
   LIVE_DEFAULTS,
+  LIVE_SERVER_EVENT,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   type TranscriptSpeaker,
@@ -46,8 +42,37 @@ export interface UnboxExportOptions {
 
 const DEFAULT_TRACE_NAME = "luke-agent-trace";
 
+/** Which kind of record one line of a trace carries, as the host's trace writer wrote it. */
+const TRACE_ENTRY_KIND = {
+  WIRE: "wire",
+  SPEECH: "speech",
+} as const;
+
+/** Which side of the data channel a wire line's event crossed from. */
+const TRACE_DIRECTION = {
+  CLIENT: "client",
+  SERVER: "server",
+} as const;
+
+/**
+ * The live events a trace reads back into a conversation: the two captions,
+ * the three appends a trusted side sends, the delegation that opens a backend
+ * turn, the usage snapshot, and the two lifecycle events.
+ */
+const TRACE_LIVE_EVENT = {
+  SESSION_STARTED: LIVE_SERVER_EVENT.SESSION_STARTED,
+  SESSION_CLOSED: LIVE_SERVER_EVENT.SESSION_CLOSED,
+  INPUT_TRANSCRIPT_DELTA: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
+  OUTPUT_TRANSCRIPT_DELTA: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+  DELEGATION_CREATED: LIVE_SERVER_EVENT.DELEGATION_CREATED,
+  USAGE_UPDATED: LIVE_SERVER_EVENT.USAGE_UPDATED,
+  INSTRUCTIONS_APPEND: LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
+  THINKING_APPEND: LIVE_CLIENT_EVENT.THINKING_APPEND,
+  COMMENTARY_APPEND: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+} as const;
+
 /** Which lines carry a kind this reader recognizes at all; anything else costs only itself. */
-const readsTraceEntryKind = Schema.is(TraceEntryKindSchema);
+const readsTraceEntryKind = Schema.is(Schema.Literals(Object.values(TRACE_ENTRY_KIND)));
 
 /** The exchange before any delegation has no id of its own; a segment that closes with the session is named for it. */
 const SESSION_GENERATION_NAME = "session";

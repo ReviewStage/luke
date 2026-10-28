@@ -35,7 +35,7 @@ export type ClientSettingSideEffects = Readonly<
  * Each write is carried to the host, which stores it, applies its own side
  * effects, counts it, and tells every other window; and then applied through
  * the client's own side effects, the ones only it has hands on (the
- * desktop's login item and duck).
+ * desktop's login item).
  */
 export interface SettingsProceduresDependencies {
   host: Pick<

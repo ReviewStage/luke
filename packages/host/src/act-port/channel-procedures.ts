@@ -25,8 +25,7 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * channel-procedures.ts -- the Channels view's asks of the host about a workspace's channels.
  *
  * The one check these procedures make is who asked: only a panel draws the
- * Channels view, so every one refuses the takeover and the hidden voice
- * window, in its own sentence. What the service answers comes back as the
+ * Channels view, so every one refuses the takeover, in its own sentence. What the service answers comes back as the
  * panel's own answer, or why there is none. A workspace's channels are
  * followed while a panel holds a stream of them open: the host follows them
  * on the first stream and lets them go with the last, and every move it

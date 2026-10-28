@@ -19,11 +19,11 @@ export const GATEWAY_METHOD = {
   TASKS_RESYNC: "tasks.resync",
   /** One task made the active one and its saved document read, replacing whichever was active. */
   TASKS_OPEN: "tasks.open",
-  /** The developer left the open task: its call ends and no task is active. */
+  /** The developer left the open task, and no task is active. */
   TASKS_CLOSE: "tasks.close",
   /** A named task started on the service, on the repository it names where it names one, and made the active one. */
   TASKS_START: "tasks.start",
-  /** One task deleted on the service; deleting the open task ends its call and leaves no task active. */
+  /** One task deleted on the service; deleting the open task leaves no task active. */
   TASKS_DELETE: "tasks.delete",
   /** One task renamed on the service; the list and the open document take the name it answered without reading either again. */
   TASKS_RENAME: "tasks.rename",
@@ -434,197 +434,10 @@ export const GATEWAY_METHOD = {
   ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
-  VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
 } as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
-
-/**
- * The live voice session's vocabulary, declared beside the four methods and
- * the one event that speak it, so the host that answers them and the client
- * that sends them read one shape. The session itself belongs to the host; the
- * renderer is a WebRTC peer that hands over an SDP offer, reports what its
- * transport and microphone are doing, and asks for the end, and no credential
- * of any kind travels in these shapes.
- */
-
-/** Where the one live session stands, as `voiceLiveSession.changed` reports it. */
-export const LIVE_SESSION_PHASE = {
-  /** The provider created the session; its answer is on its way to the peer. */
-  CREATED: "created",
-  /** The provider announced the session live. */
-  STARTED: "started",
-  /**
-   * Luke said goodbye and is ending the call: the peer hangs up through its
-   * own hang-up once the goodbye has played, or keeps the call up if the
-   * developer speaks first. The host ends nothing on it.
-   */
-  ENDING: "ending",
-  /** The host asked for a graceful close and is waiting for it to be confirmed. */
-  CLOSING: "closing",
-  CLOSED: "closed",
-} as const;
-
-export type LiveSessionPhase = (typeof LIVE_SESSION_PHASE)[keyof typeof LIVE_SESSION_PHASE];
-
-const LIVE_SESSION_PHASES: readonly LiveSessionPhase[] = Object.values(LIVE_SESSION_PHASE);
-
-/** What a peer's transport reports of itself, after the peer connection's own states. */
-export const LIVE_TRANSPORT_STATE = {
-  CONNECTING: "connecting",
-  CONNECTED: "connected",
-  DISCONNECTED: "disconnected",
-  FAILED: "failed",
-  CLOSED: "closed",
-} as const;
-
-export type LiveTransportState = (typeof LIVE_TRANSPORT_STATE)[keyof typeof LIVE_TRANSPORT_STATE];
-
-const LIVE_TRANSPORT_STATES: readonly LiveTransportState[] = Object.values(LIVE_TRANSPORT_STATE);
-
-/**
- * Why the peer ended its side of a call, told with the closed transport it
- * reports, so the host's line about the end names the peer's own reason.
- */
-export const LIVE_PEER_END_REASON = {
-  /** The developer or the policy above the peer hung up. */
-  HUNG_UP: "hung_up",
-  /** The hang-up's `session.closed` did not arrive within its bound. */
-  CLOSE_TIMED_OUT: "close_timed_out",
-  /** `session.closed` reached the peer unasked. */
-  SERVICE_CLOSED: "service_closed",
-  /** The data channel closed under the peer. */
-  CHANNEL_CLOSED: "channel_closed",
-  /** The peer connection reported itself failed. */
-  TRANSPORT_FAILED: "transport_failed",
-  /** The created session never announced itself started. */
-  START_TIMED_OUT: "start_timed_out",
-} as const;
-
-export type LivePeerEndReason = (typeof LIVE_PEER_END_REASON)[keyof typeof LIVE_PEER_END_REASON];
-
-const LIVE_PEER_END_REASONS: readonly LivePeerEndReason[] = Object.values(LIVE_PEER_END_REASON);
-
-/**
- * The most characters an SDP document may carry. A WebRTC offer for one audio
- * track and one data channel is a few kilobytes; the bound refuses an offer
- * no peer of this build composes rather than carrying it to a provider.
- */
-export const LIVE_SDP_MAX_CHARACTERS = 65_536;
-
-/**
- * The representation a check carries so the node a model is shown says the
- * bound the check stands for. Effect's own length filters annotate themselves
- * with it, and a filter of this module's own that means the same bound says so
- * under the same id rather than emitting nothing.
- */
-const SCHEMA_CHECK_REPRESENTATION = {
-  MIN_LENGTH: "effect/schema/isMinLength",
-} as const;
-
-/** A trimmed text, refused when only whitespace remains. */
-const text: Schema.Codec<string, string> = Schema.Trim.check(Schema.isNonEmpty());
-
-/** A text admitted as written, refused when only whitespace remains, and bounded by `max`. */
-function keptText(max: number): Schema.Codec<string, string> {
-  return Schema.String.check(
-    Schema.makeFilter<string>((value) => value.trim().length > 0, {
-      representation: {
-        id: SCHEMA_CHECK_REPRESENTATION.MIN_LENGTH,
-        payload: { minLength: 1 },
-      },
-    }),
-    Schema.isMaxLength(max),
-  );
-}
-
-/**
- * Every answer below is a plain struct that names exactly its own keys. A key
- * a newer service added is ignored at the read rather than in the declaration,
- * because whether an unnamed key refuses a value is a parse option a caller
- * passes and no longer something a schema can say for itself: the readers of
- * these answers hand `readEither` `{ excess: EXCESS_KEYS.DROP }`, and what a
- * model is shown still says `additionalProperties: false`.
- */
-
-/** SDP is line-oriented and ends its lines with CRLF, so it travels verbatim: nothing is trimmed, collapsed, or cut. */
-const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
-
-/**
- * `voice.createLiveSession`: the peer's SDP offer, and the agent the call
- * speaks into with the task it is on, none for an agent with no task. The
- * host creates a call only into an agent the account reaches on eve, whose
- * own task is the one named.
- */
-export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
-  sdp: sdpSchema,
-  taskId: Schema.optionalKey(text),
-  agentId: text,
-});
-
-/**
- * What `voice.createLiveSession` answers: the session the provider named, the
- * SDP answer the peer sets, and, where the account holds a row for the
- * session, the store's own id for it, which is what a stored spoken row names
- * as its `voice_session_id`.
- */
-export const voiceCreateLiveSessionResultSchema = Schema.Struct({
-  sessionId: text,
-  sdpAnswer: sdpSchema,
-  voiceSessionId: Schema.optionalKey(text),
-});
-
-export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSchema.Type;
-
-/**
- * `voice.endLiveSession`: the peer's hang-up, naming the session it hangs up,
- * so an old call still closing behind a newer one ends nothing but its own.
- */
-export const voiceEndLiveSessionParamsSchema = Schema.Struct({ sessionId: text });
-
-export type VoiceEndLiveSessionParams = typeof voiceEndLiveSessionParamsSchema.Type;
-
-/**
- * `voice.reportLiveTransport`: the peer connection's state as the peer saw it
- * change, the session that peer was created for, and why the peer ended where
- * it did. The session is named for the same reason the hang-up names it: an
- * old peer's late close is about its own session and never the next one.
- */
-export const voiceReportLiveTransportParamsSchema = Schema.Struct({
-  sessionId: text,
-  state: Schema.Literals(LIVE_TRANSPORT_STATES),
-  reason: Schema.optionalKey(Schema.Literals(LIVE_PEER_END_REASONS)),
-});
-
-export type VoiceReportLiveTransportParams = typeof voiceReportLiveTransportParamsSchema.Type;
-
-/** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
-export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.Boolean });
-
-/**
- * What `voice.stopSpeaking` answers: whether a standing session was told to
- * stop. The stop key is the one ask that carries this; a muted microphone
- * says nothing about Luke's own output, so the method takes no parameters
- * and the mute carries none of its meaning.
- */
-export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
-
-/** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
-export const voiceLiveSessionChangedSchema = Schema.Struct({
-  sessionId: Schema.optionalKey(text),
-  phase: Schema.Literals(LIVE_SESSION_PHASES),
-  reason: Schema.optionalKey(text),
-});
-
-export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
 
 /** Every way a call can be refused: the dispatcher's own two, and the codes a handler fails with. */
 export const GATEWAY_ERROR = {
@@ -707,7 +520,6 @@ export const GATEWAY_EVENT = {
   ACCOUNT_CHANGED: "account.changed",
   /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
   ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
-  VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks, active task, and document, whole, whenever a read moved them. */
   TASKS_CHANGED: "tasks.changed",
