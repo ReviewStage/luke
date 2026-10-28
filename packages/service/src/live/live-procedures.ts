@@ -67,7 +67,8 @@
  * conversation the call will open rather than wait for it. It is woken by
  * Luke Sync (`agentTranscriptLive`), and a reader that names where it holds
  * the newest messages (`cursor`) is answered only those written or amended
- * past it (`liveCursorParts`).
+ * past it (`liveCursorParts`). Its answers are measured
+ * (`transcript-metrics.ts`).
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
@@ -136,6 +137,7 @@ import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -221,7 +223,9 @@ function readParts<Part extends string>(
  * (`read`) and answered with their own digests, and with the txids of the
  * writes that woke it, which is how the desktop confirms a write once the
  * read it follows shows it. At the hold's end it looks once more, and
- * answers that look, its digests and no rows, where nothing moved.
+ * answers that look, its digests and no rows, where nothing moved. Where a
+ * notification woke it, `onWoken` is handed the instant the first write was
+ * heard, once the rows are read.
  */
 const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string, R>(
   looked: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
@@ -229,11 +233,15 @@ const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends stri
   moved: (standing: ReadParts<Part>) => boolean,
   topics: readonly SyncTopic[],
   look: Duration.Duration,
+  onWoken?: (heardAt: number) => Effect.Effect<void>,
 ): Effect.fn.Return<ReadParts<Part>, HostedRefusal, R> {
   const woken = yield* heldUntil(looked, moved, topics, look, LIVE_POLL_HOLD.HOLD);
   if (Option.isSome(woken)) {
     // Note that the rows are read after the look that saw them move, so they are at least as new as it, and are answered with their own digests rather than its.
     const answer = yield* read;
+    if (onWoken !== undefined && Option.isSome(woken.value.heardAt)) {
+      yield* onWoken(woken.value.heardAt.value);
+    }
     return { ...answer, queries: wokenBy(answer.queries, woken.value.txids) };
   }
   const standing = yield* looked;
@@ -307,7 +315,8 @@ function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string |
  * a snapshot's are. Held until any of that moves (`cursorMoved`). A reader
  * that names no cursor, or a read with no cursor parts, is answered as a
  * snapshot is (`liveQueryParts`), which is how a released desktop reads it.
- * Unavailable where its statements can't be built or read.
+ * Unavailable where its statements can't be built or read. `onWoken` is
+ * handed to the hold (`heldParts`), which a snapshot's answer does not take.
  */
 export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
@@ -317,6 +326,7 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   params: LiveParams<Param>,
   asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
+  onWoken?: (heardAt: number) => Effect.Effect<void>,
 ) {
   const following = query.cursor;
   const cursor = asked[LIVE_POLL.CURSOR];
@@ -355,6 +365,7 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
     (standing) => cursorMoved(standing, after),
     query.topics(params),
     look,
+    onWoken,
   );
 });
 
@@ -495,12 +506,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         agentId: agent.id,
         readerId: context.userId,
       };
-      return yield* liveCursorParts(
+      const answer = yield* liveCursorParts(
         agentTranscriptLive,
         params,
         input,
         LIVE_POLL_HOLD.WATCHED_LOOK,
+        countAnswerWait,
       );
+      yield* countAnswerBytes(answer.queries);
+      return answer;
     }),
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

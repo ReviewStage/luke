@@ -60,7 +60,18 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
+import {
+  Cause,
+  DateTime,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Metric,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import {
   Database,
@@ -1356,6 +1367,19 @@ function holdJournal(context: WriterContext, turnId: string, row: MessageRow, di
 }
 
 /**
+ * What a journal's growth costs to write: each amendment that lands rewrites
+ * the turn's whole journal row, so its bytes climb with the turn's length.
+ * Sentry's metrics layer sends it as the histogram's `.sum`, `.count`,
+ * `.min`, and `.max`. It carries a size and never a row, an id, or a txid.
+ */
+const JOURNAL_METRIC = {
+  REWRITE_BYTES: Metric.histogram("luke.transcript.journal_rewrite_bytes", {
+    description: "Bytes of parts a landed journal amendment wrote, as the row's whole parts",
+    boundaries: Metric.exponentialBoundaries({ start: 1024, factor: 2, count: 12 }),
+  }),
+} as const;
+
+/**
  * Lands every journal the write amended, each in one statement that moves
  * the conversation's journal revision once: the parts as the last amendment
  * left them. A journal a later statement of the same write already wrote
@@ -1372,7 +1396,13 @@ function landJournals(context: WriterContext): Write<void> {
               conversationId: context.target.conversationId,
               parts: held.row.parts,
             }),
-            Effect.sync(() => holdJournal(context, turnId, held.row, false)),
+            Effect.andThen(
+              Metric.update(
+                JOURNAL_METRIC.REWRITE_BYTES,
+                Buffer.byteLength(JSON.stringify(held.row.parts)),
+              ),
+              Effect.sync(() => holdJournal(context, turnId, held.row, false)),
+            ),
           )
         : Effect.void,
     { discard: true },
