@@ -85,7 +85,7 @@ import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.j
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
-import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
+import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import type { MenuAction } from "./action-menu.js";
@@ -697,7 +697,6 @@ function PlanDocument({
   const now = useMinute();
   // The agent of this task a call is in progress into, whose tab wears the live mark.
   const calling = useCallingAgent();
-  const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -903,9 +902,6 @@ function PlanDocument({
       ? undefined
       : (name: string | undefined) => tasks.onDraftName(opened.id, name),
   );
-  const markRead = useSteadyDoor((unread: boolean) => {
-    if (opened !== undefined) reads.mark(opened, unread);
-  });
   // The chips send a change through the door the rows use, which says so
   // where the service did not keep it, and the chip goes on drawing the
   // task's own value, which is the one that stands.
@@ -917,8 +913,6 @@ function PlanDocument({
   const openedRepository = opened?.repository ?? null;
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
-  const unread = openedId === undefined ? false : reads.markedUnread(openedId);
-  const readMark = useMemo(() => ({ unread, onMark: markRead }), [unread, markRead]);
   const workspaceName = home?.name ?? "";
   const { macs: devices } = agents;
   const standing = useMemo(
@@ -1142,7 +1136,6 @@ function PlanDocument({
         onDraftName={draftNameDoor}
         rename={titleRename}
         looks={looks}
-        readMark={readMark}
         sectionLinks={sectionLinks}
         standing={standing}
         head={planAgents}
