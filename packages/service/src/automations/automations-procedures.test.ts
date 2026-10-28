@@ -70,13 +70,13 @@ import {
 } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
+import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
-} from "../agents/brain-host/eve-sessions.js";
-import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
+} from "../agents/eve-host/eve-sessions.js";
 import { requestUserId } from "../auth/bearer.js";
 import { TURN_FAILURE } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";

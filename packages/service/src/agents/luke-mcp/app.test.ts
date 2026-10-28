@@ -65,7 +65,6 @@ import {
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
@@ -82,6 +81,7 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
   LUKE_MCP_PATH,

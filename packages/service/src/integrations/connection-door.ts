@@ -62,7 +62,7 @@ import { DateTime, Duration, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
-import type { AdmittedConversation } from "../agents/brain-host/conversation.js";
+import type { AdmittedConversation } from "../agents/eve-host/conversation.js";
 import { heldProjection, turnServersOf } from "../agents/native-events/native-projection.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";

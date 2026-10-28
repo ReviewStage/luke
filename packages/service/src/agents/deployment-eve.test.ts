@@ -6,9 +6,9 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./brain-host/bounds.js";
-import { EVE_MOUNT, type EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { deploymentEve, deploymentEveForAccounts } from "./deployment-eve.js";
+import { EVE_HOST_HEADER, EVE_HOST_TURN } from "./eve-host/bounds.js";
+import { EVE_MOUNT, type EveTypedTurn } from "./eve-host/eve-sessions.js";
 
 /**
  * The one place a web function composes the deployment's caller at eve's
@@ -26,7 +26,7 @@ const EVE_DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const CRON_SECRET = "cron-secret-1";
 const CONVERSATION = "2b000000-0000-4000-8000-000000000001";
 const SESSION = "wrun_01M0000000000000000000001";
-const MESSAGE = { conversationId: CONVERSATION, turn: BRAIN_HOST_TURN.TYPED, message: "hello" };
+const MESSAGE = { conversationId: CONVERSATION, turn: EVE_HOST_TURN.TYPED, message: "hello" };
 
 /** A deployment's environment holding the secrets given and no key of its own. */
 function environment(secrets: {
@@ -62,7 +62,7 @@ const askedBy = (received: ReturnType<typeof eveOverHttp>["received"]) =>
   received.map(({ url, headers }) => ({
     url,
     authorization: headers.get("authorization"),
-    account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+    account: headers.get(EVE_HOST_HEADER.ACCOUNT),
   }));
 
 // A coding agent's session is answered by the runtime its conversation runs on, read from the store

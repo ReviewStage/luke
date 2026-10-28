@@ -12,10 +12,10 @@ import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { DateTime, Effect, Option, Redacted } from "effect";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { NO_GITHUB, openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
-import { EVE_MOUNT, type EveTypedTurn, eveSessions } from "./brain-host/eve-sessions.js";
 import { startFromOf } from "./coder-host/replay.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { EVE_MOUNT, type EveTypedTurn, eveSessions } from "./eve-host/eve-sessions.js";
 
 /**
  * Who controls a coding agent that runs on its starter's own GitHub token,

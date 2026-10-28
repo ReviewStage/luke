@@ -5,7 +5,7 @@ import type { EveMessageContext } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
 import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { actedForAccount, conversationIdOf, sessionAuthFor, turnKindOf } from "./auth.js";
-import { BRAIN_HOST_REFUSAL } from "./bounds.js";
+import { EVE_HOST_REFUSAL } from "./bounds.js";
 
 /**
  * Ownership enforced at the door, before eve accepts a request. eve's route
@@ -53,7 +53,7 @@ async function refusalMessageOf(response: Response): Promise<string> {
   const body = readEither(refusalBody, { excess: EXCESS_KEYS.DROP })(
     unparsedWire((await response.json()) as WireBoundaryInput),
   );
-  return Result.isSuccess(body) ? body.success.error : BRAIN_HOST_REFUSAL.NOT_OWNER;
+  return Result.isSuccess(body) ? body.success.error : EVE_HOST_REFUSAL.NOT_OWNER;
 }
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 
@@ -90,23 +90,23 @@ export function ownedAuth(
       return null;
     }
     const account = actedForAccount(caller);
-    if (account === undefined) throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_ACCOUNT });
+    if (account === undefined) throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NO_ACCOUNT });
     const sessionId = sessionIdOf(request);
     if (sessionId !== undefined && !(await ownership.reachesSession(account, sessionId))) {
-      throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
+      throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NOT_OWNER });
     }
     const auth = sessionAuthFor(caller, request);
     const conversationId = conversationIdOf(auth);
     const opening = opensSession(request);
     if (conversationId === undefined) {
-      if (opening) throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
+      if (opening) throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NO_CONVERSATION });
       return caller;
     }
     if (!(await ownership.reachesConversation(account, conversationId))) {
-      throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
+      throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NOT_OWNER });
     }
     if (opening && turnKindOf(auth) === undefined) {
-      throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_TURN_KIND });
+      throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NO_TURN_KIND });
     }
     return caller;
   };
@@ -120,7 +120,7 @@ export function ownedAuth(
 export function messageAuth(context: EveMessageContext): SessionAuthContext | null {
   const auth = sessionAuthFor(context.eve.caller, context.eve.request);
   if (auth !== null && turnKindOf(auth) === undefined) {
-    throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_TURN_KIND });
+    throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NO_TURN_KIND });
   }
   return auth;
 }

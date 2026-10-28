@@ -45,14 +45,14 @@ import {
   nativeRelayFake,
   relayEnvironment,
 } from "../../testing/native-relay-fake.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { NATIVE_RELAY_CALL, NATIVE_RELAY_PATH } from "./native-relay.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -159,7 +159,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code", 
 
 const messageTo = (agent: CodingAgent, text = "Expire invitations after a week.") => ({
   conversationId: agent.conversationId,
-  turn: BRAIN_HOST_TURN.TYPED,
+  turn: EVE_HOST_TURN.TYPED,
   message: text,
 });
 

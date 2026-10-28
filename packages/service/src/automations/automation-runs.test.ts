@@ -57,15 +57,15 @@ import { sentLineId } from "@luke/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "../agents/brain-host/eve-sessions.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
-import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+} from "../agents/eve-host/eve-sessions.js";
 import { closeInboxItem, postInboxThread } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";

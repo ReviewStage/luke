@@ -12,10 +12,10 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
 import { TODOS_SAVED } from "@luke/service/agents/coder-host/todos";
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import { EVE_HOST_HEADER, EVE_HOST_TURN } from "@luke/service/agents/eve-host/bounds";
 import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
@@ -156,8 +156,8 @@ export default defineEval({
           method: "POST",
           headers: {
             "content-type": "application/json",
-            [BRAIN_HOST_HEADER.CONVERSATION]: conversationId,
-            [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+            [EVE_HOST_HEADER.CONVERSATION]: conversationId,
+            [EVE_HOST_HEADER.TURN]: EVE_HOST_TURN.TYPED,
           },
           body: JSON.stringify({ message }),
         });

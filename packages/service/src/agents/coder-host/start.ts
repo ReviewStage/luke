@@ -92,13 +92,13 @@ import {
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
@@ -1161,7 +1161,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
-        turn: BRAIN_HOST_TURN.TYPED,
+        turn: EVE_HOST_TURN.TYPED,
         message: eveContent(handed, files, mentioned),
         lineId: line,
       })

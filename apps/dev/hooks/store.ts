@@ -12,12 +12,12 @@ import {
   withdrawsCredentialForSleep,
 } from "@luke/service/agents/agent-runtime/sandbox";
 import { sandboxIdle } from "@luke/service/agents/agent-runtime/sandbox-idle";
-import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
-import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
 import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
 import { describeFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
 import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-context";
+import { pinnedState } from "@luke/service/agents/eve-host/pinned-state";
+import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/eve-host/relay";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
@@ -35,7 +35,7 @@ import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
  * session's sandbox needs of the stream: every event eve records for a
  * session is read here, after eve has written it, and told to the writer as
  * the agent's own event through the relay the brain shares
- * (`packages/service/src/agents/brain-host/relay.ts`). A session the host does not admit
+ * (`packages/service/src/agents/eve-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
  * a sandbox tool, or a message received with files eve staged there, is
  * when the sandbox opened on its shallow checkout, a call that writes is
@@ -219,7 +219,7 @@ export default defineHook({
     async "*"(event, ctx) {
       // Pinned before anything awaits, because the admission's statement can
       // hand this fiber back in another session's context, and the relay's
-      // state and the prompt's hash are this session's (`packages/service/src/agents/brain-host/pinned-state.ts`).
+      // state and the prompt's hash are this session's (`packages/service/src/agents/eve-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);

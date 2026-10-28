@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Redacted, Stream } from "effect";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
+import { EVE_HOST_HEADER, EVE_HOST_TURN } from "./bounds.js";
 import {
   type AgentSessions,
   EVE_MOUNT,
@@ -91,7 +91,7 @@ function answering(status: number, body: EveAnswer) {
   return answeringEach([{ status, body }]);
 }
 
-const MESSAGE = { conversationId: CONVERSATION, turn: BRAIN_HOST_TURN.TYPED, message: "hello" };
+const MESSAGE = { conversationId: CONVERSATION, turn: EVE_HOST_TURN.TYPED, message: "hello" };
 
 it.effect(
   "opening posts the first message under the conversation and turn headers with the deployment's bearer and the account it acts for, and reads the session eve names",
@@ -113,10 +113,10 @@ it.effect(
       assert.equal(request.method, "POST");
       assert.equal(request.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
       assert.equal(request.headers.get("content-type"), "application/json");
-      assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
-      assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
-      assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
-      assert.equal(request.headers.get(BRAIN_HOST_HEADER.TIME_ZONE), null);
+      assert.equal(request.headers.get(EVE_HOST_HEADER.ACCOUNT), ACCOUNT);
+      assert.equal(request.headers.get(EVE_HOST_HEADER.CONVERSATION), CONVERSATION);
+      assert.equal(request.headers.get(EVE_HOST_HEADER.TURN), EVE_HOST_TURN.TYPED);
+      assert.equal(request.headers.get(EVE_HOST_HEADER.TIME_ZONE), null);
       assert.deepEqual(request.body, { message: "hello", capabilities: { requestInput: false } });
     }),
 );
@@ -134,7 +134,7 @@ it.effect(
       yield* Effect.flatMap(sessions, (eve) => eve.open(zoned));
       yield* Effect.flatMap(sessions, (eve) => eve.send(SESSION, zoned));
       assert.deepEqual(
-        seen.map((request) => request.headers.get(BRAIN_HOST_HEADER.TIME_ZONE)),
+        seen.map((request) => request.headers.get(EVE_HOST_HEADER.TIME_ZONE)),
         ["Asia/Tokyo", "Asia/Tokyo"],
       );
     }),
@@ -160,7 +160,7 @@ it.effect(
       );
       for (const request of seen) {
         assert.equal(request.headers.get("authorization"), "Bearer developer-token-1");
-        assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), null);
+        assert.equal(request.headers.get(EVE_HOST_HEADER.ACCOUNT), null);
       }
     }),
 );

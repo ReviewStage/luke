@@ -28,9 +28,9 @@ import {
   integrationConnectOf,
   integrationConnectOver,
 } from "../../testing/integration-connect.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_PRINCIPAL_TYPE } from "../brain-host/bounds.js";
 import { type CoderHost, coderHost } from "../coder-host/host.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { EVE_HOST_ATTRIBUTE, EVE_HOST_PRINCIPAL_TYPE } from "../eve-host/bounds.js";
 import { CONNECTION_POLICY } from "./role.js";
 import { type ServerStanding, turnServers } from "./servers.js";
 
@@ -77,9 +77,9 @@ function mintSession(): string {
 function typedSeat(userId: string, conversationId: string): SessionAuth {
   const principal = {
     principalId: userId,
-    principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+    principalType: EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
     authenticator: "test",
-    attributes: { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId },
+    attributes: { [EVE_HOST_ATTRIBUTE.CONVERSATION]: conversationId },
   };
   return { current: principal, initiator: principal };
 }

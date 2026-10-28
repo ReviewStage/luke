@@ -5,8 +5,8 @@ import {
   readAutomation,
 } from "@luke/database/models/automation-store";
 import { Effect, Option } from "effect";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,

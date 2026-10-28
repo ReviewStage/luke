@@ -7,14 +7,14 @@ import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Ref, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { type HostedRefusal, hostedCarriesBearer } from "../http/http-effect.js";
+import { type EveReach, eveFor } from "./coder-host/stop.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   type EveMount,
-} from "./brain-host/eve-sessions.js";
-import { type EveReach, eveFor } from "./coder-host/stop.js";
+} from "./eve-host/eve-sessions.js";
 
 /**
  * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's or an agent's at its delete, an account's at its deletion.
@@ -30,7 +30,7 @@ import { type EveReach, eveFor } from "./coder-host/stop.js";
  * the bearer the request carried, or, for a browser's session cookie, as the
  * deployment acting for the account the cookie named, which eve's door
  * admits for a retire on a session that account reaches
- * (`brain-host/auth.ts`).
+ * (`eve-host/auth.ts`).
  *
  * A retire is a courtesy the delete does not wait on: an eve that cannot be
  * reached or does not confirm is logged by its outcome and status, and the

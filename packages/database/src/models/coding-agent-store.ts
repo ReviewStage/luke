@@ -128,8 +128,8 @@ import type { ConversationTarget } from "./writer.js";
  * the pair under the child and the tabs read the worker's transcript under
  * the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
- * which is kept on the delegation for that. Note that nothing here reaches the brain host's modules,
- * because the routes bundle this module and the brain host's modules reach
+ * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
+ * because the routes bundle this module and the eve host's modules reach
  * eve, which runs in a service of its own (`function-bundles.ts`). The
  * title is written two ways: filled where none stands, which is how the
  * one generated as the agent starts lands without ever covering a name the

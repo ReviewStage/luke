@@ -1,5 +1,5 @@
 import type { StoredUIMessage } from "../../core.js";
-import { BRAIN_HOST } from "./bounds.js";
+import { EVE_HOST } from "./bounds.js";
 import { storedMessageLine } from "./context.js";
 
 /**
@@ -24,11 +24,11 @@ export function rotationSeedText(
 ): string | undefined {
   if (messages.length === 0) return undefined;
   const lines = messages.map((message) =>
-    storedMessageLine(message, BRAIN_HOST.RECENT_MESSAGE_CHARS, speakers?.get(message)),
+    storedMessageLine(message, EVE_HOST.RECENT_MESSAGE_CHARS, speakers?.get(message)),
   );
   let body = lines.join("\n");
-  if (body.length > BRAIN_HOST.SEED_CHARS) {
-    body = `…${body.slice(body.length - BRAIN_HOST.SEED_CHARS)}`;
+  if (body.length > EVE_HOST.SEED_CHARS) {
+    body = `…${body.slice(body.length - EVE_HOST.SEED_CHARS)}`;
   }
   return `${SEED_MARKER} ${new Date(now).toISOString()}\n${body}`;
 }

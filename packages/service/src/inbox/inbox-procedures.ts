@@ -43,7 +43,6 @@ import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@lu
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { ownKeyOf } from "../agents/coder-host/account-keys.js";
 import {
   accountInboxPast,
@@ -55,6 +54,7 @@ import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";

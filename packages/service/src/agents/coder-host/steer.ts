@@ -48,14 +48,14 @@ import {
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
   type EveUnreachable,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
@@ -443,7 +443,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   let ended = false;
   const message = {
     conversationId: agent.conversationId,
-    turn: BRAIN_HOST_TURN.TYPED,
+    turn: EVE_HOST_TURN.TYPED,
     message: eveContent(line.text, attachments, mentioned, label),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),

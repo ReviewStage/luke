@@ -34,10 +34,7 @@ import {
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
-import {
-  type AgentSessions,
-  EVE_RESET_OUTCOME,
-} from "@luke/service/agents/brain-host/eve-sessions";
+import { type AgentSessions, EVE_RESET_OUTCOME } from "@luke/service/agents/eve-host/eve-sessions";
 import { messagesProcedures } from "@luke/service/agents/messages-procedures";
 import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import {

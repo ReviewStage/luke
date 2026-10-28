@@ -56,13 +56,13 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../../environme
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
 import { AgentSandboxImage } from "../agent-sandbox-image.js";
+import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
-} from "../brain-host/eve-sessions.js";
-import { claimedDeviceAgentLine } from "../device-agent.js";
+} from "../eve-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
