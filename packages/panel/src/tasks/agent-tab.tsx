@@ -15,7 +15,7 @@ import {
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
-import { inboxLineWords } from "@luke/features/inbox-wire";
+import { threadLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
@@ -63,7 +63,7 @@ import {
   callPlaces,
   type TranscriptCallRow,
 } from "@luke/voice/transcript-model";
-import { MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
@@ -148,6 +148,7 @@ import {
   endLineParts,
   endLineReason,
   finishedReplyLead,
+  githubLineOf,
   isTodos,
   lineSender,
   macOwnerOf,
@@ -166,6 +167,7 @@ import {
   type TurnRead,
   type TurnStretch,
   teammateStarter,
+  threadLineOf,
   transcriptRowKey,
   turnStretches,
   unreadOpeningLine,
@@ -180,6 +182,7 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
+import { GitHubLineCard, ThreadLineHead } from "./line-cards.js";
 import { linkChip } from "./mention-chip.js";
 import {
   agentMessagePlace,
@@ -485,6 +488,38 @@ function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNod
             </Text>
           )
         }
+        at={message.sentAt}
+        actions={<CopyMessageAction words={words} copyable={words !== ""} messageId={message.id} />}
+      />
+    </Message>
+  );
+}
+
+/**
+ * What GitHub said on the agent's pull request, at the column's left as
+ * another's line stands: its card (`GitHubLineCard`) in a bubble's place, then who said it by their
+ * login, when it arrived, and Copy, which copies their words.
+ */
+function GitHubLineRow({
+  message,
+  line,
+  sender,
+}: {
+  message: CodingAgentMessage;
+  line: GitHubLineMetadata;
+  sender: ReactNode;
+}): React.JSX.Element {
+  const words = line.words ?? "";
+  return (
+    <Message
+      from={MESSAGE_ROLE.ASSISTANT}
+      className={RECEIVED_MESSAGE_CLASS}
+      data-message-id={message.id}
+    >
+      <GitHubLineCard line={line} />
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
+        sender={sender}
         at={message.sentAt}
         actions={<CopyMessageAction words={words} copyable={words !== ""} messageId={message.id} />}
       />
@@ -1429,10 +1464,14 @@ export function AgentMessage({
   // A line another agent sent is that agent's message, never the developer's bubble.
   if (agentMessageOf(message) !== undefined) return <AgentMessageRow message={message} />;
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
+  // What GitHub said on the pull request is drawn as its card, never as the prompt the agent read.
+  const github = githubLineOf(message);
+  if (github !== undefined) return <GitHubLineRow message={message} line={github} sender={named} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
-    // An inbox answer or thread message reads back without the item's key, which is the agent's.
-    const shown = inboxLineWords(words);
+    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent.
+    const thread = threadLineOf(message);
+    const shown = thread === undefined ? words : threadLineWords(words, thread.event);
     // A line open for writing again is written where it stands.
     if (drawnEditor !== undefined) {
       return (
@@ -1457,8 +1496,9 @@ export function AgentMessage({
         data-message-id={message.id}
         data-undelivered={marked ? "" : undefined}
       >
+        {thread === undefined ? null : <ThreadLineHead line={thread} />}
         <MessageFileChips message={message} sending={sending} />
-        {words === "" ? null : (
+        {shown === "" ? null : (
           <MessageContent>
             <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
               <SentWords text={shown} />
@@ -1471,7 +1511,7 @@ export function AgentMessage({
           sender={named}
           at={sentAt}
           actions={
-            words === "" ? null : (
+            shown === "" ? null : (
               <CopyMessageAction words={shown} messageId={message.id} rewind={REWIND_ACTION.EDIT} />
             )
           }

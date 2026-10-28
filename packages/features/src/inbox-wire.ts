@@ -1,4 +1,10 @@
-import { isWireBoolean, isWireNumber, isWireString } from "@luke/wire";
+import {
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  THREAD_LINE_EVENT,
+  type ThreadLineMetadata,
+} from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -1137,31 +1143,43 @@ export function inboxThreadMessage(item: Pick<InboxItem, "key" | "title">, text:
   return text.trim() === "" ? header : `${header}\n\n${text.trim()}`;
 }
 
-/** How an answer, a close, and a thread message opened before they were said as a thread's, which a transcript written then still holds, each by the lead it reads back as now. */
-const EARLIER_LEADS: Readonly<Record<string, string>> = {
-  "Inbox answer": INBOX_ANSWER_LEAD,
-  "Inbox closed": INBOX_CLOSE_LEAD,
-  "Inbox message": INBOX_MESSAGE_LEAD,
-};
+/** How a member's thread line opens, by what they did on the thread, as the agent reads it and the transcript heads it. */
+export const THREAD_LINE_LEAD = {
+  [THREAD_LINE_EVENT.MESSAGE]: INBOX_MESSAGE_LEAD,
+  [THREAD_LINE_EVENT.ANSWER]: INBOX_ANSWER_LEAD,
+  [THREAD_LINE_EVENT.CLOSE]: INBOX_CLOSE_LEAD,
+} as const;
 
-/** An answer's, a close's, or a thread message's first line, as `inboxAnswerMessage`, `inboxClosedMessage`, and `inboxThreadMessage` write it, or as they wrote it before. */
-const INBOX_LINE_HEAD = new RegExp(
-  `^(${[INBOX_ANSWER_LEAD, INBOX_CLOSE_LEAD, INBOX_MESSAGE_LEAD, ...Object.keys(EARLIER_LEADS)].join("|")}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
-  "u",
-);
+/** Where the item's key opens on an answer's first line, past its quoted title. */
+const KEY_OPENS = '" (key ';
+
+/** Where the item's key closes, which no key spells. */
+const KEY_CLOSES = "):";
+
+/** How a line's paragraphs are set apart. */
+const PARAGRAPH = "\n\n";
 
 /**
- * An inbox answer or thread message as the developer reads it back in the
- * agent's transcript: its first line without the item's key, which names the
- * item to the agent and says nothing the title beside it does not to a
- * person, and led as a thread's even where it was written as the Inbox's.
- * Any other line is answered as it is.
+ * A member's thread line as a person reads it under its head: what they
+ * wrote, without the first line that names the item to the agent by its
+ * title and key (`inboxThreadMessage`, `inboxAnswerMessage`), but for what
+ * an answer's first line says they did after the key ("Declined."); nothing
+ * of a close, which says only that it closed. Note that the line is read by
+ * its metadata's word that it is a thread's, so its first line is always
+ * that header: a message's is the header alone, dropped whole, and an
+ * answer's key is found by its last opening on that line, since a title is
+ * free text that may spell one and the words after the key never do.
  */
-export function inboxLineWords(text: string): string {
-  return text.replace(
-    INBOX_LINE_HEAD,
-    (_line, lead: string, title: string) => `${EARLIER_LEADS[lead] ?? lead} on ${title}:`,
-  );
+export function threadLineWords(text: string, event: ThreadLineMetadata["event"]): string {
+  if (event === THREAD_LINE_EVENT.CLOSE) return "";
+  const cut = text.indexOf(PARAGRAPH);
+  const head = cut === -1 ? text : text.slice(0, cut);
+  const rest = cut === -1 ? "" : text.slice(cut + PARAGRAPH.length);
+  if (event === THREAD_LINE_EVENT.MESSAGE) return rest.trim();
+  const key = head.lastIndexOf(KEY_OPENS);
+  const close = key === -1 ? -1 : head.indexOf(KEY_CLOSES, key + KEY_OPENS.length);
+  const did = close === -1 ? head : head.slice(close + KEY_CLOSES.length).trim();
+  return [did, rest.trim()].filter((part) => part !== "").join(PARAGRAPH);
 }
 
 /** A field's value as words: a number as it prints, yes or no for a boolean. */
