@@ -489,6 +489,19 @@ export const deviceAgentDoneAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
 });
 
+/**
+ * That the service took a beat, and the launches it holds the device to:
+ * the ids of its launch lines still unsettled with no stop queued after
+ * them, claimed or not, read after the beat was written. The device stops a
+ * runner whose launch it does not name and settles a named launch it runs
+ * nothing for; a service from before the field names none, and a build from
+ * before it ignores it.
+ */
+export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
+  done: EffectSchema.Literal(true),
+  openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+});
+
 /** The lines waiting for this Mac, in their order, none where none came while the read was held; nothing claimed. */
 export const deviceAgentLinesAnswerSchema = EffectSchema.Struct({
   lines: EffectSchema.Array(deviceAgentLineSchema),

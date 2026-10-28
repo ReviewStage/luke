@@ -24,6 +24,8 @@ export interface Script {
   readonly exitCode?: number;
   /** How long it runs before it exits on its own. */
   readonly after?: Duration.Input;
+  /** What it runs until, in place of `after`, as a process that ends on a signal sent another way. */
+  readonly until?: Effect.Effect<void>;
 }
 
 /** One process as the operating system saw it: what it was handed, and how it ended. */
@@ -86,7 +88,7 @@ export function scriptedSpawner(
       if (script.exitCode !== undefined) {
         const code = ChildProcessSpawner.ExitCode(script.exitCode);
         yield* Effect.forkScoped(
-          Effect.sleep(script.after ?? Duration.zero).pipe(
+          (script.until ?? Effect.sleep(script.after ?? Duration.zero)).pipe(
             Effect.andThen(Effect.sync(() => (record.ended = "exited"))),
             Effect.andThen(Deferred.succeed(exit, code)),
           ),

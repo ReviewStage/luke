@@ -41,6 +41,7 @@ import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
+  openDeviceAgentLaunches,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollHost, enrollOwnDevice, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
@@ -178,9 +179,14 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
-      return yield* keptOrNotFound(
+      yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(beatDevice(context.userId, input.deviceId, input.signedIn)),
       );
+      // Note that the launches are read after the beat is written, so a claim the device finished before it sent the beat is among them.
+      const openLaunches = yield* hostedStoreOrUnavailable(
+        openDeviceAgentLaunches(context.userId, input.deviceId),
+      );
+      return { ...DONE, openLaunches };
     }),
     lines: deviceAgents.lines.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);

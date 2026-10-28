@@ -29,6 +29,7 @@ export {
 } from "./coding-agent-client.js";
 export {
   DEVICE_AGENT_NOT_CLAIMED,
+  type DeviceAgentBeat,
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
   enrollHost,

@@ -598,6 +598,36 @@ const deleteExpiredLines = SqlSchema.void({
     ),
 });
 
+const findOpenLaunches = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, deviceId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: deviceAgentLine.id })
+        .from(deviceAgentLine)
+        .where(
+          and(
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNull(deviceAgentLine.settledAt),
+            sql`not exists (${db
+              .select({ one: sql`1` })
+              .from(stopLine)
+              .where(
+                and(
+                  eq(stopLine.agentId, deviceAgentLine.agentId),
+                  eq(stopLine.kind, DEVICE_AGENT_LINE_KIND.STOP),
+                  gt(stopLine.seq, deviceAgentLine.seq),
+                ),
+              )})`,
+          ),
+        )
+        .orderBy(asc(deviceAgentLine.seq)),
+    ),
+});
+
 /** A launch line whose device's lease lapsed, with the device's name for the words its turn ends with. */
 const LapsedLaunchSchema = Schema.Struct({
   id: Schema.String,
@@ -817,6 +847,19 @@ export function deviceAgentLineSettlement(
   id: string,
 ): DeviceAgentEffect<Option.Option<{ readonly exitCode: number | null }>> {
   return findLineSettled({ userId, id });
+}
+
+/**
+ * The ids of the account's launch lines to the device given that are still
+ * open, claimed or not, with no stop queued after them, oldest first: the
+ * runs the service holds the device to, which its beat answers so it stops
+ * what it holds no longer and settles what it runs nothing for.
+ */
+export function openDeviceAgentLaunches(
+  userId: string,
+  deviceId: string,
+): DeviceAgentEffect<readonly string[]> {
+  return Effect.map(findOpenLaunches({ userId, deviceId }), (rows) => rows.map((row) => row.id));
 }
 
 /**
