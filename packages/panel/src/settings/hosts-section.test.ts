@@ -83,9 +83,9 @@ test("Add hosts shows the token in its command and sends the service only the to
   await settle();
 
   const add = [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Add Linux servers",
+    (each) => each.textContent === "Add hosts",
   );
-  assert.ok(add !== undefined, "Add Linux servers is drawn");
+  assert.ok(add !== undefined, "Add hosts is drawn");
   await act(async () => add.click());
   await settle();
 
@@ -156,7 +156,7 @@ it.effect(
     }),
 );
 
-/** Machines drawn in the desktop over the hosts given, with This Mac standing as given; how often Retry or Turn on again was asked. */
+/** Hosts drawn in the desktop over the hosts given, with This Mac standing as given; how often Retry or Turn on again was asked. */
 async function machinesWithThisMac(
   hosts: readonly Host[],
   standing: ThisMacHostStanding,

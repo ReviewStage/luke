@@ -63,7 +63,6 @@ import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
-import { HostsSection } from "./hosts-section.js";
 import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
@@ -507,7 +506,6 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
-      <HostsSection signedIn={signedIn} />
     </>
   );
 }

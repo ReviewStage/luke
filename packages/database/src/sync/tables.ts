@@ -37,7 +37,7 @@ import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { runnerLine } from "../schemas/runner-line.js";
-import { asks, conversations, messages, turns } from "../schemas/storage.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
@@ -430,17 +430,6 @@ export const turnsSync = defineSyncTable(turns, {
 });
 
 /**
- * An ask, on its conversation's topic. Note that its dispatch claim is
- * ignored, because every hand-over writes and clears it, and so are the
- * voice session it was delegated in, its place in that session, and how far
- * its turn was told to the voice, which no view reads.
- */
-export const asksSync = defineSyncTable(asks, {
-  topics: [{ kind: TOPIC.CONVERSATION, column: asks.conversationId }],
-  ignore: [asks.dispatchClaim, asks.voiceSessionId, asks.askRevision, asks.toldSeq, asks.endToldAt],
-});
-
-/**
  * A worker's delegation as it was recorded, on its parent conversation's
  * topic, looked up through the worker's own conversation, so the agent's
  * transcript hears the call that opened the worker.
@@ -492,6 +481,5 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   messagesSync,
   conversationsSync,
   turnsSync,
-  asksSync,
   codingAgentDelegationSync,
 ];

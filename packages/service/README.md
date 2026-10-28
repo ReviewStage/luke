@@ -2023,9 +2023,9 @@ a page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`).
 `src/agents/public-research.test.ts` holds it against scripted HTTP and DNS.
 ## Hosted conversation store
 
-The `conversations`, `messages`, `turns`, and `asks` tables hold the agents'
+The `conversations`, `messages`, and `turns` tables hold the agents'
 conversations per account: an agent's conversation and its workers',
-their messages, the turns that ran over them, and the asks handed to them.
+their messages, and the turns that ran over them.
 Every row is keyed by
 `user_id` and cascades with the user row, so
 the account `delete` procedure (`src/accounts/account-procedures.ts`)
@@ -2118,9 +2118,7 @@ the backstop for a writer outside the lock and nothing the writer retries.
 
 Calls an earlier version took left their spoken lines as rows of the
 conversation on the voice channel, which a transcript still reads as ordinary
-lines. The call records beside them, `voice_sessions` and
-`voice_transcript_segments`, are no longer declared, and nothing reads or
-writes them until a migration drops them.
+lines.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` and CI's test jobs need no service. The `postgres` CI job

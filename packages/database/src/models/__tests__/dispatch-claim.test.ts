@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { ASK_ORIGIN } from "@luke/features";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Deferred, Duration, Effect, Fiber, Option, Ref, Result } from "effect";
@@ -9,10 +8,9 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { asks, conversations } from "../../schemas/storage.js";
+import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { ASK_DISPATCH_REFUSAL, askRecord } from "../asks.js";
 import { REWIND_REFUSAL, readRewoundRevision, rewindConversation } from "../conversation-rewind.js";
 import { DISPATCH_CLAIM } from "../dispatch-claim.js";
 import { readMessageByClientId, sentLineStands } from "../message-reads.js";
@@ -216,75 +214,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   );
 
   it.effect(
-    "an ask whose hand-over's holder died is not handed over again once its claim expired, and the conversation's next ask is",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* openAgentConversation;
-        const record = askRecord();
-        const db = yield* Database;
-        const handed = yield* Ref.make(0);
-        const dispatch = () =>
-          Effect.as(
-            Ref.update(handed, (n) => n + 1),
-            { sessionId: "session-1", deliveryId: "dl_1" },
-          );
-        const ask = (clientId: string) =>
-          record.record({ ...target, clientId, origin: ASK_ORIGIN.TYPED, createdAt: new Date(0) });
-        const lost = yield* ask("lost");
-        const claim = randomUUID();
-        yield* claimLeftBy(target, claim);
-        yield* db.update(asks).set({ dispatchClaim: claim }).where(eq(asks.id, lost.id));
-
-        yield* TestClock.adjust(Duration.sum(DISPATCH_CLAIM.EXPIRY, Duration.seconds(1)));
-        const retried = yield* record.dispatchOnce(target, lost.id, dispatch);
-        const next = yield* ask("next");
-        const dispatched = yield* record.dispatchOnce(target, next.id, dispatch);
-
-        assert.ok(typeof retried !== "string");
-        assert.equal(retried.sessionId, undefined);
-        assert.ok(typeof dispatched !== "string");
-        assert.equal(dispatched.sessionId, "session-1");
-        assert.equal(yield* Ref.get(handed), 1);
-      }),
-  );
-
-  it.effect(
-    "an ask meeting another hand-over's claim waits no longer than a send does, leaving its own deadline to the hand-over, and is answered busy, the runtime told nothing",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* openAgentConversation;
-        const record = askRecord();
-        const handed = yield* Ref.make(0);
-        const ask = yield* record.record({
-          ...target,
-          clientId: "busy",
-          origin: ASK_ORIGIN.TYPED,
-          createdAt: new Date(0),
-        });
-        yield* claimLeftBy(target, randomUUID());
-        const askedAt = yield* Clock.currentTimeMillis;
-
-        const waiting = yield* Effect.forkChild(
-          record.dispatchOnce(target, ask.id, () =>
-            Effect.as(
-              Ref.update(handed, (n) => n + 1),
-              { sessionId: "session-1" },
-            ),
-          ),
-        );
-        const answered = yield* joinedAsTimePasses(waiting);
-        const waitedMs = (yield* Clock.currentTimeMillis) - askedAt;
-
-        assert.equal(answered, ASK_DISPATCH_REFUSAL.BUSY);
-        assert.ok(
-          waitedMs < Duration.toMillis(Duration.sum(DISPATCH_CLAIM.WAIT, Duration.seconds(2))),
-          `the ask waited ${waitedMs} ms`,
-        );
-        assert.equal(yield* Ref.get(handed), 0);
-      }),
-  );
-
-  it.effect(
     "sends waiting on a hand-over reach the runtime in the order they arrived, whichever of them asks again first once it ends",
     () =>
       Effect.gen(function* () {
@@ -445,67 +374,23 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
       }),
   );
 
-  it.effect(
-    "a refused ask whose record fails once is recorded on a second try, so a retry hands it over again",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* openAgentConversation;
-        const record = askRecord();
-        const answers = yield* Ref.make<readonly ("refused" | "taken")[]>(["refused", "taken"]);
-        const handed = yield* Ref.make(0);
-        const dispatch = () =>
-          Effect.gen(function* () {
-            yield* Ref.update(handed, (n) => n + 1);
-            const [answer, ...rest] = yield* Ref.get(answers);
-            yield* Ref.set(answers, rest);
-            return answer === "taken" ? { sessionId: "session-1", deliveryId: "dl_1" } : undefined;
-          });
-        const ask = yield* record.record({
-          ...target,
-          clientId: "ask",
-          origin: ASK_ORIGIN.TYPED,
-          createdAt: new Date(0),
-        });
-        yield* releaseFailsOnce(target);
-
-        yield* joinedAsTimePasses(
-          yield* Effect.forkChild(record.dispatchOnce(target, ask.id, dispatch)),
-        );
-        const retried = yield* record.dispatchOnce(target, ask.id, dispatch);
-
-        assert.ok(typeof retried !== "string");
-        assert.equal(retried.sessionId, "session-1");
-        assert.equal(yield* Ref.get(handed), 2);
-      }),
-  );
-
-  it.effect("no transaction stands open while a line or an ask is handed over", () =>
+  it.effect("no transaction stands open while a line is handed over", () =>
     Effect.gen(function* () {
       const target = yield* openAgentConversation;
       const writer = yield* storeWriter({ tools: {} });
-      const record = askRecord();
       const services = yield* Effect.context<DatabaseServices>();
       const seen = yield* Ref.make<readonly boolean[]>([]);
       const looked = Effect.tap(Effect.orDie(Effect.provide(inNoTransaction, services)), (alone) =>
         Ref.update(seen, (all) => [...all, alone]),
       );
-      const ask = yield* record.record({
-        ...target,
-        clientId: "ask",
-        origin: ASK_ORIGIN.TYPED,
-        createdAt: new Date(0),
-      });
 
       yield* writer.writeAwaitingLine(
         target,
         { text: "Fix the tile.", clientKey: "fix", sender: SENDER },
         Effect.as(looked, true),
       );
-      yield* record.dispatchOnce(target, ask.id, () =>
-        Effect.as(looked, { sessionId: "session-1", deliveryId: "dl_1" }),
-      );
 
-      assert.deepEqual(yield* Ref.get(seen), [true, true]);
+      assert.deepEqual(yield* Ref.get(seen), [true]);
     }),
   );
 

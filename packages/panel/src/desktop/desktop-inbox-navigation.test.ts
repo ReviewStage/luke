@@ -1357,7 +1357,7 @@ test("a channel chosen while the workspace's channels could not be read says so 
   assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
 });
 
-test("ticking the box's checkbox sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {
+test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   const moves: unknown[] = [];
@@ -1367,8 +1367,7 @@ test("ticking the box's checkbox sends its words as a new thread to the item's a
       if (write.kind === ACT_KIND.CHANNELS_MOVE) moves.push(write.payload);
     },
   });
-  // Note that the item asks nothing, since a question's controls standing in the box leave no checkbox under it.
-  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
+  world.inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: APP_CHANNEL.id }]]]);
   const starts = heldStarts();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -1381,7 +1380,10 @@ test("ticking the box's checkbox sends its words as a new thread to the item's a
     "Send as a new thread to Alerts in app",
     "it names the item's agent and channel",
   );
+  const options = () => itemPane(page).querySelectorAll('[role="radio"]').length;
+  assert.equal(options(), 2, "the question's options stand over the box");
   act(() => box().click());
+  assert.equal(options(), 0, "ticked, the box sets the question's options aside");
   const pane = itemPane(page);
   typeInComposer(pane, "Draft the annual plan's line too.");
   const send =

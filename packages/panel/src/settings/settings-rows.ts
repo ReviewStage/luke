@@ -33,6 +33,7 @@ const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.ACCOUNT]: null,
   [SETTINGS_VIEW.WORKSPACE]: null,
   [SETTINGS_VIEW.CODING_AGENTS]: null,
+  [SETTINGS_VIEW.HOSTS]: null,
   [SETTINGS_VIEW.INTEGRATIONS]: null,
   [SETTINGS_VIEW.SKILLS]: null,
   [SETTINGS_VIEW.MEMORY]: null,
@@ -50,6 +51,7 @@ const PAGE_CAPABILITY = {
  */
 const PAGE_EXPERIMENT: Partial<Record<SettingsView, Experiment>> = {
   [SETTINGS_VIEW.MEMORY]: EXPERIMENT.MEMORY,
+  [SETTINGS_VIEW.HOSTS]: EXPERIMENT.LOCAL_AGENTS,
 };
 
 /** Whether a page stands for the account's experiments: every page but one an experiment the account has off holds. */

@@ -34,7 +34,7 @@ test("notes past the first three fold behind the foot, hidden until found, and a
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(EventCard, { head: "@octocat reviewed #42", notes: NOTES })));
+  act(() => root.render(createElement(EventCard, { lead: "@octocat reviewed #42", notes: NOTES })));
   const foot = [...document.querySelectorAll("button")].find((button) =>
     /Show 2 more/u.test(button.textContent ?? ""),
   );

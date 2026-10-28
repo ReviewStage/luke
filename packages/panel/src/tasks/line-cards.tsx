@@ -1,15 +1,6 @@
 import { THREAD_LINE_LEAD } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import {
-  EventCard,
-  type EventCardNote,
-  TEXT_ELEMENT,
-  TEXT_LINK_LOOK,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-  TextLink,
-} from "@luke/ui";
+import { EventCard, type EventCardNote, SubjectLine, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
 import type { GitHubLineMetadata, ThreadLineMetadata } from "@luke/wire";
 import type { ReactNode } from "react";
 import { githubLineHead } from "./coding-agent-model.js";
@@ -75,15 +66,9 @@ export function ThreadLineHead({ line }: { line: ThreadLineMetadata }): React.JS
   const href = threadLink(line.item_id, doors);
   const chip = href === undefined ? undefined : linkChip(href, href, doors);
   return (
-    <Text
-      as={TEXT_ELEMENT.DIV}
-      variant={TEXT_VARIANT.CAPTION}
-      tone={TEXT_TONE.MUTED}
-      data-thread-line=""
-    >
-      {THREAD_LINE_LEAD[line.event]}
-      {chip === undefined ? null : <> {chip}</>}
-    </Text>
+    <SubjectLine lead={THREAD_LINE_LEAD[line.event]} data-thread-line="">
+      {chip}
+    </SubjectLine>
   );
 }
 
@@ -108,11 +93,8 @@ export function GitHubLineCard({ line }: { line: GitHubLineMetadata }): React.JS
   return (
     <EventCard
       data-github-line={line.event}
-      head={
-        <>
-          {head.event} <CardLink href={line.url} label={head.target} doors={doors} />
-        </>
-      }
+      lead={head.event}
+      subject={<CardLink href={line.url} label={head.target} doors={doors} />}
       notes={(line.comments ?? []).map(commentNote)}
     >
       {words === "" ? null : <TranscriptWords text={words} />}
