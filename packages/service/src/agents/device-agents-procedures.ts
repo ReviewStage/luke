@@ -32,7 +32,8 @@
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
  * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
  * `GET /api/device-agents/requests`), a claim takes one row by its id, a
- * launch line's secrets with it, and a settle or an answer keeps what the
+ * launch line's secrets with it, a line's claim asked again under the
+ * token it first carried answers that line again, and a settle or an answer keeps what the
  * Mac said of a row it claimed.
  */
 
@@ -191,7 +192,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     claimLine: deviceAgents.claimLine.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
       const claimed = yield* hostedStoreOrUnavailable(
-        claimedDeviceAgentLine(context.userId, input.deviceId, input.id),
+        claimedDeviceAgentLine(context.userId, input.deviceId, input.id, input.claimToken),
       );
       if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return claimed.value;

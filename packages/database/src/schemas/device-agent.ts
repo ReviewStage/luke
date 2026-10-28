@@ -32,7 +32,10 @@ import { device } from "./device.js";
  * line carries the secrets its runner is launched under (its bearer and
  * the harness credential) in `sealed_secrets`, sealed by the service, which
  * no listing reads and the claim clears in the same statement it hands
- * them over in, so they never outlive delivery. `exit_code` is the runner's
+ * them over in, so they never outlive delivery. A claim carries a token
+ * its Mac minted for the line (`claim_token`), so the same claim asked again
+ * after its answer was lost is answered again, never its secrets.
+ * `exit_code` is the runner's
  * as the Mac settled its launch line; null until then and for every other
  * kind.
  */
@@ -59,6 +62,8 @@ export const deviceAgentLine = pgTable(
     createdAt: createdAt(),
     /** When the Mac took it; null while it waits. */
     claimedAt: timestamptz("claimed_at"),
+    /** The token the Mac's claim carried, which its retries carry too; null while it waits and for a claim from a build before the token. */
+    claimToken: uuid("claim_token"),
     /** When the Mac said it was done with it; null until then. */
     settledAt: timestamptz("settled_at"),
     /** The runner's exit code, as the Mac settled a launch line; null otherwise. */

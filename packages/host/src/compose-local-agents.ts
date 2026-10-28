@@ -95,8 +95,13 @@ import type { RunMode } from "./run-mode.js";
  * Lines are claimed in the order the service lists them, its id order, and
  * handed to the agent they name, whose worker takes them one at a time, so
  * an agent's lines are delivered strictly in order while agents go on side
- * by side. A launch makes the agent's own repository under its folder
- * (`deviceAgentLayout`) where it has none, through the platform's script,
+ * by side. Each claim carries a token minted for its line and kept until
+ * the claim is answered, so a claim whose answer was lost is asked again as
+ * the same claim, before the next read, and the line is delivered once; a
+ * launch whose claim was asked again had its secrets taken by the answer
+ * lost, so it is settled as a runner gone. A launch makes the agent's own
+ * repository under its folder (`deviceAgentLayout`) where it has none,
+ * through the platform's script,
  * has the agent's VM made and started, sets in the repository, inside the
  * VM, who the agent's commits are by where the line says, as a cloud
  * checkout sets it (`@luke/features/checkout-identity`), and starts the
@@ -942,6 +947,8 @@ export function composeLocalAgents(
               case DEVICE_AGENT_LINE_KIND.LAUNCH:
                 // Note that a launch replaces the runner it finds, which is ended and its line settled first.
                 yield* stopped(agentId);
+                // Note that a launch whose claim was asked again lost its secrets with the first answer, so it is settled as a runner gone, which ends its turn in words.
+                if (claimed.secretsGone === true) return yield* settle(line.id);
                 return yield* launched(agentId, line, claimed.secrets, agentScope);
               case DEVICE_AGENT_LINE_KIND.MESSAGE:
               case DEVICE_AGENT_LINE_KIND.RETUNE: {
@@ -985,39 +992,65 @@ export function composeLocalAgents(
             return mailbox;
           });
 
-        /** One line claimed by its id, asked again a few times where unanswered; refused, or nothing where never answered. */
+        /**
+         * The token each line's claim carries, by the line's id, minted at its
+         * first claim and kept until a claim of it is answered, so the claim
+         * asked again after its answer was lost is the same claim, which the
+         * service answers again rather than refusing as taken.
+         */
+        const claimTokens = new Map<string, string>();
+
+        /** One line claimed by its id under its token, asked again a few times where unanswered; refused, or nothing where never answered. */
         const claimedLine = (id: string) =>
-          asked(client.claimLine(deviceId, id)).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced(CLAIM_RETRY.every),
-              times: CLAIM_RETRY.times,
-              until: (answer) => answer !== undefined,
+          Effect.gen(function* () {
+            const token = claimTokens.get(id) ?? kernel.createId();
+            claimTokens.set(id, token);
+            const answer = yield* asked(client.claimLine(deviceId, id, token)).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(CLAIM_RETRY.every),
+                times: CLAIM_RETRY.times,
+                until: (answered) => answered !== undefined,
+              }),
+            );
+            if (answer !== undefined) claimTokens.delete(id);
+            return answer;
+          });
+
+        /**
+         * One line claimed and, where granted, handed to its agent's mailbox;
+         * whether the claim was answered. Note that the claim and its
+         * hand-over are uninterruptible, because a line the service granted
+         * is this Mac's alone to deliver, and its token is let go of in the
+         * same step, so no line is handed over twice.
+         */
+        const lineTaken = (id: string) =>
+          Effect.uninterruptible(
+            Effect.gen(function* () {
+              const answer = yield* claimedLine(id);
+              if (answer === undefined) return false;
+              if ("line" in answer) {
+                yield* Queue.offer(yield* mailboxOf(answer.line.agentId), answer);
+              }
+              return true;
             }),
           );
 
         /**
          * The lines read and claimed in the service's order, each handed to
          * its agent's mailbox. A claim never answered ends the batch there,
-         * so a later line of the same agent is never delivered before it; the
-         * next read lists it again. Note that each claim and its hand-over are
-         * uninterruptible, because a line the service granted is this Mac's
-         * alone to deliver.
+         * so a later line of the same agent is never delivered before it, and
+         * is asked again under its token before the next read, since the
+         * service lists no line once claimed and the claim may have landed.
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
+            for (const id of [...claimTokens.keys()]) {
+              if (!(yield* lineTaken(id))) return yield* Effect.sleep(REREAD);
+            }
             const lines = yield* asked(client.lines(deviceId));
             if (lines === undefined) return yield* Effect.sleep(REREAD);
             for (const line of lines) {
-              const taken = yield* Effect.uninterruptible(
-                Effect.gen(function* () {
-                  const answer = yield* claimedLine(line.id);
-                  if (answer === undefined) return false;
-                  if (!("line" in answer)) return true;
-                  yield* Queue.offer(yield* mailboxOf(answer.line.agentId), answer);
-                  return true;
-                }),
-              );
-              if (!taken) return;
+              if (!(yield* lineTaken(line.id))) return;
             }
           }),
         );

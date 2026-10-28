@@ -52,10 +52,11 @@ const encodeBytes = Schema.encodeSync(Schema.Uint8ArrayFromBase64);
 /** What a claim the service refused answers. */
 export const DEVICE_AGENT_NOT_CLAIMED = { claimed: false } as const;
 
-/** A launch line claimed, with the secrets its claim handed over once, where it is one. */
+/** A launch line claimed, with the secrets its claim handed over once, where it is one, or saying they are gone, where its claim was asked again. */
 export interface DeviceAgentClaimedLine {
   readonly line: DeviceAgentLine;
   readonly secrets?: DeviceAgentLaunchSecrets | undefined;
+  readonly secretsGone?: true | undefined;
 }
 
 /** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
@@ -297,16 +298,35 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** One line claimed by its id, with a launch line's secrets; refused, or nothing where unanswered. */
+  /**
+   * One line claimed by its id under the token the Mac minted for it, with
+   * a launch line's secrets; refused, or nothing where unanswered. Note
+   * that a claim naming a token is asked again without it where the
+   * service refuses it, since a service from before the field refuses a
+   * request naming any key it does not know, and one after it refuses the
+   * claim without a token too wherever it refused the claim with one.
+   */
   claimLine(
     deviceId: string,
     id: string,
+    claimToken?: string,
   ): Effect.Effect<
     DeviceAgentClaimedLine | typeof DEVICE_AGENT_NOT_CLAIMED | undefined,
     never,
     HttpClient.HttpClient
   > {
-    return askHosted(this.#hosted.deviceAgents.claimLine, { deviceId, id }).pipe(
+    const claimed = (named: string | undefined) =>
+      askHosted(this.#hosted.deviceAgents.claimLine, {
+        deviceId,
+        id,
+        ...(named === undefined ? {} : { claimToken: named }),
+      });
+    return claimed(claimToken).pipe(
+      Effect.catch((failed) =>
+        claimToken !== undefined && failed._tag === "HostedRefused"
+          ? claimed(undefined)
+          : Effect.fail(failed),
+      ),
       Effect.map((answer): DeviceAgentClaimedLine => answer),
       Effect.catch((failed) =>
         Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),

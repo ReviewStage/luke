@@ -1,9 +1,10 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents in VMs: a device registered as sandboxed, signed in to nothing, getting ready while it fetches its sandbox and ready to take an agent only once it has it, or why it could not have it, an agent launched in its VM with a GitHub token from Luke, and, on This Mac alone, an agent that ran directly on it before refused with why.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents in VMs: a device registered as sandboxed, signed in to nothing, getting ready while it fetches its sandbox and ready to take an agent only once it has it, or why it could not have it, an agent launched in its VM with a GitHub token from Luke, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran directly on it before refused with why.
  *
  * The follower runs over a scripted spawner, a fake sandbox, a file system
  * that holds nothing but what a test names, and a fake service that hands
- * one launch line and a new GitHub token at each ask, on the test's clock.
+ * one launch line and a new GitHub token at each ask, on the test's clock,
+ * and answers each claim as a test says, its first answer lost where it says.
  * Synthetic ids and tokens throughout.
  */
 
@@ -93,6 +94,10 @@ const followingDevice = (
     readonly refusesSetup?: boolean;
     /** The files of the machine's state, shared with another follower on the same machine where given. */
     readonly files?: Map<string, string>;
+    /** How the service answers each claim of the launch line, by the token it carries; the line with its secrets where not given. */
+    readonly claim?: (
+      token: string | undefined,
+    ) => Effect.Effect<DeviceAgentClaimedLine | { readonly claimed: false } | undefined>;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -127,7 +132,8 @@ const followingDevice = (
               launched = true;
               return [LAUNCH.line];
             }),
-      claimLine: () => Effect.succeed(LAUNCH),
+      claimLine: (_deviceId: string, _id: string, token?: string) =>
+        options.claim === undefined ? Effect.succeed(LAUNCH) : options.claim(token),
       settleLine: (
         _deviceId: string,
         id: string,
@@ -364,6 +370,58 @@ it.effect(
           false,
         );
         assert.deepEqual(reported, ["the local agents' smolvm or sandbox image could not be had"]);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch whose claim landed but whose answer was lost is claimed again under the same token and launched once",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Note that the service takes the first claim and keeps its token, but its answer never arrives.
+        let landed: string | undefined;
+        const claims: (string | undefined)[] = [];
+        const { spawned, settled } = yield* followingDevice(() => Effect.void, {
+          claim: (token) =>
+            Effect.sync(() => {
+              claims.push(token);
+              if (landed === undefined) {
+                landed = token;
+                return undefined;
+              }
+              return token !== undefined && token === landed ? LAUNCH : { claimed: false as const };
+            }),
+        });
+        yield* until(() => claims.length === 1);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => settled.some((each) => each.id === LINE_ID));
+
+        assert.equal(claims.length, 2);
+        assert.equal(claims[1], claims[0], "the retry is the same claim");
+        assert.equal(spawned.filter((each) => each.program === VM_RUNNER).length, 1);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch whose claim was answered again with its secrets gone is settled as a runner gone and never started",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, settled } = yield* followingDevice(() => Effect.void, {
+          claim: () => Effect.succeed({ line: LAUNCH.line, secretsGone: true as const }),
+        });
+        yield* until(() => settled.some((each) => each.id === LINE_ID));
+
+        assert.deepEqual(settled, [{ id: LINE_ID }]);
+        assert.equal(
+          spawned.some((each) => each.program === VM_RUNNER),
+          false,
+        );
       }),
     ),
 );
