@@ -100,7 +100,10 @@ it.layer(getTestDB())("an agent's runner lines queued at once", (it) => {
           onAnother(queueRunnerLine(userId, { agentId, launch: LAUNCH, text: "second" })),
         );
         yield* untilWaitingOrDone(second);
+        // Note that the second queue must be seen waiting on a lock, not merely unfinished, since
+        // one still connecting when the looks run out would pass for one the lock held back.
         assert.equal(second.pollUnsafe(), undefined);
+        assert.ok((yield* waitingOnLocks) > 0);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(first);
         yield* Fiber.join(second);

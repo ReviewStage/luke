@@ -2166,6 +2166,44 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "a message queued behind another call's lease whose session has no place once the lease frees is taken back, so no launch reads it later",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* runnerTook(agent.id);
+        // The session's place is gone, as a reset leaves it.
+        yield* sessions.reset(opened.sessionId);
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        const kept = keptAfterResponse();
+
+        const answer = yield* sessions
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* kept.run;
+
+        assert.equal(answer.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: 4,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        assert.deepEqual(read, []);
+      }),
+  );
   it.effect(
     "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
     () =>
@@ -2489,10 +2527,21 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       );
 
       const sent = yield* mySessions.send(opened.sessionId, message(mine.agent, "Not yours."));
+      // A send queued behind another call's lease is told the same, and queues nothing.
+      const now = new Date(yield* Clock.currentTimeMillis);
+      const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+      assert.equal(
+        yield* claimCodingAgentRunnerLease(mine.agent.id, randomUUID(), now, until),
+        true,
+      );
+      const queuedBehind = yield* mySessions
+        .send(opened.sessionId, message(mine.agent, "Still not yours."))
+        .pipe(Effect.provide(keptAfterResponse().layer));
       const cancelled = yield* mySessions.cancel(opened.sessionId, "turn_0");
       const reset = yield* mySessions.reset(opened.sessionId);
 
       assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
+      assert.deepEqual(queuedBehind, { outcome: EVE_SEND_OUTCOME.RETIRED });
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.equal(reset.outcome, EVE_RESET_OUTCOME.NO_ACTIVE_SESSION);
       assert.equal(api.sandboxes[0]?.deleted, false);

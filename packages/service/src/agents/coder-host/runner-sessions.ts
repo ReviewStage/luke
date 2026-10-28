@@ -603,6 +603,8 @@ export const runnerSessions = <
       resume: string | undefined,
       credential: HarnessLaunch,
       alongside: Effect.Effect<void, AE, AR>,
+      /** The first message as the Start composed and queued it before it answered, which the launch takes over rather than composes again. */
+      queuedFirst?: InputLine,
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
@@ -641,11 +643,14 @@ export const runnerSessions = <
                 };
               });
               // The turn's words ahead of the first message, on what the harness's session has handed;
-              // a session not resumed is fresh, and its history holds none of it.
+              // a session not resumed is fresh, and its history holds none of it. A first message the
+              // Start already composed and queued is taken over as it stands, its words handed once.
               const opened =
                 first === undefined
                   ? Effect.succeed(undefined)
-                  : openedLine(agent, place.session, first, resume === undefined);
+                  : queuedFirst !== undefined
+                    ? Effect.succeed({ line: queuedFirst, taken: Effect.void })
+                    : openedLine(agent, place.session, first, resume === undefined);
               // The launch's record is written before its command starts, so an END the launch it
               // replaces posts late is told apart from this one's and stops nothing.
               const [, made, opening] = yield* Effect.all(
@@ -844,6 +849,7 @@ export const runnerSessions = <
       first: RunnerMessage | undefined,
       credential: HarnessLaunch,
       waitOnImage: boolean,
+      queuedFirst?: InputLine,
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -870,6 +876,7 @@ export const runnerSessions = <
                 concurrency: "unbounded",
                 discard: true,
               }),
+              queuedFirst,
             ),
         );
       });
@@ -1278,6 +1285,26 @@ export const runnerSessions = <
         ),
       );
 
+    /**
+     * A message queued while another call held the lease handed on once that
+     * call let go, under the lease: by `deliverWaitingHolding`, where the
+     * session's place is the agent's; taken back where no place stands for the
+     * session by then, said in the log, so no line waits that no launch will
+     * read.
+     */
+    const handedOn = (sessionId: string, agent: CodingAgent, lineId: string) =>
+      Effect.gen(function* () {
+        const found = yield* firstPlace(machine, sessionId);
+        if (Option.isSome(found) && found.value.agentId === agent.id) {
+          return yield* deliverWaitingHolding(sessionId, agent);
+        }
+        yield* Effect.logWarning(
+          `A ${harness.name} message queued behind another call found its session ended`,
+        );
+        yield* withdrawRunnerLine(userId, agent.id, lineId);
+        return false;
+      });
+
     const sessions: NativeSessions<Turn> = {
       // An open answers once the plan's credential is read, so a plan refused or at its limit is
       // refused at once, as before; the sandbox, the checkout, and the launch run past the answer of
@@ -1295,25 +1322,29 @@ export const runnerSessions = <
             const layout = yield* machine.layout(agent);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
             const first = messageLine(message, layout);
-            if (layout.linesRead) {
-              const opened = yield* openedLine(agent, sessionId, first, true);
-              yield* queued(agent, ANY_LAUNCH, [opened.line]);
-            }
-            // Note that a launch that failed takes its first message back, as its turn reads failed.
-            const failedLaunch = (failure: { readonly _tag: string }) =>
-              Effect.andThen(
-                layout.linesRead
-                  ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
-                  : Effect.void,
-                launchFailed(agent)(failure),
+            const withdrawn = layout.linesRead
+              ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
+              : Effect.void;
+            const opened = layout.linesRead
+              ? yield* openedLine(agent, sessionId, first, true)
+              : undefined;
+            if (opened !== undefined) yield* queued(agent, ANY_LAUNCH, [opened.line]);
+            // Note that a launch that failed takes its first message back, as its turn reads failed,
+            // and so does an open that fails once it queued it, which answers failed.
+            yield* Effect.gen(function* () {
+              if (opened !== undefined) yield* opened.taken;
+              yield* afterResponse(
+                `A ${harness.name} launch`,
+                holdingRunner(
+                  agent.id,
+                  openedPlace(agent, sessionId, layout, first, credential, true, opened?.line),
+                ).pipe(
+                  Effect.catch((failure) =>
+                    Effect.andThen(withdrawn, launchFailed(agent)(failure)),
+                  ),
+                ),
               );
-            yield* afterResponse(
-              `A ${harness.name} launch`,
-              holdingRunner(
-                agent.id,
-                openedPlace(agent, sessionId, layout, first, credential, true),
-              ).pipe(Effect.catch(failedLaunch)),
-            );
+            }).pipe(Effect.onError(() => withdrawn));
             return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
           }).pipe(
             Effect.catch(failed("open")),
@@ -1377,12 +1408,22 @@ export const runnerSessions = <
               ),
             );
             if (Option.isSome(handed)) return handed.value;
+            // A session another agent's place stands for has ended for this one, as `sendHolding`
+            // answers it. Note that no place at all is no answer yet, because a Start's launch still
+            // opening its sandbox holds the lease, which is the very case this queue is for.
+            const found = yield* firstPlace(machine, sessionId);
+            if (Option.isSome(found) && found.value.agentId !== agent.id) {
+              return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+            }
+            // Note that the runner's repository credential is not renewed for this message, as
+            // `sendHolding` renews it, because the lease is another call's; it lives an hour, and the
+            // next message renews it.
             const opened = yield* openedLine(agent, sessionId, sent, false);
             yield* queued(agent, ANY_LAUNCH, [opened.line]);
             yield* opened.taken;
             yield* afterResponse(
               `A ${harness.name} hand-on`,
-              holdingRunner(agent.id, deliverWaitingHolding(sessionId, agent)),
+              holdingRunner(agent.id, handedOn(sessionId, agent, sent.line.uuid)),
             );
             return {
               outcome: EVE_SEND_OUTCOME.ACCEPTED,
