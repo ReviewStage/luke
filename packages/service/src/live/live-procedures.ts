@@ -292,7 +292,10 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
 ) {
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* sealedParts(statements.value, asked, yield* topicsOf(query, params), look);
+  // A read that names no `after` is answered at once, so it needs no topics to wait on.
+  const held = asked[LIVE_POLL.AFTER] !== undefined;
+  const topics = held ? yield* topicsOf(query, params) : NO_TOPICS;
+  return yield* sealedParts(statements.value, asked, topics, look);
 });
 
 /**
