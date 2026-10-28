@@ -202,7 +202,9 @@ function digest(text: string): string {
 /**
  * The cursor of a live answer: a digest of what the held read's cursor
  * stamps, each item's id, revision, instant, read state, who it waits
- * on, so its task's assignee changing moves it, and whether it asks, and each
+ * on, so its task's assignee changing moves it, whether it asks, and the
+ * channel it lives in, since a move between channels changes nothing else
+ * of it and the sidebar counts each channel's from this read, and each
  * failed run, so an answer whose cursor is
  * the last one's moved nothing a reader announces or counts, as a held
  * answer's does.
@@ -215,6 +217,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     readonly unread?: boolean | undefined;
     readonly waitsOn?: string | undefined;
     readonly asking?: boolean | undefined;
+    readonly channelId?: string | undefined;
   }) => [
     item.id,
     item.revision,
@@ -222,6 +225,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     item.unread ?? null,
     item.waitsOn ?? null,
     item.asking ?? null,
+    item.channelId ?? null,
   ];
   return digest(
     JSON.stringify([

@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { CodingAgentKind } from "@luke/features/coding-agent-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -174,6 +175,8 @@ export interface AppInboxWaitingItem {
   postedAt: number;
   /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
   asking?: boolean;
+  /** The channel the thread lives in, which the sidebar counts it under; absent from a service before it. */
+  channelId?: string;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */
@@ -196,14 +199,17 @@ export interface AppInboxTaskHolding {
  * the developer: the item as a task's are, the agent as its row names it
  * now, and the automation and repository standing where a task would; the
  * automation, and its name, null where the reader may not read it or none
- * stands.
+ * stands, and the repository null for an agent that works in none, the
+ * member's operator above all.
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
+  /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
+  agentKind?: CodingAgentKind;
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;
   automationName: string | null;
-  repository: string;
+  repository: string | null;
   /** The workspace the agent belongs to, whose Inbox lists the item; absent from a service before it. */
   workspaceId?: string;
   /** The account that started the agent, whom the item waits on; absent where the service does not say, when it is the reader's own. */

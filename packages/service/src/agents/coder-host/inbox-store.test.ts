@@ -272,7 +272,7 @@ const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Ro
 /** What waits across the account as the desktop builds it from the live rows, at the instant the held read was read. */
 const liveAnswerOf = (userId: string, readAt: number) =>
   Effect.gen(function* () {
-    const parts = Option.getOrThrow(accountInboxLiveStatements(userId));
+    const parts = Option.getOrThrow(accountInboxLiveStatements(userId, true));
     const failedRuns = Option.getOrThrow(ownFailedRunsLiveStatement(userId));
     return accountInboxOfLiveRows(
       {
@@ -1632,6 +1632,23 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
         assert.ok(Result.isSuccess(yield* addressed("for-owner", owner)));
 
         assert.ok((yield* stampIds(owner)).includes(posted.id));
+        // Note that the account's read carries an agent with no repository only to a reader that asks for one, as an older build would fail on its null.
+        const planlessOf = (userId: string, repositoryless: boolean) =>
+          Effect.map(
+            accountInboxPast(userId, INBOX_CURSOR_START, repositoryless),
+            (answer) => answer.planless ?? [],
+          );
+        const [carried] = yield* planlessOf(owner, true);
+        assert.deepEqual(
+          [carried?.id, carried?.agentKind, carried?.repository, carried?.channelId !== undefined],
+          [posted.id, CODING_AGENT_KIND.OPERATOR, null, true],
+          "its member's read carries the operator's ask, its kind, and its channel",
+        );
+        assert.deepEqual(
+          [(yield* planlessOf(owner, false)).length, (yield* planlessOf(teammate, true)).length],
+          [0, 0],
+          "an older build's read carries none, nor a teammate's",
+        );
         const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
         assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
         assert.ok(Option.isSome(yield* answerDone(owner, posted)));

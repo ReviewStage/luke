@@ -19,6 +19,7 @@ import {
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
@@ -37,6 +38,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import {
@@ -284,7 +286,7 @@ const TASKS: readonly TaskSeed[] = [
   },
 ];
 
-/** An agent no task holds and no automation started, which the Inbox lists under Other agents. */
+/** The reader's operator, Luke, an agent no task holds and no automation started, in no repository, which the Inbox lists under Luke. */
 interface StraySeed {
   readonly agentId: string;
   readonly agentTitle: string;
@@ -293,7 +295,7 @@ interface StraySeed {
 
 const STRAY: StraySeed = {
   agentId: AGENT.STRAY,
-  agentTitle: "Bump the Node image",
+  agentTitle: OPERATOR_NAME,
   owner: DEAN,
 };
 
@@ -985,7 +987,13 @@ function holdings(): readonly AppInboxTaskHolding[] {
     .toSorted((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** What waits on the reader, as main counts it. */
+/** The channel a thread lives in, as main's read names it, as a key to spread; none for a thread the fixture does not hold. */
+function channelOf(itemId: string): { readonly channelId: string } | undefined {
+  const channelId = THREADS.find((each) => each.item.id === itemId)?.channelId;
+  return channelId === undefined ? undefined : { channelId };
+}
+
+/** What waits on the reader, as main counts it, each item with the channel it lives in. */
 function waiting(): readonly AppInboxTask[] {
   return holdings().flatMap(({ taskId }) => {
     const open = itemsOf(taskId).filter(needsReader);
@@ -999,26 +1007,29 @@ function waiting(): readonly AppInboxTask[] {
               agentId,
               title,
               postedAt,
+              ...channelOf(id),
             })),
           },
         ];
   });
 }
 
-/** The stray agent's open threads, as main lists the items of agents with no task. */
+/** Luke's open threads, as main lists the items of agents with no task. */
 function taskless(): readonly AppInboxTasklessItem[] {
   return strayItems()
     .filter((each) => each.status === INBOX_STATUS.OPEN)
     .map(({ id, agentId, title, postedAt }) => ({
       id,
       agentId,
+      agentKind: CODING_AGENT_KIND.OPERATOR,
       title,
       postedAt,
+      ...channelOf(id),
       agentTitle: STRAY.agentTitle,
       agentModel: MODEL,
       automationId: null,
       automationName: null,
-      repository: REPOSITORY,
+      repository: null,
       workspaceId: FIXTURE_IDS.WORKSPACE,
       startedBy: STRAY.owner.userId,
       waitsOn: STRAY.owner.userId,
@@ -1230,6 +1241,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
           agent: {
             id: STRAY.agentId,
             planId: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
             model: MODEL,
             effort: "high",
             title: STRAY.agentTitle,
@@ -1240,7 +1252,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
             startedBy: STRAY.owner,
             automationId: null,
             workspaceId: FIXTURE_IDS.WORKSPACE,
-            repository: REPOSITORY,
+            repository: null,
           },
         }
       : { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },

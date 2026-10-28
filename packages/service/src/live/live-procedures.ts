@@ -84,6 +84,7 @@ import {
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -289,7 +290,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(inboxLive, { userId: context.userId }, input);
+      return yield* liveQueryParts(
+        inboxLive,
+        { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
+        input,
+      );
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

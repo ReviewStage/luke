@@ -245,6 +245,7 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
       title: item.title,
       postedAt: item.postedAt,
       ...(item.asking === undefined ? undefined : { asking: item.asking }),
+      ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     };
     const held = tasks.get(item.planId);
     if (held === undefined) tasks.set(item.planId, [waiting]);
@@ -253,7 +254,7 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
   return [...tasks].map(([taskId, held]) => ({ taskId, items: held }));
 }
 
-/** The open items of agents with no task as the window holds them: each with its agent, who started it, and the automation and repository standing in a task's place. */
+/** The open items of agents with no task as the window holds them: each with its agent and its kind, who started it, and the automation and repository standing in a task's place. */
 function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice["taskless"] {
   return items.map((item) => ({
     id: item.id,
@@ -265,7 +266,9 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
+    ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
     ...(item.asking === undefined ? undefined : { asking: item.asking }),
+    ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
     ...(item.waitsOn === undefined ? undefined : { waitsOn: item.waitsOn }),
     ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
