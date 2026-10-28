@@ -1695,8 +1695,8 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
 /**
  * What the reviewer and label pickers of an agent's Pull request tab offer
  * (GET), read of its repository rather than its pull request: the
- * repository's labels, the users who may be asked for a review (its
- * collaborators), and its organization's teams that reach it, each up to
+ * repository's labels, the users who may be asked for a review (those it
+ * may assign), and its organization's teams that reach it, each up to
  * the bound; each empty where the Luke GitHub App may not read it.
  */
 export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({

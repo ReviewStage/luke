@@ -624,7 +624,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * What the reviewer and label pickers offer, of the agent's repository
      * rather than its pull request, on a token minted for it: its labels, its
-     * collaborators named against the workspace's members, and the teams
+     * assignable users named against the workspace's members, and the teams
      * that reach it.
      */
     reviewOptions: signedIn.reviewOptions.effect(function* ({ input, context }) {

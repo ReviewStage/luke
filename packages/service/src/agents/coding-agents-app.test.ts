@@ -4132,7 +4132,7 @@ const AGENT_REVIEW_OPTIONS = "/api/agents/review-options";
 
 it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
   it.effect(
-    "the repository's labels, collaborators named against the workspace, and teams, read on the App's token; teams it may not read list none",
+    "the repository's labels, assignable users named against the workspace, and teams, read on the App's token; teams it may not read list none",
     () =>
       Effect.gen(function* () {
         const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
@@ -4144,7 +4144,10 @@ it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
             switch (path) {
               case `${repository}/labels`:
                 return Response.json([{ name: "bug", color: "d73a4a" }]);
+              // Note that GitHub lists an installation token no collaborator whose access comes through the organization, so it answers none.
               case `${repository}/collaborators`:
+                return Response.json([]);
+              case `${repository}/assignees`:
                 return Response.json([
                   {
                     login: "priyan",
