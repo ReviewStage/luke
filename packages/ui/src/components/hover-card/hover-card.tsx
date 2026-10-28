@@ -17,7 +17,10 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
  * on or whose it is; and at the head's right its corner, muted: how long ago,
  * how it ended, or how many wait. Under the head stand its notes, read whole
  * and so wrapped to three lines, or one line faded at its end, and a rule
- * before what a card lists under it.
+ * before what a card lists under it. A card that counts things lists its
+ * figures under that rule as a receipt does, each label muted at the card's
+ * edge and its figure at the other in tabular numbers, a caption's size on a
+ * caption's tight line, so a column of counts reads at a glance.
  *
  * A card's rows are set as a menu's rows are: a glyph on the head's glyph
  * column, words on one line fading out where cut short, and what stands at
@@ -78,11 +81,20 @@ const ROW_GLYPH =
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
   "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
+const FIGURES = "luke-hover-card-figures m-0 flex flex-col gap-list-gap text-caption";
+const FIGURE =
+  "luke-hover-card-figure flex justify-between gap-control-gap [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:text-muted-foreground";
 const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
 const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
 
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
+
+/** One of a card's figures: what it counts, and the count as the card says it. */
+export interface HoverCardFigure {
+  readonly label: string;
+  readonly figure: ReactNode;
+}
 
 /** How a card's row is set: a quieter line under its name, or a row of a list under a rule. */
 export const HOVER_CARD_ROW_LOOK = {
@@ -178,6 +190,26 @@ export function HoverCardNote({
 /** The hairline before what a card lists under its head. */
 export function HoverCardRule(): React.JSX.Element {
   return <hr className={RULE} />;
+}
+
+/** What a card counts, under a rule and named by `label`: each figure's label muted at the card's edge and its figure at the other, in tabular numbers. */
+export function HoverCardFigures({
+  label,
+  figures,
+}: {
+  label: string;
+  figures: readonly HoverCardFigure[];
+}): React.JSX.Element {
+  return (
+    <dl className={FIGURES} aria-label={label}>
+      {figures.map((figure) => (
+        <div key={figure.label} className={FIGURE}>
+          <dt>{figure.label}</dt>
+          <dd>{figure.figure}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 /** A row of a card: its glyph, its words on one line, and what stands at its end; a button where a press opens what it names. */
