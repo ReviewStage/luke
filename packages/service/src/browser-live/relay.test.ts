@@ -48,9 +48,10 @@ const SESSION = "wrun_live_fixture";
 const TARGET = "page-live";
 const TARGET_SESSION = "target-session-1";
 const MEMBER = "member-1";
+const TASK = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 const ASK = {
   userId: MEMBER,
-  taskId: "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c",
+  place: { agentId: "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d" },
   tabId: "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d",
 };
 const CONVERSATION = "conversation-agent";
@@ -62,7 +63,7 @@ function reachedTab(agent: ReachedBrowserTab["agent"] | undefined): ReachedBrows
     tab: {
       id: ASK.tabId,
       conversationId: CONVERSATION,
-      taskId: ASK.taskId,
+      taskId: TASK,
       targetId: TARGET,
       address: "https://example.test/start",
       title: "Start",

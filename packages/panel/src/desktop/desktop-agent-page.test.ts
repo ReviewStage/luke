@@ -759,7 +759,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
   assert.deepEqual(
     [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
-    ["Pages", "Terminal"],
+    ["Pages", "Terminal", "Browser"],
   );
   const row =
     [...well.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
@@ -945,7 +945,7 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
     [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
     headings,
   );
-  assert.deepEqual(headings, ["Pull requests", "Terminal"]);
+  assert.deepEqual(headings, ["Pull requests", "Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the empty panel offers the agent's pull request");
   act(() => changes.click());

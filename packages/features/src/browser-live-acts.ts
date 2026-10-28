@@ -40,9 +40,9 @@ export const BROWSER_LIVE_ABNORMAL_CLOSE = 1006;
 /** The most characters one text frame the panel sends carries: an input message, well under it. */
 const BROWSER_LIVE_SEND_MAX_CHARS = 16_384;
 
-/** One cloud Browser tab of one task, as its live view names it. */
+/** One cloud Browser tab of one coding agent's browser, as its live view names it. */
 const browserLiveTargetSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
+  agentId: EffectSchema.NonEmptyString,
   tabId: EffectSchema.NonEmptyString,
 });
 
@@ -87,7 +87,7 @@ export type BrowserLivePortOutbound = typeof browserLivePortOutboundSchema.Type;
 /** The socket's path and query for one tab, which the desktop puts on the service's origin and the web on its own. */
 export function browserLivePath(target: BrowserLiveTarget): string {
   const query = new URLSearchParams({
-    [BROWSER_LIVE.QUERY.TASK]: target.taskId,
+    [BROWSER_LIVE.QUERY.AGENT]: target.agentId,
     [BROWSER_LIVE.QUERY.TAB]: target.tabId,
   });
   return `${BROWSER_LIVE.PATH}?${query.toString()}`;

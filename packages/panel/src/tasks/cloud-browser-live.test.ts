@@ -26,7 +26,7 @@ import {
  */
 
 const TARGET = {
-  taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  agentId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   tabId: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
 } as const;
 

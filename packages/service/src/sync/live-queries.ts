@@ -6,7 +6,7 @@
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
  */
-import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
+import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { messageStandingNow } from "@luke/database/models/message-reads";
@@ -510,17 +510,18 @@ export const taskHistoryLive = defineLiveQuery({
 });
 
 /**
- * One task's Browser tabs, the agent's pointer on each among them, woken by
- * a tab opened, moved, pointed at, taken over, or closed, and by the agents
- * on the task, all of which name the task.
+ * One task's Browser tabs, every one of its agents', the agent's pointer on
+ * each among them, woken by a tab opened, moved, pointed at, taken over, or
+ * closed under the task, and by the agents on the task, all of which name
+ * the task.
  */
 export const taskBrowserTabsLive = defineLiveQuery({
   name: "taskBrowserTabs",
   params: ["userId", "taskId"],
   reads: [
     agentBrowserTabSync,
-    taskSync,
     codingAgentSync,
+    taskSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -530,7 +531,33 @@ export const taskBrowserTabsLive = defineLiveQuery({
     [TOPIC.ACCOUNT, userId],
   ],
   statements: ({ userId, taskId }) =>
-    Option.map(taskBrowserTabsLiveStatement(userId, taskId), (tabs) => ({ tabs })),
+    Option.map(browserTabsLiveStatement(userId, { taskId }), (tabs) => ({ tabs })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One coding agent's Browser tabs, on a task or on none, its task read
+ * too where it is on one, woken by the agent's own row. Note that a tab names no agent's topic, its own row
+ * holding only its agent's conversation, so a tab's move reaches a reader
+ * on the watched look rather than by a wake.
+ */
+export const agentBrowserTabsLive = defineLiveQuery({
+  name: "agentBrowserTabs",
+  params: ["userId", "agentId"],
+  reads: [
+    agentBrowserTabSync,
+    codingAgentSync,
+    taskSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId }) => [
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId }) =>
+    Option.map(browserTabsLiveStatement(userId, { agentId }), (tabs) => ({ tabs })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -626,5 +653,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentPagesLive,
   taskHistoryLive,
   taskBrowserTabsLive,
+  agentBrowserTabsLive,
   agentTranscriptLive,
 ]);

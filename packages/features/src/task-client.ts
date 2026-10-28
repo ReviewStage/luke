@@ -9,6 +9,7 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
+import { type BrowserTabsPlace, browserTabsPlaceId } from "./agent-browser-tab-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import type { LocalAgentRefusal } from "./coding-agent-wire.js";
@@ -505,9 +506,9 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task's Browser tabs, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  /** One agent's Browser tabs, or a task's agents' together, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
   browserTabsLive(
-    taskId: string,
+    place: BrowserTabsPlace,
     userId: string,
     poll = false,
     after?: string,
@@ -518,8 +519,8 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(
-        this.#hosted.live.taskBrowserTabs,
-        { id: taskId, [LIVE_USER_QUERY]: userId },
+        "taskId" in place ? this.#hosted.live.taskBrowserTabs : this.#hosted.live.agentBrowserTabs,
+        { id: browserTabsPlaceId(place), [LIVE_USER_QUERY]: userId },
         poll,
         after,
       ),
@@ -659,18 +660,18 @@ export class HostedTaskClient {
 
   /**
    * Opens a Browser tab at the address in the browser of the coding agent
-   * named on the task, taken over by the account at once, under a deadline
+   * named, on a task or on none, taken over by the account at once, under a deadline
    * that outlasts the agent's sandbox resuming; or why none opened, a
    * refusal it does not name as unanswered.
    */
   openBrowserTab(
     params: TasksBrowserTabOpenParams,
   ): Effect.Effect<TasksBrowserTabOpenAnswer, never, HttpClient.HttpClient> {
-    const { taskId, agentId, address } = params;
+    const { agentId, address } = params;
     return Effect.match(
       askHosted(
-        this.#hosted.agentBrowserTabs.open,
-        { params: { id: taskId }, body: { agentId, address } },
+        this.#hosted.agentBrowserTabs.agentOpen,
+        { params: { id: agentId }, body: { address } },
         HOSTED_DEADLINE.BROWSER_OPEN,
       ),
       {
@@ -685,11 +686,15 @@ export class HostedTaskClient {
     );
   }
 
-  /** The Browser tabs open in one task's agents' browsers, the oldest first; or that the service did not answer. */
+  /** The Browser tabs open in one agent's browser, or in every one of a task's agents', the oldest first; or that the service did not answer. */
   readBrowserTabs(
-    taskId: string,
+    place: BrowserTabsPlace,
   ): Effect.Effect<TasksBrowserTabsAnswer, never, HttpClient.HttpClient> {
-    return Effect.match(askHosted(this.#hosted.agentBrowserTabs.list, { id: taskId }), {
+    const asked =
+      "taskId" in place
+        ? askHosted(this.#hosted.agentBrowserTabs.list, { id: place.taskId })
+        : askHosted(this.#hosted.agentBrowserTabs.agentList, { id: place.agentId });
+    return Effect.match(asked, {
       onSuccess: (answer): TasksBrowserTabsAnswer => answer,
       onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
     });
