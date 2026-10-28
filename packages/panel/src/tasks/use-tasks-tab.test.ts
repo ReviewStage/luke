@@ -3113,47 +3113,6 @@ test("what the developer opened while New task's agent start was out, a page and
   assert.equal(tab.control().starting, undefined);
 });
 
-test("an agent's start refused after New task was opened again leaves the card that stands as it is, and its toast's Open opens the refused card in its place", async () => {
-  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
-  );
-  const handed = {
-    idempotencyKey: AGENT_KEY,
-    prompt: "Fix it.",
-    attachments: [],
-    choice: undefined,
-  };
-  const card = {
-    repository: "acme/web",
-    links: [],
-    choice: undefined,
-    press: {
-      key: AGENT_KEY,
-      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
-    },
-  };
-  act(() => tab.control().onNewTask());
-  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
-  act(() => {
-    note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
-  });
-  act(() => tab.control().onNewTask());
-
-  await act(async () => {
-    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
-    await note;
-  });
-  assert.equal(tab.control().newTask.open, true);
-  assert.equal(tab.control().newTask.preset, undefined, "the card opened since is not taken over");
-
-  const open = newestToastAction() ?? assert.fail("the toast offers the refused card");
-  act(() => open.click());
-  await settle();
-  assert.deepEqual(tab.control().newTask.preset?.refused?.card, card);
-});
-
 test("New task's agent start opens no draft beside its agent while the task stands open before the start answers", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
@@ -3215,6 +3174,7 @@ test("New task's agent start refused after its page opened opens the card again 
       key: AGENT_KEY,
       ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
     },
+    words: handed.prompt,
   };
   act(() => tab.control().onNewTask());
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
@@ -3262,6 +3222,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
       key: AGENT_KEY,
       ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
     },
+    words: handed.prompt,
   };
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {

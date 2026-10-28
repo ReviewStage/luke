@@ -20,7 +20,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -135,9 +135,10 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * and opened again, or the welcome's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
  * does, an agent's start as it is pressed, so a New task opened while it is
- * out opens empty, and a refusal puts them back. The card holds its own
- * issues, repository, and model, so the owner mounts it afresh to start those
- * over; the workspace it starts in is the owner's.
+ * out opens empty, and a refused card opened again brings its own words
+ * back. The card holds its own issues, repository, and model, so the owner
+ * mounts it afresh to start those over; the workspace it starts in is the
+ * owner's.
  *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
@@ -328,6 +329,16 @@ export function NewTaskComposer({
   const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
+  // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
+  useLayoutEffect(() => {
+    if (refused === undefined) return;
+    const { words: kept, press } = refused.card;
+    draft.update((now) =>
+      hasWordsOrFiles(now.text, now.attachments)
+        ? now
+        : { ...now, text: kept, attachments: press.ask.agent.attachments },
+    );
+  }, []);
   // The last agent press's key and what it asked, until a start lands.
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   // How many times ⌘L asked the Issue chip to open its menu.
@@ -458,9 +469,8 @@ export function NewTaskComposer({
     onStarting?.(true);
     setNote(undefined);
     // Note that an agent's start lets its words go as it is pressed, because the card closes at
-    // once and a New task opened before the service answers must open empty; the owner puts
-    // them back as it opens this card again on a refusal (`restore`), where the box was left empty since.
-    const taken = draft.draft;
+    // once and a New task opened before the service answers must open empty; a refused card
+    // opened again brings its own words back (`refused.card.words`).
     const agentStart = handing.handed !== undefined;
     if (agentStart) draft.update(() => EMPTY_DRAFT);
     newTask
@@ -469,12 +479,6 @@ export function NewTaskComposer({
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(device === undefined ? undefined : { device }),
         ...handing,
-        ...(agentStart
-          ? {
-              restore: () =>
-                draft.update((now) => (hasWordsOrFiles(now.text, now.attachments) ? now : taken)),
-            }
-          : undefined),
       })
       .then((refused) => {
         if (refused === undefined) {
@@ -511,7 +515,14 @@ export function NewTaskComposer({
     pressed.current = press;
     begin(name, {
       handed: { idempotencyKey: key, ...ask.agent },
-      card: { ...(forAutomation ? { purpose } : undefined), repository, links, choice, press },
+      card: {
+        ...(forAutomation ? { purpose } : undefined),
+        repository,
+        links,
+        choice,
+        press,
+        words,
+      },
     });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
@@ -590,7 +601,7 @@ export function NewTaskComposer({
 
   const composer: AgentComposerControl = {
     draft: words,
-    // Note that the words handed back as they stand, as the field echoes words a refusal put back, take no note down.
+    // Note that the words handed back as they stand, as the field echoes the words a refused card opens on, take no note down.
     setDraft: (text) => {
       if (text === words) return;
       draft.update((was) => ({ ...was, text }));

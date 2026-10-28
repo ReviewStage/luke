@@ -131,8 +131,9 @@ async function settle(): Promise<void> {
  * has Linear connected, `finds` what its Linear answers a search or an
  * identifier with, and `github` what a repository's GitHub issues read
  * answers, where the workspace has GitHub connected; a read handed as a
- * promise stays out until the test settles it, and so does a start, whose
- * card is put away as it is pressed, as the tab puts it away for an agent's.
+ * promise stays out until the test settles it, and so does a start. An
+ * agent's start puts the card away as it is pressed and a refusal opens it
+ * again on what it held, as the tab does.
  */
 async function mount(
   answer: string | Failure | undefined | Promise<Failure | undefined> = undefined,
@@ -164,13 +165,14 @@ async function mount(
   let openAgain = (): void => undefined;
   function Owner() {
     const [open, setOpen] = useState(true);
+    const [reopened, setReopened] = useState<NewTaskPreset | undefined>(undefined);
     openAgain = () => setOpen(true);
     const dialog = createElement(NewTaskDialog, {
       newTask: {
         ...control.newTask,
         workspaceId: listed,
         open,
-        preset,
+        preset: reopened ?? preset,
         repositoriesIn: () => repositories,
         models: MODELS,
         readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
@@ -185,20 +187,23 @@ async function mount(
           fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
           choices.push(from?.issues);
           startedIn.push(workspaceId);
-          // A refusal puts the words back, as the tab does as it opens the card again.
-          const refusal = (refused: Failure | undefined) => {
-            if (refused !== undefined) from?.restore?.();
-            return refused;
-          };
-          if (answer instanceof Promise) {
-            setOpen(false);
-            return answer.then(refusal);
-          }
-          return Promise.resolve(
-            refusal(
-              typeof answer === "string" ? { reason: FAILURE_REASON.OTHER, text: answer } : answer,
-            ),
+          const refused = Promise.resolve(answer).then((said) =>
+            typeof said === "string" ? { reason: FAILURE_REASON.OTHER, text: said } : said,
           );
+          const card = from?.card;
+          if (from?.handed === undefined || card === undefined) return refused;
+          // An agent's start puts the card away as it is pressed, and a refusal opens it again on what it held, as the tab does.
+          setOpen(false);
+          return refused.then((note) => {
+            if (note !== undefined) {
+              setReopened({
+                ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                refused: { card, note },
+              });
+              setOpen(true);
+            }
+            return note;
+          });
         },
         onClose: () => setOpen(false),
         linearIssuesIn: () =>
@@ -630,7 +635,7 @@ test("words left in a card put away come back as New task opens again and after 
   assert.equal(card.field().textContent, "");
 });
 
-test("an agent's start still out lets its words go, so New task opened before it answers opens empty, and a refusal puts them back", async () => {
+test("an agent's start still out lets its words go, so New task opened before it answers opens empty, and a refusal opens the card again on its words, saying why", async () => {
   let answer: (refused: Failure | undefined) => void = () => undefined;
   const card = await mount(
     new Promise<Failure | undefined>((resolve) => {
@@ -646,8 +651,9 @@ test("an agent's start still out lets its words go, so New task opened before it
   await act(async () =>
     answer({ reason: FAILURE_REASON.OTHER, text: "Luke cannot reach acme/web." }),
   );
-  await card.reopen();
+  await settle();
   assert.equal(card.field().textContent, "Dark mode");
+  assert.match(card.note() ?? "", /Luke cannot reach acme\/web\./u);
 });
 
 test("words typed before the workspaces are read stay in the box as the workspace lands, over its older draft, and are its draft", async () => {
@@ -1218,12 +1224,12 @@ test("an issue picked and Return with no words starts an agent on the issue alon
   const card = await mount(undefined, undefined, {}, ISSUES);
   await openLinear();
   await card.press("Enter", linearSearch());
+  act(() => card.button("Remove issue").click());
+  await settle();
+  const dropped = issueChip();
+  await openLinear();
+  await card.press("Enter", linearSearch());
   await card.key("Enter");
-  const dropped = await (async () => {
-    act(() => card.button("Remove issue").click());
-    await settle();
-    return issueChip();
-  })();
 
   assert.equal(
     card.agents[0]?.prompt,
