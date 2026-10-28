@@ -296,11 +296,14 @@ function useOptionNumbers(
       if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
         return;
       const number = Number(event.key);
+      // Note that a number picks only an option drawn, never one stepped aside while the box starts a new thread.
+      const row = optionRows(shown)[number - 1];
+      if (row === undefined) return;
       const picked = pick?.(draft, number);
       if (picked === undefined) return;
       event.preventDefault();
       control.onDraft(item, picked);
-      optionRows(shown)[number - 1]?.focus();
+      row.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

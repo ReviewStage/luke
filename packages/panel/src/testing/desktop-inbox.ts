@@ -879,7 +879,11 @@ export async function confirmClose(): Promise<void> {
 
 /** The open item's options, a choice's radios or checkboxes, in order. */
 export function openOptions(pane: HTMLElement): HTMLButtonElement[] {
-  return [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"], [role="checkbox"]')];
+  return [
+    ...pane.querySelectorAll<HTMLButtonElement>(
+      '[data-inbox-options] [role="radio"], [data-inbox-options] [role="checkbox"]',
+    ),
+  ];
 }
 
 /** The labels of the open item's options that stand checked. */
