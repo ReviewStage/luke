@@ -31,7 +31,7 @@ type LiveMode = (typeof LIVE_MODE)[keyof typeof LIVE_MODE];
 /** A live read's name: the procedure that answers it. */
 export type LiveReadName = keyof (typeof hostedContract)["live"];
 
-/** The ids a live read is bound to, by the param each fills. */
+/** The values a live read is bound to, by the param each fills: an id, or a list as the read's query spells it. */
 export type LiveParams<Param extends string> = Readonly<Record<Param, string>>;
 
 /**
@@ -41,7 +41,7 @@ export type LiveParams<Param extends string> = Readonly<Record<Param, string>>;
  */
 export interface LiveQuery<Param extends string = string, Part extends string = string> {
   readonly name: LiveReadName;
-  /** The params the procedure binds, each an id. */
+  /** The params the procedure binds, each an id or a list as its query spells it. */
   readonly params: readonly Param[];
   /** The synced tables the statements read. */
   readonly reads: readonly SyncTable[];
