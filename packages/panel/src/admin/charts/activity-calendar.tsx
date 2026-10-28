@@ -213,7 +213,7 @@ export function ActivityCalendar({
       title={`This account's ${spanLabel}, week by week`}
       overlay={
         anchor !== undefined ? (
-          <div ref={tooltipRef} className="pointer-events-none absolute z-10">
+          <div ref={tooltipRef} className="pointer-events-none absolute z-tooltip">
             <ChartTooltipFrame
               label={formatTooltipDay(anchor.day.day, partialDay)}
               rows={[
