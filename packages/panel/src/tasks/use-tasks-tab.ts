@@ -47,6 +47,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import type { MicrophoneStatus } from "@luke/settings/microphone";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
 import { callTaskName } from "@luke/ui/call-card-model";
@@ -129,7 +130,6 @@ import {
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import type { MicrophoneStatus } from "@luke/voice/audio";
 import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";

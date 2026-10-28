@@ -1,5 +1,9 @@
-import type { RunningBuild, UpdateSnapshot } from "@luke/settings/update";
-import type { MicrophoneStatus } from "./audio.js";
+/**
+ * settings-controls.ts -- what a settings row is handed to draw a platform's control: the microphone, notifications, and updates.
+ */
+
+import type { MicrophoneStatus } from "./microphone.js";
+import type { RunningBuild, UpdateSnapshot } from "./update.js";
 
 /**
  * Whether Luke may open the microphone, and the two things that can be done

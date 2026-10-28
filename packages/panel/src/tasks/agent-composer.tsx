@@ -31,7 +31,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,

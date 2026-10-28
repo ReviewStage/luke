@@ -4,9 +4,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { HostCapability } from "@luke/settings";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import type { BuildCommit } from "@luke/settings/update";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
 import {

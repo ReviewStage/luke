@@ -4,7 +4,7 @@ import {
   MICROPHONE_TRANSPORT,
   type MicrophoneRoute,
   type MicrophoneTransport,
-} from "@luke/voice/audio";
+} from "@luke/settings/microphone";
 import { lineWatcher } from "./line-watcher";
 
 /** The one word the helper takes; its one line is read by the parser below. */

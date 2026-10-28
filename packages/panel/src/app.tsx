@@ -13,6 +13,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
 import { agentKeyLink, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
@@ -24,7 +25,6 @@ import { forgetPictures } from "@luke/ui/picture-cache";
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";

@@ -1,7 +1,7 @@
 import type { VoiceFailure } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import {
   callInProgress,
   IDLE_VOICE_VIEW,

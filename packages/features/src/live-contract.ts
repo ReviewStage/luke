@@ -13,6 +13,7 @@ import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
+import { webSocketOrigin } from "./socket-origin.js";
 import { taskActivitySchema, taskShownCodeSchema } from "./tasks-view.js";
 import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
@@ -32,32 +33,6 @@ import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
 /** The origin of Luke's own service, the same one every hosted call is addressed to. */
 export const HOSTED_SERVICE_ORIGIN = "https://tryluke.dev";
-
-const WEB_SOCKET_SCHEME = {
-  "https:": "wss:",
-  "http:": "ws:",
-  "wss:": "wss:",
-  "ws:": "ws:",
-} as const;
-
-function isWebSocketReachable(protocol: string): protocol is keyof typeof WEB_SOCKET_SCHEME {
-  return protocol in WEB_SOCKET_SCHEME;
-}
-
-/**
- * The socket origin of an HTTP or socket origin, or nothing for an address
- * that is not an absolute URL on a scheme a socket can be opened over.
- */
-export function webSocketOrigin(address: string): string | undefined {
-  try {
-    const url = new URL(address);
-    if (!isWebSocketReachable(url.protocol)) return undefined;
-    url.protocol = WEB_SOCKET_SCHEME[url.protocol];
-    return url.origin === "null" ? undefined : url.origin;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * The one origin a hosted desktop opens a voice socket to: Luke's own

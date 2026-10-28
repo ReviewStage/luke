@@ -3,6 +3,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
+import type { UpdateControl } from "@luke/settings/settings-controls";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
@@ -30,7 +31,6 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
-import type { UpdateControl } from "@luke/voice/settings-controls";
 import {
   LifeBuoyIcon,
   LightbulbIcon,

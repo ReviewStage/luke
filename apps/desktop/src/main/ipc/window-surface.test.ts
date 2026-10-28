@@ -4,7 +4,7 @@ import type { FeedbackSubmission } from "@luke/features/feedback";
 import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
 import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
-import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/voice/audio";
+import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "@luke/settings/microphone";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { windowSurfaceProcedures } from "./window-surface";

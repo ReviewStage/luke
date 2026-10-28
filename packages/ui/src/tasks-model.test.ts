@@ -3,9 +3,9 @@ import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wir
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import { LIVE_STATUS } from "@luke/live";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { test } from "vitest";
+import { VOICE_KEYLESS_NOTE } from "./microphone-access.js";
 import {
   agentPromptOf,
   CALL_LABEL,

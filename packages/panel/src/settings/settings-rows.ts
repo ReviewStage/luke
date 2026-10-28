@@ -9,10 +9,10 @@ import {
   HOST_CAPABILITY,
   type HostCapability,
 } from "@luke/settings";
+import type { MicrophoneControl } from "@luke/settings/settings-controls";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
-import { microphoneAccessRow } from "@luke/voice/microphone-access";
-import type { MicrophoneControl } from "@luke/voice/settings-controls";
+import { microphoneAccessRow } from "@luke/ui/microphone-access";
 import type { SettingsSearchInput } from "../settings-search.js";
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
 

@@ -40,13 +40,13 @@ import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,

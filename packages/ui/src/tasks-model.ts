@@ -29,13 +29,13 @@ import {
 import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
+import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
 import {
   microphoneAccessRow,
   OPENAI_KEY_MISSING_NOTE,
   VOICE_KEYLESS_NOTE,
-} from "@luke/voice/microphone-access";
-import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
+} from "./microphone-access.js";
 import {
   type PendingValue,
   type PendingValues,
