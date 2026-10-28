@@ -2836,13 +2836,20 @@ function PullRequestTabBody({
   // The Chapters view's chunk is asked for only once the view is first shown.
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
-  // The chapters, read as their view is first shown, which its tab counts once they are ready.
+  const overview = landed(parts.pullRequest);
+  // The chapters, read as their view is first shown once the pull request's own read has answered, naming the number and head it holds, which its tab counts once they are ready.
+  const overviewHead = overview?.merging?.headSha;
   const chapters = useChaptersRead(
     agentId,
     control,
-    shown && !none && view === PULL_REQUEST_VIEW.CHAPTERS,
+    shown &&
+      !none &&
+      parts.pullRequest.kind !== PART.PENDING &&
+      view === PULL_REQUEST_VIEW.CHAPTERS,
+    overview === undefined || overviewHead === undefined
+      ? undefined
+      : { number: overview.number, head: overviewHead },
   );
-  const overview = landed(parts.pullRequest);
   const title = overview ?? published;
   // Review stands at the end of the tabs once the pull request is held, whatever it stands as, because GitHub takes a review of one merged or closed too; where GitHub refuses one, as on a locked conversation, the panel says why in GitHub's words.
   const reviewable = held !== undefined;

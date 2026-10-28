@@ -292,6 +292,8 @@ const standing = (
       init: {
         readonly method?: string;
         readonly number?: number;
+        /** The head the tab already holds, named beside its number. */
+        readonly head?: string;
         /** Each `number` the query names, repeated as a client might send them. */
         readonly numbers?: readonly string[];
         readonly body?: string;
@@ -300,6 +302,7 @@ const standing = (
       Effect.gen(function* () {
         const url = new URL(`/api/agents/${agent.id}/chapters`, ORIGIN);
         if (init.number !== undefined) url.searchParams.set("number", String(init.number));
+        if (init.head !== undefined) url.searchParams.set("head", init.head);
         for (const more of init.numbers ?? []) url.searchParams.append("number", more);
         const headers = new Headers({ "content-type": "application/json" });
         if (as !== undefined) headers.set("authorization", `Bearer ${as}`);
@@ -401,6 +404,26 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         const read = chaptersOf(yield* ask(owner));
         assert.equal(read.pullRequest?.number, NUMBER);
         assert.equal(read.pullRequest?.headSha, HEAD);
+      }),
+  );
+
+  it.effect(
+    "a read naming the number and the head its tab already holds answers the workspace's chapters against that head, and asks GitHub for no pull request",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, github, ask } = yield* standing();
+        chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
+        const before = github.sent.length;
+        const held = "d".repeat(40);
+        const read = chaptersOf(yield* ask(teammate, { number: NUMBER, head: held }));
+        assert.equal(read.pullRequest?.number, NUMBER);
+        assert.equal(read.pullRequest?.headSha, held);
+        assert.equal(read.pullRequest?.generatable, true);
+        assert.equal(read.pullRequest?.chapters.status, PULL_REQUEST_CHAPTERS_STATE.READY);
+        assert.equal(read.pullRequest?.chapters.headSha, HEAD);
+        assert.ok(
+          !github.sent.slice(before).some((sent) => new URL(sent.url).pathname.includes("/pulls")),
+        );
       }),
   );
 

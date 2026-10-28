@@ -188,6 +188,13 @@ test("chapters made for an older head are stale, those for the head now are not,
   );
 });
 
+test("chapters are stale against the head the tab holds now where it holds one, rather than the head the read was answered with", () => {
+  const pushedSince = "c".repeat(40);
+  const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, pushedSince);
+
+  assert.equal(shown.kind === CHAPTERS_SHOWN.READY && shown.stale, true);
+});
+
 test("a chapter is viewed once every file it holds is, so a file two chapters share is viewed in both; one holding no file is never viewed", () => {
   const files = [STORE, LOCK];
   const viewed = new Set([STORE.path]);

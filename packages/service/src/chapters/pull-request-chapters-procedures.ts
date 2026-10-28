@@ -16,8 +16,14 @@
  * The read (`GET /api/agents/{id}/chapters`) answers the pull request's head
  * as GitHub holds it now beside the workspace's newest chapters for it,
  * whatever head they were made for, so the panel draws chapters of an older
- * head as stale. The Generate (`POST /api/agents/{id}/chapters`) reads the
- * pull request's files, title, description, and commit messages, claims the
+ * head as stale. A read that names the number and the head its tab already
+ * read (`heldSubjectOf`) asks GitHub for neither again: the token minted
+ * for the repository, kept by the instance, is what still holds the reader
+ * to it, and the chapters are kept by number, so a number its repository
+ * holds no pull request at answers as one with none; a read from a build
+ * before the head was named reads the pull request afresh as it did. The
+ * Generate (`POST /api/agents/{id}/chapters`) reads the pull request's
+ * files, title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
  * the API key the member who pressed it saved, never Luke's
  * (`chapters-generator.ts`), on the Claude model they chose in Settings
@@ -140,6 +146,16 @@ interface ChaptersSubject {
   readonly pullRequest: GitHubPullRequest;
 }
 
+/** A pull request as the answer names it: its number and its head. */
+type ChaptersPullRequest = Pick<GitHubPullRequest, "number" | "headSha">;
+
+/** What the answer stands on: the pull request, and the workspace its chapters are kept under. */
+interface ChaptersOf {
+  readonly agent: WithRepository<CodingAgent>;
+  readonly organizationId: string;
+  readonly pullRequest: ChaptersPullRequest;
+}
+
 /** The pull request the tab asks about, read afresh on the agent's repository token, with the workspace its chapters are kept under. */
 const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: Effect.Effect<PublishedCache>,
@@ -167,6 +183,26 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     token,
     pullRequest,
   }));
+});
+
+/**
+ * The pull request a read names by the number and the head its tab already
+ * holds, with the workspace its chapters are kept under: GitHub is asked for
+ * neither again, only for a token for the repository, which confirms the
+ * workspace still reaches it.
+ */
+const heldSubjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: CodingAgent,
+  held: ChaptersPullRequest,
+): Effect.fn.Return<Option.Option<ChaptersOf>, HostedRefusal, ChaptersServices> {
+  if (!hasRepository(agent)) return Option.none();
+  const workspace = yield* githubReadRefusal(
+    Effect.andThen(agentPullRequestReach(userId, agent), agentWorkspace(userId, agent)),
+  );
+  // The token was just minted through this workspace, so none here is a workspace left between two reads.
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  return Option.some({ agent, organizationId: workspace.value, pullRequest: held });
 });
 
 /** The stored row as the wire's state of the chapters. */
@@ -205,7 +241,7 @@ const stateOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The answer both procedures give: the pull request's head now, whether this deployment generates chapters, and the workspace's newest chapters for it. */
 const answerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  subject: ChaptersSubject,
+  subject: ChaptersOf,
   generatable: boolean,
 ): Effect.fn.Return<PullRequestChaptersAnswer, HostedRefusal, DatabaseServices> {
   const { organizationId, agent, pullRequest } = subject;
@@ -375,11 +411,22 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
   return {
     read: signedIn.read.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.id);
-      const subject = yield* subjectOf(published, context.userId, agent, input.number);
-      if (Option.isNone(subject)) return { pullRequest: null };
+      const number = yield* pullRequestNumberOf(input.number === undefined ? [] : [input.number]);
+      // A head named without its number names no pull request.
+      if (input.head !== undefined && number === undefined) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const subject =
+        input.head === undefined || number === undefined
+          ? subjectOf(published, context.userId, agent, input.number)
+          : heldSubjectOf(context.userId, agent, { number, headSha: input.head });
       // Whether the reader can generate at all, on a key of their own, which their choice of model never changes.
-      const model = yield* modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT);
-      return yield* answerOf(subject.value, model !== undefined);
+      const [found, model] = yield* Effect.all(
+        [subject, modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT)],
+        { concurrency: "unbounded" },
+      );
+      if (Option.isNone(found)) return { pullRequest: null };
+      return yield* answerOf(found.value, model !== undefined);
     }),
 
     generate: signedIn.generate.effect(function* ({ input, context }) {

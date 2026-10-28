@@ -1080,15 +1080,17 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** The workspace's newest chapters of one agent's pull request, or of its repository's by the number given, with its head as GitHub holds it now. */
+  /** The workspace's newest chapters of one agent's pull request, or of its repository's by the number given, with its head as GitHub holds it now, or as given where the tab holds it beside the number. */
   chapters(
     agentId: string,
     number?: number,
+    head?: string,
   ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
     return chaptersAnswer(
       askHosted(this.#hosted.pullRequestChapters.read, {
         id: agentId,
         ...(number === undefined ? undefined : { number: String(number) }),
+        ...(head === undefined ? undefined : { head }),
       }),
     );
   }

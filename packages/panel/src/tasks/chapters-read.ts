@@ -23,9 +23,17 @@ const UNANSWERED: PullRequestChaptersAnswerView = {
   failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
 };
 
+/** The pull request as the tab's own read of it holds it: its number and its head now. */
+export interface ChaptersHeld {
+  readonly number: number;
+  readonly head: string;
+}
+
 /** A pull request's chapters as the Pull request tab holds them: the read, its door, and this window's own Generate. */
 export interface ChaptersRead {
   readonly answer: PullRequestChaptersAnswerView | undefined;
+  /** The head the chapters are stale against: the tab's own, where it holds one, else the answer's. */
+  readonly head: string | undefined;
   readonly out: boolean;
   readonly ask: () => void;
   /** Generates them for the head now; the view stands as generating until it answers. */
@@ -37,7 +45,10 @@ export interface ChaptersRead {
 /**
  * The agent's pull request's chapters, read as the Chapters view is first
  * shown, again the moment the agent ends, since its last push is when the
- * head settles (`useAgentRead`), and again after a Generate. A Generate's own
+ * head settles (`useAgentRead`), and again after a Generate. A read names the
+ * number and the head the tab's own read of the pull request holds, where it
+ * holds them, so the service answers from what it keeps rather than asking
+ * GitHub for the pull request again. A Generate's own
  * answer is drawn as soon as it lands and stands until the read asked after
  * it does, so the chapters made never give way to what was there before.
  */
@@ -45,6 +56,7 @@ export function useChaptersRead(
   agentId: string,
   control: CodingAgentsControl,
   shown: boolean,
+  held: ChaptersHeld | undefined,
 ): ChaptersRead {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
@@ -53,7 +65,10 @@ export function useChaptersRead(
     agentId,
     shown,
     ended,
-    (id: string) => control.readChapters(id, number),
+    (id: string) =>
+      held === undefined
+        ? control.readChapters(id, number)
+        : control.readChapters(id, held.number, held.head),
     UNANSWERED,
   );
   const [generated, setGenerated] = useState<
@@ -81,7 +96,7 @@ export function useChaptersRead(
   }, [agentId]);
   const answer =
     generated !== undefined && generated.of === read.answer ? generated.answer : read.answer;
-  return { answer, out: read.out, ask: read.ask, generate, generating };
+  return { answer, head: held?.head, out: read.out, ask: read.ask, generate, generating };
 }
 
 /** How many chapters the Chapters tab counts: those ready, stale or not; none before then. */

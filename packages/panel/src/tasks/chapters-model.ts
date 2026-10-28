@@ -22,7 +22,8 @@ import type { DiffLineSpan } from "../diff-view/contract.js";
  * Generate where the deployment can make them; chapters being made, by this
  * window's own Generate or someone else's; a generation that failed; or the
  * chapters ready, stale where they were made for a head the pull request
- * has moved on from (`chaptersStale`). "Other changes" is always read last
+ * has moved on from, as the tab's own read of it now holds it where it does
+ * (`chaptersStale`). "Other changes" is always read last
  * (`orderedChapters`). A chapter is viewed once every file it holds is
  * marked viewed on GitHub (`chapterViewed`), and marking it marks each of
  * them, or unmarks them all where all were (`chapterMarks`), so a file two
@@ -87,11 +88,15 @@ export function chaptersModelLabel(model: string): string {
   return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;
 }
 
-/** Whether chapters were made for a head the pull request has since moved on from. */
-function chaptersStale(pullRequest: Pick<Answer, "headSha" | "chapters">): boolean {
+/** Whether chapters were made for a head the pull request has since moved on from: the tab's own where it holds one, else the answer's. */
+function chaptersStale(
+  pullRequest: Pick<Answer, "headSha" | "chapters">,
+  head: string | undefined,
+): boolean {
   const { chapters } = pullRequest;
   return (
-    chapters.status !== PULL_REQUEST_CHAPTERS_STATE.NONE && chapters.headSha !== pullRequest.headSha
+    chapters.status !== PULL_REQUEST_CHAPTERS_STATE.NONE &&
+    chapters.headSha !== (head ?? pullRequest.headSha)
   );
 }
 
@@ -114,6 +119,8 @@ export function chaptersShown(
   out: boolean,
   /** When this window's own Generate was pressed, while it is out. */
   generating: number | undefined,
+  /** The pull request's head as the tab's own read of it holds it now, where it holds one. */
+  head?: string,
 ): ChaptersShown {
   if (generating !== undefined) {
     return { kind: CHAPTERS_SHOWN.GENERATING, startedAt: generating, ours: true };
@@ -139,7 +146,7 @@ export function chaptersShown(
         kind: CHAPTERS_SHOWN.READY,
         chapters: orderedChapters(chapters.chapters),
         model: chapters.model,
-        stale: chaptersStale(pullRequest),
+        stale: chaptersStale(pullRequest, head),
         generatable,
       };
   }
