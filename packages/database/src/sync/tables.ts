@@ -16,6 +16,7 @@
  * write to them notifies the account it moves, so a read the account loses
  * is woken and answers without it.
  */
+import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -28,6 +29,7 @@ import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { macCommand } from "../schemas/mac-command.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
+import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { task } from "../schemas/task.js";
@@ -275,6 +277,28 @@ export const planRevisionSync = defineSyncTable(planRevision, {
   ignore: [planRevision.document],
 });
 
+/**
+ * A version of a page an agent showed, on its task's topic, or, for a page
+ * on no task, its agent's. A version is written once and never changed, so
+ * no column of it is hot.
+ */
+export const planPageVersionSync = defineSyncTable(planPageVersion, {
+  topics: [
+    { kind: TOPIC.TASK, column: planPageVersion.taskId },
+    { kind: TOPIC.AGENT, column: planPageVersion.agentId },
+  ],
+});
+
+/**
+ * A tab open in an agent's browser, on its task's topic. Every column is
+ * watched, the agent's pointer among them, because the task's Browser tab
+ * draws the pointer moving; the agent writes it once before each click,
+ * keystroke, or wheel.
+ */
+export const agentBrowserTabSync = defineSyncTable(agentBrowserTab, {
+  topics: [{ kind: TOPIC.TASK, column: agentBrowserTab.taskId }],
+});
+
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
   codingAgentSync,
@@ -298,4 +322,6 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   automationSync,
   automationRunSync,
   planRevisionSync,
+  planPageVersionSync,
+  agentBrowserTabSync,
 ];
