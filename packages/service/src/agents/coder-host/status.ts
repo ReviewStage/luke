@@ -14,12 +14,14 @@ import {
   type StatusTurn,
   lineAwaitsTurn as sharedLineAwaitsTurn,
   statusClockEdge as sharedStatusClockEdge,
+  turnStoppable,
 } from "@luke/features/coding-agent-status";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_KIND,
   CODING_AGENT_MACHINE,
+  CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentFailure,
@@ -90,6 +92,7 @@ function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | und
     : {
         status: turn.status,
         cancelRequested: turn.cancelRequestedAt !== null,
+        cancelRequestedAt: turn.cancelRequestedAt?.getTime(),
         queuedAt: turn.queuedAt.getTime(),
         settledAt: turn.settledAt?.getTime() ?? null,
         sessionEnded: turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED,
@@ -364,7 +367,13 @@ function summaryFields(
     now,
     awaitingLineAt: standing.awaitingLineAt,
   });
-  return started === undefined ? summary : { ...summary, runStartedAt: started };
+  const stoppable =
+    summary.status !== CODING_AGENT_STATUS.RUNNING || turnStoppable(statusTurnOf(standing.turn));
+  return {
+    ...summary,
+    ...(started === undefined ? undefined : { runStartedAt: started }),
+    ...(stoppable ? undefined : { stoppable: false }),
+  };
 }
 
 /**

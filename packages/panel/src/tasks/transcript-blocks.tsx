@@ -1196,7 +1196,7 @@ export function TranscriptTool({
 
 /**
  * A call whose subject stands in a tab of its own, as a coding agent's start
- * does once the agent began, a page once shown, or the board drawn on: the
+ * does once the agent began, or a page once shown: the
  * call's line as a call's row draws it, its icon, what it did, and where it
  * stands, as the one button that opens that tab rather than folding its
  * input and answer open in place, its hover saying what it opens, or

@@ -14,7 +14,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
@@ -132,6 +132,9 @@ let sheets: HTMLStyleElement | undefined;
 
 /** How wide the panel's stage is laid out, which jsdom, laying out nothing, leaves to the test. */
 let stageWidth = 0;
+
+// The version history's chunk loaded once, as it is once it has opened, so the first history drawn stands within a settle.
+beforeAll(() => import("./desktop-version-history.js"));
 
 beforeEach(() => {
   window.localStorage.clear();

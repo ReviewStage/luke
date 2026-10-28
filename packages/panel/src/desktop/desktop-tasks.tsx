@@ -69,7 +69,6 @@ import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
-import { TaskIssueLinks } from "../tasks/task-issue-links.js";
 import {
   mentionablePullRequests,
   TaskMentions,
@@ -811,8 +810,6 @@ function PlanDocument({
           setInboxAsk({ taskId, key: target.key, agentId: from });
         }
         return openPanelTab(SIDE_PANEL_TAB.INBOX);
-      case TOOL_TARGET.BOARD:
-        return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
@@ -945,20 +942,6 @@ function PlanDocument({
       agentLookDoor,
       pullRequestCardDoor,
     ],
-  );
-  const { linearIssuesIn, githubIssuesIn } = tasks.newTask;
-  const underTitle = useMemo(
-    () =>
-      opened === undefined ? undefined : (
-        <TaskIssueLinks
-          taskId={opened.id}
-          workspaceId={opened.workspaceId}
-          repository={opened.repository}
-          linearIn={linearIssuesIn}
-          githubIn={githubIssuesIn}
-        />
-      ),
-    [opened, linearIssuesIn, githubIssuesIn],
   );
   // The task's agents head its plan, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
@@ -1154,7 +1137,6 @@ function PlanDocument({
         readMark={readMark}
         sectionLinks={sectionLinks}
         standing={standing}
-        underTitle={underTitle}
         head={planAgents}
         titleActions={room !== SHELL_ROOM.NARROW}
       />
@@ -1381,7 +1363,6 @@ function PlanDocument({
                         holder={SIDE_PANEL_HOLDER.TASK}
                         taskId={task.id}
                         repository={task.repository}
-                        board={tasks.board}
                         pages={tasks.pages}
                         agents={agents}
                         openAgents={mainTabs.openAgents}

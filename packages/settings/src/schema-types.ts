@@ -11,8 +11,6 @@ export const SETTINGS_PAGE = {
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
-  /** The Markdown the account's new tasks start from, which is the account's on the service rather than a stored setting. */
-  PLAN_TEMPLATE: "plan-template",
   /** What the workspace's coding agents remember, shared by its members, which is the workspace's on the service rather than a stored setting. */
   MEMORY: "memory",
   /**

@@ -30,7 +30,6 @@ export const SETTINGS_SEARCH_ROW = {
   GITHUB_ACCESS: "github-access",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",
-  PLAN_TEMPLATE: "plan-template",
   MEMORY: "memory",
   CODING_AGENT_MODEL: "coding-agent-model",
   CODING_AGENT_EFFORT: "coding-agent-effort",

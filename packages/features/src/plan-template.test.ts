@@ -6,13 +6,11 @@ import { planSections } from "./plan-document.js";
 import {
   applyNotesToText,
   NOTE_KIND,
-  PLAN_HEADING,
   type PlanNote,
   readNotes,
   textNotesInProgress,
   withAgentEdit,
 } from "./plan-template.js";
-import { PLAN_FIELD } from "./task-wire.js";
 
 function add(section: string, text: string): PlanNote {
   return { kind: NOTE_KIND.ADD, section, text };
@@ -37,10 +35,10 @@ const DOCUMENT = [
 
 test("a note lands at the end of the section under its heading, as written: a bullet under a list, a paragraph under prose, a heading alone filled", () => {
   const { text, missed } = applyNotesToText(DOCUMENT, [
-    add(PLAN_HEADING.GOAL, "- Admins can withdraw an invite."),
-    add(PLAN_HEADING.CONTEXT, "It came up in support."),
-    add(PLAN_HEADING.HARD_PARTS, "- A link opened twice grants once."),
-    add(PLAN_HEADING.ASSUMPTIONS, "- Members and admins both invite."),
+    add("Goal", "- Admins can withdraw an invite."),
+    add("Context", "It came up in support."),
+    add("Hard parts", "- A link opened twice grants once."),
+    add("Assumptions", "- Members and admins both invite."),
   ]);
 
   assert.equal(missed, undefined);
@@ -73,15 +71,15 @@ test("a note lands at the end of the section under its heading, as written: a bu
 
 test("a note naming a field rather than a heading is passed over, and a correction's field is dropped like any key a note does not name, while heading notes read as written", () => {
   const headingNotes = [
-    add(PLAN_HEADING.GOAL, "- Admins can withdraw an invite."),
+    add("Goal", "- Admins can withdraw an invite."),
     { kind: NOTE_KIND.REPLACE, find: "Only an admin", text: "" },
   ];
   const read = readNotes(
     unparsedWire({
       notes: [
-        { kind: NOTE_KIND.ADD, field: PLAN_FIELD.OPEN_QUESTIONS, text: "Who may withdraw?" },
+        { kind: NOTE_KIND.ADD, field: "openQuestions", text: "Who may withdraw?" },
         headingNotes[0],
-        { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find: "an admin", text: "a member" },
+        { kind: NOTE_KIND.REPLACE, field: "context", find: "an admin", text: "a member" },
         headingNotes[1],
       ],
     }),
@@ -203,7 +201,7 @@ test("a correction that drops a mention past the plan's twentieth is not taken",
 test("a heading is renamed by correcting its line, and a note's words open sections of their own", () => {
   const { text, missed } = applyNotesToText(DOCUMENT, [
     { kind: NOTE_KIND.REPLACE, find: "## Hard parts", text: "## Risks" },
-    add(PLAN_HEADING.GOAL, "## Rollout\n\n- Desktop first."),
+    add("Goal", "## Rollout\n\n- Desktop first."),
   ]);
 
   assert.equal(missed, undefined);
@@ -265,7 +263,7 @@ test("a batch with one note naming what the text does not hold exactly once take
       note: { kind: NOTE_KIND.REPLACE, find: "a phrase the plan never held", text: "x" },
     },
     { text: DOCUMENT, note: { kind: NOTE_KIND.REPLACE, find: "## Rollout", text: "" } },
-    { text: twice, note: add(PLAN_HEADING.GOAL, "- Lands nowhere.") },
+    { text: twice, note: add("Goal", "- Lands nowhere.") },
     { text: twice, note: { kind: NOTE_KIND.REPLACE, find: "## Goal", text: "## Goals" } },
   ];
   for (const { text, note } of cases) {
@@ -285,10 +283,10 @@ test("a draft takes the notes so far up to the first that cannot be taken", () =
     DOCUMENT,
     unparsedWire({
       notes: [
-        add(PLAN_HEADING.GOAL, "- Admins can withdraw an invite."),
+        add("Goal", "- Admins can withdraw an invite."),
         { kind: NOTE_KIND.REPLACE, find: "## Rollout", text: "" },
-        add(PLAN_HEADING.CONTEXT, "It came up in support."),
-        { kind: NOTE_KIND.ADD, section: PLAN_HEADING.HARD_PARTS, text: "- A link" },
+        add("Context", "It came up in support."),
+        { kind: NOTE_KIND.ADD, section: "Hard parts", text: "- A link" },
       ],
     }),
   );

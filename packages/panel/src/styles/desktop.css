@@ -28,8 +28,7 @@
   --comment-margin-gap: var(--luke-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
-     reaches them, since the stage is one stacking context under them all;
-     inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
+     reaches them, since the stage is one stacking context under them all. */
 }
 
 /* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
@@ -105,13 +104,6 @@ body,
   *:hover,
   *:focus-within {
     scrollbar-color: var(--luke-color-scrollbar) transparent;
-  }
-
-  /* The board is Excalidraw's, which draws its own thin thumbs on no track. */
-  .excalidraw,
-  .excalidraw * {
-    scrollbar-color: auto;
-    scrollbar-width: auto;
   }
 }
 
@@ -689,13 +681,6 @@ body,
   --luke-button-ground: var(--luke-color-ground);
 }
 
-/* The "Edited by" line over the document wraps between its words and names
-   rather than cutting a name short, so no name is ever cut to nothing beside
-   the words around it. */
-.plan-edit-note {
-  flex-wrap: wrap;
-}
-
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .plan-unit.version-added {
@@ -750,7 +735,6 @@ body,
 }
 
 .desktop-document .plan-body,
-.desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
   max-width: var(--luke-page-measure);
@@ -774,19 +758,14 @@ body,
   margin-top: 1.5em;
 }
 
-/* A task's key stands tight over its title, its status and priority
-   chips close under it, and its linked issues' chips close under those, as
-   one head rather than four blocks. */
+/* A task's key stands tight over its title, and its status and priority
+   chips close under it, as one head rather than three blocks. */
 .desktop-document .plan-body > .plan-task-key + * {
   margin-top: var(--luke-list-gap);
 }
 
 .desktop-document .plan-body > .plan-task-standing {
   margin-top: var(--luke-block-gap);
-}
-
-.desktop-document .plan-body > .plan-task-standing + .task-issue-links {
-  margin-top: var(--luke-item-gap);
 }
 
 .desktop-document .luke-markdown-heading {
@@ -1116,21 +1095,6 @@ body,
   color: var(--luke-color-on-find-current);
 }
 
-/* The plan template laid out as every Settings page is (`PlanBody`'s
-   `page`): at their measure, its name at a page title's place and size, the
-   Edited line and the note under it. */
-.template-document .plan-document-body {
-  padding-top: 0;
-}
-
-.template-document :is(.plan-body, .plan-edit-note) {
-  max-width: var(--luke-settings-measure);
-}
-
-.task-page-head .plan-edit-note {
-  margin: var(--luke-tight-gap) 0 0;
-}
-
 /* Version history ------------------------------------------------------------ */
 
 /* The view's title heads the versions' pane rather than the column, so it
@@ -1285,15 +1249,14 @@ body,
   }
 }
 
+/* The first heading stands level with the chevron, so its fold's hover ends
+   short of the chevron rather than running under it. */
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
-  > .section-heading,
-.task-summary-card-body > .task-summary-section:first-of-type > .section-heading {
-  display: flex;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  margin-bottom: 0;
+  .luke-group-header-head,
+.task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
+  margin-right: calc(var(--luke-control-height) + var(--luke-tight-gap));
 }
 
 .task-summary-archived-agent > .task-summary-row {
@@ -1603,7 +1566,7 @@ body,
 
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
-:is(.new-task-composer .issue-picker-chip, .new-task-composer .agent-model-chip) {
+.new-task-composer .agent-model-chip {
   display: flex;
   flex-shrink: 0;
 }

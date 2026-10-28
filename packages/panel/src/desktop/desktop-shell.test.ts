@@ -1262,8 +1262,8 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     [PLACE.AGENT_PAGE]: false,
     [PLACE.PERSON_PAGE]: true,
     [PLACE.AUTOMATIONS]: true,
-    // Note that the panel filling the window holds the keys, on its Board, whose canvas no find reads.
-    [PLACE.SIDE_PANEL_FULL_SCREEN]: false,
+    // Note that the panel filling the window holds the keys, and finds in the tab it shows.
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
     [PLACE.SETTINGS]: false,
     [PLACE.VERSION_HISTORY]: true,
   });

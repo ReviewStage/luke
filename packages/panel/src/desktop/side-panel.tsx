@@ -1,5 +1,4 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
-import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
@@ -7,6 +6,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
@@ -139,7 +139,6 @@ import {
   TAB_KIND,
   tabLook,
 } from "../tasks/tab-look.js";
-import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { TerminalStanding } from "../tasks/terminal-shells.js";
 import { TerminalTab } from "../tasks/terminal-tab.js";
@@ -287,8 +286,8 @@ const NO_PAGES: readonly PageLine[] = [];
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Pull request, and its Terminal, and no plan's Board,
- * Call, files, or pages. A tab of an agent's page is no plan's to
+ * agent's workers, its Pull request, and its Terminal, and no plan's Call,
+ * files, or pages. A tab of an agent's page is no plan's to
  * pin, so none is offered. Beside the window's Inbox it stands for the
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
@@ -438,9 +437,6 @@ type DrawnCloudBrowser = { readonly id: string; readonly owner: CloudBrowserOwne
 
 /** No cloud Browser tab on the task, the same array every render. */
 const NO_CLOUD_BROWSERS: readonly DrawnCloudBrowser[] = [];
-
-/** Whose browser a cloud Browser tab of the task's own is in. */
-const LUKE_NAME = "Luke";
 
 /** What a draft of a tab in an agent's browser is called, until it opens a page. */
 const NEW_CLOUD_TAB = "New tab";
@@ -1672,8 +1668,6 @@ export function taskCards(input: {
           : { kind: TAB_KIND.PLAN, taskId, name: task?.name, status: task?.status };
       case TOOL_TARGET.TASK:
         return { kind: TAB_KIND.PLAN, taskId: opened.task, name };
-      case TOOL_TARGET.BOARD:
-        return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.BOARD };
       case TOOL_TARGET.INBOX:
         return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.INBOX };
     }
@@ -1735,7 +1729,6 @@ function TabContent({
   codeFilesRead,
   pagePlace,
   repository,
-  board,
   files,
   pages,
   agents,
@@ -1767,7 +1760,6 @@ function TabContent({
   pagePlace: PagePlace;
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
-  board: Board | undefined;
   /** Whether a File tab reads the task's files: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
   codeFilesRead: boolean;
   /** The open file tabs, which a file's tab reads its lit lines from. */
@@ -1983,11 +1975,6 @@ function TabContent({
       return <>{plan}</>;
     case SIDE_PANEL_TAB.INBOX:
       return <>{inbox}</>;
-    case SIDE_PANEL_TAB.BOARD:
-      // An archived task's board only shows, as its agents only read.
-      return (
-        <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
-      );
     case SIDE_PANEL_TAB.COMMENTS:
       return (
         <PlanCommentsTab
@@ -2223,7 +2210,6 @@ export function SidePanel({
   holder,
   taskId,
   repository,
-  board,
   pages,
   agents,
   openAgents,
@@ -2248,7 +2234,6 @@ export function SidePanel({
   taskId: string;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
-  board: Board | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   agents: CodingAgentsControl;
@@ -2422,7 +2407,10 @@ export function SidePanel({
   const cloudBrowsers = useMemo(() => {
     const ownerOf = (agentId: string | null): CloudBrowserOwner => {
       if (agentId === null) {
-        return { name: LUKE_NAME, icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} /> };
+        return {
+          name: OPERATOR_NAME,
+          icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />,
+        };
       }
       const subject = agentSubject(agents, agentId, drawnTranscripts, false);
       return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
@@ -2600,8 +2588,7 @@ export function SidePanel({
           {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
         </Fill>
       ) : (
-        // The Board is drawn on a canvas, which keeps a find of its own, and
-        // a page's words stand in a sandboxed frame no find of the window
+        // A page's words stand in a sandboxed frame no find of the window
         // reaches, so a page's tab finds itself, through its frame or in its
         // source; a cloud Browser tab's page is drawn on a canvas, which no
         // find of the window reaches either.
@@ -2612,13 +2599,7 @@ export function SidePanel({
           // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
           aria-label={label}
           aria-labelledby={tabId}
-          active={
-            keys &&
-            focused &&
-            tab !== SIDE_PANEL_TAB.BOARD &&
-            !isPageTab(tab) &&
-            !isCloudBrowserTab(tab)
-          }
+          active={keys && focused && !isPageTab(tab) && !isCloudBrowserTab(tab)}
           subject={{ task: taskId, tab }}
         >
           {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
@@ -2636,7 +2617,6 @@ export function SidePanel({
                 codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
                 pagePlace={pagePlaceOf(holder, taskId)}
                 repository={repository}
-                board={board}
                 files={files}
                 pages={taskPages}
                 agents={agents}

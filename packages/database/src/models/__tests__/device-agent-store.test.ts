@@ -27,6 +27,7 @@ import {
   deviceAgentRequestAnswer,
   deviceAgentRequestsWaiting,
   lapsedDeviceAgentLaunches,
+  openDeviceAgentLaunches,
   queueDeviceAgentLine,
   queueDeviceAgentRequest,
   settleDeviceAgentLine,
@@ -46,7 +47,8 @@ import { beatDevice, registerDevice } from "../device-store.js";
  * by another account; a discard line goes only to a Mac that registered it
  * takes one; the expiry withdraws old work but a runner still at work; and
  * a device whose lease lapsed has its open launches read, bounded, and
- * settled once, a waiting one never handed out after.
+ * settled once, a waiting one never handed out after; and a device's open
+ * launches, claimed or waiting, are read for its own account alone.
  * Synthetic accounts, agents, and Macs throughout.
  */
 
@@ -542,6 +544,41 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           yield* deviceAgentLineSettlement(settledByDevice.userId, exited.id),
           Option.some({ exitCode: 0 }),
         );
+      }),
+  );
+  it.effect(
+    "a device's open launches are its unsettled ones, claimed or waiting, with no stop after, and another account reads none of them",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount();
+        const other = yield* openAccount();
+        const exited = Option.getOrThrow(
+          yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId)),
+        );
+        yield* claimDeviceAgentLine(owner.userId, owner.deviceId, exited.id);
+        yield* settleDeviceAgentLine(owner.userId, owner.deviceId, exited.id, 0);
+        const stopped = Option.getOrThrow(
+          yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId)),
+        );
+        yield* claimDeviceAgentLine(owner.userId, owner.deviceId, stopped.id);
+        yield* queueDeviceAgentLine(owner.userId, {
+          agentId: owner.agentId,
+          kind: DEVICE_AGENT_LINE_KIND.STOP,
+          payload: {},
+        });
+        const running = Option.getOrThrow(
+          yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId)),
+        );
+        yield* claimDeviceAgentLine(owner.userId, owner.deviceId, running.id);
+        const waiting = Option.getOrThrow(
+          yield* queueDeviceAgentLine(owner.userId, launch(owner.agentId)),
+        );
+
+        assert.deepEqual(yield* openDeviceAgentLaunches(owner.userId, owner.deviceId), [
+          running.id,
+          waiting.id,
+        ]);
+        assert.deepEqual(yield* openDeviceAgentLaunches(other.userId, owner.deviceId), []);
       }),
   );
 });

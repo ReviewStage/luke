@@ -1,5 +1,4 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -9,18 +8,12 @@ import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import type {
-  GitHubRepositoryIssuesAnswer,
-  RepositoryIssuesAsk,
-} from "@luke/features/github-repositories-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
-import type { TaskIssueChoice } from "@luke/features/task-issue-wire";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -71,7 +64,6 @@ import {
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
-  type LinearIssuesAsk,
   MARK_FAILED_NOTES,
   markAsked,
   markedView,
@@ -155,7 +147,6 @@ import {
 } from "./coding-agent-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
-import type { NewTaskLink } from "./new-task-links.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
@@ -187,7 +178,6 @@ import {
   type NamedAgents,
   useMainTabs,
 } from "./use-main-tabs.js";
-import { usePanelArrivals } from "./use-panel-arrivals.js";
 import {
   type HistorySpot,
   type PlanHistoryControl,
@@ -518,25 +508,23 @@ export interface NewTaskPreset {
 /**
  * What New task's card held as it pressed Start, which it hands its start
  * so a card opened again on a refusal starts where it was left: the
- * repository, the issues linked, the model on its chip, and the press it
+ * repository, the model on its chip, and the press it
  * made, whose key a Retry asking the same carries again.
  */
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;
-  readonly links: readonly NewTaskLink[];
   readonly choice: ModelChoice | undefined;
   readonly press: NewTaskPress;
 }
 
 /**
- * What a start comes from beyond its name, repository, and workspace: the
- * Linear and GitHub issues it links, each with its relation, the agent New
- * task's composer starts on its words in the task's own start (`handed`).
+ * What a start comes from beyond its name, repository, and workspace: where
+ * its agents run, and the agent New task's composer starts on its words in
+ * the task's own start (`handed`).
  */
 export interface NewTaskStart {
-  readonly issues?: readonly TaskIssueChoice[];
   /** Where the task's agents run, where the card's Runs on chose: the cloud, or one of the member's devices. */
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
@@ -628,8 +616,6 @@ export interface TasksControl {
   sidePanel: SidePanelControl;
   /** The side panel's tabs holding something that arrived while the panel showed another, and the agents' tabs that ended unseen, each until it is shown. */
   unreadTabs: readonly StripTab[];
-  /** The open task's whiteboard as main holds it; absent before its first read lands. */
-  board: Board | undefined;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
@@ -771,7 +757,7 @@ export interface TasksControl {
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
     /**
      * Starts the task on the repository given, or none, in the workspace
-     * given, with an empty plan and no call, linking the issues picked,
+     * given, with an empty plan and no call,
      * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
@@ -802,28 +788,6 @@ export interface TasksControl {
     tasks: readonly { readonly id: string; readonly name: string }[];
     /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
     onShowMention: (mention: PlanMention) => void;
-    /**
-     * The read of a workspace's Linear issues, where that workspace has
-     * Linear connected; none where it has not, which leaves the name a plain
-     * field. Asked nothing, it answers the issues the dialog reads as it
-     * opens; asked a search or an identifier, it answers what Linear finds
-     * for the name as typed.
-     */
-    linearIssuesIn: (
-      workspaceId: string | undefined,
-    ) => ((ask?: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>) | undefined;
-    /**
-     * The read of a repository's GitHub issues through a workspace's
-     * installation, where that workspace has GitHub connected; none where it
-     * has not. Asked nothing, it answers the repository's open issues; asked
-     * words or a number, what GitHub finds for them; either way, or that the
-     * installation grants the App no issues, with where that is granted.
-     */
-    githubIssuesIn: (
-      workspaceId: string | undefined,
-    ) =>
-      | ((repository: string, ask: RepositoryIssuesAsk) => Promise<GitHubRepositoryIssuesAnswer>)
-      | undefined;
   };
   /** Leaves the open task for the page the window rests on (`resting-page.ts`); a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -1116,19 +1080,14 @@ function rememberedChoice(
 }
 
 /**
- * What the open task holds of each fixed tab's kind, each unknown until its
- * read lands: its plan always, of its Inbox whether it may draw one, an
- * agent held, an archived one among them, or an item waiting (`inbox`).
+ * What the open task holds of each fixed tab's kind: its plan always, and of
+ * its Inbox whether it may draw one, an agent held, an archived one among
+ * them, or an item waiting (`inbox`).
  */
-function taskHolds(view: Pick<TasksView, "board">, inbox: boolean): TaskHolds {
-  const { board } = view;
+function taskHolds(inbox: boolean): TaskHolds {
   return {
     [SIDE_PANEL_TAB.PLAN]: true,
     [SIDE_PANEL_TAB.INBOX]: inbox,
-    [SIDE_PANEL_TAB.BOARD]:
-      board === undefined
-        ? undefined
-        : board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0,
   };
 }
 
@@ -1559,7 +1518,7 @@ export function useTasksTab(input: {
           bare: true,
         }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
+        ? { id: viewed.activeTaskId, holds: taskHolds(inboxHeld) }
         : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
@@ -2233,21 +2192,9 @@ export function useTasksTab(input: {
     copyWithToast(planMarkdown(region.task), TASK_COPIED_NOTE);
   };
 
-  // A fixture's staged task has nothing arriving on it.
-  const arrivedTabs = usePanelArrivals({
-    // Note that nothing of the plan's arrives while an agent's page holds the
-    // panel, so the plan's visit ends, and what it gained meanwhile counts as
-    // seen.
-    taskId: fixture === undefined ? (pageAgent ?? tasks.activeTaskId) : undefined,
-    board: pageAgent === undefined ? tasks.board : undefined,
-    panel: sidePanel,
-  });
-  // An agent that ended unseen marks its tab unread as an arrival does; main
-  // clears it once the tab is shown.
-  const unreadTabs: readonly StripTab[] = [
-    ...arrivedTabs,
-    ...input.unseenAgents.map((agent) => ({ agent })),
-  ];
+  // An agent that ended unseen marks its tab unread; main clears it once the
+  // tab is shown.
+  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => ({ agent }));
 
   // A fixture's repositories are read from nowhere, as its tasks are. The
   // chip lists the repositories of the workspace its task is in: the open
@@ -2445,8 +2392,7 @@ export function useTasksTab(input: {
   // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
-  // names no planning, so the task opens on an empty plan rather than the
-  // template. New task starts the task
+  // names no planning, so the task opens on its empty plan. New task starts the task
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
@@ -2499,9 +2445,6 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(from.issues === undefined || from.issues.length === 0
-        ? undefined
-        : { issues: from.issues }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
@@ -2580,27 +2523,6 @@ export function useTasksTab(input: {
           : undefined,
       (refused: Error): Failure => ({ reason: FAILURE_REASON.OTHER, text: refused.message }),
     );
-
-  // The dialog matches its name against the Linear issues of the workspace
-  // it starts in, and searches them, where that workspace has Linear connected.
-  const linearIssuesIn = useCallback<TasksControl["newTask"]["linearIssuesIn"]>(
-    (workspaceId) => {
-      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-      if (linked?.linear?.active !== true) return undefined;
-      return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
-    },
-    [viewed.workspaces, act],
-  );
-  // The dialog lists the chosen repository's GitHub issues, where the workspace has GitHub connected.
-  const githubIssuesIn = useCallback<TasksControl["newTask"]["githubIssuesIn"]>(
-    (workspaceId) => {
-      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-      if (linked?.github == null || !linked.github.active) return undefined;
-      return (repository, ask) =>
-        act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
-    },
-    [viewed.workspaces, act],
-  );
 
   // New task opens the dialog over whatever stands, an open task and its
   // call included, which stay until a task is started. Note that a press
@@ -3186,7 +3108,6 @@ export function useTasksTab(input: {
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
-    board: tasks.board,
     pages: tasks.pages,
     agents,
     history: {
@@ -3430,8 +3351,6 @@ export function useTasksTab(input: {
       onClose: () => setNewTaskAsk(undefined),
       tasks: sidebar,
       onShowMention: guard(showMention),
-      linearIssuesIn,
-      githubIssuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),
     onRenameTask: renameTask,

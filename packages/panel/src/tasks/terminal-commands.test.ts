@@ -300,7 +300,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
 test("the panel's + lists each agent's terminal under Terminal, says how it stands, and a pick adds a shell to that agent's sandbox", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
-    side: SIDE_PANEL_TAB.BOARD,
+    side: SIDE_PANEL_TAB.COMMENTS,
     lastTerminal: DONE.id,
   });
   const add = document.querySelector<HTMLButtonElement>(
@@ -415,7 +415,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   await mountOn(DESKTOP_CAPABILITIES.filter(offered), {
     agents: [WORKING],
     main: { agent: WORKING.id },
-    side: SIDE_PANEL_TAB.BOARD,
+    side: SIDE_PANEL_TAB.COMMENTS,
   });
   rightClickTab("Invite flow");
   const without = menuLabels();

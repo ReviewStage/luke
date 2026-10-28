@@ -379,6 +379,8 @@ export const INBOX_REFUSAL = {
   NO_MEMBER:
     "Not posted: to names no member; write a member of your workspace by their mention link, [@Name](link), as a person's chip is written.",
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
+  NOT_ITS_MEMBER:
+    "Not posted: your threads are the developer's alone, which no teammate sees; name the developer in to, or leave to out.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -651,6 +653,8 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_CHANNEL;
     case INBOX_POST_REFUSAL.NO_ADDRESSEE:
       return INBOX_REFUSAL.NO_ADDRESSEE;
+    case INBOX_POST_REFUSAL.NOT_ITS_MEMBER:
+      return INBOX_REFUSAL.NOT_ITS_MEMBER;
   }
 }
 

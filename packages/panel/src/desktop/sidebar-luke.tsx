@@ -1,4 +1,5 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import {
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -18,7 +19,7 @@ import { markReadItem } from "../tasks/task-menu-items.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast, useWorkingToast } from "../toast.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
-import { LUKE_NAME, type LukeOperator, type OperatorAnswer } from "./luke-operator.js";
+import type { LukeOperator, OperatorAnswer } from "./luke-operator.js";
 import { RowMarks } from "./task-actions.js";
 
 /**
@@ -132,7 +133,7 @@ export function SidebarLuke({
       }
       title={
         <>
-          {LUKE_NAME}
+          {OPERATOR_NAME}
           {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
         </>
       }
@@ -144,7 +145,7 @@ export function SidebarLuke({
         if (agentId !== undefined) onOpen(agentId);
         else if (operator.failed) operator.retry();
       }}
-      menu={rowMenu("Luke", groups, shown)}
+      menu={rowMenu(OPERATOR_NAME, groups, shown)}
       actionsAt={operator.failed ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
       actions={actions}
     />

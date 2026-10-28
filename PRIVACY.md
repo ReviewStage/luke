@@ -175,8 +175,8 @@ agent's title, opening with the sending agent's title and id, and goes to
 the receiving agent's model provider as the rest of its conversation does,
 and an agent it starts runs as the member who started it, on that member's
 keys, and is told which agent started it. It stores
-under your account its name and its plan, one Markdown document, which begins as a copy of
-your plan template and is written by coding agents started on it and by
+under your account its name and its plan, one Markdown document, which begins empty
+and is written by coding agents started on it and by
 you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
 unsaved words stay in Luke's memory on your Mac, never on disk. Our service
@@ -259,16 +259,6 @@ open threads beside the plan, and a thread in which a member mentions one of
 them with @ is handed to that agent whole as a request; either way the comments' words
 and their writers' names go to that agent's model provider, as the plan does
 (see "Who we send it to").
-
-**Your plan template.** The template a new task's plan starts from is kept with your
-account preferences on our service, as you write it in Settings › Plan
-template (up to 20,000 characters; a built-in one until you do), sent as you
-pause typing. Our service keeps its history without limit, as it does a
-plan's: the template after each revision (your saves close together count as
-one), whether you wrote it or restored which earlier version, and when, so
-Settings can show and restore an earlier one. A new task's plan begins as a copy of
-it; no model reads the template itself. Deleting your account removes it and
-its history.
 
 **What Luke remembers.** Where its developer turned on the Memory
 experiment, as a coding agent works it may keep a fact or
@@ -920,18 +910,12 @@ rather than under their account, and our service handles the token as it
 does an account's, sending it only to Linear. We keep the workspace
 connection's state, who last began its sign-in, when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. While it is connected, every member
-of the workspace can list the issues that Linear account can see, private
-teams' issues included, and start a plan from one, and Luke's agents working
-on that workspace's plans and coding agents use this connection for Linear in
-place of a member's own, so what they change in Linear shows as made by the
-person who connected it. Starting a plan from an issue copies the issue's
-key, title, address, and description onto the plan, where it stays with the
-plan, is handed to the plan's coding agents with the task, and is
-deleted with the plan. Once you pause typing in New task's name field, what
-you typed is sent to Linear through this connection as a search, or, where it
-is an issue's key or a link to one, as a read of that one issue; neither what
-was sent nor what Linear answered is kept. Where a plan, a reply, or an Inbox item shows a link
+one-time value that matches its return. While it is connected, Luke's agents
+working on that workspace's plans and coding agents use this connection for
+Linear in place of a member's own, so what they change in Linear shows as made
+by the person who connected it. A plan started from an issue by an earlier
+version of Luke keeps the issue's key, title, address, and description, which
+are deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title,
 state, and assignee's name, which it reads through this connection as you
 look and keeps nowhere; the app shows them on the link, and they go no
@@ -1111,19 +1095,19 @@ the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
-its whiteboard, its Call tab, the contents of its File tabs with
+its Call tab, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
 the live view of its page; code drawn in a
-transcript; the API keys and Plan template pages of Settings; an automation's
+transcript; the API keys page of Settings; an automation's
 webhook secret, the one time it is shown; the admin page in the app, which
 only our maintainers can open and which names other people's accounts; and the cards
-that open over a row or a chip on hover, a page's preview among them. The
-whiteboard and a Terminal tab's shell draw their words as pixels, which the
-masking cannot reach, so leaving them out is
-their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
+that open over a row or a chip on hover, a page's preview among them. A
+Terminal tab's shell draws its words as pixels, which the
+masking cannot reach, so leaving it out is
+its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked. Each recording carries Luke's version and whether it is a released
@@ -1636,7 +1620,7 @@ and error, performance, and agent reports by Sentry.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
-  counts, preferences, and plan template with its history, your pinned
+  counts and preferences, your pinned
   repositories, your tasks with their history, whiteboards, pages, coding
   agents, inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the

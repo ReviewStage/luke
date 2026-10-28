@@ -15,16 +15,20 @@ export const VM_TOOLS = {
   codex: "/usr/local/bin/codex",
 } as const;
 
-/** What a suite reads back: the GitHub tokens handed to the VMs and the agents whose VMs were deleted, in order, beside the sandbox. */
+/** What a suite reads back: the GitHub tokens handed to the VMs, and the agents whose VMs were signalled in, stopped, and deleted, in order, beside the sandbox. */
 export interface FakeSandbox {
   readonly sandbox: LocalAgentSandbox;
   readonly tokens: string[];
+  readonly signalled: string[];
+  readonly stopped: string[];
   readonly deleted: string[];
 }
 
 /** A sandbox whose VMs always start, once `ready` has, at once and with nothing to fetch where the suite names none. */
 export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.void): FakeSandbox {
   const tokens: string[] = [];
+  const signalled: string[] = [];
+  const stopped: string[] = [];
   const deleted: string[] = [];
   const sandbox: LocalAgentSandbox = {
     tools: VM_TOOLS,
@@ -36,11 +40,11 @@ export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.voi
       args: [command.command, ...command.args],
       env: command.env,
     }),
-    signalled: () => Effect.void,
-    stopped: () => Effect.succeed(true),
+    signalled: (agentId) => Effect.sync(() => void signalled.push(agentId)),
+    stopped: (agentId) => Effect.sync(() => stopped.push(agentId)).pipe(Effect.as(true)),
     deleted: (agentId) => Effect.sync(() => deleted.push(agentId)),
     githubToken: (_agentId, token) => Effect.sync(() => tokens.push(token)),
     deviceGit: () => ({}),
   };
-  return { sandbox, tokens, deleted };
+  return { sandbox, tokens, signalled, stopped, deleted };
 }

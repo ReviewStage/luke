@@ -12,6 +12,7 @@
 
 import { Database, type DatabaseServices, queryBuilder } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
+import { agentAutomationRunSql } from "@luke/database/models/agent-name";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { member, session, user } from "@luke/database/schemas/auth";
 import { automationRun } from "@luke/database/schemas/automation";
@@ -120,11 +121,8 @@ const PR_MERGED = or(
   eq(sql`${codingAgent.published} ->> 'state'`, PULL_REQUEST_STATE.MERGED),
 );
 
-/** Whether an automation started the agent: its link, or the origin that outlives the automation. */
-const STARTED_BY_AUTOMATION = or(
-  isNotNull(codingAgent.automationId),
-  isNotNull(codingAgent.automationOrigin),
-);
+/** Whether an automation started the agent, as every query asks it. */
+const STARTED_BY_AUTOMATION = agentAutomationRunSql(codingAgent);
 
 /**
  * Every meaningful action since `since`, one row per action: the account that

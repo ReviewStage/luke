@@ -258,7 +258,6 @@ export const SCENES: readonly Scene[] = [
     ],
   },
   // The plan's other faces.
-  { id: "plan-board", place: PLACE.PLAN, title: "The whiteboard", profile: "tasks-board" },
   {
     id: "plan-transcript",
     place: PLACE.PLAN,

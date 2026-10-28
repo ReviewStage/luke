@@ -52,10 +52,7 @@ Claude Code, Codex, or any other agent.
 
 ## Features
 
-- **Plans** start from a template you set in Settings › Plan template. The
-  default reads like a design doc: Context, Goal, Approach, Interfaces,
-  Alternatives, Hard parts, Not doing, Plan of attack, Testing, Open
-  questions, and Assumptions. Plans hold pictures and Mermaid diagrams.
+- **Plans** start empty, and hold pictures and Mermaid diagrams.
 - **Coding agents** hand scoped work to read-only subagents on a model and
   effort they choose, message and start other agents in the workspace, and
   show you screenshots or an interactive HTML page of what they built.
@@ -63,8 +60,7 @@ Claude Code, Codex, or any other agent.
   repositories of the GitHub account or organization the workspace connects.
 - **Integrations** reach Linear, Notion, Sentry, Slack, GitHub, Granola,
   Mercury, Neon, PostHog, Supabase, Vercel, Y Combinator, and Executor through
-  each service's own MCP server, for Luke and every agent. A task can start
-  from a Linear issue.
+  each service's own MCP server, for Luke and every agent.
 - **Skills** in the repository's `.agents/skills` or `.claude/skills` are
   offered to Luke and agents, and `/` in an agent's message box picks one.
 - **Run on this Mac** checks an agent's branch out in a local worktree with

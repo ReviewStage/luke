@@ -16,8 +16,8 @@ export const ACCOUNT_ACT_KIND = {
 } as const;
 
 /**
- * The account's own asks from Settings and a dictating box: its provider keys,
- * its plan template and that template's history, and a dictated clip's words.
+ * The account's own asks from Settings and a dictating box: its provider keys
+ * and a dictated clip's words.
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
@@ -50,18 +50,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_READ: "githubToken.read",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
    * the workspace Settings shows, shared by its members, read as the page
@@ -292,8 +280,8 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, a call about the open task, and its
- * whiteboard saved. And what one task holds, read as its tabs draw it: its
+ * GitHub connected or disconnected, and a call about the open task. And
+ * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, a call's messages, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
@@ -335,8 +323,6 @@ export const TASKS_ACT_KIND = {
   GITHUB_DISCONNECT: "github.disconnect",
   /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
@@ -529,7 +515,6 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
-  WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
@@ -590,19 +575,6 @@ export const WINDOW_SURFACE_ACT_KIND = {
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
-/**
- * A task's linked issues, GitHub's and Linear's, as its page asks for them:
- * read with where each stands now, one linked, one's keyword changed, and
- * one let go. Each answers the service's answer whole, or why there is none,
- * which the page says.
- */
-export const TASK_ISSUE_ACT_KIND = {
-  TASK_ISSUES_READ: "taskIssues.read",
-  TASK_ISSUES_LINK: "taskIssues.link",
-  TASK_ISSUES_RELATE: "taskIssues.relate",
-  TASK_ISSUES_UNLINK: "taskIssues.unlink",
-} as const;
-
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
@@ -619,7 +591,6 @@ export const PORT_ACT_KIND = {
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
-  ...TASK_ISSUE_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,

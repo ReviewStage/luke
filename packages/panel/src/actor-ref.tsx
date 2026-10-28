@@ -296,7 +296,7 @@ function Face({
           name={actorName(actor)}
           glyph={
             <StateGlyph
-              glyph={<AgentMark provider={actor.provider} />}
+              glyph={<AgentMark provider={actor.provider} operator={actor.operator} />}
               state={GLYPH_OF_STATE[actor.state]}
             />
           }
@@ -373,7 +373,7 @@ export function commentAuthor(actor: Actor): CommentAuthor {
         shape: AVATAR_SHAPE.SQUARE,
         glyph: (
           <StateGlyph
-            glyph={<AgentMark provider={actor.provider} />}
+            glyph={<AgentMark provider={actor.provider} operator={actor.operator} />}
             state={GLYPH_OF_STATE[actor.state]}
           />
         ),

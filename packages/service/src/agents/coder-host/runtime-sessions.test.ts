@@ -1712,7 +1712,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike, kept as the Start's prompt and sent by the agent whose start_agent asked where one did; eve writes its own",
+      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike, kept as the Start's prompt and sent by the agent whose start_agent asked where one did",
       () =>
         Effect.gen(function* () {
           const layers = (native: ReturnType<typeof runtimes>["native"]) =>

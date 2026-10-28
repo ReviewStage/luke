@@ -18,16 +18,11 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history.js";
+import type { NavigationHistory } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import {
-  fakeActPort,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-  refusedOnPort,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -37,8 +32,6 @@ import {
   pressInPhoneHead,
   readPhoneHead,
 } from "../testing/phone-head.js";
-import { newestToastAction, newestToastSays } from "../testing/toast.js";
-import { ToastHost } from "../toast.js";
 import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
@@ -62,7 +55,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Account", "Agents", "Integrations", "Skills", "Plan template", "Experimental"],
+    rows: ["Account", "Agents", "Integrations", "Skills", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -296,7 +289,7 @@ function openPage(page: HTMLElement, title: string): HTMLElement {
   const button = pageButtons(page).find((each) => each.textContent === title);
   assert.ok(button, `the sidebar lists ${title}`);
   act(() => button.click());
-  const drawn = page.querySelector<HTMLElement>(".settings-page, .plan-template-page");
+  const drawn = page.querySelector<HTMLElement>(".settings-page");
   assert.ok(drawn, `${title} is drawn`);
   return drawn;
 }
@@ -761,186 +754,6 @@ test("the Integrations page's search is cleared when another page is turned to",
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });
 
-test("the mouse's Back button from the plan template's version history goes back to the template page and cancels the browser's own, so a browser tab takes no second step", async () => {
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-  });
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
-      Promise.resolve({ template: "# Context\n", custom: false }),
-  });
-  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-  const history = page.querySelector<HTMLButtonElement>('button[aria-label="Version history"]');
-  assert.ok(history, "the template page offers its version history");
-  act(() => history.click());
-  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the version history stands");
-
-  const release = new MouseEvent("mouseup", {
-    button: MOUSE_BUTTON.BACK,
-    bubbles: true,
-    cancelable: true,
-  });
-  act(() => {
-    document.body.dispatchEvent(release);
-  });
-
-  assert.equal(release.defaultPrevented, true);
-  assert.equal(
-    page.querySelector('nav[aria-label="Versions"]'),
-    null,
-    "Back left the version history",
-  );
-});
-
-test("while the plan template is read its page stands the document's own head, its name and note, over placeholder blocks, and the template lands under the same head", async () => {
-  const { promise: read, resolve: land } = Promise.withResolvers<void>();
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-  });
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
-      read.then(() => ({ template: "# Context\n", custom: false })),
-  });
-  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
-  const placeholder = () => page.querySelector('[role="status"][aria-busy="true"]')?.textContent;
-  const head = () => page.querySelector('section[aria-label="Plan template"] header')?.textContent;
-  const reading = head();
-
-  assert.deepEqual(
-    [reading?.startsWith("Plan template"), placeholder()],
-    [true, "Reading your plan template"],
-  );
-  land();
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-  assert.equal(placeholder(), undefined);
-  assert.ok(page.querySelector('button[aria-label="Version history"]'), "the template is drawn");
-  assert.equal(head(), reading);
-});
-
-test("the plan template names itself once, by a header holding its title and its actions, while it is read and once it lands", async () => {
-  const { promise: read, resolve: land } = Promise.withResolvers<void>();
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-  });
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
-      read.then(() => ({ template: "# Context\n", custom: false })),
-  });
-  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
-  /** The page's titles, and the buttons of the header the first stands in. */
-  const named = () => {
-    const titles = [...page.querySelectorAll("h1")];
-    return {
-      titles: titles.map((title) => title.textContent),
-      acts: [...(titles[0]?.closest("header")?.querySelectorAll("button") ?? [])].map((button) =>
-        button.getAttribute("aria-label"),
-      ),
-    };
-  };
-
-  assert.deepEqual(named().titles, ["Plan template"]);
-  land();
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(named(), { titles: ["Plan template"], acts: ["Version history"] });
-});
-
-test("a plan template that could not be read keeps its heading, over the failure and its Retry", async () => {
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-  });
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.reject(refusedOnPort("Not here.")),
-  });
-  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(
-    [...page.querySelectorAll("h1")].map((title) => title.textContent),
-    ["Plan template"],
-  );
-  assert.equal(page.textContent?.includes("The template could not be read."), true);
-});
-
-test("the plan template's header says, under its title, what the template is for and that it follows the account, which a search for it lands on", async () => {
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
-      Promise.resolve({ template: "# Context\n", custom: false }),
-  });
-  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  const header =
-    page.querySelector<HTMLElement>('section[aria-label="Plan template"] header') ??
-    assert.fail("the template page has a header");
-  assert.equal(
-    header.querySelector("p")?.textContent,
-    "New plans start as a copy of this template. Follows your account.",
-  );
-  assert.ok(header.querySelector('[data-search-anchor="plan-template"]'), "a search lands in it");
-});
-
-test("Reset to defaults resets the plan template at once, asking nothing, and its toast's Undo writes back the words the page held", async () => {
-  const written: (string | null)[] = [];
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Mine\n", custom: true }),
-    [ACT_KIND.PLAN_TEMPLATE_WRITE]: ({ template }) => {
-      written.push(template);
-      return Promise.resolve({ template: template ?? "# Default\n", custom: template !== null });
-    },
-  });
-  const page = mount(
-    createElement(
-      "div",
-      null,
-      createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }),
-      createElement(ToastHost),
-    ),
-  );
-  const settle = () =>
-    act(async () => {
-      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-    });
-  /** Which of the two templates the page's document draws. */
-  const shown = () => {
-    const words = page.querySelector(".template-document")?.textContent ?? "";
-    return ["Mine", "Default"].filter((name) => words.includes(name));
-  };
-  await settle();
-  assert.deepEqual(shown(), ["Mine"]);
-
-  const reset = [...page.querySelectorAll("button")].find(
-    (button) => button.textContent === "Reset to defaults",
-  );
-  assert.ok(reset, "a template of the account's own offers its reset");
-  act(() => reset.click());
-  await settle();
-
-  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
-  assert.deepEqual(
-    { written, shown: shown(), toast: newestToastSays()?.startsWith("Plan template reset") },
-    { written: [null], shown: ["Default"], toast: true },
-  );
-
-  const undo = newestToastAction();
-  assert.equal(undo?.textContent, "Undo");
-  act(() => undo?.click());
-  await settle();
-
-  assert.deepEqual({ written, shown: shown() }, { written: [null, "# Mine\n"], shown: ["Mine"] });
-});
-
 test("on a phone the page list is headed by its way out alone, named for the step Back goes to, and Settings centred, with no Back and Forward, and the way out leaves as Back did", () => {
   let exits = 0;
   const page = mount(
@@ -1027,60 +840,6 @@ test("on a phone a page is headed by the way back to the list, its title, and it
   assert.equal(resets.length, 1, "the ⋯'s reset resets the page");
   pressInPhoneHead(page, "settings-page", "Settings");
   assert.equal(listings, 1);
-});
-
-test("on a phone the plan template is headed by the way back and a ⋯ holding Version history and Reset to defaults, which leave its title's line", async () => {
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-  });
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () => Promise.resolve({ template: "# Context\n", custom: true }),
-    [ACT_KIND.PLAN_TEMPLATE_WRITE]: () =>
-      Promise.resolve({ template: "# Default\n", custom: false }),
-  });
-  const page = mount(
-    createElement(SettingsHarness, {
-      opensOn: SETTINGS_VIEW.PLAN_TEMPLATE,
-      room: SHELL_ROOM.NARROW,
-      step: { listed: false, onList: ignore },
-    }),
-  );
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(readPhoneHead(page, "settings-page"), {
-    start: ["Settings"],
-    title: undefined,
-    end: ["Plan template actions"],
-  });
-  assert.equal(
-    page.querySelector('.task-title-line button[aria-label="Version history"]'),
-    null,
-    "the title's line holds no actions",
-  );
-  pressInPhoneHead(page, "settings-page", "Plan template actions");
-  assert.deepEqual(
-    menuItems().map((item) => item.label),
-    ["Version history", "Reset to defaults"],
-  );
-  chooseMenuItem("Reset to defaults");
-  assert.equal(
-    document.querySelector('[role="alertdialog"], [role="dialog"]'),
-    null,
-    "the reset asks nothing",
-  );
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-  pressInPhoneHead(page, "settings-page", "Plan template actions");
-  assert.deepEqual(
-    menuItems().map((item) => item.label),
-    ["Version history"],
-    "the reset left the template at its default, with nothing to reset",
-  );
-  chooseMenuItem("Version history");
-  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the template's versions stand");
 });
 
 test("a wide room keeps the page list's Back row and title and a page's own title and reset, with no phone's header", () => {
@@ -1195,10 +954,9 @@ test("a browser says its own store is this browser's, never this Mac's", () => {
       capabilities: DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP),
     }),
   );
-  const said = pageButtons(page).flatMap((button) => {
-    const title = button.textContent ?? "";
-    return title === "Plan template" ? [] : keepLines(openPage(page, title));
-  });
+  const said = pageButtons(page).flatMap((button) =>
+    keepLines(openPage(page, button.textContent ?? "")),
+  );
 
   assert.ok(said.includes("Kept in this browser"));
   assert.equal(said.includes("Kept on this Mac"), false);

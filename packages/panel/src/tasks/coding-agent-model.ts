@@ -16,6 +16,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
   CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_SENDER,
@@ -24,6 +25,7 @@ import {
   type CodingAgentArchivedBy,
   type CodingAgentAttachment,
   type CodingAgentFailure,
+  type CodingAgentKind,
   type CodingAgentMessage,
   type CodingAgentPartCut,
   type CodingAgentPayer,
@@ -261,16 +263,28 @@ export function agentActorState(status: CodingAgentStatus): ActorState {
   return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
 }
 
-/** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
+/**
+ * An agent as its tile draws it: its harness, read off its model, or Luke's
+ * face for a member's operator, known by its kind, wearing where it stands
+ * (at rest where that is not known), under the name it goes by.
+ */
 export function agentActor(
-  agent: { readonly model: string; readonly status: CodingAgentStatus },
+  agent: {
+    readonly model: string;
+    readonly status?: CodingAgentStatus | undefined;
+    readonly kind?: CodingAgentKind | undefined;
+  },
   name: string,
 ): Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }> {
   return {
     kind: ACTOR_KIND.AGENT,
     name,
     provider: providerOf(agent.model),
-    state: ACTOR_STATE_OF_GLYPH[agentGlyphState(agent.status)],
+    ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { operator: true } : undefined),
+    state:
+      agent.status === undefined
+        ? ACTOR_STATE.REST
+        : ACTOR_STATE_OF_GLYPH[agentGlyphState(agent.status)],
   };
 }
 
@@ -405,6 +419,15 @@ const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
 /** Whether an agent in this status may still write more. */
 export function agentStillWriting(status: CodingAgentStatus): boolean {
   return FOLLOWED_STATUSES.has(status);
+}
+
+/**
+ * Whether the agent's tab offers Stop: it runs, and its service has not said
+ * a Stop would stop nothing (`stoppable`), as after a Stop already taken, so
+ * a press is never dropped unheard. A starting agent has no turn yet to stop.
+ */
+export function offersStop(agent: Pick<CodingAgentSummary, "status" | "stoppable">): boolean {
+  return agent.status === CODING_AGENT_STATUS.RUNNING && agent.stoppable !== false;
 }
 
 /**
@@ -643,6 +666,12 @@ const DEVICE_WAKE = {
   [DEVICE_PLATFORM.LINUX]: "Start Luke on that host",
 } as const satisfies Record<DevicePlatform, string>;
 
+/** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own Luke started again. */
+const SETUP_RETRY = {
+  [DEVICE_PLATFORM.DARWIN]: "Choose Retry under This Mac in Settings › Agents › Machines on it",
+  [DEVICE_PLATFORM.LINUX]: "Run sudo systemctl restart luke-host on that host",
+} as const satisfies Record<DevicePlatform, string>;
+
 /**
  * Why the device a task runs its agents on would not take a Start, as New
  * task and an agent's Start alike say it, naming the device where the
@@ -666,7 +695,7 @@ export function localAgentRefusalWords(
     case LOCAL_AGENT_REFUSAL.PREPARING:
       return `${name} is still getting ready for local agents (downloading its sandbox). Try again in a few minutes.`;
     case LOCAL_AGENT_REFUSAL.SETUP_FAILED:
-      return `${name} couldn't set up local agents. Turn Run agents on this Mac off and on in Settings › Agents to try again, ${RUN_IN_CLOUD}.`;
+      return `${name} couldn't set up local agents. ${SETUP_RETRY[devicePlatformOf(device ?? {})]} to try again, ${RUN_IN_CLOUD}.`;
     // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
     case LOCAL_AGENT_REFUSAL.NOT_OWNER:
       return `This task runs on ${device?.name ?? "another member's device"}. Only ${device?.owner ?? "its owner"} can start agents on it.`;

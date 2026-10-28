@@ -34,7 +34,6 @@ export * from "./personal-workspace.js";
 export * from "./plan-comment.js";
 export * from "./plan-page.js";
 export * from "./plan-revision.js";
-export * from "./plan-template-revision.js";
 export * from "./preferences.js";
 export * from "./pull-request-chapters.js";
 export * from "./repository-pin.js";

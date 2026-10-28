@@ -75,6 +75,7 @@ import {
   INSTALLED_SKILLS,
   type InputLine,
   InputLineSchema,
+  RUNNER_CONTROL,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
@@ -297,11 +298,21 @@ interface Launch {
   readonly firstSequence: number;
 }
 
-/** Calls one of the session's control requests, reporting a failure rather than ending the launch on it. */
-function control(step: string, call: () => Promise<void>) {
+/**
+ * Calls one of the session's control requests, reporting a failure rather
+ * than ending the launch on it; answers whether the CLI answered within
+ * `RUNNER_CONTROL.ANSWER_MS`. Note that one it never answers is let go, so
+ * it holds up none of Luke's later lines.
+ */
+function control(step: string, call: () => Promise<unknown>) {
   return Effect.tryPromise(call).pipe(
-    Effect.catch(() => Effect.logWarning(`agent-runner: ${step} failed`)),
-    Effect.asVoid,
+    Effect.timeoutOption(Duration.millis(RUNNER_CONTROL.ANSWER_MS)),
+    Effect.flatMap((answer) =>
+      Option.isSome(answer)
+        ? Effect.succeed(true)
+        : Effect.as(Effect.logWarning(`agent-runner: ${step} went unanswered`), false),
+    ),
+    Effect.catch(() => Effect.as(Effect.logWarning(`agent-runner: ${step} failed`), true)),
   );
 }
 
@@ -347,9 +358,10 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
         return;
       }
       yield* Ref.set(launch.stopping, true);
-      yield* control("interrupt", async () => {
-        await launch.session.interrupt();
-      });
+      // An interrupt the CLI never answers ends the launch, whose end closes the CLI.
+      if (!(yield* control("interrupt", () => launch.session.interrupt()))) {
+        yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
+      }
       return;
     }
     case INPUT_LINE.RETIRE: {
@@ -627,20 +639,27 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
       },
     }),
   );
-  const loops = [
+  const reading = [
     yield* Effect.forkScoped(inputLoop),
-    yield* Effect.forkScoped(outputLoop),
     yield* sink.undelivered.pipe(
       Effect.andThen(Deferred.succeed(launch.ended, RUNNER_END.FAILED)),
       Effect.forkScoped,
     ),
   ];
+  const posting = yield* Effect.forkScoped(outputLoop);
 
-  // The loops stop before the session closes, so nothing it emits on the
-  // way down is numbered after the launch's last event.
+  // The loops stop before the launch's last event is posted, so nothing the
+  // CLI emits on the way down is numbered after it. Note that Luke's lines
+  // stop first, so none is taken into a CLI being closed, and the CLI is
+  // closed before the output loop is waited on, because the SDK's iterator
+  // answers its return only once the read under way does, which a quiet CLI
+  // (a wait on a wakeup, a warm launch) answers only when it next writes:
+  // waiting on it first held an ended launch, deaf to every line, for up to
+  // the hour its wakeup was set for.
   const end = yield* Deferred.await(launch.ended);
-  yield* Fiber.interruptAll(loops);
+  yield* Fiber.interruptAll(reading);
   session.close();
+  yield* Fiber.interrupt(posting);
   const wakeups = yield* Ref.get(launch.released);
   return (
     wakeups === undefined ? { end, failure } : { end, failure, wakeups }

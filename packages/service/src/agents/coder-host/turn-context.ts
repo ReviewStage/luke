@@ -31,25 +31,12 @@ import { createHash } from "node:crypto";
 import type { CodingAgentContextRow } from "@luke/database/models/coding-agent-store";
 import type { StoredTask } from "@luke/database/models/task-store";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
-import {
-  PLAN_FIELD_BAR,
-  PLAN_FIELD_HEADING,
-  PLAN_FIELD_PURPOSE,
-} from "@luke/features/plan-template";
-import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
+import type { PlanRevisionLine } from "@luke/features/task-wire";
 import { Schema } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL } from "./tool-set.js";
-
-/** Each section of the default template as the developer reads it, what it holds, and when it is done. */
-const DOCUMENT_SECTIONS = Object.values(PLAN_FIELD)
-  .map(
-    (field) =>
-      `- ${PLAN_FIELD_HEADING[field]}: ${PLAN_FIELD_PURPOSE[field]}\n  Done when: ${PLAN_FIELD_BAR[field]}`,
-  )
-  .join("\n");
 
 /** What every spoken turn is told: that it is heard, how to speak, never to wait, and how to ask. */
 const SPOKEN_WORDS = `## This turn is spoken
@@ -68,28 +55,24 @@ Ask the developer a question in your words, one at a time, with the answer you r
 
 /**
  * What a spoken turn of an agent on a task is told of talking its plan
- * through, which carries its sources: the plan as a spec,
- * the template's sections and their bars, the interfaces, hard parts, and
- * tests a teammate draws out, the developer still working out what they
- * want, what a note holds, and when the plan is done.
+ * through, which carries its sources: the plan as a spec that starts
+ * empty, the interfaces, hard parts, and tests a teammate draws out, the
+ * developer still working out what they want, what a note holds, and when
+ * the plan is done.
  */
 const DOCUMENT_TALK_WORDS = `## Talking the plan through
 
 On a call the developer may talk the task through with you rather than ask for code: keep its plan with \`${CODER_TOOL.EDIT_PLAN}\` as the talk settles it. The plan is the design doc two engineering teammates would write after talking a task through, and the whole spec an agent builds from without having heard the call: concrete enough that two agents given it would build the same behavior, structure, and interfaces. Talk like a teammate; hold the document to a spec's bar.
 
-Its headings are its sections, and they are what you ask about. A line of guidance under a heading is the developer's prompt for that section, not an answer. Most plans start from the default template, whose sections each say what they hold and when they are done:
-
-${DOCUMENT_SECTIONS}
-
-Where the developer's template names its sections differently, hold each to the bar of the default section it stands for; a section with no counterpart is held to what its heading and guidance ask.
+Its headings are its sections. A plan starts empty: open a section under a heading of its own as the talk reaches what it answers, and add to a heading the plan already holds where one fits.
 
 Context and goal come first: don't design an approach for a problem you don't understand yet. Spend your effort where a teammate adds the most: push on the approach, name an alternative the developer has not considered and say which you would pick, and hunt for the hard parts before an agent finds them. Read the code for the types and signatures a change touches and propose the new shapes yourself for the developer to confirm; for each goal, ask what happens when it goes wrong, and put the cases that matter with your recommended behavior; and turn each goal and hard part into a "When ..., then ..." case with an exact result for them to confirm.
 
 Don't assume the developer arrives knowing what to build: while the idea is still rough, start from who it is for and what goes wrong today. When they are unsure, ask the same decision again as two or three concrete directions grounded in the code, with the one you recommend and why; if they still have no preference, take your recommendation as a working assumption and move on. A direction is settled only once they agreed to it.
 
-Write what was settled: what the developer said, what you found, and what you proposed that they did not push back on; never a guess, and never a point the plan already holds. Put each point under the heading it answers, in its section's form. A section named under [sections the developer wrote] holds their own words: never reword or strike them, and raise anything that contradicts them with them.
+Write what was settled: what the developer said, what you found, and what you proposed that they did not push back on; never a guess, and never a point the plan already holds. Put each point under the heading it answers. A section named under [sections the developer wrote] holds their own words: never reword or strike them, and raise anything that contradicts them with them.
 
-The plan is done when it is enough for a separate agent to build the change without coming back with a question: every section meets its bar or the developer agreed it does not apply, and every remaining choice they do not mind either way is stated as an assumption. Then ask nothing more, and say the plan is complete, with the working assumptions for them to hear.`;
+The plan is done when it is enough for a separate agent to build the change without coming back with a question: every section is settled or the developer agreed it does not apply, and every remaining choice they do not mind either way is stated as an assumption. Then ask nothing more, and say the plan is complete, with the working assumptions for them to hear.`;
 
 /** The line a turn's message rides behind, by whether it holds the task or the time alone. */
 const TURN_MESSAGE_LEAD = {

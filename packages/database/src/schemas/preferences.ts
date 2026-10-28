@@ -44,13 +44,6 @@ export const accountPreference = pgTable("account_preference", {
    */
   chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
   /**
-   * The Markdown a new plan of this account starts from, kept verbatim as
-   * Settings wrote it; null means the built-in `DEFAULT_PLAN_TEMPLATE`
-   * (`@luke/features/plan-document-template`). Its own path writes it
-   * (`/api/account/plan-template`), apart from the preferences snapshot.
-   */
-  planTemplate: text("plan_template"),
-  /**
    * Each experiment the account turned on or back off, by its key
    * (`@luke/settings`'s `EXPERIMENT`); null on a row that never chose one,
    * which reads as every experiment off. A write merges its keys over what
@@ -72,7 +65,7 @@ export const accountPreference = pgTable("account_preference", {
   createdAt: createdAt(),
   /**
    * When the preferences part was last written; null on a row only a
-   * coding-agent choice or a plan template opened. The desktop reads the instant's presence as
+   * coding-agent choice opened. The desktop reads the instant's presence as
    * a snapshot to apply over its own settings, so a row with none written
    * must answer none, or a never-synced Mac would take an empty snapshot
    * over the voice it holds.

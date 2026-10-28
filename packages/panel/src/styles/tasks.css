@@ -1,69 +1,3 @@
-/* A board narrower than Excalidraw's phone breakpoint draws its phone
-   toolbar, a row of tools wider than the side panel at its narrowest,
-   centred and cut off at both edges. There the row wraps within the board
-   instead, clear of the column of tools Excalidraw stands at its right, so
-   every tool is in reach. Note that these name Excalidraw's own classes,
-   which hold for the version the workspace pins. */
-.task-board .excalidraw--mobile .App-top-bar > section {
-  width: 100%;
-  padding-right: var(--default-button-size);
-}
-
-.task-board .excalidraw--mobile .App-top-bar > section > .Stack,
-.task-board .excalidraw--mobile .App-toolbar-container {
-  display: flex;
-  justify-content: center;
-}
-
-.task-board .excalidraw--mobile .App-toolbar--mobile {
-  min-width: 0;
-}
-
-.task-board .excalidraw--mobile .App-toolbar--mobile > .Stack_horizontal {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-/* A finger works the board's controls, so each takes a finger's press:
-   Excalidraw sizes its buttons by its own `--default-button-size` and
-   `--lg-button-size`, and shrinks its toolbar's tools on a narrow screen and
-   the column of tools it stands at its right to fixed sizes of its own,
-   which here take the finger's size too. That column is drawn as a tab run
-   off the canvas's right edge, which on a phone's screen reads as cut off,
-   so there it stands whole inside the board, at the canvas's own inset, and
-   the toolbar's rows keep clear of it. A mouse keeps Excalidraw's sizes and
-   its tab. */
-@media (pointer: coarse) {
-  .task-board .excalidraw {
-    --default-button-size: 44px;
-    --lg-button-size: 44px;
-  }
-
-  .task-board .excalidraw .App-toolbar-container .ToolIcon__icon {
-    width: var(--lg-button-size);
-    height: var(--lg-button-size);
-  }
-
-  .task-board .excalidraw--mobile .mobile-misc-tools-container {
-    right: 0;
-    border-right-width: 1px;
-    border-right-style: solid;
-    border-right-color: var(--sidebar-border-color, var(--luke-color-border));
-    border-radius: var(--border-radius-lg, var(--luke-radius-8));
-  }
-
-  .task-board .excalidraw--mobile .mobile-misc-tools-container .ToolIcon__icon,
-  .task-board .excalidraw--mobile .mobile-misc-tools-container .sidebar-trigger {
-    width: var(--default-button-size);
-    height: var(--default-button-size);
-  }
-
-  .task-board .excalidraw--mobile .App-top-bar > section {
-    padding-right: calc(var(--default-button-size) + 2px + var(--luke-space-8));
-  }
-}
-
 /* The caret a save is typed behind: solid, as a caret is while someone types.
    Note that it and the selection are inline, so they take none of the gap
    a note (`@luke/ui`'s prose.css) opens between a list item's blocks, which as an inline-block
@@ -2045,9 +1979,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The composer answers its card's width, not the window's, so it holds in
    the main column and the side panel alike (`agent-composer.tsx`). The
    presses never give way, the model chip's words do first, and the ⋯
-   stands only once it has something to take in. */
+   stands only once it has something to take in. The card is a `luke-room`
+   too, so the badge saying where the agent runs gives up its words under
+   it (`agent-place.tsx`) rather than under a room around the box. */
 .agent-composer > form {
-  container: composer / inline-size;
+  container: composer luke-room / inline-size;
 }
 
 .agent-composer-actions > :is(.agent-servers, .agent-context) {
@@ -2324,22 +2260,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 .issue-mark[data-issue-state="not-planned"] {
   color: var(--luke-color-text-muted);
-}
-
-/* A task's linked issues under its status and priority
-   (`task-issue-links.tsx`): a row of chips in the status chip's own look,
-   wrapping where the page is narrow, each its issue's mark, its key in the
-   code face, and its title cut short at a chip's widest, and Link issue,
-   quiet, at the row's end. What did not land is said under the row. */
-.task-issue-link .issue-mark {
-  width: var(--luke-icon-12);
-  height: var(--luke-icon-12);
-}
-
-.task-issue-link-unread > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 /* The pull request's row pinned over the composer, a card of one row

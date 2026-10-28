@@ -8,21 +8,6 @@ export interface PanelStaticDirectory {
 
 export const REDIRECTED: RegExp;
 export function redirectOf(specifier: string, importer: string | undefined): string | undefined;
-export const EXCALIDRAW_UNUSED: RegExp;
-export const EXCALIDRAW_UNUSED_MODULE: string;
-export function excalidrawLeftOut(specifier: string, importer: string | undefined): boolean;
-export const EXCALIDRAW_SCRIPT: RegExp;
-export function excalidrawWithoutFontFallback(code: string): string | undefined;
-/** The fonts' fix as an esbuild plugin, typed by the part of esbuild's build object it calls. */
-export const excalidrawFontsLocal: {
-  readonly name: string;
-  setup(build: {
-    onLoad(
-      options: { filter: RegExp },
-      callback: (args: { path: string }) => Promise<{ contents: string; loader: "js" } | undefined>,
-    ): void;
-  }): void;
-};
 export const LUCIDE_WHOLE: string;
 export function lucideWholeModule(file: string): string;
 /**
@@ -59,5 +44,4 @@ export const HIGHLIGHT_WORKER_BUILD: HighlightWorkerBuild;
 export function panelDefines(highlightWorkerText: string): {
   readonly [identifier: string]: string;
 };
-export const EXCALIDRAW_STYLESHEET: string;
 export function panelStaticDirectories(): readonly PanelStaticDirectory[];

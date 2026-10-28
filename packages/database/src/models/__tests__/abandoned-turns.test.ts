@@ -294,12 +294,17 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
   );
 
   it.effect(
-    "the sweep settles a turn whose Stop eve never confirmed as cancelled once past the Stop's bound, and not before",
+    "the sweep settles a turn whose Stop eve never confirmed as cancelled once past the Stop's bound, and not before, dropping the turn a native projection holds",
     () =>
       Effect.gen(function* () {
+        const db = yield* Database;
         const writer = yield* storeWriter({ tools: {} });
         const target = yield* openAgentConversation;
         const turnId = yield* turnIn(writer, target, TURN_STATUS.RUNNING);
+        yield* db
+          .update(conversations)
+          .set({ nativeProjection: { session: "cli", turn: { id: turnId } } })
+          .where(eq(conversations.id, target.conversationId));
         const stoppedAt = STARTED_AT + 60_000;
         yield* writer.requestTurnCancel(target, { turnId, at: new Date(stoppedAt) });
 
@@ -314,6 +319,11 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           { now: stoppedAt + TURN_ABANDON.CANCEL_AFTER_MS + 1 },
         );
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.CANCELLED, null]);
+        const [row] = yield* db
+          .select({ projection: conversations.nativeProjection })
+          .from(conversations)
+          .where(eq(conversations.id, target.conversationId));
+        assert.deepEqual(row?.projection, { session: "cli" });
       }),
   );
 

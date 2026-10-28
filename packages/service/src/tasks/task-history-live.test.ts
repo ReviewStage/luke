@@ -11,7 +11,6 @@ import { voiceSessions } from "@luke/database/schemas/voice";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { VOICE_DELEGATION_MODE } from "@luke/database/voice-vocabulary";
 import { revisionsOfLiveRows, taskHistoryLiveRowsSchema } from "@luke/features/live-wire";
-import { PLAN_HEADING } from "@luke/features/plan-template";
 import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS } from "@luke/features/task-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -82,11 +81,10 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
           model: "gpt-realtime",
         });
-        yield* saveNotes(
-          binding,
-          [added(PLAN_HEADING.CONTEXT, "A member cannot bring a teammate in.")],
-          { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: CALL },
-        );
+        yield* saveNotes(binding, [added("Context", "A member cannot bring a teammate in.")], {
+          actor: PLAN_ACTOR.NOTETAKER,
+          liveSessionId: CALL,
+        });
         const started = yield* createCodingAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
@@ -97,13 +95,12 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
           repository: "acme/relay",
         });
         yield* later;
-        yield* saveNotes(
-          binding,
-          [added(PLAN_HEADING.OPEN_QUESTIONS, "- Who may withdraw an invite?")],
-          { actor: PLAN_ACTOR.AGENT, agentId: Option.getOrThrow(started).agent.id },
-        );
+        yield* saveNotes(binding, [added("Open questions", "- Who may withdraw an invite?")], {
+          actor: PLAN_ACTOR.AGENT,
+          agentId: Option.getOrThrow(started).agent.id,
+        });
         yield* later;
-        yield* saveNotes(binding, [added(PLAN_HEADING.HARD_PARTS, "- Links expire.")], {
+        yield* saveNotes(binding, [added("Hard parts", "- Links expire.")], {
           actor: PLAN_ACTOR.DEVELOPER,
         });
         yield* later;

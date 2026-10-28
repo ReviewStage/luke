@@ -8,6 +8,7 @@ import {
   STARTING_GRACE_MILLIS,
   type StatusTurn,
   statusClockEdge,
+  turnStoppable,
 } from "./coding-agent-status.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 
@@ -96,6 +97,24 @@ test("a line beside a running turn awaits it whatever the clock says, so nothing
   assert.equal(codingAgentStatusAt(running, long), CODING_AGENT_STATUS.RUNNING);
   assert.equal(lineAwaitsTurn(running, long), true);
   assert.equal(statusClockEdge(running, long), undefined);
+});
+
+test("a Stop wins over a line written before it, while its turn runs and once it ended, and a line written after it still runs with nothing left to stop", () => {
+  const stoppedAt = STARTED + 10_000;
+  const stamped = turn(TURN_STATUS.RUNNING, {
+    cancelRequested: true,
+    cancelRequestedAt: stoppedAt,
+  });
+  const ended = { ...stamped, status: TURN_STATUS.CANCELLED, settledAt: stoppedAt + 300_000 };
+  const before = standing(stoppedAt + 1_000 - STARTED, stoppedAt - 1_000);
+  for (const stopped of [stamped, ended]) {
+    assert.equal(codingAgentStatusAt(stopped, before), CODING_AGENT_STATUS.CANCELLED);
+    assert.equal(lineAwaitsTurn(stopped, before), false);
+  }
+  const after = standing(stoppedAt + 2_000 - STARTED, stoppedAt + 1_000);
+  assert.equal(codingAgentStatusAt(stamped, after), CODING_AGENT_STATUS.RUNNING);
+  assert.equal(turnStoppable(stamped), false);
+  assert.equal(turnStoppable(turn(TURN_STATUS.RUNNING)), true);
 });
 
 test("a line written before the newest turn was queued was that turn's own, and awaits nothing once it ended", () => {

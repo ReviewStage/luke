@@ -1,5 +1,3 @@
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
-import type { Board, DrawingElement } from "@luke/features/board-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
@@ -99,9 +97,9 @@ const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
 /**
  * The reference journey's task partway through its conversation: the
  * context, the goal, an approach with the pending-membership design settled,
- * its interfaces, one alternative weighed, one hard part, an open question,
- * and its assumptions, with every other section still holding the default
- * template's guidance, as a draft shows it.
+ * its interfaces, one alternative weighed, one hard part, what it leaves
+ * out, its first test, an open question, and its assumptions, as a draft
+ * shows it.
  */
 const FIXTURE_SECTIONS = [
   "## Context",
@@ -128,9 +126,9 @@ const FIXTURE_SECTIONS = [
   "- A withdrawn or accepted invite link is opened again: the page reads " +
     '"This invite is no longer valid" and grants nothing.',
   "## Not doing",
-  "What is out of scope on purpose, and why.",
+  "- Inviting someone by a link anyone can open: every invite names one email address.",
   "## Testing",
-  'The cases that prove the change, each as "When …, then …" with an exact result, then the end-to-end check.',
+  "- When a member invites an address, then one email with a link reaches it.",
   "## Open questions",
   "- Who can withdraw an invite: the member who sent it, any admin, or both?",
   "## Assumptions",
@@ -400,77 +398,6 @@ const FIXTURE_OPEN_TASK: TasksView = {
   activity: { planner: { action: "grep -rn pending src/members" } },
 };
 
-/**
- * What Luke drew for the fixture's task, in the vocabulary his
- * `draw_on_board` call sends, not yet on the board: the capture shows the
- * canvas converting it with Excalidraw's own converter, as a Mac does the
- * first time it reads a new drawing.
- */
-const FIXTURE_DRAWING: readonly DrawingElement[] = [
-  { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -110, text: "Inviting a teammate" },
-  {
-    type: DRAWING_ZONE,
-    id: "service",
-    x: 280,
-    y: -60,
-    width: 280,
-    height: 380,
-    title: "Invites service",
-  },
-  {
-    type: BOARD_ELEMENT_TYPE.RECTANGLE,
-    id: "member",
-    x: 0,
-    y: 0,
-    label: "Member",
-    backgroundColor: "#a5d8ff",
-  },
-  {
-    type: BOARD_ELEMENT_TYPE.RECTANGLE,
-    id: "invites",
-    x: 320,
-    y: 0,
-    label: "POST /invites",
-    backgroundColor: "#b2f2bb",
-  },
-  {
-    type: BOARD_ELEMENT_TYPE.ELLIPSE,
-    id: "email",
-    x: 640,
-    y: 0,
-    label: "Invite email",
-    backgroundColor: "#d0bfff",
-  },
-  {
-    type: BOARD_ELEMENT_TYPE.DIAMOND,
-    id: "valid",
-    x: 620,
-    y: 160,
-    width: 240,
-    height: 140,
-    label: "Link still valid?",
-    backgroundColor: "#fff3bf",
-  },
-  {
-    type: BOARD_ELEMENT_TYPE.RECTANGLE,
-    id: "joined",
-    x: 320,
-    y: 190,
-    label: "Joins workspace",
-    backgroundColor: "#b2f2bb",
-  },
-  { type: BOARD_ELEMENT_TYPE.ARROW, id: "sends", from: "member", to: "invites", label: "email" },
-  { type: BOARD_ELEMENT_TYPE.ARROW, id: "mails", from: "invites", to: "email" },
-  { type: BOARD_ELEMENT_TYPE.ARROW, id: "opens", from: "email", to: "valid", label: "opens" },
-  { type: BOARD_ELEMENT_TYPE.ARROW, id: "accepts", from: "valid", to: "joined", label: "yes" },
-];
-
-const FIXTURE_BOARD: Board = {
-  elements: [],
-  appliedDrawing: 0,
-  drawing: { number: 1, elements: FIXTURE_DRAWING },
-};
-
 /** One thread's comment, written by `writer` at `at`. */
 function comment(
   id: string,
@@ -641,19 +568,12 @@ function commentsActAnswer(
   return { answer: commentsAnswer(read) as PortActResult<PortActKind> };
 }
 
-/** The open task on its whiteboard, as the tasks-board profile captures it. */
-const FIXTURE_OPEN_BOARD: TasksView = { ...FIXTURE_OPEN_TASK, board: FIXTURE_BOARD };
-
 /** The side panels the fixture profiles open their task with. */
 const FIXTURE_DOCUMENT_PANEL: SidePanelState = {
   open: true,
   tabs: SIDE_PANEL_TABS,
   tab: SIDE_PANEL_TAB.PLAN,
   width: SIDE_PANEL_WIDTH.DEFAULT,
-};
-const FIXTURE_BOARD_PANEL: SidePanelState = {
-  ...FIXTURE_DOCUMENT_PANEL,
-  tab: SIDE_PANEL_TAB.BOARD,
 };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_DOCUMENT_PANEL, open: false };
 
@@ -673,15 +593,14 @@ export function fixtureTasksView(run: {
   const agent = agentTasksView(run.profile, FIXTURE_OPEN_TASK);
   if (agent !== undefined) return agent;
   if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_OPEN_TASK;
-  if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_OPEN_BOARD;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_OPEN_TASK;
   if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_OPEN_TASK;
   return settingsTasksView(run.profile, FIXTURE_TASK_LIST) ?? FIXTURE_TASK_LIST;
 }
 
 /**
- * The side panel a fixture run opens its task with: on the whiteboard under
- * the tasks-board profile, on the plan under the tasks, tasks-transcript, and
+ * The side panel a fixture run opens its task with: on the plan under
+ * the tasks, tasks-transcript, and
  * tasks-work profiles, whose call the task's column shows, the latter with
  * Luke at work on it, on the agent's tab each agent profile names, and
  * closed under any other. Nothing for a live run, which opens the panel as
@@ -695,7 +614,6 @@ export function fixtureSidePanel(run: {
   const agent = agentSidePanel(run.profile, FIXTURE_DOCUMENT_PANEL, FIXTURE_TASK_ID);
   if (agent !== undefined) return agent;
   if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_DOCUMENT_PANEL;
-  if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_BOARD_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_DOCUMENT_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_DOCUMENT_PANEL;
   return FIXTURE_CLOSED_PANEL;
@@ -703,16 +621,13 @@ export function fixtureSidePanel(run: {
 
 /**
  * What a fixture run reads of its task where no profile stages more: no
- * agents, and no linked issues. Note that main answers a fixture run's
- * service reads with nothing, which the task's column would wait on in its
- * placeholder for good, and which the plan's Linked issues box would say as
- * a read Luke did not answer.
+ * agents. Note that main answers a fixture run's service reads with
+ * nothing, which the task's column would wait on in its placeholder for good.
  */
 function emptyTaskAnswer(
   kind: PortActKind,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   if (kind === ACT_KIND.CODING_AGENTS_LIST) return { answer: { agents: [] } };
-  if (kind === ACT_KIND.TASK_ISSUES_READ) return { answer: { issues: [] } };
   return undefined;
 }
 
@@ -723,7 +638,7 @@ function emptyTaskAnswer(
  * history under every profile, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads, every
  * profile's workspace members, every other profile's task as one with no
- * agents and no linked issues, and nothing else, which goes to main as it
+ * agents, and nothing else, which goes to main as it
  * would.
  */
 export function fixtureActAnswer(

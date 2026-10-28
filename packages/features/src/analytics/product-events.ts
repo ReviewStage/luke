@@ -157,6 +157,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   INTEGRATIONS: "integrations",
   SKILLS: "skills",
   API_KEYS: "api_keys",
+  /** No page since Settings › Plan template was removed; an older build still counts a visit to it. */
   PLAN_TEMPLATE: "plan_template",
   WORKSPACE: "workspace",
   ACCOUNT: "account",

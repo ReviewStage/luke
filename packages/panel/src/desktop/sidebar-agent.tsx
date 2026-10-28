@@ -1,4 +1,5 @@
 import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import { automationRun } from "@luke/features/model-label";
 import {
   InlineEdit,
   LIST_DENSITY,
@@ -74,9 +75,8 @@ function starterOf(
   face: boolean,
   reader: ReturnType<typeof useMemberDirectory>,
 ): Actor | undefined {
-  if (agent.automationName !== undefined) {
-    return { kind: ACTOR_KIND.AUTOMATION, name: agent.automationName, state: ACTOR_STATE.REST };
-  }
+  const name = automationRun(agent)?.name;
+  if (name !== undefined) return { kind: ACTOR_KIND.AUTOMATION, name, state: ACTOR_STATE.REST };
   if (!face) return undefined;
   return teammateCreator({ createdBy: agent.startedBy, ownerId: agent.startedBy?.userId }, reader);
 }

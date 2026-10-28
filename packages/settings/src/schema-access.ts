@@ -380,7 +380,7 @@ export type SettingKeep = (typeof SETTING_KEEP)[keyof typeof SETTING_KEEP];
 /**
  * Where the service keeps a page's own rows, the ones that are no stored
  * setting: the account itself and its GitHub token, its agents' keys and
- * model, integrations, skills, plan template, and experiments; a workspace's
+ * model, integrations, skills, and experiments; a workspace's
  * members, connections, and memory. Nothing for a page whose every row is a
  * stored setting or the device's own, whose keep its settings answer.
  */
@@ -388,7 +388,6 @@ const SERVICE_KEEP_OF_PAGE = {
   [SETTINGS_PAGE.ACCOUNT]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.APPEARANCE]: null,
   [SETTINGS_PAGE.SHORTCUTS]: null,
-  [SETTINGS_PAGE.PLAN_TEMPLATE]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.MEMORY]: SETTING_KEEP.WORKSPACE,
   [SETTINGS_PAGE.CODING_AGENTS]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.INTEGRATIONS]: SETTING_KEEP.ACCOUNT,

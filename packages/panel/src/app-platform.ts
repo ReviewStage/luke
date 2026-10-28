@@ -54,8 +54,8 @@ export interface AppPlatform {
   /** The address one version of an agent's page is drawn from, in a sandboxed frame. */
   pageFrameUrl(page: FramedPage): string;
   /**
-   * The folder the panel's static files are served from (Excalidraw's fonts,
-   * the harness marks), as an absolute address ending in `/`: the shell's to
+   * The folder the panel's static files are served from (the harness
+   * marks), as an absolute address ending in `/`: the shell's to
    * name, because the document's own address need not be that folder.
    */
   assetBase(): string;

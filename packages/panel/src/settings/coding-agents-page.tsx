@@ -14,12 +14,6 @@ import {
 } from "@luke/features/provider-key-wire";
 import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
-  SETTING_SECTION,
-  type SettingsRowsInput,
-  settingRowsForPage,
-} from "@luke/settings";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   CHOICE_BAR_LOOK,
@@ -72,10 +66,7 @@ import { ChaptersModelSection } from "./chapters-model-section.js";
 import { HostsSection } from "./hosts-section.js";
 import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
-import { SchemaSettingRows } from "./schema-rows.js";
 import { SwitchRow } from "./switch-row.js";
-import { ThisMacHostRow } from "./this-mac-host-row.js";
-import type { SettingsWrites } from "./writes.js";
 
 /**
  * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on.
@@ -504,43 +495,7 @@ function CodingAgentsSection({
  * own key, so it reads them from the rows that change them rather than from
  * a read of its own that a save there would leave behind.
  */
-/**
- * The page's schema rows, under the page's own groups: whether this Mac runs
- * the account's local agents, drawn only while the Local agents experiment is
- * on in the desktop app (`@luke/settings`'s schema says so), with where This
- * Mac's `luke-host` stands under it. Nothing, not even its group, where no
- * row stands.
- */
-function AgentSchemaRows({
-  view,
-  writes,
-}: {
-  view: SettingsRowsInput;
-  writes: SettingsWrites;
-}): React.JSX.Element | null {
-  if (
-    settingRowsForPage(SCHEMA_SETTINGS_PAGE.CODING_AGENTS, SETTING_SECTION.MAIN, view).length === 0
-  ) {
-    return null;
-  }
-  return (
-    <SettingsSection>
-      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.CODING_AGENTS} view={view} writes={writes} />
-      <ThisMacHostRow />
-    </SettingsSection>
-  );
-}
-
-export function CodingAgentsPage({
-  signedIn,
-  view,
-  writes,
-}: {
-  signedIn: boolean;
-  /** What the schema rows are drawn from; none before the settings are read, where no row is drawn. */
-  view?: SettingsRowsInput | undefined;
-  writes?: SettingsWrites | undefined;
-}): React.JSX.Element {
+export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
@@ -552,9 +507,6 @@ export function CodingAgentsPage({
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
-      {view === undefined || writes === undefined ? null : (
-        <AgentSchemaRows view={view} writes={writes} />
-      )}
       <HostsSection signedIn={signedIn} />
     </>
   );

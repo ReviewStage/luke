@@ -192,7 +192,6 @@ export const SHORTCUT_KEY = {
   R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
   // A bare V is Files changed's own, marking the file stood on viewed; no app command holds it.
   V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
-  // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
   L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
   // ⌘E, ⇧⌘X, and the digits but 0 are the writing chords' own (`WRITING_SHORTCUTS`); no app command holds them.
   E: { accelerator: "E", glyph: "E", key: "e", code: "KeyE" },
@@ -637,7 +636,6 @@ export const APP_SHORTCUTS = {
 export const IN_CONTEXT_KEY = {
   STEP_BACK: "in-context-step-back",
   INBOX_OPTION: "in-context-inbox-option",
-  NEW_TASK_ISSUE: "in-context-new-task-issue",
   TAB_STRIP_PREVIOUS: "in-context-tab-strip-previous",
   TAB_STRIP_NEXT: "in-context-tab-strip-next",
   TAB_STRIP_CLOSE: "in-context-tab-strip-close",
@@ -672,8 +670,7 @@ export interface InContextShortcut {
  * The keys that answer in place, each read where its place answers it: the
  * window's layered Escape, once for every layer it steps back from
  * (`app.tsx` in `@luke/panel`); an Inbox ask's options by their number
- * (`inbox-ask-controls.tsx`); New task's ⌘L for its issue
- * (`issue-picker-chip.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
+ * (`inbox-ask-controls.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
  * `@luke/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
  * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
  * `zoom-image.tsx` in `@luke/ui`); ⌘K over selected words for a link
@@ -688,10 +685,6 @@ export const IN_CONTEXT_SHORTCUTS = {
     label: "Choose an ask's option by its number",
     chord: { key: SHORTCUT_KEY.ONE, plain: true },
     through: { key: SHORTCUT_KEY.NINE, plain: true },
-  },
-  [IN_CONTEXT_KEY.NEW_TASK_ISSUE]: {
-    label: "Choose an issue for a new task",
-    chord: { key: SHORTCUT_KEY.L },
   },
   [IN_CONTEXT_KEY.TAB_STRIP_PREVIOUS]: {
     label: "Focus previous tab in strip",
@@ -784,7 +777,7 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Tasks",
-    keys: [IN_CONTEXT_KEY.INBOX_OPTION, IN_CONTEXT_KEY.NEW_TASK_ISSUE],
+    keys: [IN_CONTEXT_KEY.INBOX_OPTION],
     commands: [
       APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,

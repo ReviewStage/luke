@@ -31,7 +31,6 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
-  [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <GLYPH.PLAN /> },
   [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
   [SETTINGS_VIEW.THIS_MAC]: { title: "This Mac", icon: <LaptopIcon /> },

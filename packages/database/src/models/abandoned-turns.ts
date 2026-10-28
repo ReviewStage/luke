@@ -234,7 +234,14 @@ export interface AbandonedTurnSweepOptions {
   readonly limit?: number | undefined;
 }
 
-/** Settles every running turn whose Stop went unconfirmed past its bound as cancelled, and every other one started more than its kind's bound ago as failed for abandonment; answers how many it settled. */
+/**
+ * Settles every running turn whose Stop went unconfirmed past its bound as
+ * cancelled, and every other one started more than its kind's bound ago as
+ * failed for abandonment; answers how many it settled. The turn a native
+ * agent's projection holds is dropped with it, as a lost runner's is, so a
+ * runner still posting opens a turn of its own rather than having every
+ * event refused as one for a turn already ended.
+ */
 export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandonedTurns")(function* (
   store: AbandonedTurnSweepStore,
   options: AbandonedTurnSweepOptions,
@@ -259,7 +266,9 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
         : { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.ABANDONED },
       options.now,
     );
-    if (written) settled += 1;
+    if (!written) continue;
+    settled += 1;
+    yield* dropNativeProjectionTurns(turn.conversationId, [turn.id]);
   }
   return settled;
 });
