@@ -14,10 +14,9 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { RotateCcwIcon, RotateCwIcon } from "lucide-react";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { agentGlyphState } from "../tasks/coding-agent-model.js";
-import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { agentEndMark } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast, useWorkingToast } from "../toast.js";
-import { useCallingAgent } from "../use-voice-view.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import type { LukeOperator, OperatorAnswer } from "./luke-operator.js";
@@ -27,8 +26,8 @@ import { RowMarks } from "./task-actions.js";
  * sidebar-luke.tsx -- Luke's row at the head of the sidebar's list: the account's operator in the listed workspace, always there.
  *
  * The row is an agent's row (`sidebar-agent.tsx`) in what it wears: Luke's
- * face giving way to the working mark while he works, the live mark while a
- * call into him stands, the failed mark at its end, and the unseen dot,
+ * face giving way to the working mark while he works, the failed mark at its
+ * end, and the unseen dot,
  * main's or one set by hand. It stands above every pin and section and in
  * none of them, so it offers neither Pin nor Move to section, and neither
  * Archive nor Permanently delete: its ⋯, right-click, and menu key offer its read mark and,
@@ -50,16 +49,8 @@ function refusedNotice(reason: string): ToastNotice {
   return { words: reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED };
 }
 
-/** Luke's glyph: his face, giving way to the working mark while he works, or the live mark while a call into him stands. */
-function LukeGlyph({
-  agent,
-  calling,
-}: {
-  agent: TasklessAgent | undefined;
-  calling: boolean;
-}): React.JSX.Element {
-  if (calling)
-    return <>{tabLook({ kind: TAB_KIND.AGENT, name: OPERATOR_NAME, agent, calling }).icon}</>;
+/** Luke's glyph: his face, giving way to the working mark while he works. */
+function LukeGlyph({ agent }: { agent: TasklessAgent | undefined }): React.JSX.Element {
   const state = agent === undefined ? GLYPH_STATE.REST : agentGlyphState(agent.status);
   return <StateGlyph glyph={<WingFace />} state={state} />;
 }
@@ -85,7 +76,6 @@ export function SidebarLuke({
   /** Opens the page of the Luke named, this one or a fresh one a Reset made. */
   onOpen: (agentId: string) => void;
 }): React.JSX.Element {
-  const calling = useCallingAgent();
   const reads = useAgentReadMarks();
   const { agentId } = operator;
   const isUnread = unread || (agentId !== undefined && reads.markedUnread(agentId));
@@ -138,7 +128,7 @@ export function SidebarLuke({
       ink={LIST_ROW_INK.SIDEBAR}
       leading={
         <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
-          <LukeGlyph agent={agent} calling={agentId !== undefined && calling === agentId} />
+          <LukeGlyph agent={agent} />
         </span>
       }
       title={

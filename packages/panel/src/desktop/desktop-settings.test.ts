@@ -18,7 +18,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { CallCardContext, type CallCardInput } from "../call/call-card.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
@@ -60,7 +59,7 @@ const PAGE_GROUPS = [
   },
   {
     heading: "This Mac",
-    rows: ["Voice", "Appearance", "This Mac", "About", "Keyboard shortcuts"],
+    rows: ["Appearance", "This Mac", "About", "Keyboard shortcuts"],
   },
 ];
 
@@ -97,8 +96,8 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
 const HOMES = [
   { words: "Sign out", page: "Account" },
   { words: "Delete account", page: "Account" },
-  { words: "Quiet Music and Spotify", page: "Voice" },
   { words: "Let agents run commands on this Mac", page: "This Mac" },
+  { words: "Prefer the Mac's microphone", page: "This Mac" },
   { words: "Open Luke at login", page: "This Mac" },
   { words: "Check for updates", page: "About", found: "Updates" },
   { words: "Changelog", page: "About" },
@@ -113,7 +112,7 @@ const ACCOUNT: SettingsPanelProps["account"] = {
   provider: "github",
 };
 
-/** A signed-in account's Settings over voice that can run, on the desktop unless the platform is named, every press but a page's ignored. */
+/** A signed-in account's Settings, on the desktop unless the platform is named, every press but a page's ignored. */
 function settingsProps(
   view: SettingsView,
   onViewChange: (view: SettingsView) => void,
@@ -128,7 +127,6 @@ function settingsProps(
     onViewChange,
     microphone: {
       status: MICROPHONE_STATUS.GRANTED,
-      voiceAvailable: true,
       onRequest: ignore,
       onOpenSettings: ignore,
     },
@@ -173,7 +171,6 @@ const NO_HISTORY: NavigationHistory = {
 function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,
-  call,
   onExit = ignore,
   capabilities,
   stored,
@@ -183,7 +180,6 @@ function SettingsHarness({
 }: {
   workspace?: WorkspaceSettingsControl;
   opensOn?: SettingsView;
-  call?: CallCardInput;
   onExit?: () => void;
   capabilities?: readonly HostCapability[];
   /** The stored settings the pages read, the defaults where left out. */
@@ -193,8 +189,7 @@ function SettingsHarness({
   history?: NavigationHistory;
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(opensOn);
-  // The card is handed down as the window's root hands it, past every page between.
-  const settings = createElement(DesktopSettings, {
+  return createElement(DesktopSettings, {
     sidebar: {
       collapsed: false,
       compact: false,
@@ -214,7 +209,6 @@ function SettingsHarness({
     },
     onExit,
   });
-  return createElement(CallCardContext.Provider, { value: call }, settings);
 }
 
 let root: Root | undefined;
@@ -451,9 +445,8 @@ test("Open Luke at login stands on This Mac under Startup, drawn as the choice a
   assert.equal(appearance.includes("Open Luke at login"), false);
 });
 
-test("a platform without voice, Mac commands, or updates lists none of their pages, draws About without its Updates row, and its search finds none of them", () => {
+test("a platform without Mac commands or updates lists no This Mac page, draws About without its Updates row, and its search finds none of them", () => {
   const missing: readonly HostCapability[] = [
-    HOST_CAPABILITY.VOICE,
     HOST_CAPABILITY.MAC_COMMANDS,
     HOST_CAPABILITY.UPDATES,
   ];
@@ -467,11 +460,7 @@ test("a platform without voice, Mac commands, or updates lists none of their pag
   const about = openPage(page, "About").textContent ?? "";
   assert.equal(about.includes("Changelog"), true);
   assert.equal(about.includes("Check for updates"), false);
-  for (const words of [
-    "Quiet Music and Spotify",
-    "Let agents run commands on this Mac",
-    "Updates",
-  ]) {
+  for (const words of ["Let agents run commands on this Mac", "Updates"]) {
     assert.deepEqual(foundUnder(page, words), [], `${words} is found nowhere`);
   }
 });
@@ -516,10 +505,10 @@ test("a browser, which is no installed app, draws Appearance without Zoom and Th
   assert.deepEqual(browser.found, []);
 });
 
-test("a platform with voice but without its own microphone route draws Voice without the Microphone permission row or Prefer the Mac's microphone, and its search finds neither", () => {
-  const voicePage = (capabilities: readonly HostCapability[]) => {
+test("This Mac draws dictation's Microphone permission row and Prefer the Mac's microphone only on a platform with its own microphone route, and its search finds them only there", () => {
+  const thisMac = (capabilities: readonly HostCapability[]) => {
     const page = mount(createElement(SettingsHarness, { capabilities }));
-    const words = openPage(page, "Voice").textContent ?? "";
+    const words = openPage(page, "This Mac").textContent ?? "";
     const found = foundUnder(page, "Microphone");
     act(() => root?.unmount());
     root = undefined;
@@ -527,20 +516,21 @@ test("a platform with voice but without its own microphone route draws Voice wit
     return { words, found };
   };
 
-  const desktop = voicePage(DESKTOP_CAPABILITIES);
-  const without = voicePage(
+  const desktop = thisMac(DESKTOP_CAPABILITIES);
+  const without = thisMac(
     DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MICROPHONE),
   );
 
+  assert.ok(desktop.words.includes("Dictation"));
   assert.ok(desktop.words.includes("Prefer the Mac's microphone"));
   assert.ok(desktop.words.includes("Microphone"));
-  assert.ok(desktop.found.includes("Voice"));
+  assert.ok(desktop.found.includes("This Mac"));
   assert.equal(without.words.includes("Prefer the Mac's microphone"), false);
   assert.equal(without.words.includes("Microphone"), false);
-  assert.equal(without.found.includes("Voice"), false);
+  assert.equal(without.found.includes("This Mac"), false);
 });
 
-test("Keyboard shortcuts lists Show terminal and the Call group's chords only on a platform offering terminals and voice, and its search finds them only there", () => {
+test("Keyboard shortcuts lists Show terminal only on a platform offering terminals, and its search finds it only there", () => {
   const listed = (capabilities: readonly HostCapability[]) => {
     const page = mount(createElement(SettingsHarness, { capabilities }));
     const words = openPage(page, "Keyboard shortcuts").textContent ?? "";
@@ -548,22 +538,15 @@ test("Keyboard shortcuts lists Show terminal and the Call group's chords only on
     act(() => root?.unmount());
     root = undefined;
     document.body.innerHTML = "";
-    return {
-      terminal: words.includes("Show terminal"),
-      call: words.includes("Mute or unmute microphone"),
-      found,
-    };
+    return { terminal: words.includes("Show terminal"), found };
   };
-  const without = DESKTOP_CAPABILITIES.filter(
-    (each) => each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.VOICE,
-  );
+  const without = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.TERMINALS);
 
   assert.deepEqual(listed(DESKTOP_CAPABILITIES), {
     terminal: true,
-    call: true,
     found: ["Keyboard shortcuts"],
   });
-  assert.deepEqual(listed(without), { terminal: false, call: false, found: [] });
+  assert.deepEqual(listed(without), { terminal: false, found: [] });
 });
 
 test("Keyboard shortcuts lists Files changed's own keys under a group of their own, which its search finds", () => {
@@ -621,7 +604,7 @@ test("Appearance draws every diff setting in the Diff, Lines, and Text groups, i
 
 test("a page turned to opens at its top, not where the last page was scrolled", () => {
   const page = mount(createElement(SettingsHarness));
-  openPage(page, "Voice");
+  openPage(page, "Appearance");
   const scroller = shownScroller(page);
   // Note that jsdom lays nothing out, so the scroll offset is held by hand.
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
@@ -707,7 +690,7 @@ test("once the opening caret's search is typed in, Escape clears it, then lets g
   let exits = 0;
   const page = mount(createElement(SettingsHarness, { onExit: () => (exits += 1) }));
   const field = fieldNamed(page, SIDEBAR_SEARCH) ?? assert.fail("the sidebar's search");
-  typeInto(field, "voice");
+  typeInto(field, "theme");
 
   pressEscape();
   assert.equal(field.value, "");
@@ -765,7 +748,7 @@ test("the Integrations page's search is cleared when another page is turned to",
   openPage(page, "Integrations");
   typeInto(fieldNamed(page, PAGE_SEARCH) ?? assert.fail("the page's search"), "deploy");
 
-  openPage(page, "Voice");
+  openPage(page, "Appearance");
   openPage(page, "Integrations");
 
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
@@ -945,7 +928,6 @@ const PAGE_KEEPS = [
   { title: "Integrations", keep: ["Follows your account"] },
   { title: "Skills", keep: ["Follows your account"] },
   { title: "Experimental", keep: ["Follows your account"] },
-  { title: "Voice", keep: ["Kept on this Mac"] },
   { title: "Appearance", keep: ["Kept on this Mac"] },
   { title: "This Mac", keep: ["Kept on this Mac"] },
   { title: "About", keep: [] },
@@ -964,10 +946,6 @@ test("each Settings page says once, under its title, where its settings are kept
 
   const account = openPage(page, "Account").textContent ?? "";
   assert.ok(account.includes("Never what you type or say. Kept on this Mac."));
-  const voice = openPage(page, "Voice").textContent ?? "";
-  assert.ok(
-    voice.includes("Choosing one ends the conversation in progress. Follows your account."),
-  );
 });
 
 test("a browser says its own store is this browser's, never this Mac's", () => {

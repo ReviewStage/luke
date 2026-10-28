@@ -1,23 +1,11 @@
 /**
- * microphone-access.ts -- what the microphone's row and the controls that need the microphone say, from macOS's answer and whether there is a voice to talk to.
+ * microphone-access.ts -- what the microphone's row and the controls that need the microphone say, from macOS's answer.
  */
 
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
 
-/**
- * Why voice as a whole is off: nothing it can run on stands, which since
- * LUKE-205 means no signed-in account carrying hosted voice. One sentence,
- * shared by every mark that stands for the same absence — the sidebar's
- * Voice row, the Voice page's own heading, and the shortcut rows whose chords
- * answer nothing without it — so it never reads as two different problems.
- */
-export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
-
-/** Why a call or a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in settings, and none is saved. */
+/** Why a dictated clip cannot run: it runs on the account's own OpenAI key, kept under Codex in settings, and none is saved. */
 export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI key in settings";
-
-/** Why Luke can speak but not listen: the system's grant is still missing. */
-export const MICROPHONE_UNGRANTED_NOTE = "Luke cannot listen: the microphone is not allowed yet.";
 
 /**
  * What the row says beneath its name, once the system has answered. Only a
@@ -49,54 +37,25 @@ interface MicrophoneAccessRow {
    * state where sending someone there is not sending them to look at nothing.
    */
   offerSystemSettings: boolean;
-  /** Whether voice can listen: there is a voice to talk to, and the microphone is Luke's to open. */
-  ready: boolean;
+  /** Whether the microphone is Luke's to open, which the row marks with its check. */
+  granted: boolean;
 }
 
 /**
- * Reads the row from the system's answer and whether there is a voice to talk
- * to.
- *
- * The microphone has two uses: talking a task through with Luke, and
- * dictating into a message box, whose clip goes through Luke's service to
- * OpenAI and comes back as words. Either is a use the macOS prompt is the
- * consent for, so the ask is offered wherever macOS has not answered, voice
- * or no voice, and System Settings wherever it has. What still waits on voice
- * is whether the row reports itself ready, since that is what draws the voice
- * controls beneath it.
+ * Reads the row from the system's answer. The microphone's use is dictating
+ * into a message box, whose clip goes through Luke's service to OpenAI and
+ * comes back as words; the macOS prompt is the consent for it, so the ask is
+ * offered wherever macOS has not answered, and System Settings wherever it
+ * has.
  */
-export function microphoneAccessRow(input: {
-  voiceAvailable: boolean;
-  status: MicrophoneStatus;
-}): MicrophoneAccessRow {
+export function microphoneAccessRow(status: MicrophoneStatus): MicrophoneAccessRow {
   const row: MicrophoneAccessRow = {
-    offerAccess: input.status === MICROPHONE_STATUS.NOT_DETERMINED,
+    offerAccess: status === MICROPHONE_STATUS.NOT_DETERMINED,
     offerSystemSettings:
-      input.status === MICROPHONE_STATUS.GRANTED || input.status === MICROPHONE_STATUS.DENIED,
-    ready: input.voiceAvailable && input.status === MICROPHONE_STATUS.GRANTED,
+      status === MICROPHONE_STATUS.GRANTED || status === MICROPHONE_STATUS.DENIED,
+    granted: status === MICROPHONE_STATUS.GRANTED,
   };
-  const detail = microphoneStatusDetail(input.status);
+  const detail = microphoneStatusDetail(status);
   if (detail !== undefined) row.detail = detail;
   return row;
-}
-
-/**
- * Why the Settings sidebar's Voice row wears its exclamation mark, or nothing while
- * voice is ready to run. One sentence naming the first thing still missing —
- * the key before the microphone, because the key is what makes the microphone
- * worth asking for — worded for the hover and the screen reader alike. The
- * Voice page itself is where the missing thing is explained and supplied, so
- * the mark only has to say that something there still needs a hand.
- */
-export function voiceAttentionNote(input: {
-  voiceAvailable: boolean;
-  status: MicrophoneStatus;
-}): string | undefined {
-  if (!input.voiceAvailable) {
-    return VOICE_KEYLESS_NOTE;
-  }
-  if (!microphoneAccessRow(input).ready) {
-    return MICROPHONE_UNGRANTED_NOTE;
-  }
-  return undefined;
 }

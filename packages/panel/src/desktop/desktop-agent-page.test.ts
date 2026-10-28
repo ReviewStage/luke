@@ -45,8 +45,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
-import { CALL_LABEL } from "@luke/ui/call-card-model";
+import { experimentsOn } from "@luke/settings/testing";
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Clock, Context, Effect } from "effect";
@@ -61,7 +60,6 @@ import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -2297,38 +2295,6 @@ test("a delete the service refused for an agent still starting says why in the d
   );
   assert.equal(reason?.textContent, "The agent is still starting its turn. Try again in a moment.");
   assert.equal(closed, 0);
-});
-
-test("the page offers Call in its agent's composer, whose press asks for a call into that agent on no task, and an agent on a task on its own", async () => {
-  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
-  const pressed: { agentId: string; place: AgentCallPlace }[] = [];
-  const calls = {
-    onPress: (agentId: string, place: AgentCallPlace) => pressed.push({ agentId, place }),
-  };
-  const page = mount(tasksControl({ calls }));
-  await settle();
-
-  const call = page.querySelector<HTMLButtonElement>(`button[aria-label="${CALL_LABEL}"]`);
-  assert.ok(call, "the composer offers Call");
-  act(() => call.click());
-  assert.deepEqual(pressed, [{ agentId: AGENT_ID, place: { taskId: undefined, archived: false } }]);
-
-  act(() => root?.unmount());
-  pages = [{ agent: { ...PAGE, planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" } }];
-  const onTask = mount(tasksControl({ calls }));
-  await settle();
-  act(() => onTask.querySelector<HTMLButtonElement>(`button[aria-label="${CALL_LABEL}"]`)?.click());
-  assert.deepEqual(pressed.at(-1), {
-    agentId: AGENT_ID,
-    place: { taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: false },
-  });
-});
-
-test("a window with no voice hands the page no Call", async () => {
-  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
-  const page = mount(tasksControl({ calls: undefined }));
-  await settle();
-  assert.equal(page.querySelector(`button[aria-label="${CALL_LABEL}"]`), null);
 });
 
 test("on a phone the page is headed by its way back's glyph, the agent's name centred, and its one ⋯, which offers the panel the title bar's toggle offered", async () => {

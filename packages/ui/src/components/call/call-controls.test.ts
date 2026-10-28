@@ -2,26 +2,14 @@
 
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test } from "vitest";
-import { MicrophoneOffIcon } from "../../face/glyphs.js";
-import {
-  CALL_CONTROL_LABEL,
-  CALL_DEVICE,
-  CALL_LIVE_WORD,
-  CALL_STAGE,
-  CallBar,
-  CallLive,
-  CallMute,
-} from "./call-controls.js";
+import { CALL_CONTROL_LABEL, CALL_DEVICE, CallBar, CallMute } from "./call-controls.js";
 
 /**
  * call-controls.test.ts -- a call's controls as a reader meets them: a mute
- * is named for what its press will do, says so as it toggles, announces
- * itself pressed while on, and carries its chord; End call is the bar's one
- * control that is no toggle and hands its press back; and a box's call status says the call is live, or
- * muted, and how long it has run, or that it is connecting or ending, with
- * no count. Synthetic call.
+ * is named for what its press will do, says so as it toggles, and announces
+ * itself pressed while on; End call is the bar's one control that is no
+ * toggle and hands its press back. Synthetic call.
  */
 
 declare global {
@@ -62,11 +50,10 @@ function OwnedMute(): React.JSX.Element {
   });
 }
 
-test("a mute toggles with its label: named for its next press, pressed while muted, with its chord", () => {
+test("a mute toggles with its label: named for its next press, and pressed while muted", () => {
   const scope = draw(createElement(OwnedMute));
   const live = button(scope, CALL_CONTROL_LABEL.MUTE_MICROPHONE);
   expect(live.getAttribute("aria-pressed")).toBe("false");
-  expect(live.getAttribute("aria-keyshortcuts")).toMatch(/Shift\+M/u);
 
   act(() => live.click());
   const muted = button(scope, CALL_CONTROL_LABEL.UNMUTE_MICROPHONE);
@@ -77,40 +64,6 @@ test("a mute toggles with its label: named for its next press, pressed while mut
   expect(button(scope, CALL_CONTROL_LABEL.MUTE_MICROPHONE).getAttribute("aria-pressed")).toBe(
     "false",
   );
-});
-
-test("a mute whose chord is not offered names no chord, and one offered names it", () => {
-  const withheld = draw(
-    createElement(CallMute, {
-      device: CALL_DEVICE.MICROPHONE,
-      muted: false,
-      offered: false,
-      onPress: () => {},
-    }),
-  );
-  expect(
-    button(withheld, CALL_CONTROL_LABEL.MUTE_MICROPHONE).hasAttribute("aria-keyshortcuts"),
-  ).toBe(false);
-  const offered = draw(
-    createElement(CallMute, {
-      device: CALL_DEVICE.MICROPHONE,
-      muted: false,
-      offered: true,
-      onPress: () => {},
-    }),
-  );
-  expect(
-    button(offered, CALL_CONTROL_LABEL.MUTE_MICROPHONE).getAttribute("aria-keyshortcuts"),
-  ).toMatch(/Shift\+M/u);
-});
-
-test("the speaker's mute is its own, named for the speaker and toggled by its own chord", () => {
-  const scope = draw(
-    createElement(CallMute, { device: CALL_DEVICE.SPEAKER, muted: true, onPress: () => {} }),
-  );
-  const speaker = button(scope, CALL_CONTROL_LABEL.UNMUTE_SPEAKER);
-  expect(speaker.getAttribute("aria-pressed")).toBe("true");
-  expect(speaker.getAttribute("aria-keyshortcuts")).toMatch(/Shift\+S/u);
 });
 
 test("the bar's mutes and End call each hand their press back, and End call alone is no toggle", () => {
@@ -149,35 +102,4 @@ test("the bar says what Luke is doing while the backend works, with no subject a
   expect(scope.textContent).toContain("Working · Reading");
   expect(scope.textContent).not.toMatch(/Luke ·|Notetaker|Writing notes/u);
   expect(scope.querySelector('[role="status"]')?.textContent).toBe("Luke is working on it");
-});
-
-test("a box's call status says the call is live and how long it has run, and says Muted, quietly, with the struck microphone while the microphone is muted", () => {
-  const startedAt = Date.UTC(2026, 9, 24, 15, 0, 0);
-  const now = startedAt + 72_000;
-  const live = draw(
-    createElement(CallLive, { stage: CALL_STAGE.LIVE, startedAt, muted: false, now }),
-  );
-  expect(live.textContent).toBe(`${CALL_LIVE_WORD.LIVE}1m 12s`);
-  const timer = live.querySelector('[role="timer"]');
-  expect(timer?.getAttribute("dateTime")).toBe("PT72S");
-
-  const muted = draw(
-    createElement(CallLive, { stage: CALL_STAGE.LIVE, startedAt, muted: true, now }),
-  );
-  expect(muted.textContent).toBe(`${CALL_LIVE_WORD.MUTED}1m 12s`);
-  expect(muted.textContent).not.toContain(CALL_LIVE_WORD.LIVE);
-  expect(muted.querySelector("svg")?.outerHTML).toBe(
-    renderToStaticMarkup(createElement(MicrophoneOffIcon)),
-  );
-});
-
-test("a box's call status says Connecting… and Ending… either side of the call, quietly and with no count", () => {
-  for (const [stage, word] of [
-    [CALL_STAGE.CONNECTING, CALL_LIVE_WORD.CONNECTING],
-    [CALL_STAGE.ENDING, CALL_LIVE_WORD.ENDING],
-  ] as const) {
-    const scope = draw(createElement(CallLive, { stage }));
-    expect(scope.textContent).toBe(word);
-    expect(scope.querySelector('[role="timer"]')).toBeNull();
-  }
 });

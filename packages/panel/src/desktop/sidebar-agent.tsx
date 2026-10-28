@@ -28,7 +28,6 @@ import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { useCallingAgent } from "../use-voice-view.js";
 import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
@@ -149,7 +148,6 @@ export function SidebarAgent({
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
-  const calling = useCallingAgent();
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -231,8 +229,7 @@ export function SidebarAgent({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
-              {/* The live mark while a call into the agent stands, as its tab's glyph wears it on a task. */}
-              {tabLook({ kind: TAB_KIND.AGENT, name, agent, calling: calling === agent.id }).icon}
+              {tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
             </span>
           }
           title={

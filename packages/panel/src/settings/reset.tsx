@@ -23,7 +23,6 @@ import type { SettingsWrites } from "./writes.js";
 
 /** What the toast says once a page's reset landed, by the group it reset. */
 const RESET_NOTES = {
-  [SETTINGS_RESET_SCOPE.VOICE]: "Voice settings reset",
   [SETTINGS_RESET_SCOPE.APPEARANCE]: "Appearance settings reset",
 } as const satisfies Record<SettingsResetScope, string>;
 
@@ -48,8 +47,8 @@ function sameSetting(
  * The group's settings the reset changed, as they stood before it: each
  * whose reading before differs from the store's answer after. Note that
  * the answer is what decides, not the defaults, because a setting the file
- * never held is read as what the launch resolved, a voice chosen by the
- * environment among them, and the reset leaves it reading the same, so an
+ * never held is read as what the launch resolved, and the reset leaves it
+ * reading the same, so an
  * Undo writing it back would make it the file's own.
  */
 function changedBy(
@@ -175,12 +174,8 @@ function ResetPageButton({
   );
 }
 
-/**
- * Which page carries which group's reset. The Voice page's takes the talk and
- * stop keys with the rest of the page.
- */
+/** Which page carries which group's reset. */
 const PAGE_RESET = {
-  [SETTINGS_VIEW.VOICE]: SETTINGS_RESET_SCOPE.VOICE,
   [SETTINGS_VIEW.APPEARANCE]: SETTINGS_RESET_SCOPE.APPEARANCE,
 } satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 
