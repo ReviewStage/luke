@@ -1,4 +1,4 @@
-import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@luke/features/brain";
+import { RUN_EVENT, RUN_STATUS, TURN_FAILURE } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
@@ -157,16 +157,14 @@ const endedSessionTurns = SqlSchema.findAll({
 
 /** How a lost turn ends: cancelled where its Stop went unconfirmed, failed for the reason given otherwise. */
 type LostTurnEnd =
-  | { readonly status: typeof BRAIN_REQUEST_STATUS.CANCELLED }
+  | { readonly status: typeof RUN_STATUS.CANCELLED }
   | {
-      readonly status: typeof BRAIN_REQUEST_STATUS.FAILED;
-      readonly failure:
-        | typeof BRAIN_REQUEST_FAILURE.ABANDONED
-        | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED;
+      readonly status: typeof RUN_STATUS.FAILED;
+      readonly failure: typeof TURN_FAILURE.ABANDONED | typeof TURN_FAILURE.SESSION_ENDED;
     }
   | {
-      readonly status: typeof BRAIN_REQUEST_STATUS.FAILED;
-      readonly failure: typeof BRAIN_REQUEST_FAILURE.MODEL;
+      readonly status: typeof RUN_STATUS.FAILED;
+      readonly failure: typeof TURN_FAILURE.MODEL;
       readonly failureDetail: string;
     };
 
@@ -212,7 +210,7 @@ const settledLost = (
     writer.consume(
       { userId: turn.userId, conversationId: turn.conversationId },
       {
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         conversationId: sessionKey(turn.conversationId),
         turnId: turn.id,
         sequence: 1,
@@ -262,8 +260,8 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
       store.writer,
       turn,
       cancelled
-        ? { status: BRAIN_REQUEST_STATUS.CANCELLED }
-        : { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.ABANDONED },
+        ? { status: RUN_STATUS.CANCELLED }
+        : { status: RUN_STATUS.FAILED, failure: TURN_FAILURE.ABANDONED },
       options.now,
     );
     if (!written) continue;
@@ -289,7 +287,7 @@ export const settleEndedSessionTurn = /* @__PURE__ */ Effect.fn("web/settleEnded
     return yield* settledLost(
       writer,
       turn,
-      { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED },
+      { status: RUN_STATUS.FAILED, failure: TURN_FAILURE.SESSION_ENDED },
       now,
     );
   },
@@ -334,8 +332,8 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
         writer,
         turn,
         cancelRequestedAt === null
-          ? { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED }
-          : { status: BRAIN_REQUEST_STATUS.CANCELLED },
+          ? { status: RUN_STATUS.FAILED, failure: TURN_FAILURE.SESSION_ENDED }
+          : { status: RUN_STATUS.CANCELLED },
         options.now,
       );
       if (written) settled += 1;
@@ -366,9 +364,7 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
     now: number,
     detail: string = RUNNER_LOST_DETAIL,
     only?: ReadonlySet<string>,
-    failure:
-      | typeof BRAIN_REQUEST_FAILURE.MODEL
-      | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED = BRAIN_REQUEST_FAILURE.MODEL,
+    failure: typeof TURN_FAILURE.MODEL | typeof TURN_FAILURE.SESSION_ENDED = TURN_FAILURE.MODEL,
   ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
     const running = yield* agentRunningTurns({ conversationId });
     const lost = only === undefined ? running : running.filter((turn) => only.has(turn.id));
@@ -378,8 +374,8 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
         writer,
         turn,
         cancelRequestedAt === null
-          ? { status: BRAIN_REQUEST_STATUS.FAILED, failure, failureDetail: detail }
-          : { status: BRAIN_REQUEST_STATUS.CANCELLED },
+          ? { status: RUN_STATUS.FAILED, failure, failureDetail: detail }
+          : { status: RUN_STATUS.CANCELLED },
         now,
       );
       if (written) settled += 1;

@@ -1,9 +1,4 @@
-import {
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  type BrainTurnOrigin,
-  type BrainTurnTrigger,
-} from "../../core.js";
+import { RUN_TURN_ORIGIN, type RunTurnOrigin, TURN_TRIGGER, type TurnTrigger } from "../../core.js";
 
 /**
  * The bounds and names the agents' hosts run under: how a request names the
@@ -146,31 +141,31 @@ export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 /** The run stream's origin and trigger for each kind of turn the relay records, and whose row the line that opens it is; a line that joins the turn under way is told apart as it arrives (`relay.ts`'s `#received`). */
 export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.TYPED]: {
-    origin: BRAIN_TURN_ORIGIN.TYPED,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
+    origin: RUN_TURN_ORIGIN.TYPED,
+    trigger: TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.RELAY,
   },
   [BRAIN_HOST_TURN.SPOKEN]: {
-    origin: BRAIN_TURN_ORIGIN.SPOKEN,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
+    origin: RUN_TURN_ORIGIN.SPOKEN,
+    trigger: TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
   [BRAIN_HOST_TURN.UNHEARD]: {
-    origin: BRAIN_TURN_ORIGIN.SPOKEN,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
+    origin: RUN_TURN_ORIGIN.SPOKEN,
+    trigger: TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
   // The task the brain handed the subagent is the child turn's received line.
   [RELAY_TURN.CHILD]: {
-    origin: BRAIN_TURN_ORIGIN.CHILD,
-    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+    origin: RUN_TURN_ORIGIN.CHILD,
+    trigger: TURN_TRIGGER.CHILD_TASK,
     receivedLine: RECEIVED_LINE.RELAY,
   },
 } as const satisfies Record<
   RelayTurn,
   {
-    readonly origin: BrainTurnOrigin;
-    readonly trigger: BrainTurnTrigger;
+    readonly origin: RunTurnOrigin;
+    readonly trigger: TurnTrigger;
     readonly receivedLine: ReceivedLine;
   }
 >;

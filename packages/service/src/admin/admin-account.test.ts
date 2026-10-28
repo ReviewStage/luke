@@ -47,7 +47,7 @@ import {
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { Effect } from "effect";
-import { BRAIN_REQUEST_FAILURE, DAY_MS } from "../core.js";
+import { DAY_MS, TURN_FAILURE } from "../core.js";
 import { buildAdminAccountSupport } from "./admin-account.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 
@@ -171,7 +171,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
     const overflowed = yield* startAgent(userId, sharedWorkspace, 2, {
       turn: {
         status: TURN_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.MODEL,
+        failure: TURN_FAILURE.MODEL,
         failureDetail: "prompt is too long: 1368155 tokens > 1000000 maximum",
       },
       published: PULL_REQUEST_STATE.DRAFT,
@@ -256,7 +256,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
     const lateFailure = yield* startAgent(userId, own, 45, {
       turn: {
         status: TURN_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        failure: TURN_FAILURE.SESSION_ENDED,
         endedDaysAgo: 1,
       },
     });

@@ -49,7 +49,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { BRAIN_RUN_EVENT, type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
+import { RUN_EVENT, type RunEvent, TURN_ORIGIN } from "../../core.js";
 import { afterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -307,8 +307,8 @@ function turnsMovedBy(writes: readonly NativeWrite[]): TurnsMoved {
     writes.flatMap((write) => (write.kind === NATIVE_WRITE.EVENT ? [write.event.kind] : [])),
   );
   return {
-    started: kinds.has(BRAIN_RUN_EVENT.TURN_STARTED),
-    ended: kinds.has(BRAIN_RUN_EVENT.TURN_ENDED),
+    started: kinds.has(RUN_EVENT.TURN_STARTED),
+    ended: kinds.has(RUN_EVENT.TURN_ENDED),
   };
 }
 
@@ -345,7 +345,7 @@ function reportRefused(what: string, result: Result.Result<unknown, { readonly r
 }
 
 /** Lands the events gathered so far as one write of the writer. */
-function landEvents(applying: Applying, events: readonly BrainRunEvent[]) {
+function landEvents(applying: Applying, events: readonly RunEvent[]) {
   return Effect.gen(function* () {
     if (events.length === 0) return;
     const results = yield* applying.writer.consumeAll(applying.target, events);
@@ -462,7 +462,7 @@ function landWrite(
  */
 function landWrites(applying: Applying, writes: readonly NativeWrite[], now: number) {
   return Effect.gen(function* () {
-    let events: BrainRunEvent[] = [];
+    let events: RunEvent[] = [];
     const stops: string[] = [];
     // Only the newest reading of the context stands, so one batch writes it once.
     const lastContext = writes.findLastIndex((write) => write.kind === NATIVE_WRITE.CONTEXT);

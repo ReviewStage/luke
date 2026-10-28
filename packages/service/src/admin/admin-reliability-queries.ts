@@ -54,7 +54,7 @@ import { Duration, Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
-import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS } from "../core.js";
+import { DAY_MS, TURN_FAILURE, TURN_STATUS } from "../core.js";
 import { isAdminRole } from "./admin-access.js";
 import { dayStart, lastNDayKeys } from "./admin-metrics.js";
 import {
@@ -432,7 +432,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
   const abandonedTurns = new Map<string, number>();
   for (const row of outcomes) {
     const failed = row.status === TURN_STATUS.FAILED ? row.value : 0;
-    if (row.failure === BRAIN_REQUEST_FAILURE.ABANDONED) {
+    if (row.failure === TURN_FAILURE.ABANDONED) {
       bump(abandonedTurns, row.day, 0, (counted) => counted + row.value);
     }
     const work = turnWorkOf(row.kind, row.parentKind);

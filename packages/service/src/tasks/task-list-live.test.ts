@@ -64,7 +64,7 @@ import { SqlClient } from "effect/sql";
 import { codingAgentSummary, summaryAccounts } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
-import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import { TURN_FAILURE } from "../core.js";
 import { taskListLiveStatements } from "./task-list-live.js";
 
 /**
@@ -362,7 +362,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const orphaned = yield* openAgent(owner, { taskId: plan.id }, 25 * 60_000);
         yield* turnOf(orphaned, TURN_STATUS.FAILED, 24 * 60_000, {
           settled: true,
-          failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          failure: TURN_FAILURE.SESSION_ENDED,
         });
         yield* lineOf(orphaned, 1, "Try again.", null, 60_000);
 

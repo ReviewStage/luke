@@ -49,10 +49,10 @@ import { afterAll } from "vitest";
 import { z } from "zod";
 import {
   ASK_ORIGIN,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
+  RUN_EVENT,
+  RUN_TURN_ORIGIN,
   sessionKey,
+  TURN_TRIGGER,
   UI_PART_TYPE,
 } from "../core.js";
 import {
@@ -169,9 +169,9 @@ class TurnOpeningAgent implements LiveAgent {
         createdAt: new Date(NOW),
       });
       yield* store.consume(this.#conversation, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
-        origin: BRAIN_TURN_ORIGIN.SPOKEN,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        kind: RUN_EVENT.TURN_STARTED,
+        origin: RUN_TURN_ORIGIN.SPOKEN,
+        trigger: TURN_TRIGGER.ASK,
         at: NOW,
         conversationId: sessionKey(this.#conversation.conversationId),
         turnId,

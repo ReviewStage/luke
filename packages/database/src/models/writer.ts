@@ -2,17 +2,17 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { isWireUuid } from "@luke/features";
 import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  type BrainRunEvent,
-  type BrainTurnOrigin,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  type RunEvent,
+  type RunTurnOrigin,
   STEP_START_PART,
   settledToolPart,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
-} from "@luke/features/brain";
+} from "@luke/features/turn-run";
 import { causeKind } from "@luke/runtime/effect";
 import {
   type AgentMessageMetadata,
@@ -96,7 +96,7 @@ import { writeOperatorNotice } from "./operator-notices.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
- * written. It consumes the brain's run event stream (`BrainRunEvent`,
+ * written. It consumes the brain's run event stream (`RunEvent`,
  * every kind of turn) and keeps the record the plan describes: a turn row
  * from queued through running to its end, one assistant message per turn
  * that is the turn's journal while it runs — each tool call written in
@@ -248,7 +248,7 @@ export type StoreWriteResult = Result.Result<
   | MessageRefused
 >;
 
-type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUEST_STATUS];
+type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS];
 
 /** A turn queued ahead of its start: what opened it and, where the caller knows them, what it will run under. */
 interface TurnEnqueue {
@@ -469,7 +469,7 @@ type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION
  */
 export interface StoreWriter {
   /** Consumes one event of the run stream for the conversation it names. */
-  consume(target: ConversationTarget, event: BrainRunEvent): Write<StoreWriteResult>;
+  consume(target: ConversationTarget, event: RunEvent): Write<StoreWriteResult>;
   /**
    * Consumes a batch of the run stream's events, in order, as one locked
    * write: the conversation is locked once, each journal is read once, and
@@ -479,7 +479,7 @@ export interface StoreWriter {
    */
   consumeAll(
     target: ConversationTarget,
-    events: readonly BrainRunEvent[],
+    events: readonly RunEvent[],
   ): Write<readonly StoreWriteResult[]>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
@@ -584,23 +584,23 @@ export interface StoreWriter {
 }
 
 /** The plan's turn origin for each origin the brain's stream names: each is written as reported. */
-const TURN_ORIGIN_OF_BRAIN_ORIGIN = {
-  [BRAIN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
-  [BRAIN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [BRAIN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
-} as const satisfies Record<BrainTurnOrigin, TurnOrigin>;
+const TURN_ORIGIN_OF_RUN_ORIGIN = {
+  [RUN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
+  [RUN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
+  [RUN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
+} as const satisfies Record<RunTurnOrigin, TurnOrigin>;
 
-function turnStatusOf(status: BrainRequestStatus): TurnStatus {
+function turnStatusOf(status: RunStatus): TurnStatus {
   switch (status) {
-    case BRAIN_REQUEST_STATUS.SUCCEEDED:
+    case RUN_STATUS.SUCCEEDED:
       return TURN_STATUS.SETTLED;
-    case BRAIN_REQUEST_STATUS.CANCELLED:
+    case RUN_STATUS.CANCELLED:
       return TURN_STATUS.CANCELLED;
-    case BRAIN_REQUEST_STATUS.FAILED:
-    case BRAIN_REQUEST_STATUS.TIMED_OUT:
-    case BRAIN_REQUEST_STATUS.INTERRUPTED:
-    case BRAIN_REQUEST_STATUS.QUEUED:
-    case BRAIN_REQUEST_STATUS.RUNNING:
+    case RUN_STATUS.FAILED:
+    case RUN_STATUS.TIMED_OUT:
+    case RUN_STATUS.INTERRUPTED:
+    case RUN_STATUS.QUEUED:
+    case RUN_STATUS.RUNNING:
       return TURN_STATUS.FAILED;
   }
 }
@@ -1509,7 +1509,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_STARTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TURN_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   const startedAt = new Date(event.at);
@@ -1518,7 +1518,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
       turnId: event.turnId,
       userId: context.target.userId,
       conversationId: context.target.conversationId,
-      origin: TURN_ORIGIN_OF_BRAIN_ORIGIN[event.origin],
+      origin: TURN_ORIGIN_OF_RUN_ORIGIN[event.origin],
       startedAt,
     });
     return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
@@ -1532,7 +1532,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_ENDED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TURN_ENDED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   if (Option.isNone(standing)) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN });
@@ -1582,9 +1582,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   if (Option.isSome(open) && open.value.finishedAt === null) {
     const reason =
-      event.status === BRAIN_REQUEST_STATUS.CANCELLED
-        ? UNANSWERED_REASON.CANCELLED
-        : UNANSWERED_REASON.ENDED;
+      event.status === RUN_STATUS.CANCELLED ? UNANSWERED_REASON.CANCELLED : UNANSWERED_REASON.ENDED;
     const keepsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
     const parts = open.value.parts.flatMap((part): Parts => {
       if (part.type === UI_PART_TYPE.TEXT) return keepsWords ? [part] : [];
@@ -1649,7 +1647,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.STEP_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
@@ -1663,7 +1661,7 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TOOL_CALL_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
@@ -1680,7 +1678,7 @@ const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TOOL_CALL_SETTLED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* journalRow(context, event.turnId);
   if (Option.isNone(standing)) {
@@ -1720,7 +1718,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.REASONING_COMPLETED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const { id } = event.item;
   if (!isWireString(id)) return Result.succeed(STORE_WRITE_EFFECT.IGNORED);
@@ -1746,7 +1744,7 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.TEXT_DRAFTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
@@ -1787,7 +1785,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED }>,
+  event: Extract<RunEvent, { kind: typeof RUN_EVENT.MESSAGE_COMPLETED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const read = yield* admitted(context, event.message);
   if (Result.isFailure(read)) return Result.fail(read.failure);
@@ -1854,34 +1852,34 @@ function moveJournalBehindWhatFollowed(context: WriterContext, id: string): Writ
   });
 }
 
-function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWriteResult> {
+function consume(context: WriterContext, event: RunEvent): Write<StoreWriteResult> {
   switch (event.kind) {
-    case BRAIN_RUN_EVENT.TURN_STARTED:
+    case RUN_EVENT.TURN_STARTED:
       return turnStarted(context, event);
-    case BRAIN_RUN_EVENT.TURN_ENDED:
+    case RUN_EVENT.TURN_ENDED:
       return turnEnded(context, event);
-    case BRAIN_RUN_EVENT.STEP_STARTED:
+    case RUN_EVENT.STEP_STARTED:
       return stepStarted(context, event);
-    case BRAIN_RUN_EVENT.TOOL_CALL_STARTED:
+    case RUN_EVENT.TOOL_CALL_STARTED:
       return toolCallStarted(context, event);
-    case BRAIN_RUN_EVENT.TOOL_CALL_SETTLED:
+    case RUN_EVENT.TOOL_CALL_SETTLED:
       return toolCallSettled(context, event);
-    case BRAIN_RUN_EVENT.REASONING_COMPLETED:
+    case RUN_EVENT.REASONING_COMPLETED:
       return reasoningCompleted(context, event);
-    case BRAIN_RUN_EVENT.MESSAGE_COMPLETED:
+    case RUN_EVENT.MESSAGE_COMPLETED:
       return messageCompleted(context, event);
-    case BRAIN_RUN_EVENT.TEXT_DRAFTED:
+    case RUN_EVENT.TEXT_DRAFTED:
       return textDrafted(context, event);
     // The rest of the stream is the relay's, about a run's moments rather
     // than the record.
-    case BRAIN_RUN_EVENT.SLOW_STEP:
-    case BRAIN_RUN_EVENT.QUESTION_QUEUED:
-    case BRAIN_RUN_EVENT.QUESTION_WITHDRAWN:
-    case BRAIN_RUN_EVENT.CODE_SHOWN:
-    case BRAIN_RUN_EVENT.CALL_ENDING:
-    case BRAIN_RUN_EVENT.ACTIONS_SETTLED:
-    case BRAIN_RUN_EVENT.REPLY_SENTENCE:
-    case BRAIN_RUN_EVENT.ENDED:
+    case RUN_EVENT.SLOW_STEP:
+    case RUN_EVENT.QUESTION_QUEUED:
+    case RUN_EVENT.QUESTION_WITHDRAWN:
+    case RUN_EVENT.CODE_SHOWN:
+    case RUN_EVENT.CALL_ENDING:
+    case RUN_EVENT.ACTIONS_SETTLED:
+    case RUN_EVENT.REPLY_SENTENCE:
+    case RUN_EVENT.ENDED:
       return Effect.succeed(Result.succeed(STORE_WRITE_EFFECT.IGNORED));
   }
 }

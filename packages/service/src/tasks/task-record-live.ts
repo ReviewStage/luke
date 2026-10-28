@@ -11,7 +11,7 @@ import { planPageVersion } from "@luke/database/schemas/plan-page";
 import { messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { toolPartType } from "@luke/features/brain";
+import { toolPartType } from "@luke/features/turn-run";
 import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 import { ACTION_RESULT_STATUS, TOOL_PART_STATE } from "../core.js";
