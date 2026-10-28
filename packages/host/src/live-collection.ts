@@ -136,6 +136,13 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
    * collection stands, the transaction is held, and lands with its drop.
    */
   readonly answer: (rows: readonly Row[]) => void;
+  /**
+   * Takes what a write's own answer says of one row in the read's place,
+   * where the read can confirm no write yet: the row as the read last
+   * answered it, with the `fields` it gives laid over it. A row the read
+   * never answered is left alone.
+   */
+  readonly confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => void;
 }
 
 /** A collection of rows keyed by `getKey`, ready and empty until its read first answers, for as long as the scope stands. */
@@ -164,8 +171,14 @@ export function answeredCollection<Row extends object, Key extends string>(optio
         },
       }),
     );
-    const answer = (rows: readonly Row[]) => {
-      const next = new Map(rows.map((row) => [options.getKey(row), row]));
+    const answer = (rows: readonly Row[]) =>
+      taken(new Map(rows.map((row) => [options.getKey(row), row])));
+    const confirmRow = (key: Key, fields: (row: Row) => Partial<Row>) => {
+      const row = held.get(key);
+      if (row !== undefined) taken(new Map(held).set(key, { ...row, ...fields(row) }));
+    };
+    /** Takes the rows `next` holds as the synced ones, one transaction writing each that moved. */
+    function taken(next: ReadonlyMap<Key, Row>): void {
       const changes = rowChanges(held, next);
       if (writer === undefined || changes.length === 0) return;
       writer.begin();
@@ -173,8 +186,8 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       // Note that the receipt is never awaited, since a commit held behind a standing write lands only once that write settles.
       writer.commit();
       held = next;
-    };
-    return { collection, answer };
+    }
+    return { collection, answer, confirmRow };
   });
 }
 
