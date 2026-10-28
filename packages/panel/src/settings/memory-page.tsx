@@ -65,7 +65,7 @@ import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js"
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
-import { useMemberDirectory } from "../member-directory.js";
+import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
 
 /**
@@ -595,7 +595,11 @@ function MemoryList({
   const listed = narrowed.filter((each) => scopeOf(each.memory) === scope);
   const countOf = (side: MemoryScope) =>
     String(narrowed.filter((each) => scopeOf(each.memory) === side).length);
-  const chosen = listed.filter((each) => selected.has(each.memory.id)).map((each) => each.memory);
+  // Note that a memory no longer drawn leaves the selection for good, as a task does, so one a search or the other side hid is not chosen again unasked.
+  const drawn = new Set(listed.map((each) => each.memory.id));
+  const standing: ReadonlySet<string> = new Set([...selected].filter((id) => drawn.has(id)));
+  if (standing.size !== selected.size) setSelected(standing);
+  const chosen = listed.filter((each) => standing.has(each.memory.id)).map((each) => each.memory);
   const forgettable = asked.filter((memory) => memory.forgettable);
   const forgetConfirm = useConfirmDialog({ subject: asked.length > 0, surfaceOpen: true }, () =>
     onForget(forgettable.map((memory) => memory.id)),
@@ -658,7 +662,7 @@ function MemoryList({
             />
             <KeptByFilter keepers={keepers} kept={kept} onKept={setKept} />
           </div>
-          <KeptByChips keepers={keepers} kept={kept} onKept={setKept} />
+          <KeptByChips keepers={keepersOf(all)} kept={kept} onKept={setKept} />
         </Stack>
         {listed.length === 0 ? (
           <NothingShown
@@ -668,7 +672,7 @@ function MemoryList({
             onClear={clear}
           />
         ) : (
-          <SelectionRegion id={regionId} selection={{ selected, onChange: setSelected }}>
+          <SelectionRegion id={regionId} selection={{ selected: standing, onChange: setSelected }}>
             <ul className={MEMORY_LIST}>
               {listed.map((shown) => (
                 <MemoryRow
@@ -679,7 +683,7 @@ function MemoryList({
                   open={open === shown.memory.id}
                   locked={forgetting}
                   chosen={
-                    several !== undefined && selected.has(shown.memory.id) ? several : undefined
+                    several !== undefined && standing.has(shown.memory.id) ? several : undefined
                   }
                   onOpen={() => setOpen(open === shown.memory.id ? undefined : shown.memory.id)}
                   onForget={() => askForget([shown.memory])}
@@ -847,13 +851,16 @@ export function MemorySection({
       </Text>
       <div className={NO_CAPTURE}>
         {memories !== undefined ? (
-          <MemoryList
-            workspace={workspace}
-            readerId={readerId}
-            memories={memories}
-            forgetting={forgetting !== undefined}
-            onForget={forgetAll}
-          />
+          // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
+          <MemberDirectory workspace={workspace} readerId={readerId}>
+            <MemoryList
+              workspace={workspace}
+              readerId={readerId}
+              memories={memories}
+              forgetting={forgetting !== undefined}
+              onForget={forgetAll}
+            />
+          </MemberDirectory>
         ) : readFailed ? (
           <SettingsLine>
             <ErrorState onRetry={() => setAttempt((count) => count + 1)}>

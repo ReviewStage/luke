@@ -302,6 +302,47 @@ test("Forget asks first, then forgets the memory for good and lists what the ser
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
+test("a memory a search hid comes back unchosen, so a later act on what is chosen leaves it be", async () => {
+  const { page } = await mount();
+  act(() => {
+    pressOf(page, DEPLOYS).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    );
+  });
+
+  await searchFor(page, "store");
+  await searchFor(page, "");
+
+  // Note that the element is checked as a yes or no, because a failure's diff of an element would print the whole document.
+  assert.ok(page.querySelector('[role="toolbar"]') === null, "nothing stands chosen");
+  assert.equal(pressOf(page, DEPLOYS).getAttribute("data-selected"), null);
+});
+
+test("a keeper the filter keeps stays named by their chip on the side that holds none of theirs", async () => {
+  stored = [
+    DEPLOYS,
+    TESTS,
+    {
+      ...DEPLOYS,
+      id: "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a7b",
+      text: "Answer in short paragraphs.",
+      private: true,
+    },
+  ];
+  const { page } = await mount();
+  const filter =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Filter"]') ??
+    assert.fail("no Filter");
+  act(() => filter.click());
+  chooseMenuItem("Kept by");
+  chooseMenuItem("Dean");
+
+  showSide(page, "Only you");
+
+  assert.match(page.textContent ?? "", /Kept by Dean/u);
+  assert.deepEqual(words(page), []);
+});
+
 test("a forget that fails says so in the dialog and keeps the memory listed", async () => {
   refuseForget = true;
   const { page } = await mount();
