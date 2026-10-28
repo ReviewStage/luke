@@ -113,7 +113,7 @@ it.layer(getTestDB())("the runner line store", (it) => {
   );
 
   it.effect(
-    "a launch that dropped its predecessor's lines reads only its untaken messages under the same number",
+    "a launch that dropped its predecessor's lines reads only its untaken messages in the window under the same number",
     () =>
       Effect.gen(function* () {
         const { userId, agentId } = yield* openAccount;
@@ -124,6 +124,8 @@ it.layer(getTestDB())("the runner line store", (it) => {
             text,
             ...(lineId ? { lineId } : {}),
           });
+        yield* queue("stale", randomUUID());
+        yield* TestClock.adjust(Duration.hours(2));
         const taken = randomUUID();
         yield* queue("taken", taken);
         yield* queue("stop");

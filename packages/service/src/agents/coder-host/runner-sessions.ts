@@ -103,7 +103,6 @@ import {
   clearRunnerLines,
   queueRunnerLine,
   runnerLinesWaiting,
-  withdrawRunnerLine,
 } from "@luke/database/models/runner-line-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
@@ -586,9 +585,9 @@ export const runnerSessions = <
      * queued for the launch, and the launch is handed beside it every message
      * an earlier launch never took; such a launch may have no first message
      * of its own, as one that hands those on (`deliverWaiting`). A runner
-     * started but never configured is ended, its record cleared and its
-     * first message withdrawn, so the next message relaunches whole rather
-     * than writing to a runner that waits for its config.
+     * started but never configured is ended, and its record cleared, so the
+     * next message relaunches whole rather than writing to a runner that
+     * waits for its config.
      */
     const launch = <AE, AR>(
       agent: CodingAgent,
@@ -686,13 +685,8 @@ export const runnerSessions = <
               if (opened.length === 0) return yield* new LaunchRefused({ reason: "no message" });
               return { lines: [made.config, ...opened].map(line).join(""), mark };
             }),
-          abandon: (made) =>
-            Effect.andThen(
-              layout.linesRead && first !== undefined
-                ? withdrawRunnerLine(userId, agent.id, first.line.uuid)
-                : Effect.void,
-              launching(made.firstSequence),
-            ),
+          // Note that a first message a runner never read stands queued, for the next launch to hand on.
+          abandon: (made) => launching(made.firstSequence),
         });
         // The runner was handed the first message, so what its words handed is kept for the next.
         if (opening !== undefined) yield* opening.taken;
