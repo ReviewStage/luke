@@ -300,23 +300,24 @@ const stood = (hub: Hub, listening: Listening, connection: Connection) =>
 
 /**
  * A standing connection was given up: every watch reads again, and waits on
- * its clock until another stands. Note that the listener counts as down only
- * while a watch is registered on it, because a connection lost while none is,
- * as a resumed instance finds the one Postgres reaped while it was paused,
- * is replaced before any watch waits on its clock.
+ * its clock until another stands. Note that the listener counts as down, and
+ * warns, only while a watch is registered on it, because a connection lost
+ * while none is, as a resumed instance finds the one Postgres reaped while it
+ * was paused, is replaced before any watch waits on its clock, and is
+ * expected after every pause.
  */
 const lost = (hub: Hub, listening: Listening, loss: Loss) =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+    const watched = hub.watchers.all.size > 0;
     listening.state = LISTENER_STATE.OPENING;
     listening.connection = undefined;
     listening.lost = true;
-    if (hub.watchers.all.size > 0) listening.downSince ??= now;
+    if (watched) listening.downSince ??= now;
     Latch.closeUnsafe(listening.settled);
     wakeAll(hub.watchers);
-    yield* Effect.logWarning(
-      `sync: the listener's connection was given up (${loss}); reopening it`,
-    );
+    const message = `sync: the listener's connection was given up (${loss}); reopening it`;
+    yield* watched ? Effect.logWarning(message) : Effect.logDebug(message);
   });
 
 /** A connection would not open: the listener is down, so a watch answers at once and waits on its clock. */
