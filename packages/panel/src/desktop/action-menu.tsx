@@ -29,7 +29,7 @@ export interface MenuAction extends Omit<SharedMenuAction, "hint"> {
 }
 
 /** An item that opens a menu of the window's own items beside it rather than acting. */
-interface MenuSubmenu {
+export interface MenuSubmenu {
   label: string;
   icon?: React.JSX.Element;
   items: readonly MenuAction[];

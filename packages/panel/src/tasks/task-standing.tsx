@@ -14,6 +14,7 @@ import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CHIP_WIDTH,
   ErrorState,
@@ -31,7 +32,9 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
@@ -56,6 +59,9 @@ import { TaskRunsOnChip } from "./runs-on.js";
  * Change repository opens the same way; and, while local agents are on, a
  * fifth for where its agents run (`runs-on.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
+ * S, pressed while not typing, opens the status chip's menu, as Linear's S
+ * does, and a task row's menu lists what each chip lists
+ * (`standing-submenus.tsx`).
  * A task from a service before statuses has no key and no chips.
  */
 
@@ -84,13 +90,15 @@ export const TASK_PRIORITY_WORDS = {
   [TASK_PRIORITY.LOW]: "Low",
 } as const satisfies Record<TaskPriority, string>;
 
-const STATUS_ROWS: readonly MenuRow[] = TASK_STATUS_ORDER.map((status) => ({
+/** The status chip's rows, each status by its mark, which a task row's Status submenu lists too. */
+export const STATUS_ROWS: readonly MenuRow[] = TASK_STATUS_ORDER.map((status) => ({
   id: status,
   label: TASK_STATUS_WORDS[status],
   icon: <TaskStatusMark status={status} />,
 }));
 
-const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priority) => ({
+/** The priority chip's rows, each priority by its bars, which a task row's Priority submenu lists too. */
+export const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priority) => ({
   id: priority,
   label: TASK_PRIORITY_WORDS[priority],
   icon: <TaskPriorityMark priority={priority} />,
@@ -135,6 +143,28 @@ export function assigneeRows(
       terms: row.terms,
       card: row.card,
     })),
+  ];
+}
+
+/**
+ * The assignee's menu for a task (`assigneeRows`), with the member it is
+ * assigned to after them where the members do not name them, as while they
+ * are unread, so they still stand checked by the name the task carries: what
+ * a row's assignee chip and a task row's Assignee submenu both list.
+ */
+export function useAssigneeRows(assignee: TaskSummary["assignee"]): readonly MenuRow[] {
+  const { members, readerId } = useMemberDirectory();
+  const person = usePerson(assignee);
+  const value = assignee?.userId ?? NO_ASSIGNEE;
+  const listed = assigneeRows(members, readerId);
+  if (listed.some((row) => row.id === value)) return listed;
+  return [
+    ...listed,
+    {
+      id: value,
+      label: assignee?.name ?? NO_ASSIGNEE_WORDS,
+      icon: <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />,
+    },
   ];
 }
 
@@ -271,11 +301,14 @@ export function TaskKeyLine({
 function TaskStatusPicker({
   label = "Status",
   status,
+  openRequest,
   onPick,
 }: {
   /** The chip's name for a reader; the task page's own where none is named. */
   label?: string | undefined;
   status: TaskStatus;
+  /** Counts the S key's asks to open the menu, each opening it. */
+  openRequest?: number | undefined;
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((status: TaskStatus) => void) | undefined;
 }): React.JSX.Element {
@@ -290,6 +323,7 @@ function TaskStatusPicker({
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}
+      openRequest={openRequest}
       onPick={(id) => {
         const picked = statusOf(id);
         if (picked !== undefined && picked !== status) onPick?.(picked);
@@ -321,6 +355,12 @@ export function TaskStandingChips({
   const { status, priority } = task;
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const standing = status !== undefined && priority !== undefined;
+  // S opens the status chip's menu while the chip takes a pick, each press counted so it opens it again.
+  const [statusAsks, setStatusAsks] = useState(0);
+  useAppCommand(
+    APP_COMMAND.SET_STATUS,
+    onSet !== undefined && standing ? () => setStatusAsks((asks) => asks + 1) : undefined,
+  );
   if (!standing && repository === undefined) return null;
   const runsOnDrawn =
     standing &&
@@ -333,6 +373,7 @@ export function TaskStandingChips({
           <>
             <TaskStatusPicker
               status={status}
+              openRequest={statusAsks}
               onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
             />
             <Picker

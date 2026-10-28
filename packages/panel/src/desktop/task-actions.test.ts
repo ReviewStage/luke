@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   PLAN_ACTOR,
+  TASK_PRIORITY,
   TASK_STATUS,
   type Task,
   type TaskStatus,
@@ -802,9 +803,31 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task, drawn red, cancels it, and a task already done offers neither Mark done nor its check", async () => {
+/** Where a task from a service with statuses stands before anything moves it. */
+const STANDING = { status: TASK_STATUS.TODO, priority: TASK_PRIORITY.NONE } as const;
+
+/** Opens the open menu's submenu `submenu`, then chooses `label` in it. */
+function chooseIn(submenu: string, label: string): void {
+  choose(submenu);
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')].find(
+    (candidate) => itemLabel(candidate) === label,
+  );
+  assert.ok(item, `${submenu} offers ${label}`);
+  act(() => item.click());
+}
+
+/** The items of the open submenu `submenu` that stand checked. */
+function checkedIn(submenu: string): (string | null)[] {
+  choose(submenu);
+  return [...document.querySelectorAll<HTMLElement>('[role="menu"] [aria-checked="true"]')].map(
+    itemLabel,
+  );
+}
+
+test("a row's Status sets the task at the status picked, Done as the row's Mark done check does, asking nothing even where agents work on it, and checks the status it stands at", async () => {
   const working: TaskSummary = {
     ...OTHER,
+    ...STANDING,
     status: TASK_STATUS.IN_PROGRESS,
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
@@ -833,9 +856,11 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
   rightClick(rowButton, 40, 60);
-  choose("Mark done");
+  assert.deepEqual(checkedIn("Status"), ["In progress"]);
+  chooseIn("Status", "Done");
   rightClick(rowButton, 40, 60);
-  choose("Cancel task");
+  chooseIn("Status", "Canceled");
+  assert.equal(asking(), false, "no status asks anything");
   assert.deepEqual(settled, [
     [[working.id], TASK_STATUS.DONE],
     [[working.id], TASK_STATUS.DONE],
@@ -845,18 +870,12 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   unmountAll();
   const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
-  const doneRowButton = doneRow.querySelector("ul > li > button");
-  assert.ok(doneRowButton instanceof HTMLButtonElement);
-  rightClick(doneRowButton, 40, 60);
-  const labels = menuItems().map(itemLabel);
-  assert.equal(labels.includes("Mark done"), false);
-  assert.equal(labels.includes("Cancel task"), true);
 });
 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
-const CHIP_ITEMS = ["Mark done", "Cancel task", "Change repository"];
+const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
 
-test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, which act on the open task, and leaves Mark done, Cancel task, and Change repository to the plan's chips, which the open task's row keeps; another task's menu prints no chord, and Open on GitHub wears the GitHub mark", () => {
+test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, which act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's menu prints no chord, and Open on GitHub wears the GitHub mark", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
@@ -878,17 +897,14 @@ test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, 
   );
 
   unmountAll();
-  rightClick(mountSidebarTask(tasks, TASK, asked, true), 40, 60);
+  const other: TaskSummary = { ...OTHER, ...STANDING };
+  rightClick(mountSidebarTask(tasksControl({ tasks: [other] }), other, asked), 40, 60);
   const row = menuItems().map(itemLabel);
   assert.deepEqual(
     CHIP_ITEMS.filter((item) => row.includes(item)),
     CHIP_ITEMS,
     "a row draws no chips, so its menu keeps them",
   );
-
-  unmountAll();
-  rightClick(mountSidebarTask(tasks, OTHER, asked), 40, 60);
-  assert.ok(menuItems().some((item) => itemLabel(item) === "Mark done"));
   // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
   assert.deepEqual(
     itemChords(),

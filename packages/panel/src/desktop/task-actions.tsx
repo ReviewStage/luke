@@ -1,5 +1,10 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_BOUNDS,
+  TASK_PRIORITY_ORDER,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
@@ -15,6 +20,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  type MenuRow,
   nextRowOrHead,
   OneLine,
   RowHint,
@@ -63,24 +69,30 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items.js";
-import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import {
+  NO_ASSIGNEE,
+  PRIORITY_ROWS,
+  TASK_STATUS_WORDS,
+  useAssigneeRows,
+} from "../tasks/task-standing.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
+import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
+import { chipSubmenu, STANDING_WORDS, statusSubmenu } from "./standing-submenus.js";
 import {
   SIDEBAR_ROW_REPOSITORY,
   SIDEBAR_ROW_TIME,
   TaskRowStatus,
   taskCardOf,
 } from "./task-card.js";
-import { taskSubject } from "./task-row-parts.js";
+import { taskSubject, useStandingDoor } from "./task-row-parts.js";
 import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
 
 /**
@@ -90,16 +102,18 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * window keeps, Copy, then name and read, then organize, then open
  * elsewhere, and Delete last and alone, so a task in a list can be acted on
  * without being opened first. The Plan tab's is the task's document menu
- * (`TASK_MENU_SURFACE.DOCUMENT`): it leaves out Mark done, Cancel task, and
- * Change repository, because the plan draws chips for the task's status and
- * its repository under its title, and its Pin is the task's own, since the
- * tab showing the task is what stands for the task in the sidebar. A row's
- * menu (`TASK_MENU_SURFACE.ROW`) keeps all three, since a row draws no
- * chips. The menu is the window's own (`action-menu.tsx`), so every door
+ * (`TASK_MENU_SURFACE.DOCUMENT`): it leaves out the task's status, priority,
+ * assignee, and repository, because the plan draws chips for them under its
+ * title, and its Pin is the task's own, since the tab showing the task is
+ * what stands for the task in the sidebar. A row's menu
+ * (`TASK_MENU_SURFACE.ROW`) keeps them, since a row draws no chips: Status,
+ * Priority, and Assignee as submenus listing what the chips list
+ * (`standing-submenus.tsx`), as Linear's right-click has them, and Change
+ * repository. The menu is the window's own (`action-menu.tsx`), so every door
  * draws it the same way and Permanently delete can be drawn red.
  * Each item is worded, marked, and keyed as the window's one list has it
  * (`command-items.tsx`), as ⌘K offers the same command; the open task's menu
- * prints the chords of Copy plan, Mark done, and Permanently delete, which
+ * prints the chords of Copy plan and Permanently delete, which
  * act on the open task, and another task's prints none, as a tab's menu
  * prints its chords for the chosen tab alone.
  *
@@ -111,15 +125,15 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * the Plan tab's ⋯ puts the caret in the plan's own title. Version history
  * opens the plan's versions over the whole window, opening the task first
  * where it is not the open one, the one item that moves it. Pin moves the
- * task in the sidebar at once and is undone from the same menu; Mark done,
- * where Archive used to stand, with its chord, sets the task Done, and
- * Cancel task sets it Canceled, each said in a toast whose Undo puts back
- * the status it stood at, and neither asking anything, since neither stops
- * an agent. A sidebar row also offers Pin and Mark done as buttons at its
- * end on hover.
+ * task in the sidebar at once and is undone from the same menu. A pick in
+ * Status sets the task there, said in a toast whose Undo puts back the
+ * status it stood at, asking nothing, since no status stops an agent; a
+ * pick in Priority or Assignee sets it as the row's chips do. A sidebar row
+ * also offers Pin and Mark done as buttons at its end on hover, Mark done
+ * running what Status's Done runs.
  * Move to workspace opens a dialog listing the account's other workspaces
  * and what the move does (`move-task-dialog.tsx`), offered on a task the
- * reader started. Move to section, beside Pin and Mark done while the account
+ * reader started. Move to section, beside Pin while the account
  * has sections on, puts the task in one of the reader's own sections, a new
  * one, or none (`sidebar-sections.tsx`).
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
@@ -160,7 +174,7 @@ export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undef
     : undefined;
 }
 
-/** One way a task can be moved in the sidebar or settled, as the menu and the row's own buttons both offer it: the list's command and what it does to this task. */
+/** One way a task can be moved in the sidebar or settled, as a sidebar row's buttons offer it: the list's command and what it does to this task. */
 interface PlaceMark {
   key: string;
   item: PanelCommand;
@@ -195,28 +209,6 @@ function pinAction(
   if (task === undefined) return [];
   const { item, onSelect } = pinMark(tasks, task);
   return [commandAction(item, onSelect, keyed)];
-}
-
-/** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task not already canceled, Mark done keyed where `keyed`; nothing for a task neither the list nor the document holds. */
-function placeActions(
-  tasks: TasksControl,
-  task: TaskSummary | undefined,
-  keyed: boolean,
-): MenuAction[] {
-  if (task === undefined) return [];
-  const marks = placeMarks(tasks, task).map(({ item, onSelect }) =>
-    commandAction(item, onSelect, keyed),
-  );
-  const cancel: MenuAction = {
-    ...commandAction(
-      PANEL_COMMAND.CANCEL_TASK,
-      () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
-      keyed,
-    ),
-    danger: true,
-  };
-  const cancelable = settleOffered(task, SETTLED_STATUS.CANCELED);
-  return cancelable ? [...marks, cancel] : marks;
 }
 
 /** One of a sidebar row's buttons at its end: what it says and runs, and the chord its tooltip names, where it has one. */
@@ -264,8 +256,9 @@ export function RowMarks({
  * Pin and Mark done at a task's sidebar row's end (`RowMarks`), Mark done
  * as a check where Archive's box stood. Rested on, the row hangs the task's
  * card beside it (`task-card.tsx`): its name in full, its repository, and
- * its agents and pull requests, read from the list's row. Each runs what
- * its menu item runs, and only the open task's Mark done names ⇧⌘A,
+ * its agents and pull requests, read from the list's row. Pin runs what its
+ * menu item runs and Mark done what Status's Done runs, and only the open
+ * task's Mark done names ⇧⌘A,
  * because the chord marks the open task rather than the row under the
  * pointer.
  */
@@ -292,11 +285,43 @@ function SidebarTaskMarks({
   return <RowMarks marks={marks} disabled={disabled} />;
 }
 
+/**
+ * A row's Status, Priority, and Assignee submenus, each listing what the
+ * plan's chip lists, the value standing checked: Status set as Mark done
+ * sets it, with Undo, and Priority and Assignee as the row's chips set them.
+ * None for a task from a service before statuses, which draws no chips.
+ */
+function standingSubmenus(
+  tasks: TasksControl,
+  task: TaskSummary,
+  assignees: readonly MenuRow[],
+  setStanding: ReturnType<typeof useStandingDoor>,
+): MenuSubmenu[] {
+  const { status, priority } = task;
+  if (status === undefined || priority === undefined) return [];
+  const pickPriority = (id: string) => {
+    const picked = TASK_PRIORITY_ORDER.find((each) => each === id);
+    if (picked !== undefined) setStanding(task, { priority: picked });
+  };
+  const pickAssignee = (id: string) =>
+    setStanding(task, { assigneeId: id === NO_ASSIGNEE ? null : id });
+  return [
+    statusSubmenu(tasks, [task.id], status),
+    chipSubmenu(STANDING_WORDS.PRIORITY, PRIORITY_ROWS, priority, pickPriority),
+    chipSubmenu(
+      STANDING_WORDS.ASSIGNEE,
+      assignees,
+      task.assignee?.userId ?? NO_ASSIGNEE,
+      pickAssignee,
+    ),
+  ];
+}
+
 /** Which surface offers a task's menu, which decides what the menu holds (`taskActionGroups`). */
 export const TASK_MENU_SURFACE = {
-  /** A row of the task, which draws no chips, so its menu keeps Mark done, Cancel task, and Change repository. */
+  /** A row of the task, which draws no chips, so its menu keeps Status, Priority, Assignee, and Change repository. */
   ROW: "row",
-  /** The Plan tab, which shows the task under chips for its status and its repository, so its menu leaves those out. */
+  /** The Plan tab, which shows the task under chips for its status, priority, assignee, and repository, so its menu leaves those out. */
   DOCUMENT: "document",
 } as const;
 
@@ -304,16 +329,14 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
 
 /**
  * One task's actions in the groups a rule divides, offering only those that
- * apply to it now, for the surface that offers them. Copy formats the
- * document drawn, so only the open task offers it, ahead of Copy link. A
- * row's menu then holds Mark as unread or read, Rename, and Version
- * history in that same group; Pin, Mark done, and Cancel task in the next,
- * beside Move to section; and the repository changed from any row, Move to
- * workspace where the task may be moved, and Open on GitHub where it has a
- * repository. The Plan tab's document menu holds Rename, Version history,
- * and the read mark in a group of their own, then Pin, Move to section, and
- * Move to workspace, then Open on GitHub alone, and neither Mark done,
- * Cancel task, nor Change repository, which the plan's chips stand for.
+ * apply to it now, for the surface that offers them. A row's menu holds
+ * Copy link; then Rename, Version history, and Mark as unread or read; then
+ * Status, Priority, and Assignee; then Pin, Move to section, and Move to
+ * workspace where the task may be moved; then the repository changed from
+ * any row and Open on GitHub where it has one. The Plan tab's document
+ * menu leads with Copy plan, since Copy formats the document drawn, and
+ * holds the same but for Status, Priority, Assignee, and Change repository,
+ * which the plan's chips stand for, Open on GitHub alone in their place.
  * Permanently delete is last and alone on both. Only the open task's items
  * print their chords, since a chord acts on the open task alone.
  */
@@ -328,6 +351,8 @@ function taskActionGroups(
     read: ReadMark;
     /** Move to section, where the account keeps sections and the task may stand in one. */
     section: MenuEntry | undefined;
+    /** Status, Priority, and Assignee as a row's submenus, where the task has them; none for a task from a service before statuses. */
+    standing: readonly MenuSubmenu[];
   },
   surface: TaskMenuSurface,
 ): MenuEntry[][] {
@@ -372,9 +397,11 @@ function taskActionGroups(
           [remove],
         ]
       : [
-          [...copy, ...link, ...read, rename, versions],
-          [...placeActions(tasks, task, drawn), ...section],
-          [change, ...move, ...open],
+          link,
+          [rename, versions, ...read],
+          [...doors.standing],
+          [...pinAction(tasks, task, drawn), ...section, ...move],
+          [change, ...open],
           [remove],
         ];
   return groups.filter((group) => group.length > 0);
@@ -505,6 +532,12 @@ export function useTaskMenuItems(
     task !== undefined
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
+  const setStanding = useStandingDoor(tasks);
+  const assignees = useAssigneeRows(task?.assignee);
+  const standing =
+    doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
+      ? standingSubmenus(tasks, task, assignees, setStanding)
+      : [];
   const groups = (): readonly (readonly MenuEntry[])[] => [
     ...withRowMoves(
       taskActionGroups(
@@ -516,6 +549,7 @@ export function useTaskMenuItems(
           askMove: moving.ask,
           copy,
           section,
+          standing,
           read: {
             unread: doors.unread,
             onMark: (unread) => {

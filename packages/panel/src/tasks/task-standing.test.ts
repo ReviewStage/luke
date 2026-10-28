@@ -5,9 +5,11 @@ import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -122,19 +124,21 @@ test("the repository chip stands among the chips where the page hands its doors,
   assert.equal(legacy.querySelector('[aria-label^="Status"]'), null);
 });
 
-test("a status picked from the menu is handed to the page, and the one standing is not picked again", () => {
+test("a status picked from the menu, opened by its chip or by S, is handed to the page, and the one standing is not picked again", () => {
   const sent: TaskStanding[] = [];
   const host = drawn(TASK, (standing) => sent.push(standing));
 
-  const pick = (words: string) => {
-    act(() => chip(host, "Status").click());
+  const pick = (open: () => void, words: string) => {
+    act(open);
     const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
       each.textContent?.includes(words),
     );
     act(() => (row ?? assert.fail(`no ${words} row`)).click());
   };
-  pick("Todo");
-  pick("Done");
+  pick(() => chip(host, "Status").click(), "Todo");
+  pick(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the plan's chips answer S");
+  }, "Done");
 
   assert.deepEqual(sent, [{ status: TASK_STATUS.DONE }]);
 });
