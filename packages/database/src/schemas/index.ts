@@ -3,6 +3,7 @@
 export * from "./account-provider-key.js";
 export * from "./agent-browser-tab.js";
 export * from "./agent-pin.js";
+export * from "./agent-queue.js";
 export * from "./attachment.js";
 export * from "./auth.js";
 export * from "./automation.js";

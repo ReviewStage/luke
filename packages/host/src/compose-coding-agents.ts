@@ -26,6 +26,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentQueueAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   type CodingAgentTranscriptOlderAnswer,
   type CodingAgentTranscriptPage,
@@ -51,6 +52,7 @@ import {
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentPullRequestReadParamsSchema,
+  codingAgentQueueParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentRewindParamsSchema,
   codingAgentServersParamsSchema,
@@ -170,6 +172,7 @@ export type CodingAgentClient = Pick<
   | "choose"
   | "rename"
   | "switchServers"
+  | "changeQueue"
   | "archive"
   | "pin"
   | "ensureOperator"
@@ -671,6 +674,16 @@ function composed(
         );
         const answer = yield* asked(client.switchServers(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_QUEUE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, change } = yield* readParams(
+          codingAgentQueueParamsSchema,
+          params,
+          "changing an agent's queue names the agent and the change",
+        );
+        const answer = yield* asked(client.changeQueue(agentId, change));
+        return carried<CodingAgentQueueAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ARCHIVE]: (params) =>
       Effect.gen(function* () {

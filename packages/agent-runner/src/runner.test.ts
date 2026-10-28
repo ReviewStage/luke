@@ -35,7 +35,6 @@ import {
   INPUT_LINE,
   INSTALLED_SKILLS,
   type InputLine,
-  MESSAGE_DELIVERY,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
@@ -361,62 +360,6 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
     ]);
   }),
 );
-
-it.effect(
-  "holds a message queued during a turn, unaccepted, and hands it on as the next turn",
-  () =>
-    Effect.gen(function* () {
-      const luke = fakeLuke([], "Working on the first message.");
-      const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
-      const queued = "6f1c2a4e-3b7d-4c8e-9a0b-1d2e3f405163";
-      yield* write(CONFIG);
-      yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
-      yield* write({
-        type: INPUT_LINE.MESSAGE,
-        uuid: queued,
-        content: [{ type: "text", text: "Then this." }],
-        delivery: MESSAGE_DELIVERY.QUEUE,
-      });
-      yield* Queue.take(prompted);
-      yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }));
-      // The turn under way is not handed the queued message, nor is it said taken.
-      assert.equal(cli.prompts.length, 1);
-      assert.equal(acceptedUuids(luke).includes(queued), false);
-      yield* release;
-      yield* Queue.take(prompted);
-
-      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      assert.deepEqual(
-        cli.prompts.map((prompt) => [prompt.uuid === queued, prompt.priority]),
-        [
-          [false, undefined],
-          [true, undefined],
-        ],
-      );
-      // Said taken only once the first turn's result left it for the next.
-      const firstResult = luke.applied.findIndex(
-        ({ message }) => "type" in message && message.type === "result",
-      );
-      const queuedAccepted = luke.applied.findIndex(
-        ({ message }) =>
-          "type" in message && message.type === RUNNER_EVENT.ACCEPTED && message.uuid === queued,
-      );
-      assert.ok(queuedAccepted > firstResult);
-      // The turn that ended is said over first, so the queued message opens a turn of its own.
-      const idle = luke.applied.findIndex(
-        ({ message }) => "type" in message && message.type === RUNNER_EVENT.IDLE,
-      );
-      assert.ok(idle > firstResult && idle < queuedAccepted);
-    }),
-);
-
-/** The uuids of the messages Luke was told the launch took, in order. */
-function acceptedUuids(luke: ReturnType<typeof fakeLuke>): string[] {
-  return luke.applied.flatMap(({ message }) =>
-    "type" in message && message.type === RUNNER_EVENT.ACCEPTED ? [message.uuid] : [],
-  );
-}
 
 /** How many IDLE events Luke has taken. */
 function idles(luke: ReturnType<typeof fakeLuke>): number {

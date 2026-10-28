@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { pauseAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
   awaitingLinesOfReached,
   type CodingAgent,
@@ -15,6 +16,7 @@ import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
+import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { Clock, DateTime, Effect, Exit, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
@@ -215,6 +217,8 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
+  // The developer's Stop pauses what is queued behind the turn too, so nothing more goes until Resume.
+  yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
   yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
 });
 

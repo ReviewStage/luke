@@ -49,6 +49,7 @@
     "./channel-view": "./src/channel-view.js",
     "./channel-wire": "./src/channel-wire.js",
     "./coding-agent-view": "./src/coding-agent-view.js",
+    "./agent-queue-wire": "./src/agent-queue-wire.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
     "./conversation-picture-wire": "./src/conversation-picture-wire.js",
     "./date-mention": "./src/date-mention.js",

@@ -34,6 +34,7 @@ import {
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import type { AgentQueue } from "@luke/features/agent-queue-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -52,7 +53,6 @@ import {
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
-import { LINE_DELIVERY } from "@luke/wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import {
@@ -66,6 +66,7 @@ import {
 } from "../../core.js";
 import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
+import { queueOnPage } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -151,7 +152,6 @@ type TranscriptMessage = StoredUIMessage &
     readonly sentBy?: CodingAgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
-    readonly queued?: true;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -176,6 +176,8 @@ export interface TranscriptPage {
   readonly subagentTitles?: readonly CodingAgentSubagentTitle[];
   /** Where every one of its workers stands, read from the worker's own session, on its own transcript; absent while it has delegated nothing and on a worker's. */
   readonly subagents?: readonly CodingAgentSubagentStanding[];
+  /** The messages queued behind its turn and the queue's pause, on its own transcript; absent while none is queued and on a worker's. */
+  readonly queue?: AgentQueue;
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -340,14 +342,6 @@ function spokenOnCall(message: StoredUIMessage): boolean {
   return "channel" in metadata && metadata.channel === MESSAGE_CHANNEL.VOICE;
 }
 
-/** Whether one of the developer's lines was queued behind a turn and no turn has taken it yet. */
-function queuedLine(record: StoredMessageRecord): boolean {
-  if (record.turnId !== undefined || record.message.role !== MESSAGE_ROLE.USER) return false;
-  const { metadata } = record.message;
-  if (!("channel" in metadata)) return false;
-  return metadata.channel === MESSAGE_CHANNEL.TYPED && metadata.delivery === LINE_DELIVERY.QUEUE;
-}
-
 /**
  * A row as the page carries it: its message, for a developer's line when
  * and what sent it and where in a turn under way it arrived, for a line
@@ -370,7 +364,6 @@ function transcriptMessageOf(
       ...(sent === undefined ? undefined : { sentBy: senderOf(sent) }),
       sentAt: record.placedAt.getTime(),
       ...(place === undefined ? undefined : { arrivedIn: place }),
-      ...(queuedLine(record) ? { queued: true } : undefined),
     };
   }
   if (spokenOnCall(record.message)) {
@@ -484,7 +477,7 @@ const withUsage = (
   Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
     // Note that every read here stands apart from the others, so they run at once rather than one round trip after another.
-    const { rows, offered, payer, held, delegations, subagentTitles, subagents } =
+    const { rows, offered, payer, held, delegations, subagentTitles, subagents, queue } =
       yield* Effect.all(
         {
           rows: turnUsagesOf(target.userId, target.conversationId),
@@ -503,6 +496,7 @@ const withUsage = (
             own === undefined
               ? Effect.succeed<readonly CodingAgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
+          queue: own === undefined ? Effect.succeed(undefined) : queueOnPage(own.id),
         },
         { concurrency: CODER.READ_CONCURRENCY },
       );
@@ -518,6 +512,7 @@ const withUsage = (
       ...(delegations.length === 0 ? undefined : { delegations }),
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),
       ...(subagents.length === 0 ? undefined : { subagents }),
+      ...(queue === undefined ? undefined : { queue }),
     };
   });
 

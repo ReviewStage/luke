@@ -145,6 +145,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
   CODING_AGENTS_SERVERS: "codingAgents.servers",
+  CODING_AGENTS_QUEUE: "codingAgents.queue",
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_REWIND: "codingAgents.rewind",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",

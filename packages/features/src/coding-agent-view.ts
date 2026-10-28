@@ -1,6 +1,8 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
+  agentQueueAnswerSchema,
+  agentQueueChangeSchema,
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentAnswerSchema,
@@ -342,6 +344,22 @@ const codingAgentMessageAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentMessageAnswerView = typeof codingAgentMessageAnswerViewSchema.Type;
+
+/** One change of an agent's queue, as the window asks it: the agent and the change. */
+export const codingAgentQueueParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  change: agentQueueChangeSchema,
+});
+
+export type CodingAgentQueueParams = typeof codingAgentQueueParamsSchema.Type;
+
+/** A change of an agent's queue, as the window hears the service answer it: the queue as it then stands, or why it did not change. */
+export const codingAgentQueueAnswerViewSchema = EffectSchema.Union([
+  agentQueueAnswerSchema,
+  failedReaching,
+]);
+
+export type CodingAgentQueueAnswerView = typeof codingAgentQueueAnswerViewSchema.Type;
 
 /** An agent deleted for good, as the window hears it: that it was, or why it was not. */
 export const codingAgentDeleteAnswerViewSchema = EffectSchema.Union([

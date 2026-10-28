@@ -173,7 +173,6 @@ import {
   useMessageReveal,
 } from "./message-links.js";
 import { PlanPictures } from "./plan-pictures.js";
-import { QueuedMark } from "./queued-mark.js";
 import { ORIGIN_CHIP, ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
@@ -1431,7 +1430,6 @@ export function AgentMessage({
         className={received ? RECEIVED_MESSAGE_CLASS : undefined}
         data-message-id={message.id}
         data-undelivered={marked ? "" : undefined}
-        data-queued={message.queued === true ? "" : undefined}
       >
         {thread === undefined ? null : <ThreadLineHead line={thread} />}
         <MessageFileChips message={message} sending={sending} />
@@ -1443,7 +1441,6 @@ export function AgentMessage({
           </MessageContent>
         )}
         <UndeliveredMark messageId={message.id} />
-        {message.queued === true ? <QueuedMark /> : null}
         <MessageLine
           align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
           sender={named}

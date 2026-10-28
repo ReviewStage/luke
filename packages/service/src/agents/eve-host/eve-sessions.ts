@@ -3,7 +3,6 @@
  */
 
 import { failureKind } from "@luke/runtime/effect";
-import type { LineDelivery } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
@@ -306,8 +305,6 @@ export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
    * (`runner-sessions.ts`). eve is never handed it.
    */
   readonly lineId?: string;
-  /** Whether a native harness's runner holds the message for the next turn rather than steering the one under way; eve is never handed it. */
-  readonly delivery?: LineDelivery;
 }
 
 /**

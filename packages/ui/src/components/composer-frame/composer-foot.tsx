@@ -73,8 +73,10 @@ export type ComposerSend = {
   held?: boolean | undefined;
   /** Its own press, where the frame is no form whose submit sends it. */
   onSend?: (() => void) | undefined;
-  /** Whether it reads as its label in words, where its press settles something and sends no message ("Got it"). */
+  /** Whether it reads as its label in words, where its press settles something and sends no message ("Got it"), or sends one another way than its round send would ("Queue"). */
   inWords?: boolean | undefined;
+  /** The glyph before its words, where it reads in words and says how it sends ("Queue", "Steer"). */
+  icon?: ReactNode;
   /** The key that sends where it is no bare Enter, drawn on its hint: ⌘↩ for a box whose Enter breaks the line. */
   chord?: ShortcutChord | undefined;
   /** Where the box can say why it holds nothing to send: what its press while empty tells, and what it says, once said, under the bar. */
@@ -159,7 +161,7 @@ function SendButton({
   send: ComposerSend;
   refusalId: string;
 }): React.JSX.Element {
-  const { label, empty, held = false, inWords = false, onSend, chord, refuses } = send;
+  const { label, empty, held = false, inWords = false, icon, onSend, chord, refuses } = send;
   const busy = send.busy === true ? { busy: true, busyLabel: send.busyLabel } : {};
   const type = onSend === undefined ? BUTTON_TYPE.SUBMIT : BUTTON_TYPE.BUTTON;
   // Note that an empty send that can say why stays pressable, and a held one never is.
@@ -176,6 +178,7 @@ function SendButton({
       <Button
         variant={BUTTON_VARIANT.INK}
         type={type}
+        icon={icon}
         disabled={empty || held}
         onClick={onSend}
         {...refusing}

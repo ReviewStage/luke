@@ -18,6 +18,7 @@
  */
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
+import { agentQueuePause, queuedMessage } from "../schemas/agent-queue.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -188,6 +189,18 @@ export const macCommandSync = defineSyncTable(macCommand, {
 const runnerLineSync = defineSyncTable(runnerLine, {
   topics: [{ kind: TOPIC.AGENT, column: runnerLine.agentId }],
   ignore: [runnerLine.acceptedAt],
+});
+
+/**
+ * A message queued behind an agent's running turn, and the queue's pause,
+ * each on the agent's topic, which the agent's tab reads its queue on.
+ */
+export const queuedMessageSync = defineSyncTable(queuedMessage, {
+  topics: [{ kind: TOPIC.AGENT, column: queuedMessage.agentId }],
+});
+
+export const agentQueuePauseSync = defineSyncTable(agentQueuePause, {
+  topics: [{ kind: TOPIC.AGENT, column: agentQueuePause.agentId }],
 });
 
 /**
@@ -464,6 +477,8 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentPinSync,
   macCommandSync,
   runnerLineSync,
+  queuedMessageSync,
+  agentQueuePauseSync,
   deviceAgentLineSync,
   deviceAgentRequestSync,
   planCommentThreadSync,

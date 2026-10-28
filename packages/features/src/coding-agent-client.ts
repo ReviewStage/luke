@@ -38,6 +38,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentQueueAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   type CodingAgentWorkspaceListParams,
   type DevicePresenceAnswerView,
@@ -58,6 +59,8 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  type AgentQueueChange,
+  agentQueueChangeSchema,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_WORKSPACE_QUERY,
@@ -917,6 +920,23 @@ export class HostedCodingAgentClient {
     return hostedAnswer(
       askHosted(
         this.#hosted.messages.send,
+        { params: { id: agentId }, body: admitted },
+        HOSTED_DEADLINE.STEER,
+      ),
+      MESSAGE_REFUSALS,
+    );
+  }
+
+  /** Changes one agent's queue of messages waiting behind its turn, answering the queue as it then stands; a change the service would refuse by shape is refused here without traveling. */
+  changeQueue(
+    agentId: string,
+    change: AgentQueueChange,
+  ): Effect.Effect<CodingAgentQueueAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(agentQueueChangeSchema)(change));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.messages.queue,
         { params: { id: agentId }, body: admitted },
         HOSTED_DEADLINE.STEER,
       ),

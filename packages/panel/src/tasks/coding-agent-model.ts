@@ -94,7 +94,6 @@ import {
   type GitHubLineMetadata,
   isRecord,
   isWireString,
-  LINE_DELIVERY,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type ThreadLineMetadata,
@@ -2376,8 +2375,6 @@ export interface SentLine {
   readonly attachments: readonly CodingAgentAttachment[];
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
-  /** Whether it was queued behind the turn under way as it went, so it waits for that turn to end and opens the next; none for a line that steers or opens its turn. */
-  readonly delivery?: typeof LINE_DELIVERY.QUEUE | undefined;
   readonly state: SentLineState;
   /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
   readonly rewinds?: string | undefined;
@@ -2449,7 +2446,6 @@ function sentLineMessage(line: SentLine): CodingAgentMessage {
     id: line.id,
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: line.text }, ...files],
-    ...(line.delivery === LINE_DELIVERY.QUEUE ? { queued: true } : undefined),
   };
 }
 

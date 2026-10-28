@@ -107,6 +107,8 @@ import {
   type CodingAgentPullRequestReadParams,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentQueueAnswerView,
+  type CodingAgentQueueParams,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
   type CodingAgentRewindParams,
@@ -144,6 +146,7 @@ import {
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
+  codingAgentQueueAnswerViewSchema,
   codingAgentReviewOptionsAnswerViewSchema,
   codingAgentTranscriptChangedSchema,
   codingAgentTranscriptOlderAnswerSchema,
@@ -681,6 +684,7 @@ export interface HostOperator {
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
   codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentQueue(params: CodingAgentQueueParams): Effect.Effect<CodingAgentQueueAnswerView>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
@@ -1772,7 +1776,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           text: params.text,
           clientKey: params.clientKey,
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
-          ...("delivery" in params ? { delivery: params.delivery } : undefined),
         }),
         answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
@@ -1801,6 +1804,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           disabledServers: params.disabledServers,
         }),
         answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+      ),
+    codingAgentQueue: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_QUEUE, {
+          agentId: params.agentId,
+          change: params.change,
+        }),
+        answerOf(codingAgentQueueAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentStop: (params) =>
       Effect.map(

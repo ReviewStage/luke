@@ -20,6 +20,7 @@ import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   agentBrowserTabSync,
   agentPinSync,
+  agentQueuePauseSync,
   agentSectionEntrySync,
   attachmentSync,
   automationRunSync,
@@ -42,6 +43,7 @@ import {
   personalWorkspaceSync,
   planPageVersionSync,
   planRevisionSync,
+  queuedMessageSync,
   repositoryPinSync,
   taskPinSync,
   taskSectionEntrySync,
@@ -573,6 +575,8 @@ export const agentTranscriptLive = defineLiveQuery({
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
+    queuedMessageSync,
+    agentQueuePauseSync,
   ],
   topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
     const parent: readonly SyncTopic[] =

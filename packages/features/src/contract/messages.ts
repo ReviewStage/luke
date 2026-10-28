@@ -19,6 +19,8 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  agentQueueAnswerSchema,
+  agentQueueChangeSchema,
   CODING_AGENT_BOUNDS,
   codingAgentMessageAnswerSchema,
   codingAgentMessageRequestSchema,
@@ -90,6 +92,18 @@ export const messagesContract = {
     )
     .input(exactBodyInput(EffectSchema.Struct(byId), codingAgentMessageRequestSchema))
     .output(EffectSchema.flip(codingAgentMessageAnswerSchema)),
+  /** One change of an agent's queue of messages waiting behind its turn, answering the queue as it then stands. */
+  queue: hostedProcedure
+    .meta(bodyCap(MESSAGE_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: "/api/agents/{id}/queue",
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(EffectSchema.Struct(byId), agentQueueChangeSchema))
+    .output(EffectSchema.flip(agentQueueAnswerSchema)),
   /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agentWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))

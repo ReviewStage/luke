@@ -9,6 +9,7 @@ import { queryBuilder } from "@luke/database/core/query";
 import type { MessageCursor } from "@luke/database/models/message-reads";
 import { agentReachableBy } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { agentQueuePause, queuedMessage } from "@luke/database/schemas/agent-queue";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
@@ -75,6 +76,8 @@ export interface TranscriptLiveStatements extends TranscriptWindowStatements {
   readonly conversation: LiveStatement;
   readonly agent: LiveStatement;
   readonly workers: LiveStatement;
+  readonly queue: LiveStatement;
+  readonly queuePause: LiveStatement;
 }
 
 /** A number Postgres holds as `bigint`, as a number rather than the text Realtime would carry. */
@@ -411,12 +414,36 @@ export function transcriptLiveStatements(
         reached,
       ),
     );
+  // The agent's queue and its pause, whose every write moves a count or a stamp, so an edit, a new order, or a pause wakes the read.
+  const queueAgent = and(
+    eq(codingAgent.conversationId, parentConversationId),
+    eq(codingAgent.userId, userId),
+    reached,
+  );
+  const queue = queryBuilder
+    .select({
+      rows: LIVE_COUNT.as("rows"),
+      changedAt: liveLatest(queuedMessage.updatedAt).as("changedAt"),
+    })
+    .from(queuedMessage)
+    .innerJoin(codingAgent, eq(codingAgent.id, queuedMessage.agentId))
+    .where(queueAgent);
+  const queuePause = queryBuilder
+    .select({
+      rows: LIVE_COUNT.as("rows"),
+      changedAt: liveLatest(agentQueuePause.pausedAt).as("changedAt"),
+    })
+    .from(agentQueuePause)
+    .innerJoin(codingAgent, eq(codingAgent.id, agentQueuePause.agentId))
+    .where(queueAgent);
   return Option.all({
     messages: liveStatementOf(written),
     turns: liveStatementOf(run),
     conversation: liveStatementOf(conversation),
     agent: liveStatementOf(agent),
     workers: liveStatementOf(workers),
+    queue: liveStatementOf(queue),
+    queuePause: liveStatementOf(queuePause),
   }).pipe(
     Option.flatMap((statements) =>
       Option.map(transcriptWindowLiveStatements(target, reached, past), (window) => ({

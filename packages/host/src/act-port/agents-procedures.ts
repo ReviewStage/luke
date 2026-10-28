@@ -44,6 +44,8 @@ import {
   type CodingAgentPullRequestReadParams,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentQueueAnswerView,
+  type CodingAgentQueueParams,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
   type CodingAgentRewindParams,
@@ -101,6 +103,7 @@ export interface AgentProceduresDependencies {
     codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentQueue(params: CodingAgentQueueParams): Effect.Effect<CodingAgentQueueAnswerView>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
@@ -377,6 +380,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* notedAgent(host.codingAgentServers(input));
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_QUEUE]: actPort[AGENT_ACT_KIND.CODING_AGENTS_QUEUE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentQueue(input);
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_STOP]: actPort[AGENT_ACT_KIND.CODING_AGENTS_STOP].effect(

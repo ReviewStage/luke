@@ -94,7 +94,6 @@ import {
   INPUT_LINE,
   INSTALLED_SKILLS,
   InputLineSchema,
-  MESSAGE_DELIVERY,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
@@ -208,8 +207,6 @@ interface Outgoing {
   readonly clientId: string;
   readonly input: readonly UserInput[];
   readonly lines: readonly string[];
-  /** Whether Luke queued it behind the turn under way rather than steering it. */
-  readonly queued?: boolean;
 }
 
 /** The fields of an answer the controller reads. */
@@ -698,11 +695,6 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
         yield* startTurn(launch, [outgoing]);
         return undefined;
       }
-      // A queued message waits for the next turn as it is, unaccepted until that turn takes it.
-      if (value.delivery === MESSAGE_DELIVERY.QUEUE) {
-        launch.waiting.push({ ...outgoing, queued: true });
-        return undefined;
-      }
       // A steer the turn cannot take waits for the next turn; any other refusal fails the launch.
       const steered = yield* launch.server
         .request(METHOD.TURN_STEER, {
@@ -762,16 +754,6 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   }
 });
 
-/**
- * What a stop does to the messages queued behind the turn it ends. Note that
- * they are let go unaccepted for now, so Luke hands them on as it hands any
- * message no launch took; this is the one place that changes once what a
- * stop does to them is settled, as `runner.ts`'s own is for Claude Code.
- */
-function queuedAtStop(launch: CodexLaunch): void {
-  launch.waiting = launch.waiting.filter((outgoing) => outgoing.queued !== true);
-}
-
 /** The turn this launch ran completed: the launch ends, or its unanswered messages start the next turn. */
 const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(function* (
   launch: CodexLaunch,
@@ -779,10 +761,7 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
 ) {
   if (signal.turnId !== launch.turnId) return undefined;
   launch.turnId = undefined;
-  if (launch.stopping) {
-    queuedAtStop(launch);
-    return ended(RUNNER_END.STOPPED);
-  }
+  if (launch.stopping) return ended(RUNNER_END.STOPPED);
   if (signal.status === "failed")
     return ended(RUNNER_END.FAILED, signal.error ?? "the turn failed");
   if (signal.status === "interrupted") {
@@ -792,10 +771,6 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
   launch.sent.clear();
   launch.waiting = [];
   if (unanswered.length > 0) {
-    // Note that a queued message opens a turn of its own, so Luke is told this one is over first.
-    if (unanswered.some((outgoing) => outgoing.queued === true)) {
-      yield* launch.context.sink.emit({ type: RUNNER_EVENT.IDLE });
-    }
     yield* startTurn(launch, unanswered);
     return undefined;
   }

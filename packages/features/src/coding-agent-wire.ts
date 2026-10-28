@@ -1,12 +1,7 @@
-import {
-  keepIdentity,
-  LINE_DELIVERY,
-  MESSAGE_ROLE,
-  TURN_ORIGIN,
-  WireValueSchema,
-} from "@luke/wire";
+import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
+import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
@@ -475,7 +470,7 @@ const codingAgentAttachmentSchema = EffectSchema.Struct({
 export type CodingAgentAttachment = typeof codingAgentAttachmentSchema.Type;
 
 /** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
-const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
+export const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
   EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
   EffectSchema.makeFilter(
     (attachments) =>
@@ -485,7 +480,7 @@ const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSch
 );
 
 /** A message's words, trimmed and bounded, and empty where the files carry the message alone. */
-const messageWordsSchema = EffectSchema.Trim.check(
+export const messageWordsSchema = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
 );
 
@@ -647,20 +642,74 @@ export const codingAgentStartRequestOnWire = (request: CodingAgentStartRequest) 
  * so the service answers what the first send did rather than sending the
  * words a second time. The message steers the turn under way, so the model
  * sees it at its next step and a call still generating is cut short and
- * run again with it, or, where its `delivery` queues it, waits for that turn
- * to end and opens the next; either opens a turn where none runs. A steer
- * names no delivery, so a service older than queueing still takes it. The
- * answer is the agent's summary with its status read after the message was
- * taken, which is running.
+ * run again with it, or opens a turn where none runs. The answer is the
+ * agent's summary with its status read after the message was taken, which
+ * is running.
  */
 export const codingAgentMessageRequestSchema = EffectSchema.Struct({
   text: messageWordsSchema,
   clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
-  delivery: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(LINE_DELIVERY))),
 }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
+
+/** What a member asks of an agent's queue (`agent-queue-wire.ts`). */
+export const QUEUE_CHANGE = {
+  /** A message queued at the end, under the key this one send is known by, which a retry carries again. */
+  ADD: "add",
+  /** A queued message's words written again in its place, its edit over; its files stay as they were. */
+  EDIT: "edit",
+  /** A queued message taken into a member's composer to edit, held out of the hand-off until the edit ends or lapses; or, `held` false, the edit cancelled. */
+  HOLD: "hold",
+  DELETE: "delete",
+  /** A queued message sent now, steering the turn under way, and taken out of the queue. */
+  STEER: "steer",
+  /** The queue in a new order: every message it holds, by id, in the order they now go. */
+  REORDER: "reorder",
+  /** The queue's pause dropped, the next message going once no turn runs. */
+  RESUME: "resume",
+} as const;
+
+const queuedMessageIdSchema = wireUuidSchema;
+
+/** One change to an agent's queue, by its kind. */
+export const agentQueueChangeSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.ADD),
+    text: messageWordsSchema,
+    clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+    attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments))),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.EDIT),
+    messageId: queuedMessageIdSchema,
+    text: messageWordsSchema.check(EffectSchema.isMinLength(1)),
+  }),
+  EffectSchema.Struct({
+    change: EffectSchema.Literals([QUEUE_CHANGE.DELETE, QUEUE_CHANGE.STEER]),
+    messageId: queuedMessageIdSchema,
+  }),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.HOLD),
+    messageId: queuedMessageIdSchema,
+    held: EffectSchema.Boolean,
+  }),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.REORDER),
+    order: EffectSchema.Array(queuedMessageIdSchema).check(
+      EffectSchema.isMaxLength(AGENT_QUEUE_BOUNDS.MAX_MESSAGES),
+    ),
+  }),
+  EffectSchema.Struct({ change: EffectSchema.Literal(QUEUE_CHANGE.RESUME) }),
+]);
+
+export type AgentQueueChange = typeof agentQueueChangeSchema.Type;
+
+/** What a change to the queue answers: the queue as it then stands. */
+export const agentQueueAnswerSchema = EffectSchema.Struct({ queue: agentQueueSchema });
+
+export type AgentQueueAnswer = typeof agentQueueAnswerSchema.Type;
 
 /**
  * Rewinding an agent (POST): the developer's line it goes back to just
@@ -2157,13 +2206,6 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
   ),
-  /**
-   * Whether one of the developer's lines was queued behind the turn under way
-   * and no turn has taken it yet, so the tab draws it waiting at the
-   * transcript's foot; absent once a turn took it, on a line that steered or
-   * opened its turn, on every other row, and from a service older than it.
-   */
-  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */
@@ -2292,6 +2334,8 @@ export type CodingAgentSubagentTitle = typeof codingAgentSubagentTitleSchema.Typ
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
   cursor: codingAgentCursorSchema,
+  /** The messages queued behind the agent's turn, and whether the queue stands paused, on its own transcript; absent while none is queued, on a worker's page, and from a service older than it. */
+  queue: EffectSchema.optionalKey(agentQueueSchema),
   /**
    * The turn the page before the oldest message here is read before, on a
    * task conversation's page read from its newest turns or before one;

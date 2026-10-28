@@ -32,7 +32,6 @@ import {
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
-import { LINE_DELIVERY, type LineDelivery } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
@@ -45,7 +44,6 @@ import {
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { modEnterSends } from "../enter-sends.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
@@ -63,7 +61,6 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { ComposerQuoteView } from "./reply-to-selection.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
-import { SendOptions } from "./send-options.js";
 import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -90,14 +87,10 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * box is an editor (`composer-field.tsx`) that holds plain words and a
  * chosen skill's chip, and the message is its words as a string. A
  * message sent while a turn runs steers it, so the agent sees it at its
- * next step, or, sent with ⌘↩ (Ctrl+↩ elsewhere) or the chevron beside
- * Send (`send-options.tsx`), is queued behind the turn, waiting at the
- * transcript's foot until the turn is over and opening the next; sent idle,
- * it opens a new turn. The box reads the same
+ * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
  * and one placeholder naming who it writes to, because the tab's glyph and the transcript's "Working…"
- * line already say where the agent stands. What follows the agent's state is
- * that chevron, standing while a turn runs and the box holds a message, and
+ * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
@@ -661,23 +654,6 @@ export function AgentComposer({
     onStop().finally(() => setStopping(false));
   };
 
-  /** The box's message sent, steering a turn under way unless `delivery` queues it behind the turn. */
-  const submit = (delivery?: LineDelivery) => {
-    setRefusal(undefined);
-    setCut(false);
-    refocus.current = card.current?.contains(document.activeElement) === true;
-    composer.send(delivery);
-    setSends((count) => count + 1);
-  };
-  // A message written while a turn runs may be queued behind it rather than steer it, by the chevron beside Send or by ⌘↩.
-  const queues = stoppable && !empty && !held && !files.reading;
-  /** Whether a press queued the box's message, which it does for ⌘↩ while it may. */
-  const queuedBy = (event: KeyboardEvent): boolean => {
-    if (!queues || !sendable || !modEnterSends(event)) return false;
-    submit(LINE_DELIVERY.QUEUE);
-    return true;
-  };
-
   // Note that a popover closed by key while the ⋯ stands hands focus to the
   // ⋯, after its own close has handed it to its hidden press, because a
   // hidden press can hold no keyboard; with the press drawn, the ⋯ is not.
@@ -744,7 +720,13 @@ export function AgentComposer({
       <PromptInput
         className={closed ? "opacity-60" : undefined}
         dropping={files.drop.dropping}
-        onSubmit={() => submit()}
+        onSubmit={() => {
+          setRefusal(undefined);
+          setCut(false);
+          refocus.current = card.current?.contains(document.activeElement) === true;
+          composer.send();
+          setSends((count) => count + 1);
+        }}
       >
         <ComposerBody
           files={
@@ -780,7 +762,7 @@ export function AgentComposer({
             onKey={(event) =>
               pickers.field.onKey(event) ||
               // A file still being read holds the owner's keys too, as it holds Send.
-              (!files.reading && (queuedBy(event) || onKey?.(event) === true))
+              (!files.reading && onKey?.(event) === true)
             }
             onEnter={() => {
               if (room.current !== null) submitPromptInput(room.current);
@@ -840,7 +822,6 @@ export function AgentComposer({
               <DictateButton dictation={dictation} disabled={held || module === undefined} />
               <ComposerMore card={card} offers={offers} />
               {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
-              {queues ? <SendOptions disabled={!sendable} onSend={submit} /> : null}
             </ComposerActions>
           }
           strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}

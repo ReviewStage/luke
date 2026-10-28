@@ -43,6 +43,8 @@ import {
   codingAgentPullRequestReadParamsSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
+  codingAgentQueueAnswerViewSchema,
+  codingAgentQueueParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentReviewOptionsAnswerViewSchema,
   codingAgentRewindParamsSchema,
@@ -166,6 +168,11 @@ export const agentActsContract = {
   )
     .input(exactInput(codingAgentServersParamsSchema))
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_QUEUE]: actProcedure(
+    "Could not change the agent's queue on this system.",
+  )
+    .input(exactInput(codingAgentQueueParamsSchema))
+    .output(EffectSchema.flip(codingAgentQueueAnswerViewSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_STOP]: actProcedure("Could not stop the agent on this system.")
     .input(exactInput(codingAgentStopParamsSchema))
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),

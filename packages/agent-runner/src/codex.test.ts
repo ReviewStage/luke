@@ -32,7 +32,6 @@ import {
   INPUT_LINE,
   INSTALLED_SKILLS,
   type InputLine,
-  MESSAGE_DELIVERY,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
@@ -170,7 +169,6 @@ function notified(exchanges: readonly Exchange[]): string[] {
 const LINE = {
   FIRST: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e01",
   STEERED: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e02",
-  QUEUED: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e03",
 } as const;
 
 /** The lines a launch said app-server took, in order. */
@@ -621,47 +619,6 @@ it.effect("sends a steer refused by a turn that cannot be steered as the next tu
       { type: "text", text: "And the second line?", text_elements: [] },
     ]);
     assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
-  }),
-);
-
-it.effect("holds a queued message for the next turn rather than steering the running one", () =>
-  Effect.gen(function* () {
-    const luke = fakeLuke("What exact line");
-    // The only steer app-server sees is the later line's, refused as the turn ends.
-    const script = refusedSteer({ code: -32600, message: "no active turn to steer" }, true);
-    const { spawned, write, run } = yield* launch([script], luke);
-    yield* write({ ...CONFIG, threadId: THREAD });
-    yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
-    yield* luke.seen;
-    yield* write({
-      type: INPUT_LINE.MESSAGE,
-      uuid: LINE.QUEUED,
-      content: [{ type: "text", text: "Then check the tests." }],
-      delivery: MESSAGE_DELIVERY.QUEUE,
-    });
-    yield* write(message("And the second line?", LINE.STEERED));
-
-    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-    const [process] = spawned;
-    assert.deepEqual(process?.unexpected, []);
-    assert.deepEqual(
-      received(process, "turn/steer").map((steer) => steer.clientUserMessageId),
-      [LINE.STEERED],
-    );
-    assert.deepEqual(received(process, "turn/start")[1]?.input, [
-      { type: "text", text: "Then check the tests.", text_elements: [] },
-      { type: "text", text: "And the second line?", text_elements: [] },
-    ]);
-    assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.QUEUED, LINE.STEERED]);
-    // The turn that completed is said over before the queued message opens the next one.
-    const told = (found: (posted: RunnerEvent["message"]) => boolean) =>
-      luke.applied.findIndex(({ message: posted }) => found(posted));
-    const idle = told((posted) => "type" in posted && posted.type === RUNNER_EVENT.IDLE);
-    const queued = told(
-      (posted) =>
-        "type" in posted && posted.type === RUNNER_EVENT.ACCEPTED && posted.uuid === LINE.QUEUED,
-    );
-    assert.ok(idle !== -1 && idle < queued);
   }),
 );
 

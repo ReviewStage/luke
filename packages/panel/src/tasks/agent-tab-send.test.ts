@@ -12,7 +12,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINE_DELIVERY, type LineDelivery, MESSAGE_ROLE } from "@luke/wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -114,7 +114,7 @@ async function settle(): Promise<void> {
 async function drawnTab(later: readonly CodingAgentMessage[], agent = AGENT_SUMMARY) {
   fakeAppBridge({});
   const answers: ((answer: CodingAgentAgentAnswer) => void)[] = [];
-  const sent: { text: string; clientKey: string; delivery: LineDelivery | undefined }[] = [];
+  const sent: { text: string; clientKey: string }[] = [];
   let release: () => void = () => undefined;
   const released = new Promise<void>((resolve) => {
     release = resolve;
@@ -127,8 +127,8 @@ async function drawnTab(later: readonly CodingAgentMessage[], agent = AGENT_SUMM
   });
   const control = codingAgentsControl({
     agents: [agent],
-    onMessage: (_agentId, text, clientKey, _attachments, delivery) => {
-      sent.push({ text, clientKey, delivery });
+    onMessage: (_agentId, text, clientKey) => {
+      sent.push({ text, clientKey });
       return new Promise((resolve) => answers.push(resolve));
     },
     transcripts: pushedTranscripts(() => [page(MESSAGES), page([...MESSAGES, ...later])], {
@@ -240,26 +240,6 @@ test("a message sent to an agent at rest draws the working line at once, before 
 
   assert.ok(tab.container.querySelector("[data-working]"), "working from the press");
   assert.equal(tab.sent.length, 1, "with the send still unanswered");
-});
-
-test("⌘↩ while a turn runs queues the message behind it, its line marked Queued, where Enter steers", async () => {
-  const tab = await drawnTab([], { ...AGENT_SUMMARY, status: CODING_AGENT_STATUS.RUNNING });
-  typeInComposer(tab.container, "Then open a pull request.");
-  pressInComposer(tab.container, "Enter", { metaKey: true });
-  await settle();
-  await tab.answer(0, TAKEN);
-  await tab.send("Also rename the tile.");
-
-  assert.deepEqual(
-    tab.sent.map(({ text, delivery }) => [text, delivery]),
-    [
-      ["Then open a pull request.", LINE_DELIVERY.QUEUE],
-      ["Also rename the tile.", undefined],
-    ],
-  );
-  const queued = (words: string) => tab.lines(words)[0]?.textContent?.includes("Queued");
-  assert.equal(queued("Then open a pull request."), true);
-  assert.equal(queued("Also rename the tile."), false);
 });
 
 test("a Codex or Claude Code agent's box says nothing under it of the plan that pays", async () => {

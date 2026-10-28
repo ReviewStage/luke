@@ -77,7 +77,6 @@ import {
   INSTALLED_SKILLS,
   type InputLine,
   InputLineSchema,
-  MESSAGE_DELIVERY,
   RUNNER_CONTROL,
   RUNNER_END,
   RUNNER_ENV,
@@ -275,12 +274,6 @@ function userMessage(
   return message;
 }
 
-/** A message queued behind the turn under way: its uuid and its content, as its line carried them. */
-interface QueuedMessage {
-  readonly uuid: UUID;
-  readonly content: Extract<InputLine, { type: "message" }>["content"];
-}
-
 /** The launch's state, shared by its two loops. */
 interface Launch {
   readonly session: ClaudeCodeSession;
@@ -291,8 +284,6 @@ interface Launch {
   readonly turnRunning: Ref.Ref<boolean>;
   /** The messages Luke sent that no `result` has answered yet, by their uuid. */
   readonly unanswered: Ref.Ref<ReadonlySet<string>>;
-  /** The messages Luke queued behind the turn under way, oldest first, held unaccepted until it is over. */
-  readonly queued: Ref.Ref<readonly QueuedMessage[]>;
   readonly stopping: Ref.Ref<boolean>;
   /** How many waits the launch has posted, so a wait's release is dropped once a newer one began. */
   readonly waits: Ref.Ref<number>;
@@ -349,12 +340,7 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
               "agent-runner: skipped a message for a released launch",
             );
           }
-          const running = yield* Ref.get(launch.turnRunning);
-          // A message queued behind a turn under way waits for its end, said taken only once handed on.
-          if (running && value.delivery === MESSAGE_DELIVERY.QUEUE) {
-            return yield* Ref.update(launch.queued, (held) => [...held, { uuid, content }]);
-          }
-          yield* Ref.set(launch.turnRunning, true);
+          const running = yield* Ref.getAndSet(launch.turnRunning, true);
           yield* Ref.set(launch.warm, false);
           yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
           // Posted ahead of the hand-off, so it is numbered before anything the CLI says of the message.
@@ -460,7 +446,6 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   if (message.type !== SDK_MESSAGE.RESULT) return;
   const inFlight = MutableRef.getAndSet(launch.inFlight, undefined);
   if (yield* Ref.get(launch.stopping)) {
-    yield* queuedAtStop(launch);
     return yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
   }
   // A message Luke sent during the turn that the turn did not take runs as
@@ -468,61 +453,20 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   const left = stillUnanswered(yield* Ref.get(launch.unanswered), message);
   yield* Ref.set(launch.unanswered, left);
   if (left.size > 0) return;
+  const waiting =
+    inFlight !== undefined &&
+    (inFlight.background_tasks.length > 0 || inFlight.session_crons.length > 0);
   // A `result` no Stop hook came before, such as an error's, ends the launch rather than trusting its CLI warm.
   if (inFlight === undefined) return yield* Deferred.succeed(launch.ended, RUNNER_END.TURN_ENDED);
-  // The messages queued behind the turn open the next one, whatever the turn left waiting.
-  if (yield* launch.admission.withPermit(handQueued(launch))) return;
-  const waiting = inFlight.background_tasks.length > 0 || inFlight.session_crons.length > 0;
   if (!waiting) {
     return launch.warmable
       ? yield* warmed(launch)
       : yield* Deferred.succeed(launch.ended, RUNNER_END.TURN_ENDED);
   }
-  // Decided under the admission, so a message queued since the check above is handed on rather than held through the wait.
-  const handed = yield* launch.admission.withPermit(
-    Effect.gen(function* () {
-      if (yield* handQueued(launch)) return true;
-      yield* Ref.set(launch.turnRunning, false);
-      return false;
-    }),
-  );
-  if (handed) return;
+  yield* Ref.set(launch.turnRunning, false);
   yield* launch.sink.emit({ type: RUNNER_EVENT.WAITING, ...inFlight });
   const wait = yield* Ref.updateAndGet(launch.waits, (count) => count + 1);
   yield* Effect.forkScoped(watchWait(launch, wait, inFlight));
-});
-
-/**
- * The messages queued behind the turn just over, handed to the CLI as its
- * next turn, oldest first, each said taken as it goes; answers whether there
- * were any. Note that an IDLE goes first, though the launch stays at work,
- * because it is what tells Luke the agent's turn is over, so the queued
- * messages open a turn of their own rather than being read as steering the
- * one that ended. Run under the admission, so no message is queued behind a
- * turn the launch has already let go of.
- */
-const handQueued = Effect.fn("agent-runner/handQueued")(function* (launch: Launch) {
-  const held = yield* Ref.getAndSet(launch.queued, []);
-  if (held.length === 0) return false;
-  yield* launch.sink.emit({ type: RUNNER_EVENT.IDLE });
-  yield* Ref.set(launch.turnRunning, true);
-  yield* Ref.set(launch.warm, false);
-  for (const message of held) {
-    yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(message.uuid));
-    yield* launch.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid: message.uuid });
-    yield* Queue.offer(launch.prompts, userMessage(message.uuid, message.content, false));
-  }
-  return true;
-});
-
-/**
- * What a stop does to the messages queued behind the turn it ends. Note that
- * they are let go unaccepted for now, so Luke hands them on as it hands any
- * message no launch took; this is the one place that changes once what a
- * stop does to them is settled.
- */
-const queuedAtStop = Effect.fn("agent-runner/queuedAtStop")(function* (launch: Launch) {
-  yield* Ref.set(launch.queued, []);
 });
 
 /** Whether the launch is still warm, with nothing taken, begun, stopped, or ended since its IDLE. Read under the admission. */
@@ -547,7 +491,6 @@ const warmed = Effect.fn("agent-runner/warmed")(function* (launch: Launch) {
   const wait = yield* launch.admission.withPermit(
     Effect.gen(function* () {
       if ((yield* Ref.get(launch.unanswered)).size > 0) return undefined;
-      if (yield* handQueued(launch)) return undefined;
       yield* Ref.set(launch.turnRunning, false);
       yield* Ref.set(launch.warm, true);
       yield* launch.sink.emit({ type: RUNNER_EVENT.IDLE });
@@ -670,7 +613,6 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     inFlight,
     turnRunning: yield* Ref.make(false),
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
-    queued: yield* Ref.make<readonly QueuedMessage[]>([]),
     stopping: yield* Ref.make(false),
     waits: yield* Ref.make(0),
     warmable: config.warm === true,

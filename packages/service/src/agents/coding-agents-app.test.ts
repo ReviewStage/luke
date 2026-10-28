@@ -73,6 +73,7 @@ import {
   ACCOUNT_INBOX_ARCHIVED,
   accountInboxAnswerSchema,
 } from "@luke/features/account-inbox-wire";
+import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -95,6 +96,7 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  agentQueueAnswerSchema,
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -120,6 +122,7 @@ import {
   LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
+  QUEUE_CHANGE,
   TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/coding-agent-wire";
 import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
@@ -161,10 +164,10 @@ import {
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { LINE_DELIVERY, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sentLineId } from "@luke/wire/host-ids";
-import { temporaryDirectory } from "@luke/wire/testing";
+import { noNetwork, temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq, sql } from "drizzle-orm";
 import {
@@ -241,6 +244,7 @@ import {
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
+import { queueAtTurnEnd } from "./coder-host/agent-queue.js";
 import { CODER } from "./coder-host/bounds.js";
 import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
@@ -532,6 +536,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
   ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
+  ["/api/agents/queue", (id: string) => `/api/agents/${id}/queue`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
   ["/api/workspaces/agents", (id: string) => `/api/workspaces/${id}/agents`],
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
@@ -5139,38 +5144,194 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
+  /** Where a change to an agent's queue lands. */
+  const AGENT_QUEUE = "/api/agents/queue";
+
+  /** One change to the agent's queue as its owner asks it, and the queue it answers. */
+  const queueChanged = (
+    ask: (request: Request) => Effect.Effect<Answer>,
+    owner: string,
+    agentId: string,
+    change: WireBoundaryInput,
+  ) =>
+    Effect.map(
+      ask(request(AGENT_QUEUE, owner, { method: "POST", id: agentId, body: change })),
+      (answered) => readAnswer(agentQueueAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).queue,
+    );
+
   it.effect(
-    "a message queued behind the running turn is handed on queued and reads as queued until a turn takes it",
+    "messages queued behind the running turn wait there, edited, held, and put in order, none of them sent, and read on the agent's transcript",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { agent, ask, owner, target, writer, turnId } = yield* startedAgent(eve, {
-          running: true,
-        });
-        const text = "Then open a pull request.";
-        const answered = yield* ask(
-          messageAs(owner, agent.id, {
+        const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
+        const sentBefore = eve.sent.length;
+        for (const text of ["First", "Second", "Third"]) {
+          yield* queueChanged(ask, owner, agent.id, {
+            change: QUEUE_CHANGE.ADD,
             text,
             clientKey: randomUUID(),
-            delivery: LINE_DELIVERY.QUEUE,
-          }),
+          });
+        }
+        const [first, second, third] = (yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.RESUME,
+        })).messages;
+        assert.ok(first !== undefined && second !== undefined && third !== undefined);
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.EDIT,
+          messageId: second.id,
+          text: "Second, reworded",
+        });
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.REORDER,
+          order: [third.id, first.id, second.id],
+        });
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.HOLD,
+          messageId: first.id,
+          held: true,
+        });
+
+        assert.equal(eve.sent.length, sentBefore, "nothing goes while the turn runs");
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
-        assert.equal(answered.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(answered.body));
-        assert.equal(eve.sent.at(-1)?.message.delivery, LINE_DELIVERY.QUEUE);
-        /** The developer's newest line as the page reads it. */
-        const newestLine = Effect.map(
+        assert.deepEqual(
+          page.queue?.messages.map((message) => [message.text, message.editing ?? false]),
+          [
+            ["Third", false],
+            ["First", true],
+            ["Second, reworded", false],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a message queued while the agent stands idle goes at once as its member's own message, under its own key, and leaves the queue",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, target } = yield* startedAgent(eve, { running: false });
+        const clientKey = randomUUID();
+        const queue = yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Now the dark variant.",
+          clientKey,
+        });
+
+        assert.deepEqual(queue.messages, []);
+        assert.ok(
+          JSON.stringify(eve.sent.at(-1)?.message.message).includes("Now the dark variant."),
+        );
+        assert.equal(
+          yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
+          true,
+        );
+      }),
+  );
+
+  it.effect("a queued message steered goes into the running turn now and leaves the queue", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve();
+      const { agent, ask, owner, target } = yield* startedAgent(eve, { running: true });
+      const clientKey = randomUUID();
+      const [queued] = (yield* queueChanged(ask, owner, agent.id, {
+        change: QUEUE_CHANGE.ADD,
+        text: "Also the emails.",
+        clientKey,
+      })).messages;
+      assert.ok(queued !== undefined);
+      const queue = yield* queueChanged(ask, owner, agent.id, {
+        change: QUEUE_CHANGE.STEER,
+        messageId: queued.id,
+      });
+
+      assert.deepEqual(queue.messages, []);
+      assert.equal(
+        yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
+        true,
+      );
+    }),
+  );
+
+  it.effect(
+    "at the turn's end the queue hands on its first message alone, nothing more while that one awaits its turn, and a stopped turn pauses it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
+          running: true,
+        });
+        for (const text of ["First", "Second"]) {
+          yield* queueChanged(ask, owner, agent.id, {
+            change: QUEUE_CHANGE.ADD,
+            text,
+            clientKey: randomUUID(),
+          });
+        }
+        yield* writer.consume(target, {
+          kind: RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 2,
+          status: RUN_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: 0,
+        });
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+        /** The queue at the turn's end, as the runner's events route hands it on, with GitHub and no network. */
+        const turnEnded = (ended: { readonly stopped: boolean; readonly failed: boolean }) =>
+          queueAtTurnEnd(eveFor, stored, ended).pipe(
+            Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
+          );
+        /** The agent's queue as the owner reads it on the transcript. */
+        const queued = Effect.map(
           ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-          (read) =>
-            readAnswer(
-              codingAgentMessagesAnswerSchema,
-              HOSTED_HTTP_STATUS.OK,
-              read,
-            ).messages.findLast((each) => each.role === MESSAGE_ROLE.USER),
+          (answered) =>
+            readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).queue,
         );
 
-        assert.equal((yield* newestLine)?.queued, true);
-        yield* writer.takeAwaitingLine(target, { text, turnId });
-        assert.equal((yield* newestLine)?.queued, undefined);
+        yield* turnEnded({ stopped: false, failed: false });
+        yield* turnEnded({ stopped: false, failed: false });
+        assert.deepEqual(
+          (yield* queued)?.messages.map((message) => message.text),
+          ["Second"],
+        );
+        assert.equal(
+          eve.sent.filter((each) => JSON.stringify(each.message.message).includes("First")).length,
+          1,
+        );
+
+        yield* turnEnded({ stopped: true, failed: false });
+        assert.deepEqual((yield* queued)?.paused, { because: QUEUE_PAUSE.STOPPED });
+      }),
+  );
+
+  it.effect(
+    "a Stop pauses what is queued behind the turn, and Resume lets the queue go again",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Then open a pull request.",
+          clientKey: randomUUID(),
+        });
+        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.deepEqual(page.queue?.paused, { because: QUEUE_PAUSE.STOPPED });
+
+        const resumed = yield* queueChanged(ask, owner, agent.id, { change: QUEUE_CHANGE.RESUME });
+        assert.equal(resumed.paused, undefined);
       }),
   );
 

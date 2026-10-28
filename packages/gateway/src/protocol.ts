@@ -210,6 +210,7 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_RENAME: "codingAgents.rename",
   /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_SERVERS: "codingAgents.servers",
+  CODING_AGENTS_QUEUE: "codingAgents.queue",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */

@@ -377,6 +377,11 @@ function fakeService() {
         asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
         return { agent: { ...AGENT, disabledServers: request.disabledServers } };
       }),
+    changeQueue: (agentId, change) =>
+      Effect.sync(() => {
+        asked.push(`queue:${agentId}:${change.change}`);
+        return { queue: { messages: [] } };
+      }),
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
