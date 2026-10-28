@@ -136,15 +136,14 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
  * a file's, the board, the code, the Inbox, a terminal, a pull request
  * the agent did not open, and a worker of Luke's own, which is drawn
  * nowhere a link opens. Note that a Changes or a
- * worker's tab is the agent's, so it is linked by the agent, the task still
- * named on a task's panel until its writers move to the agent's form.
+ * worker's tab is the agent's, so it is linked by the agent alone, on a
+ * task's panel as on the agent's page.
  */
 export function panelTabPlace(
   holder: PagePlace,
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  const task = "taskId" in holder ? { planId: holder.taskId } : {};
   if (tab === SIDE_PANEL_TAB.PLAN) {
     return "taskId" in holder ? { kind: LINK_PLACE.TASK, planId: holder.taskId } : undefined;
   }
@@ -156,14 +155,14 @@ export function panelTabPlace(
   // A Changes tab on another pull request of the agent's repository, by its number, is no place a link names.
   if (isChangesTab(tab)) {
     return tab.number === undefined
-      ? { kind: LINK_PLACE.CHANGES, ...task, agentId: tab.changes }
+      ? { kind: LINK_PLACE.CHANGES, agentId: tab.changes }
       : undefined;
   }
   if (!isSubagentTab(tab)) return undefined;
   const agent = tab.delegation?.agent ?? ("agentId" in holder ? holder.agentId : undefined);
   return agent === undefined
     ? undefined
-    : { kind: LINK_PLACE.WORKER, ...task, agentId: agent, callId: tab.subagent };
+    : { kind: LINK_PLACE.WORKER, agentId: agent, callId: tab.subagent };
 }
 
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
@@ -180,11 +179,15 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
   }
 }
 
-/** An Inbox item's place, under the task or the agent with no task that holds it. */
+/** An Inbox item's place, under its agent; under its task only while an older link opened it naming no agent. */
 function inboxItemPlace(chosen: InboxChoice): LinkPlace {
-  return "taskId" in chosen
-    ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
-    : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+  if (!("taskId" in chosen)) {
+    return { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+  }
+  const { taskId, itemAgentId, itemId } = chosen;
+  return itemAgentId === undefined
+    ? { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId }
+    : { kind: LINK_PLACE.INBOX_ITEM, agentId: itemAgentId, itemId };
 }
 
 /** The links of an Inbox narrowed to a channel: its chosen thread's, a step of its own where it stands alone, and the channel's. */
@@ -236,7 +239,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
     agentId === undefined
       ? undefined
       : {
-          link: { workspace, place: { kind: LINK_PLACE.AGENT, planId: drawn.id, agentId } },
+          link: { workspace, place: { kind: LINK_PLACE.AGENT, agentId } },
           thing: LINK_THING.AGENT,
           name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };

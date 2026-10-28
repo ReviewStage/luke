@@ -111,8 +111,7 @@ export function SidebarLuke({
       );
   };
   const copyLink = useCopyLinkItem();
-  const linkItem =
-    agentId === undefined ? undefined : copyLink(agentPlace({ id: agentId, planId: null }));
+  const linkItem = agentId === undefined ? undefined : copyLink(agentPlace(agentId));
   const groups: MenuEntry[][] = [
     linkItem === undefined ? [] : [linkItem],
     agent === undefined

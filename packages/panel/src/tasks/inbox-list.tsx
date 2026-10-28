@@ -481,7 +481,7 @@ export function InboxItemRow({
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
   // Note that U acts only on the chosen item, so only its row names the chord.
-  const { read, close, groups } = useInboxItemActions(holder, item, {
+  const { read, close, groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
     onMove: onAskMove === undefined ? undefined : () => onAskMove(listed),
     onClose,

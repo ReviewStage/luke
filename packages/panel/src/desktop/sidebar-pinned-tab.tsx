@@ -598,9 +598,7 @@ export function SidebarPinnedTab({
   const open = openAgentOf(pin, tasks);
   if (open !== undefined) return <PinnedAgentRow agent={open} drawn={drawn} />;
   // Another task's agent is read only as far as its task's row names it, so its pin offers its link alone beside Unpin.
-  const link = isAgentTab(pin.tab)
-    ? copyLink(agentPlace({ id: pin.tab.agent, planId: pin.task }))
-    : undefined;
+  const link = isAgentTab(pin.tab) ? copyLink(agentPlace(pin.tab.agent)) : undefined;
   return (
     <PinnedTabRow
       drawn={drawn}

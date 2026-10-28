@@ -5795,16 +5795,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
-          // Another agent is marked as one beside its name, its model, and itself on its task, with no kind an older window would refuse.
+          // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
             "Take the split view.",
-            {
-              name: "Add PR overview tab",
-              agent: true,
-              model: agent.model,
-              agentId: agent.id,
-              taskId: task.id,
-            },
+            { name: "Add PR overview tab", agent: true, model: agent.model, agentId: agent.id },
           ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
@@ -5900,7 +5894,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.ok(Option.isSome(shown));
         const place = { workspace: "acme", repository: task.repository };
-        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: task.id, agentId: other.agent.id }, "Store", place)}.`;
+        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: other.agent.id }, "Store", place)}.`;
 
         yield* sent(words);
 
@@ -5952,15 +5946,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* moved(oneOff.agent.id, task.workspaceId);
         yield* moved(foreign.agent.id, elsewhere);
         const place = { workspace: "acme", repository: task.repository };
-        const mention = (agentId: string, taskId: string | undefined, name: string) =>
-          mentionMarkdown(
-            taskId === undefined
-              ? { kind: MENTION_KIND.AGENT, agentId }
-              : { kind: MENTION_KIND.AGENT, taskId, agentId },
-            name,
-            place,
-          );
-        const words = `Line up with ${mention(onBilling.agent.id, billing.id, "Billing agent")}, ${mention(oneOff.agent.id, undefined, "Sweeper")} and ${mention(foreign.agent.id, undefined, "Stranger")}.`;
+        const mention = (agentId: string, name: string) =>
+          mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId }, name, place);
+        const words = `Line up with ${mention(onBilling.agent.id, "Billing agent")}, ${mention(oneOff.agent.id, "Sweeper")} and ${mention(foreign.agent.id, "Stranger")}.`;
 
         yield* sent(words);
 

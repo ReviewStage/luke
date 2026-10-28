@@ -610,7 +610,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: tasks.invitations, name: "Teammate invitations" },
     onYourTask: true,
     archived: true,
-    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${agents.archived.id})`,
+    mention: `[@${agents.archived.name}](https://tryluke.dev/workspace-${workspaceId}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
@@ -621,7 +621,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: tasks.billing, name: "Billing" },
     onYourTask: false,
     archived: false,
-    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${agents.teammates.id})`,
+    mention: `[@${agents.teammates.name}](https://tryluke.dev/workspace-${workspaceId}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -727,7 +727,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   // The agent is answered with the mention its starter names it by, its model's name while it has no title.
   assert.equal(
     started.agent.mention,
-    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${stored.title ?? AGENT_CHOICE_NAME}](https://tryluke.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
@@ -958,7 +958,7 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
 });
 
 test("start_agent with a title names the agent by it from the start, and a title generated later never covers it; an empty or over-long title starts nothing", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
@@ -977,7 +977,7 @@ test("start_agent with a title names the agent by it from the start, and a title
   assert.equal(named.title, title);
   assert.equal(
     started.agent.mention,
-    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.invitations}/agent/${startedId})`,
+    `[@${named.title}](https://tryluke.dev/workspace-${workspaceId}/agent/${startedId})`,
   );
 
   // The title generated as the agent's words arrive is filled only where none stands.
@@ -1266,7 +1266,7 @@ test("start_agent continues a teammate's agent that ended, on that agent's own t
   );
   const first = {
     id: stored.id,
-    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${stored.id})`,
+    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/agent/${stored.id})`,
   };
   assert.deepEqual(second.earlierContinuations, [first]);
 

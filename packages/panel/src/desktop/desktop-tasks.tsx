@@ -465,7 +465,11 @@ function TaskInboxTab({
   const link =
     chosen === undefined || columns.shown === INBOX_COLUMNS.LIST
       ? undefined
-      : linkItem({ kind: LINK_PLACE.INBOX_ITEM, planId: task.id, itemId: chosen.item.id });
+      : linkItem({
+          kind: LINK_PLACE.INBOX_ITEM,
+          agentId: chosen.item.agentId,
+          itemId: chosen.item.id,
+        });
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -850,8 +854,10 @@ function PlanDocument({
   const openPullRequest = (agentId: string, number?: number) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
   // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
+  // An agent the task lists not has no tab here, so a link to it, which names no task, wears what the window reads of it.
   const agentLook = (agentId: string) => {
     const subject = agentSubject(agents, agentId, views.held, false);
+    if (subject.agent === undefined) return undefined;
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
   // A pull request one of the task's agents opened hangs its Pull request tab's card wherever a link names it.

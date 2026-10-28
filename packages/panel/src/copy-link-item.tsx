@@ -85,12 +85,7 @@ export function useCopyLinkItem(): (place: LinkPlace) => MenuAction | undefined 
     workspace === undefined ? undefined : copyLinkItem(copy, linkOf(place, workspace), chord);
 }
 
-/** The place an agent is linked by: under its task where it has one, else its own. */
-export function agentPlace(agent: {
-  readonly id: string;
-  readonly planId: string | null;
-}): LinkPlace {
-  return agent.planId === null
-    ? { kind: LINK_PLACE.AGENT, agentId: agent.id }
-    : { kind: LINK_PLACE.AGENT, planId: agent.planId, agentId: agent.id };
+/** The place an agent is linked by, its own whichever task it works on, which its reader finds by the agent. */
+export function agentPlace(agentId: string): LinkPlace {
+  return { kind: LINK_PLACE.AGENT, agentId };
 }

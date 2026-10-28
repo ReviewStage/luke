@@ -76,7 +76,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 const SENDER_ID = "2f9e8d7c-6b5a-4c3d-9e8f-7a6b5c4d3e2f";
 const SENDER_TASK = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 
-/** That agent as its task's agents are read now: renamed since it sent the line, and moved to another model. */
+/** That agent as its task's agents, or its workspace's, are read now: renamed since it sent the line, and moved to another model. */
 const SENDER_NOW: CodingAgentSummary = {
   id: SENDER_ID,
   planId: SENDER_TASK,
@@ -134,13 +134,12 @@ const MESSAGES: readonly CodingAgentMessage[] = [
   }),
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   line("agent", "Thanks, that's everything I need.", { name: "Add PR overview tab", agent: true }),
-  // A service that keeps the sending agent answers the model it ran on, which its harness is read off, and the agent on its task.
+  // A service that keeps the sending agent answers the model it ran on, which its harness is read off, and the agent.
   line("claude-agent", "The split view is merged.", {
     name: "Split view",
     agent: true,
     model: "anthropic/claude-opus-5.5",
     agentId: SENDER_ID,
-    taskId: SENDER_TASK,
   }),
   // A service older than the sender's kind names Luke by name alone.
   line("older", "Rebase again.", { name: "Luke" }),
@@ -176,7 +175,8 @@ async function drawnFor(
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.CODING_AGENTS_LIST
+          : request.kind === ACT_KIND.CODING_AGENTS_LIST ||
+              request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
             ? { status: FAKE_ANSWER.DONE, value: { agents: [SENDER_NOW] } }
             : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
@@ -338,7 +338,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
     sender.querySelector(".luke-harness-mark")?.getAttribute("data-provider"),
     MODEL_PROVIDER.ANTHROPIC,
   );
-  assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: SENDER_TASK, agentId: SENDER_ID }]);
+  assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, agentId: SENDER_ID }]);
   fakeAppBridge({});
 });
 

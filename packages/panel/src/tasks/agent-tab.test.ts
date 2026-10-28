@@ -31,6 +31,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { ChipCards } from "./chip-cards.js";
+import { TranscriptAgent } from "./line-cards.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
@@ -990,17 +991,24 @@ const AGENT_MESSAGE: CodingAgentMessage = {
 };
 
 /** The message drawn in an agent's transcript, on the task's page where one is given. */
-function agentMessageDrawn(message: CodingAgentMessage, page?: TaskMentionsValue): HTMLElement {
+function agentMessageDrawn(
+  message: CodingAgentMessage,
+  page?: TaskMentionsValue,
+  agentId?: string,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const drawn = createElement(AgentMessage, {
-    message,
-    plan: false,
-    lead: AGENT_LEAD,
-    moving: false,
-    delegation: { models: [] },
+  const drawn = createElement(TranscriptAgent, {
+    value: agentId,
+    children: createElement(AgentMessage, {
+      message,
+      plan: false,
+      lead: AGENT_LEAD,
+      moving: false,
+      delegation: { models: [] },
+    }),
   });
   act(() =>
     root.render(
@@ -1044,7 +1052,7 @@ test("a message from an agent the line keeps no chip of is named by the name its
   );
 });
 
-/** A task's page in the workspace `acme`, whose transcript draws a thread's chip. */
+/** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {
   taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   taskName: "Invitations",
@@ -1079,6 +1087,7 @@ test("a member's message on a thread is headed by what they did and the thread's
       },
     },
     TASK_PAGE,
+    "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
   assert.match(head?.textContent ?? "", /^Thread message/u);

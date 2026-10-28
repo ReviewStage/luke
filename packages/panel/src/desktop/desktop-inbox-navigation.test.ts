@@ -681,7 +681,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
 });
 
-test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
+test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {
   world.listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -703,7 +703,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   await act(async () => item.click());
 
   assert.deepEqual(world.copied, [
-    `https://tryluke.dev/acme/plan/${BILLING.id}/inbox/${THRESHOLD.id}`,
+    `https://tryluke.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
   ]);
 });
 

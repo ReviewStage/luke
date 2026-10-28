@@ -3546,10 +3546,9 @@ export type LineSent =
       readonly agent: SendingAgent | undefined;
     };
 
-/** The coding agent that sent a line, as it stands now: its id, and the task it works on, none for one on no task. */
+/** The coding agent that sent a line, as it stands now, by its id. */
 interface SendingAgent {
   readonly id: string;
-  readonly taskId: string | undefined;
 }
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
@@ -3561,7 +3560,6 @@ const LineSenderRowSchema = Schema.Struct({
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
-  agentTaskId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -3582,7 +3580,6 @@ const findLineSenders = SqlSchema.findAll({
           senderName: messages.senderName,
           senderModel: messages.senderModel,
           agentId: codingAgent.id,
-          agentTaskId: codingAgent.taskId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
@@ -3626,10 +3623,7 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
             kind: MESSAGE_SENDER.AGENT,
             name: row.senderName,
             model: row.senderModel ?? undefined,
-            agent:
-              row.agentId === null
-                ? undefined
-                : { id: row.agentId, taskId: row.agentTaskId ?? undefined },
+            agent: row.agentId === null ? undefined : { id: row.agentId },
           };
   }
 }

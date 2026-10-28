@@ -1,6 +1,6 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import type { AppInboxSlice, AppInboxWaitingItem } from "@luke/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { InboxIcon } from "lucide-react";
@@ -16,7 +16,7 @@ import {
   taskHolder,
 } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
-import { useMentionedPlace } from "./mentioned-agent-card.js";
+import { useAgentTaskRead, useMentionedPlace } from "./mentioned-agent-card.js";
 import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
 
 /**
@@ -52,7 +52,19 @@ function tasklessAgentOf(
   return agent === undefined ? undefined : inboxAgentOf(agent);
 }
 
-/** The item a link names as the Inbox lists it, its holder named as its group's header is; none until its inbox is read, where that read failed, or where the window holds neither its task nor its agent. */
+/** The task main's brief says holds an item still waiting, by the item's id; none for one settled or unknown. */
+function waitingTaskOf(inbox: AppInboxSlice | undefined, itemId: string): string | undefined {
+  return inbox?.waiting.find((task) => task.items.some((each) => each.id === itemId))?.taskId;
+}
+
+/**
+ * The item a link names as the Inbox lists it, its holder named as its
+ * group's header is; none until its inbox is read, where that read failed,
+ * or where the window holds neither its task nor its agent. Note that a
+ * link under its agent leaves its task to be found: by main's brief while
+ * it waits, else by the window's agents with no task, else by reading the
+ * agent, once its inbox holds it.
+ */
 function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const planId = "planId" in place ? place.planId : undefined;
   const agentId = "agentId" in place ? place.agentId : undefined;
@@ -66,17 +78,28 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const tasks = useAppSlice(APP_SLICE.TASKS);
   const inbox = useAppSlice(APP_SLICE.INBOX);
   const held = followed === undefined ? undefined : items.get(followed);
+  const item = held?.find((each) => each.id === place.itemId);
+  const linkedTask =
+    planId ?? (agentId === undefined ? undefined : waitingTaskOf(inbox, place.itemId));
+  const taskless = useMemo(
+    () =>
+      agentId === undefined || linkedTask !== undefined
+        ? undefined
+        : tasklessAgentOf(agentId, inbox?.taskless ?? [], tasks?.tasklessAgents ?? []),
+    [agentId, linkedTask, inbox, tasks],
+  );
+  const unplaced = item !== undefined && linkedTask === undefined && taskless === undefined;
+  const readTask = useAgentTaskRead(unplaced ? agentId : undefined);
+  const taskId = linkedTask ?? readTask ?? undefined;
   return useMemo(() => {
-    const item = held?.find((each) => each.id === place.itemId);
     if (item === undefined) return undefined;
-    if (planId !== undefined) {
-      const task = tasks?.tasks.find((each) => each.id === planId);
+    if (taskId !== undefined) {
+      const task = tasks?.tasks.find((each) => each.id === taskId);
       return task === undefined ? undefined : { holder: taskHolder(task), item };
     }
-    if (agentId === undefined) return undefined;
-    const agent = tasklessAgentOf(agentId, inbox?.taskless ?? [], tasks?.tasklessAgents ?? []);
-    return agent === undefined ? undefined : { holder: agentHolder(agent), item };
-  }, [held, place.itemId, planId, agentId, tasks, inbox]);
+    if (agentId === undefined || taskless === undefined) return undefined;
+    return { holder: agentHolder(taskless), item };
+  }, [item, taskId, agentId, taskless, tasks]);
 }
 
 /** The brief main holds of an item that waits, by its id; none for one settled or unknown. */

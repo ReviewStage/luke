@@ -5429,7 +5429,6 @@ test("a thread's file and lines in the Conversation take it to Files changed thr
 
   assert.deepEqual(heard.at(-1)?.place, {
     kind: LINK_PLACE.PULL_REQUEST_THREAD,
-    planId: AGENT.planId,
     agentId: AGENT.id,
     threadId: JUMPED,
     view: PULL_REQUEST_THREAD_VIEW.FILES,
@@ -5698,7 +5697,7 @@ test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn i
   await threadMenuItem(card ?? assert.fail("the thread is drawn"), "Copy link");
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
+    `https://tryluke.dev/acme/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
   ]);
 });
 
@@ -5738,7 +5737,6 @@ test("a link in the pull request's words to one of its own comments on GitHub op
   await press("the thread");
   assert.deepEqual(heard.at(-1)?.place, {
     kind: LINK_PLACE.PULL_REQUEST_THREAD,
-    planId: AGENT.planId,
     agentId: AGENT.id,
     threadId: JUMPED,
     view: PULL_REQUEST_THREAD_VIEW.CONVERSATION,

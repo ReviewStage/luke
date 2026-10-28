@@ -601,13 +601,9 @@ function agentRows(
   for (const agent of [...mine, ...workspace]) {
     if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
     seen.add(agent.id);
-    const task = agent.task;
     const row = agentMenuRow(agent, place);
     rows.push({
-      mention:
-        task === undefined
-          ? { kind: MENTION_KIND.AGENT, agentId: agent.id }
-          : { kind: MENTION_KIND.AGENT, taskId: task.id, agentId: agent.id },
+      mention: { kind: MENTION_KIND.AGENT, agentId: agent.id },
       name: row.label,
       detail: row.detail,
       terms: (row.terms ?? [row.label]).join(" "),

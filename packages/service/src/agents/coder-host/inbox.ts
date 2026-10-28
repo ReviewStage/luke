@@ -562,12 +562,9 @@ function inboxOwner(agent: InboxAgent): PageOwner {
     : { kind: PAGE_OWNER.TASK, taskId: agent.taskId };
 }
 
-/** An item's mention under the workspace step given, by its link under its task, or under its agent where that works on no task. */
+/** An item's mention under the workspace step given, by its link under its agent, whichever task that works on. */
 function itemMention(agent: InboxAgent, step: string, item: InboxItem): string {
-  const place =
-    agent.taskId === null
-      ? { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id }
-      : { kind: LINK_PLACE.INBOX_ITEM, planId: agent.taskId, itemId: item.id };
+  const place = { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id } as const;
   return mentionMarkdownLink(item.title, linkOf(place, step));
 }
 
