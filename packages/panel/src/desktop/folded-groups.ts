@@ -411,7 +411,8 @@ const NO_CHANNEL_SCOPES: ChannelScopes = {};
 /** Each channel's own scope, and the press that turns one. */
 export interface ChannelScopeChoices {
   scopeOf: (channelId: string) => ChannelScope;
-  onScope: (channelId: string, scope: ChannelScope) => void;
+  /** Turns one or both of a channel's choices, leaving the other as it is kept now. */
+  onScope: (channelId: string, turned: Partial<ChannelScope>) => void;
 }
 
 /** Each channel's scope, All of everyone's until first turned, and kept for that channel as it is turned. */
@@ -419,8 +420,12 @@ export function useChannelScopes(): ChannelScopeChoices {
   const [scopes, , change] = useKept(KEPT.CHANNEL_SCOPES, NO_CHANNEL_SCOPES);
   return {
     scopeOf: (channelId) => scopes[channelId] ?? CHANNEL_SCOPE_OPENING,
-    // Note that the record is changed over what storage holds now, so another window's turn of another channel is kept beside this one.
-    onScope: (channelId, scope) => change((kept) => ({ ...kept, [channelId]: scope })),
+    // Note that the turn is merged over what storage holds now, so another window's turn of another channel, or of this channel's other choice, is kept beside it.
+    onScope: (channelId, turned) =>
+      change((kept) => ({
+        ...kept,
+        [channelId]: { ...(kept[channelId] ?? CHANNEL_SCOPE_OPENING), ...turned },
+      })),
   };
 }
 

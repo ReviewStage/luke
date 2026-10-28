@@ -100,9 +100,9 @@ function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   return {
     ...kept,
     show: standing.show,
-    onShow: (show) => scopes.onScope(channelId, { ...standing, show }),
+    onShow: (show) => scopes.onScope(channelId, { show }),
     whose: standing.whose,
-    onWhose: (whose) => scopes.onScope(channelId, { ...standing, whose }),
+    onWhose: (whose) => scopes.onScope(channelId, { whose }),
   };
 }
 
