@@ -89,7 +89,7 @@
  *
  * `GET /api/live/inbox-items?since=` answers every inbox item the account
  * reaches as four statements: where each item stands, every open one and
- * every settled one changed in the last week, and those changed since the
+ * every settled one changed in the last thirty days, and those changed since the
  * reader's `since` whole, with their threads and files, as a plan's inbox
  * carries them (`inbox-store.ts`'s `accountItemsLiveStatements`). Its poll
  * is held on where the items stand alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`),

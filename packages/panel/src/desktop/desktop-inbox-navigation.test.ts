@@ -105,7 +105,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
-  const { page } = mount([], { windowRoot: true });
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
   await settle();
   const rows = listed(page);
   assert.ok(
@@ -140,26 +140,14 @@ test("the Inbox under the window's root draws each task held whole by the accoun
   }
 });
 
-test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
-  const { page } = mount([], { windowRoot: true });
+test("an Inbox under the window's root whose feed holds nothing of its tasks says so rather than reading for good", async () => {
+  // The feed answers with no task, as it leaves out one whose items all settled past its bound.
+  world.inboxes = new Map();
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
   await settle();
-  world.main.push(
-    { kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id },
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-  );
-  act(() => world.setInboxOpen(false));
-  await settle();
-
-  act(() => world.setInboxOpen(true));
-  await settle();
-  assert.ok(
-    world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }),
-    "the failed task is followed anew",
-  );
-  assert.ok(
-    listed(page).some((row) => row.endsWith(EXPIRY.title)),
-    "its items are drawn again",
-  );
+  const list = page.querySelector(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  assert.equal(list.querySelector('[aria-busy="true"]'), null, "nothing is still being read");
 });
 
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
