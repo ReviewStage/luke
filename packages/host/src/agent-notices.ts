@@ -278,11 +278,16 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
 /**
  * Each agent the open items of agents with no task name, once, as a service
  * before `agents` leaves the window to list them: how many it holds open,
- * how many ask, and when the latest changed, named as its latest names it.
- * Note that its settled items are not among them, since such a service
- * names none.
+ * how many are asks among those that wait on the account (`waiting`, as
+ * `waitingOnAccount` keeps them), and when the latest changed, named as its
+ * latest names it. Note that its settled items are not among them, since
+ * such a service names none.
  */
-function agentsOfOpenItems(items: readonly AccountTasklessEntry[]): AppInboxSlice["agents"] {
+function agentsOfOpenItems(
+  items: readonly AccountTasklessEntry[],
+  waiting: readonly AccountTasklessEntry[],
+): AppInboxSlice["agents"] {
+  const toDo = new Set(waiting.filter(asking).map((item) => item.id));
   const held = new Map<string, AppInboxSlice["agents"][number]>();
   // The read answers its items the latest changed first, so an agent's first is the one it is named by.
   for (const item of items) {
@@ -300,7 +305,7 @@ function agentsOfOpenItems(items: readonly AccountTasklessEntry[]): AppInboxSlic
         updatedAt: item.updatedAt,
       }),
       items: (was?.items ?? 0) + 1,
-      toDo: (was?.toDo ?? 0) + (asking(item) ? 1 : 0),
+      toDo: (was?.toDo ?? 0) + (toDo.has(item.id) ? 1 : 0),
     });
   }
   return [...held.values()];
@@ -466,7 +471,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         taskless: waitingTaskless(listed),
         automations: answer.automations ?? [],
         // A service before `agents` names only the agents something waits on.
-        agents: answer.agents ?? agentsOfOpenItems(listed),
+        agents: answer.agents ?? agentsOfOpenItems(listed, answer.planless ?? []),
         failedRuns: answer.failedRuns ?? [],
       };
     }
