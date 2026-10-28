@@ -1,4 +1,3 @@
-import { VOICE_SERVICE_PATH } from "@luke/features";
 import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { LUKE_MCP_FUNCTION, LUKE_MCP_PATH } from "@luke/service/agents/luke-mcp/app";
@@ -14,10 +13,10 @@ import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the WebSocket functions, the voice sessions, the terminal
- * relay, and the Browser tab's live view, carry the platform's longest generally available duration.
+ * may run, so the WebSocket functions, the terminal relay and the Browser
+ * tab's live view, carry the platform's longest generally available duration.
  */
-const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
+const WEBSOCKET_FUNCTION_MAX_DURATION_SECONDS = 800;
 
 const API_PREFIX = "/api/";
 
@@ -52,7 +51,7 @@ export interface FunctionDefinition {
   readonly routes: readonly string[];
   /**
    * Whether the bundle is a generated dispatcher over the routes, or the one
-   * route's own module. The voice route exports the `http.Server` Vercel
+   * route's own module. A WebSocket route exports the `http.Server` Vercel
    * upgrades WebSockets into, which no fetch dispatcher can front, so it
    * stays a function of its own.
    */
@@ -85,12 +84,8 @@ const GROUPS: readonly GroupDefinition[] = [
   },
 ];
 
-/** The WebSocket services, each a function of its own: the voice sessions, the terminal relay, and the Browser tab's live view. */
-const STANDALONE_ROUTES: readonly string[] = [
-  ...Object.values(VOICE_SERVICE_PATH),
-  TERMINAL_RELAY.PATH,
-  BROWSER_LIVE.PATH,
-].map(routeKeyOf);
+/** The WebSocket services, each a function of its own: the terminal relay and the Browser tab's live view. */
+const STANDALONE_ROUTES: readonly string[] = [TERMINAL_RELAY.PATH, BROWSER_LIVE.PATH].map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:
@@ -110,7 +105,7 @@ export function functionDefinitions(routeKeys: readonly string[]): readonly Func
     ...GROUPS.map((group) => ({ ...group, dispatches: true })),
     ...STANDALONE_ROUTES.map((route) => ({
       file: route,
-      maxDuration: VOICE_FUNCTION_MAX_DURATION_SECONDS,
+      maxDuration: WEBSOCKET_FUNCTION_MAX_DURATION_SECONDS,
       routes: [route],
       dispatches: false,
     })),

@@ -137,14 +137,6 @@
           "dest": "/api/terminal/sessions.js"
         },
         {
-          "src": "/api/voice/sessions",
-          "dest": "/api/voice/sessions"
-        },
-        {
-          "src": "/api/voice/sessions\\.js",
-          "dest": "/api/voice/sessions.js"
-        },
-        {
           "src": "/api/(.*)",
           "dest": "/api/default.js?route=orpc&route-path=$1"
         },
