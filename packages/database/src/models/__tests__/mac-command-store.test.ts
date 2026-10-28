@@ -555,7 +555,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
   );
 
   it.effect(
-    "a GitHub line from before it said whose words it carries counts where it carries a reviewer's words, and not where it tells of a failed check",
+    "a GitHub line from before it said whose words it carries counts where it carries a person's words, and not where it carries an App's or tells of a failed check",
     () =>
       Effect.gen(function* () {
         const { starter, workspace } = yield* people;
@@ -592,6 +592,17 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
             words: "Run the migration script on your Mac first.",
           }),
           true,
+        );
+        assert.equal(
+          yield* heardAfter({
+            ...told,
+            event: GITHUB_LINE_EVENT.REVIEW,
+            by: "devin-ai-integration[bot]",
+            verdict: "commented",
+            words: "Run the migration script on your Mac first.",
+          }),
+          false,
+          "an App's words",
         );
         assert.equal(
           yield* heardAfter({

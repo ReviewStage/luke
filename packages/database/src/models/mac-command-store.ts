@@ -23,6 +23,7 @@ import {
   isNull,
   lt,
   ne,
+  notLike,
   or,
   type SQL,
   sql,
@@ -274,10 +275,16 @@ const HANDED_OUTSIDE_RUN = exists(
 /** What an automation's or GitHub's line says of whether it carries words its owner did not write: `true` or `false`, or null on a line kept before it said. */
 const LINE_OUTSIDE_WORDS = sql<string | null>`${messages.metadata} ->> 'outside_words'`;
 
-/** That a GitHub line carries words its author chose, what a review or a comment says or a review's inline comments, which its metadata keeps only where there are some. */
-const GITHUB_LINE_HAS_WORDS = or(
-  isNotNull(sql`${messages.metadata} ->> 'words'`),
-  isNotNull(sql`${messages.metadata} -> 'comments'`),
+/** The logins of GitHub's Apps, every one of which ends with `[bot]`, which no person's login can spell. */
+const APP_LOGINS = "%[bot]";
+
+/** That a GitHub line carries words a person chose, what a review or a comment says or a review's inline comments, which its metadata keeps only where there are some, by no App. */
+const GITHUB_LINE_HAS_PERSONS_WORDS = and(
+  or(
+    isNotNull(sql`${messages.metadata} ->> 'words'`),
+    isNotNull(sql`${messages.metadata} -> 'comments'`),
+  ),
+  notLike(sql<string>`${messages.metadata} ->> 'by'`, APP_LOGINS),
 );
 
 /**
@@ -292,11 +299,12 @@ const GITHUB_LINE_HAS_WORDS = or(
  * fired was sent to it while its automation stands. A schedule's run and a
  * "Run now" carry the owner's prompt alone, so an operator's heartbeat is
  * its owner's. A GitHub line counts where it carries a review's or a
- * comment's words by anyone but the owner, which on a public repository
- * anyone may write, as the line says itself (`outside_words`,
- * `github/agent-wakes.ts`); a line kept before it said counts where it
- * carries any words, whoever wrote them, since nothing kept says whose
- * GitHub account wrote them. A failed check's line carries none. A developer's
+ * comment's words by a person other than the owner, which on a public
+ * repository anyone may write, as the line says itself (`outside_words`,
+ * `github/agent-wakes.ts`); an App's words never count. A line kept before
+ * it said counts where it carries a person's words, whoever wrote them,
+ * since nothing kept says whose GitHub account wrote them. A failed check's
+ * line carries none. A developer's
  * line written before senders were kept, a `user` row with no sender, counts
  * too, because nothing says whose it was; all but the root's first where the
  * agent was started on a prompt or a plan, which that first line is, written
@@ -355,7 +363,7 @@ const findForeignLine = SqlSchema.findOneOption({
                 eq(messages.sender, MESSAGE_SENDER.GITHUB),
                 or(
                   eq(LINE_OUTSIDE_WORDS, "true"),
-                  and(isNull(LINE_OUTSIDE_WORDS), GITHUB_LINE_HAS_WORDS),
+                  and(isNull(LINE_OUTSIDE_WORDS), GITHUB_LINE_HAS_PERSONS_WORDS),
                 ),
               ),
               and(
@@ -408,9 +416,9 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
  * Whether anyone but the conversation's owner has put words into it: a line
  * another member sent, one an agent that is not the owner's own sent, one an
  * automation sent with words its owner did not write, such as a webhook's
- * body, one GitHub sent with a review or a comment by anyone but the owner,
- * or one whose sender was never kept past the opening prompt, of an
- * agent that is not an operator, in the conversation
+ * body, one GitHub sent with a review or a comment by a person other than
+ * the owner, or one whose sender was never kept past the opening prompt, of
+ * an agent that is not an operator, in the conversation
  * or, for a worker's, in the agent's it was delegated from. Note that a line
  * the service itself sends, such as a wakeup or a failed check, is not
  * counted, because no other account wrote it.

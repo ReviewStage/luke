@@ -70,15 +70,19 @@ import {
  * is, since the pull request's checks count it beside the check runs.
  *
  * On a public repository anyone on GitHub may write a review or a comment,
- * so the line says whether it carries words anyone but the told agent's
- * owner wrote (`outside_words`), by GitHub's id of its author against the
- * GitHub accounts the owner linked to Luke, and such a line takes
- * `run_on_mac` from the agent (`mac-command-store.ts`'s
- * `heardFromAnotherAccount`). An App's words count, Luke's own among them,
- * since every agent of every account writes as it. A failed check and every
- * check finished carry no one's words: the line is the service's own,
- * naming the agent's own branch and commit, and what the agent reads next
- * is its own checks' output on its own commit.
+ * so the line says whether it carries words a person other than the told
+ * agent's owner wrote (`outside_words`), by GitHub's id of its author
+ * against the GitHub accounts the owner linked to Luke, and such a line
+ * takes `run_on_mac` from the agent (`mac-command-store.ts`'s
+ * `heardFromAnotherAccount`). An App's words never count, Luke's own, a
+ * deployment's, and a review bot's among them, told by the `[bot]` GitHub
+ * ends every App's login with and no person's login can spell: Dean's
+ * ruling of 2026-10-28, since an App comments only where the repository
+ * installed it, and Apps comment on nearly every pull request. Note that an
+ * App may quote an outsider's words, which is what that ruling accepts. A
+ * failed check and every check finished carry no one's words: the line is
+ * the service's own, naming the agent's own branch and commit, and what the
+ * agent reads next is its own checks' output on its own commit.
  *
  * The agents told are those standing on the pull request's branch, or, for
  * a comment, whose pull request GitHub last answered is the one commented
@@ -182,7 +186,7 @@ const SHORT_SHA_CHARS = 7;
 /** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
 const AGENT_BRANCH_PREFIX = "luke/";
 
-/** What GitHub appends to an App's login, which a failed check is told by. */
+/** What GitHub appends to an App's login, which a failed check is told by and an App's words told apart by. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
 /** The most agents one delivery tells, newest started first, so a delivery answers inside GitHub's ten seconds. */
@@ -673,10 +677,10 @@ function carriesWords(
 }
 
 /**
- * Whether the line a wake writes the agent of `userId` carries words anyone
- * but that owner wrote: words at all (`carriesWords`), by a GitHub account
- * other than those the owner linked to Luke, told apart by GitHub's id, or
- * by one GitHub named no id for.
+ * Whether the line a wake writes the agent of `userId` carries words a
+ * person other than that owner wrote: words at all (`carriesWords`), by no
+ * App, and by a GitHub account other than those the owner linked to Luke,
+ * told apart by GitHub's id, or by one GitHub named no id for.
  */
 function outsideWordsFor(
   wake: AgentWake,
@@ -684,7 +688,9 @@ function outsideWordsFor(
   userId: string,
 ): TaskStoreEffect<boolean> {
   const { byId } = wake;
-  if (!carriesWords(wake, inline)) return Effect.succeed(false);
+  if (!carriesWords(wake, inline) || wake.by.endsWith(BOT_LOGIN_SUFFIX)) {
+    return Effect.succeed(false);
+  }
   if (byId === undefined) return Effect.succeed(true);
   return Effect.map(linkedGitHubUserIds(userId), (linked) => !linked.includes(byId));
 }
