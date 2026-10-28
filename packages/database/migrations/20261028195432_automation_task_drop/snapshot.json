@@ -1,11 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ef7dd2a1-3f52-4dde-9eeb-a3c8762cf1a0",
+  "id": "2e3a9fba-3dcf-451d-b6fe-4c32d9747419",
   "prevIds": [
-    "323b2e49-181f-4dfb-be11-35475ae36eac",
-    "5c993da5-677a-4fae-8f14-dbd950c71df2",
-    "82b7fd34-5e3a-484d-9c3d-20f9d858c23a"
+    "1ac1a87e-443a-47c2-b51c-18ef9885f06a"
   ],
   "ddl": [
     {
@@ -485,12 +483,6 @@
     {
       "isRlsEnabled": false,
       "name": "voice_transcript_segments",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "workspace_integration_connection",
       "entityType": "tables",
       "schema": "public"
     },
@@ -4019,6 +4011,19 @@
       "generated": null,
       "identity": null,
       "name": "started_from",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_by_agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
@@ -10646,149 +10651,6 @@
       "table": "voice_transcript_segments"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "state",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "state_issued_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "connect_verifier",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "connected_by_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "connected_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "tools",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "tools_listed_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -14126,27 +13988,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "state",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "workspace_integration_connection_state_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "organization_id",
           "isExpression": false,
           "asc": true,
@@ -14966,6 +14807,23 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "coding_agent_automation_id_automation_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "started_by_agent_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "coding_agent_started_by_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "coding_agent"
@@ -16852,40 +16710,6 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "workspace_integration_connection_HMbDsJWkK6TV_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "connected_by_user_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "workspace_integration_connection_3ggWlPzIKenx_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "workspace_integration_connection"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
       "name": "workspace_token_repository_organization_id_organization_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -17063,17 +16887,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "voice_transcript_segments"
-    },
-    {
-      "columns": [
-        "organization_id",
-        "provider"
-      ],
-      "nameExplicit": false,
-      "name": "workspace_integration_connection_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "workspace_integration_connection"
     },
     {
       "columns": [

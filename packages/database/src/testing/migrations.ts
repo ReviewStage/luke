@@ -59,7 +59,7 @@ const DROPPED_TABLES = [
   "workspace_chat",
 ] as const;
 
-/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028194836_automation_task_drop`). */
+/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`). */
 const DROPPED_COLUMNS = [
   {
     table: "automation",
