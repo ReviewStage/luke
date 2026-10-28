@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { DEVICE_ARCH } from "@luke/features/device-agent-wire";
+import { DARWIN_HOST } from "@luke/host/daemon";
 import {
   HOST_LOGIN_ITEM_ACT,
   HOST_LOGIN_ITEM_STATUS,
@@ -28,6 +30,13 @@ import { app } from "electron";
  */
 
 const COMMAND = "luke-host";
+
+/** The Mac as its `luke-host` registers it (`DARWIN_HOST`), on Apple silicon alone. */
+const machine = Effect.sync(() => ({
+  name: DARWIN_HOST.deviceName(),
+  platform: DARWIN_HOST.platform,
+  arch: DEVICE_ARCH.ARM64,
+}));
 
 /** How long the command may take; `SMAppService` answers at once. */
 const ACT_WITHIN = Duration.seconds(30);
@@ -79,6 +88,7 @@ const packagedHost: ThisMacHostSeam = (() => {
         }),
       ),
     version: printedBy(command, ["version"]),
+    machine,
   };
 })();
 
@@ -137,6 +147,7 @@ const developmentHost = (stateRoot: string) =>
       version: Effect.suspend(() =>
         staged() ? printedBy(node, [bundle, "version"]) : Effect.succeed(Result.fail(unstaged)),
       ),
+      machine,
     };
     return seam;
   });

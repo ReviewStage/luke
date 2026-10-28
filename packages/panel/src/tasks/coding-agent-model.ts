@@ -43,11 +43,7 @@ import {
   type PullRequestState,
   type RefusedDevice,
 } from "@luke/features/coding-agent-wire";
-import {
-  DEVICE_PLATFORM,
-  type DeviceKind,
-  type DevicePlatform,
-} from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
@@ -628,11 +624,10 @@ export interface RefusedCall {
   readonly refusedDevice?: RefusedDevice | undefined;
 }
 
-/** The device a task runs its agents on, as a refusal names it: its name, its platform and kind where the service said, and its owner where it is another member's and the service said. */
+/** The device a task runs its agents on, as a refusal names it: its name, its platform where the service said, and its owner where it is another member's and the service said. */
 export interface RefusingDevice {
   readonly name: string;
   readonly platform?: DevicePlatform | undefined;
-  readonly kind?: DeviceKind | undefined;
   readonly owner?: string | undefined;
 }
 

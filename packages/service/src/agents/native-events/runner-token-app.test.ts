@@ -9,7 +9,11 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
-import { enrollHost, mintHostInstallToken } from "@luke/database/models/host-store";
+import {
+  enrollHost,
+  enrollOwnDevice,
+  mintHostInstallToken,
+} from "@luke/database/models/host-store";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
@@ -493,8 +497,8 @@ const enrolledHost = (userId: string) =>
     return { deviceId, secret: secret.secret };
   });
 
-/** A desktop registered under the member, running its agents as `isolation` says: its device id. */
-const registeredDesktop = (userId: string, isolation: DeviceIsolation) =>
+/** A Mac registered under the member, running its agents as `isolation` says, and enrolled on a secret of its own: its device id and its secret. */
+const enrolledMac = (userId: string, isolation: DeviceIsolation) =>
   Effect.gen(function* () {
     const deviceId = randomUUID();
     yield* registerDevice(userId, {
@@ -504,7 +508,14 @@ const registeredDesktop = (userId: string, isolation: DeviceIsolation) =>
       isolation,
       signedIn: {},
     });
-    return deviceId;
+    const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
+    const enrolled = yield* enrollOwnDevice(userId, {
+      id: deviceId,
+      version: HOST_VERSION.FLOOR,
+      secretHash: secret.hash,
+    });
+    assert.ok(enrolled, "the Mac was not enrolled");
+    return { deviceId, secret: secret.secret };
   });
 
 /** A Claude Code agent of the member's on the repository, run on the device given. */
@@ -593,9 +604,9 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
   );
 });
 
-it.layer(getTestDB())("a sandboxed desktop's GitHub token", (it) => {
+it.layer(getTestDB())("a Mac's GitHub token", (it) => {
   it.effect(
-    "hands a desktop running its agents in VMs an installation token for its member's agent on it, on the member's own sign-in",
+    "refuses a desktop's own sign-in as needing an upgrade, even for its member's own agent on a sandboxed Mac",
     () =>
       Effect.gen(function* () {
         const { ask, desktops } = yield* hostStanding;
@@ -604,51 +615,43 @@ it.layer(getTestDB())("a sandboxed desktop's GitHub token", (it) => {
           experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
         });
         desktops.set("desktop-sign-in", member.userId);
-        const desktop = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.SANDBOX);
-        const agentId = yield* agentOnDevice(member, desktop);
+        const mac = yield* enrolledMac(member.userId, DEVICE_ISOLATION.SANDBOX);
+        const agentId = yield* agentOnDevice(member, mac.deviceId);
 
         assert.deepEqual(yield* ask("desktop-sign-in", agentId), {
-          status: HOSTED_HTTP_STATUS.OK,
-          cache: "private, no-store",
-          body: { githubToken: GITHUB_FIXTURE_INSTALLATION_TOKEN },
+          status: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
+          cache: null,
+          body: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
         });
+        assert.equal((yield* ask(mac.secret, agentId)).status, HOSTED_HTTP_STATUS.OK);
       }),
   );
 
   it.effect(
-    "refuses an agent on a desktop running its agents directly on the Mac, or another member's, and a member with Local agents off",
+    "refuses an agent on a Mac running its agents directly on it, and a member with Local agents off",
     () =>
       Effect.gen(function* () {
-        const { ask, desktops } = yield* hostStanding;
+        const { ask } = yield* hostStanding;
         const forbidden = {
           status: HOSTED_HTTP_STATUS.FORBIDDEN,
           cache: null,
           body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
         };
         const member = yield* openMember;
-        desktops.set("member-sign-in", member.userId);
-        const sandboxed = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.SANDBOX);
-        const onSandboxed = yield* agentOnDevice(member, sandboxed);
+        const sandboxed = yield* enrolledMac(member.userId, DEVICE_ISOLATION.SANDBOX);
+        const onSandboxed = yield* agentOnDevice(member, sandboxed.deviceId);
 
-        // With Local agents off, even the member's own sandboxed desktop is refused.
-        assert.deepEqual(yield* ask("member-sign-in", onSandboxed), forbidden);
+        // With Local agents off, even the member's own sandboxed Mac is refused.
+        assert.deepEqual(yield* ask(sandboxed.secret, onSandboxed), forbidden);
         yield* writeAccountPreferences(member.userId, {
           experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
         });
 
-        const bare = yield* registeredDesktop(member.userId, DEVICE_ISOLATION.BARE);
+        const bare = yield* enrolledMac(member.userId, DEVICE_ISOLATION.BARE);
         assert.deepEqual(
-          yield* ask("member-sign-in", yield* agentOnDevice(member, bare)),
+          yield* ask(bare.secret, yield* agentOnDevice(member, bare.deviceId)),
           forbidden,
         );
-
-        // Another member's agent on that member's own sandboxed desktop.
-        const other = yield* openMember;
-        const theirs = yield* agentOnDevice(
-          other,
-          yield* registeredDesktop(other.userId, DEVICE_ISOLATION.SANDBOX),
-        );
-        assert.deepEqual(yield* ask("member-sign-in", theirs), forbidden);
       }),
   );
 });

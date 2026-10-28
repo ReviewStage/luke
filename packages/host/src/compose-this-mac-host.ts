@@ -153,16 +153,14 @@ export function composeThisMacHost(
 
     const set = (next: ThisMacHostStanding) => Effect.as(Ref.set(standing, next), next);
 
-    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for. */
+    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so Luke creates the device where it never saw this Mac. */
     const enrolled = (deviceId: string, version: string) =>
-      client
-        .enrollOwn(deviceId)
-        .pipe(
-          Effect.updateService(
-            HttpClient.HttpClient,
-            HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
-          ),
-        );
+      Effect.flatMap(host.machine, (machine) => client.enrollOwn(deviceId, machine)).pipe(
+        Effect.updateService(
+          HttpClient.HttpClient,
+          HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
+        ),
+      );
 
     /**
      * The sequence: the Mac enrolled under the account's device id, its

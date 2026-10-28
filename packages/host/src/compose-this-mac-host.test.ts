@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@luke/features";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
@@ -108,6 +109,11 @@ const thisMac = (stateRoot: string, options: { refusedUnregisters?: number } = {
           Layer.succeed(ThisMacHost, {
             loginItem,
             version: Effect.succeed(Result.succeed("0.1.0")),
+            machine: Effect.succeed({
+              name: "Studio",
+              platform: DEVICE_PLATFORM.DARWIN,
+              arch: DEVICE_ARCH.ARM64,
+            }),
           }),
         ),
       ),

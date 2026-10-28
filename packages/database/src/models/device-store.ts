@@ -115,8 +115,8 @@ const upsertDevice = SqlSchema.findAll({
           id,
           userId,
           name,
-          // Note that a register is the desktop's own call, so what it registers is a desktop.
-          kind: DEVICE_KIND.DESKTOP,
+          // Note that every device runs its agents through the host program, so a row is written as a host; nothing reads the kind.
+          kind: DEVICE_KIND.HOST,
           platform,
           arch,
           isolation,

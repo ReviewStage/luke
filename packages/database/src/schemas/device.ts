@@ -16,8 +16,8 @@ import { user } from "./auth.js";
 /**
  * device.ts -- one of an account's devices that can run its local agents, and when it last said it was there.
  *
- * A device is the desktop app on a member's Mac today (`DEVICE_KIND`), and
- * says which platform and architecture it runs on, whether it runs each
+ * A device is a member's machine running the host program, a Mac or a
+ * Linux box alike, and says which platform and architecture it runs on, whether it runs each
  * agent in a VM of its own or directly on the machine (`DEVICE_ISOLATION`),
  * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
  * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
@@ -31,10 +31,11 @@ import { user } from "./auth.js";
  * same Mac (`./device-agent.ts`). The row belongs to the account and leaves
  * with it.
  *
- * A host (`DEVICE_KIND.HOST`) joins instead by trading an install token
- * (`./host-install-token.ts`) for a device secret of its own, which the row
- * keeps only as its SHA-256 in `secret_hash` and which every later call of
- * the host carries as its bearer. Until the host first registers, it has no
+ * Every device joins by trading for a device secret of its own, a Linux
+ * box an install token (`./host-install-token.ts`) and a Mac its desktop's
+ * signed-in session, which the row keeps only as its SHA-256 in
+ * `secret_hash` and which every later call of the device carries as its
+ * bearer. Until the host first registers, it has no
  * `home` or `claude_executable`, and no agent is offered or launched on it.
  * Removing a host stamps `removed_at` and clears its secret, so the box is
  * refused at once while its agents keep the name they ran under; enrolling
@@ -51,7 +52,7 @@ export const device = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** The Mac's own name, as the desktop read it from the system, for the agent's label. */
     name: text("name").notNull(),
-    /** What program the device runs local agents through (`DEVICE_KIND`). */
+    /** What program the device ran local agents through when it was written (`DEVICE_KIND`), kept for old rows; nothing reads it, since every device runs the host program. */
     kind: text("kind").$type<DeviceKind>().notNull(),
     /** The device's operating system, as it last registered. */
     platform: text("platform").$type<DevicePlatform>().notNull(),
@@ -92,9 +93,9 @@ export const device = pgTable(
     setup: text("setup").$type<DeviceSetup>(),
     /** The device's own words for why its setup failed, naming no secret; null unless `setup` is failed. */
     setupFailure: text("setup_failure"),
-    /** A host's device secret as its SHA-256 in hex, never the secret; null for a desktop, which calls on its sign-in, and for a removed host. */
+    /** The device's secret as its SHA-256 in hex, never the secret; null for a device that never enrolled, which Luke no longer takes a call from, and for a removed one. */
     secretHash: text("secret_hash"),
-    /** The daemon version a host last called with; null for a desktop. */
+    /** The host program version the device last called with; null for one that never enrolled. */
     version: text("version"),
     /** When the account removed the host; null while it stands. */
     removedAt: timestamptz("removed_at"),

@@ -3,6 +3,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@luke/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -143,6 +144,11 @@ describe("the host's platform concerns", () => {
             Layer.succeed(ThisMacHost, {
               loginItem: () => Effect.succeed(Result.fail("no login item in a fixture")),
               version: Effect.succeed(Result.fail("no luke-host in a fixture")),
+              machine: Effect.succeed({
+                name: "Studio",
+                platform: DEVICE_PLATFORM.DARWIN,
+                arch: DEVICE_ARCH.ARM64,
+              }),
             }),
           ),
         ),

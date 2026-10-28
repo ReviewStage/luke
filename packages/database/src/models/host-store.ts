@@ -13,9 +13,9 @@
  * A machine is enrolled where its row holds a secret and was not removed
  * (`enrolled`), whatever its kind or platform: a Linux box that traded an
  * install token, and a member's own desktop converted in place by its
- * signed-in session (`enrollOwnDevice`), are read, listed, refused below
- * the floor, and removed alike. A device that never enrolled, a desktop on
- * its sign-in alone, is none of this file's business.
+ * signed-in session (`enrollOwnDevice`), or created by it where the
+ * account never registered the id, are read, listed, refused below the
+ * floor, and removed alike.
  */
 
 import {
@@ -214,6 +214,48 @@ const findStanding = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The account's own device keyed with a new secret, inserted where no row
+ * holds the id, so a machine whose first word to Luke is its enroll is
+ * created under the account.
+ */
+const insertOwnDevice = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    id: Schema.String,
+    name: Schema.String,
+    platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
+    arch: Schema.Literals(Object.values(DEVICE_ARCH)),
+    version: Schema.String,
+    secretHash: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: KeptSchema,
+  execute: ({ userId, id, name, platform, arch, version, secretHash, now }) =>
+    Database.use((db) =>
+      db
+        .insert(device)
+        .values({
+          id,
+          userId,
+          name,
+          kind: DEVICE_KIND.HOST,
+          platform,
+          arch,
+          version,
+          secretHash,
+          lastSeenAt: now,
+        })
+        .onConflictDoUpdate({
+          target: device.id,
+          set: { kind: DEVICE_KIND.HOST, version, secretHash, removedAt: null },
+          // Note that another account's device is never keyed, so its id answers no row, as an id the account never registered once did.
+          setWhere: sql`${device.userId} = ${userId}`,
+        })
+        .returning({ id: device.id }),
+    ),
+});
+
 /** The account's own device keyed with a new secret in place, under the same id, so its agents keep it. */
 const keyOwnDevice = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -365,23 +407,41 @@ export function enrollHost(
   );
 }
 
+/** What a signed-in session enrolls its own machine with: its id, its daemon's version, its new secret's hash, and the machine as it names itself, which creates the device where the account never registered the id. */
+export interface OwnEnrollment {
+  readonly id: string;
+  readonly version: string;
+  readonly secretHash: string;
+  readonly machine?: {
+    readonly name: string;
+    readonly platform: DevicePlatform;
+    readonly arch: DeviceArch;
+  };
+}
+
 /**
- * Enrolls one of the account's own devices with a new secret, on its
- * signed-in session: the row it registered, converted in place under the
- * same id, so every agent pinned to it keeps it, keyed with the new
- * secret's hash, of kind host from now on (the program that runs its
- * agents is the host program), with the version it enrolled with. A
- * device already enrolled is keyed again, its old secret refused from
- * now on, and a removed one brought back, since the session holds the
- * account's whole say over its devices, as no install token does; when to
- * ask is its caller's. False where the account holds no device of the id,
- * another account's included, and nothing was written.
+ * Enrolls one of the account's own machines with a new secret, on its
+ * signed-in session: a row it already has converted in place under the
+ * same id, so every agent pinned to it keeps it, and where no row holds
+ * the id and the enroll names the machine, a device created under the
+ * account with the machine's name, platform and architecture, which its
+ * host program's first register fills in. Either is keyed with the new
+ * secret's hash and the version it enrolled with. A machine already
+ * enrolled is keyed again, its old secret refused from now on, and a
+ * removed one brought back, since the session holds the account's whole
+ * say over its devices, as no install token does; when to ask is its
+ * caller's. False where the id is another account's device, or no row
+ * holds it and the enroll named no machine, and nothing was written.
  */
-export function enrollOwnDevice(
-  userId: string,
-  enrollment: { readonly id: string; readonly version: string; readonly secretHash: string },
-): HostEffect<boolean> {
-  return Effect.map(keyOwnDevice({ userId, ...enrollment }), (rows) => rows.length > 0);
+export function enrollOwnDevice(userId: string, enrollment: OwnEnrollment): HostEffect<boolean> {
+  const { machine, ...key } = enrollment;
+  const kept =
+    machine === undefined
+      ? keyOwnDevice({ userId, ...key })
+      : Effect.flatMap(DateTime.nowAsDate, (now) =>
+          insertOwnDevice({ userId, ...key, ...machine, now }),
+        );
+  return Effect.map(kept, (rows) => rows.length > 0);
 }
 
 /** The standing machine a device secret's hash names, of any kind, its account, and the version it last called with; nothing for a removed machine, an old secret, or none. */

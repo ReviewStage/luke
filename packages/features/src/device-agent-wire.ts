@@ -93,7 +93,7 @@ export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, D
     [DEVICE_AGENT_LINE_KIND.DISCARD]: DEVICE_CAPABILITY.DISCARD,
   };
 
-/** What program a device runs local agents through. */
+/** What program a device ran local agents through when its row was written, which nothing reads since every device runs the host program; still on the wire for clients that decode it. */
 export const DEVICE_KIND = {
   /** The Luke desktop app, on the Mac its member is signed in at. */
   DESKTOP: "desktop",
