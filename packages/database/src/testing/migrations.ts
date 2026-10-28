@@ -59,9 +59,30 @@ const DROPPED_TABLES = [
   "workspace_chat",
 ] as const;
 
-/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table since dropped, or an index or constraint named after one, left out. */
+/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`). */
+const DROPPED_COLUMNS = [
+  {
+    table: "automation",
+    columns: ["plan_id", "task_id"],
+    indexes: ["automation_trigger_plan", "automation_trigger_task"],
+  },
+] as const;
+
+/** Whether the statement names a column since dropped, or an index that went with it. */
+function namesDroppedColumn(statement: string): boolean {
+  return DROPPED_COLUMNS.some(
+    ({ table, columns, indexes }) =>
+      indexes.some((index) => statement.includes(`"${index}"`)) ||
+      (statement.includes(`"${table}"`) &&
+        columns.some((column) => statement.includes(`"${column}"`))),
+  );
+}
+
+/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table or column since dropped, or an index or constraint named after one, left out. */
 export function replayable(statements: readonly string[]): readonly string[] {
-  return statements.filter((statement) =>
-    DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)),
+  return statements.filter(
+    (statement) =>
+      DROPPED_TABLES.every((table) => !statement.includes(`"${table}`)) &&
+      !namesDroppedColumn(statement),
   );
 }
