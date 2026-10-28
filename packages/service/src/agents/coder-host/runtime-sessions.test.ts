@@ -1771,7 +1771,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.deepEqual(said, {
             sender: MESSAGE_SENDER.AUTOMATION,
             senderName: "Nightly checks",
-            metadata: { channel: "automation" },
+            // A schedule's run carries its owner's prompt alone.
+            metadata: { channel: "automation", outside_words: false },
           });
           assert.ok(run.agent.conversationId !== "");
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { isWireUuid } from "@luke/features";
+import { type AutomationFiring, FIRING_HANDS_OUTSIDE_WORDS } from "@luke/features/automation-wire";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -421,10 +422,17 @@ const TYPED_LINE_METADATA: TypedAskMetadata = {
 /** A line Luke sent the agent on its own. */
 export const LUKE_LINE_METADATA: LukeLineMetadata = { channel: MESSAGE_CHANNEL.LUKE };
 
-/** An automation's run's prompt. */
-export const AUTOMATION_LINE_METADATA: AutomationLineMetadata = {
-  channel: MESSAGE_CHANNEL.AUTOMATION,
-};
+/**
+ * An automation's run's prompt, saying whether what fired the run put words
+ * its owner did not write beside it, which the line keeps for the rest of
+ * the conversation's life, whatever becomes of the automation and its runs.
+ */
+export function automationLineMetadata(firing: AutomationFiring): AutomationLineMetadata {
+  return {
+    channel: MESSAGE_CHANNEL.AUTOMATION,
+    outside_words: FIRING_HANDS_OUTSIDE_WORDS[firing.kind],
+  };
+}
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
 type AwaitingLineWritten = Result.Result<

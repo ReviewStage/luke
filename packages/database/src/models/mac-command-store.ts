@@ -1,3 +1,4 @@
+import { AUTOMATION_FIRING, FIRING_HANDS_OUTSIDE_WORDS } from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import {
   MAC_COMMAND_KIND,
@@ -27,6 +28,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
+import { automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import { conversations, messages } from "../schemas/storage.js";
@@ -227,18 +229,63 @@ const sendingAgent = alias(codingAgent, "sending_agent");
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
-/** The agent the root conversation is of, read for whether it is an operator, and whether it was started on a prompt or a plan at all. */
+/** The agent the root conversation is of, read for whether it is an operator, whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
 const startedAgent = alias(codingAgent, "started_agent");
+
+/** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
+const OUTSIDE_FIRINGS = Object.values(AUTOMATION_FIRING).filter(
+  (kind) => FIRING_HANDS_OUTSIDE_WORDS[kind],
+);
+
+/** That the automation's run that started the root's agent was fired by words its owner did not write, as the agent's origin keeps it whatever becomes of the automation. */
+const STARTED_ON_OUTSIDE_WORDS = inArray(
+  sql<string | null>`${startedAgent.automationOrigin} -> 'firing' ->> 'kind'`,
+  OUTSIDE_FIRINGS,
+);
+
+/**
+ * That a run fired by words its owner did not write was handed to the root's
+ * agent: the run that started it, or one sent to it, which is claimed for
+ * the agent before its line is sent. Note that the runs go with their
+ * automation, so this holds only while it stands.
+ */
+const HANDED_OUTSIDE_RUN = exists(
+  queryBuilder
+    .select({ id: automationRun.id })
+    .from(automationRun)
+    .where(
+      and(
+        or(
+          eq(automationRun.claimedAgentId, startedAgent.id),
+          eq(automationRun.codingAgentId, startedAgent.id),
+        ),
+        inArray(sql<string>`${automationRun.firing} ->> 'kind'`, OUTSIDE_FIRINGS),
+      ),
+    ),
+);
+
+/** What an automation's line says of what fired its run: `true` or `false`, or null on a line kept before it said. */
+const LINE_OUTSIDE_WORDS = sql<string | null>`${messages.metadata} ->> 'outside_words'`;
 
 /**
  * One line of the conversation's root, or the root's own where it is one,
  * that another account put there: a member other than the owner, a former
- * member, or an agent that is not the owner's own or is gone. A developer's
+ * member, or an agent that is not the owner's own or is gone. An
+ * automation's line counts where what fired its run put words its owner did
+ * not write beside the automation's prompt: a webhook's body, an
+ * integration's event, or a GitHub event's (`FIRING_HANDS_OUTSIDE_WORDS`),
+ * as the line says itself (`outside_words`); a line kept before it said
+ * counts where the run that started the agent was so fired, or a run so
+ * fired was sent to it while its automation stands. A schedule's run and a
+ * "Run now" carry the owner's prompt alone, so an operator's heartbeat is
+ * its owner's. A developer's
  * line written before senders were kept, a `user` row with no sender, counts
  * too, because nothing says whose it was; all but the root's first where the
  * agent was started on a prompt or a plan, which that first line is, written
  * untagged by eve's relay for every agent started before the start wrote it
- * with its sender (`coder-host/start.ts`). A blank agent was started on
+ * with its sender (`coder-host/start.ts`), unless the automation's run that
+ * started the agent was fired by words its owner did not write, which that
+ * first line holds. A blank agent was started on
  * none, so its first line is whoever's first steer, and counts. An
  * operator's untagged lines are its owner's and never count, because its
  * conversation is its owner's alone: anyone else's words reach it tagged,
@@ -278,11 +325,19 @@ const findForeignLine = SqlSchema.findOneOption({
                 or(isNull(sendingAgent.userId), ne(sendingAgent.userId, userId)),
               ),
               and(
+                eq(messages.sender, MESSAGE_SENDER.AUTOMATION),
+                or(
+                  eq(LINE_OUTSIDE_WORDS, "true"),
+                  and(isNull(LINE_OUTSIDE_WORDS), or(STARTED_ON_OUTSIDE_WORDS, HANDED_OUTSIDE_RUN)),
+                ),
+              ),
+              and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
                 or(isNull(startedAgent.kind), ne(startedAgent.kind, CODING_AGENT_KIND.OPERATOR)),
                 or(
                   and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
+                  STARTED_ON_OUTSIDE_WORDS,
                   exists(
                     db
                       .select({ seq: earlierLine.seq })
@@ -324,9 +379,10 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
 
 /**
  * Whether anyone but the conversation's owner has put words into it: a line
- * another member sent, one an agent that is not the owner's own sent, or one
- * whose sender was never kept past the opening prompt, of an agent that is
- * not an operator, in the conversation
+ * another member sent, one an agent that is not the owner's own sent, one an
+ * automation sent with words its owner did not write, such as a webhook's
+ * body, or one whose sender was never kept past the opening prompt, of an
+ * agent that is not an operator, in the conversation
  * or, for a worker's, in the agent's it was delegated from. Note that a line
  * the service itself sends, such as a wake, is not counted, because no other
  * account wrote it.
