@@ -144,6 +144,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostKernel } from "./host-kernel.js";
+import { ROW_GONE, type RowWrite } from "./live-collection.js";
 import {
   confirmWrite,
   LIVE_GONE,
@@ -154,13 +155,7 @@ import {
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections } from "./sidebar-collections.js";
-import {
-  type AgentRow,
-  type PlanRow,
-  ROW_GONE,
-  type RowWrite,
-  taskListCollections,
-} from "./task-list-collections.js";
+import { type AgentRow, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import { TASK_RECORD_PART, type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import {

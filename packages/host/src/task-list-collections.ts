@@ -27,14 +27,15 @@ import {
   taskPullRequestsOfLiveRows,
 } from "@luke/features/task-list-live";
 import type { TaskListAnswer, TaskPullRequests } from "@luke/features/task-wire";
-import { Clock, Data, Deferred, Duration, Effect, Queue, type Scope, Stream } from "effect";
+import { Effect, type Scope } from "effect";
 import {
-  type AnsweredCollection,
   answeredCollection,
-  optimistically,
+  drawnAtEdges,
+  type RowWrite,
   rowsOf,
+  rowWrites,
 } from "./live-collection.js";
-import { confirmWrite, type TxWait } from "./live-follow.js";
+import type { TxWait } from "./live-follow.js";
 
 /** A plan's row as the list's statement answers it. */
 export type PlanRow = TaskListLiveRows["plans"][number];
@@ -50,47 +51,12 @@ export interface LiveTaskList {
   readonly pendingTasks: readonly string[];
 }
 
-/**
- * What a write's service call answered: the caller's own answer, the
- * transaction it committed in, and the row's fields as the service then
- * holds them, or that it is gone, taken in the list's place where it hands
- * no wait; where the answer says none of them, the fields the write drew
- * are taken instead.
- */
-export interface RowWritten<Row, Answer> {
-  readonly answer: Answer;
-  readonly txid: string | undefined;
-  readonly fields?: Partial<Row> | typeof ROW_GONE;
-}
-
-/** What a write leaves of a row that it takes out of the list, as a task deleted is. */
-export const ROW_GONE: unique symbol = Symbol("the row is gone");
-
-/** A write the service refused, which takes back what it drew, and what the caller answers for it. */
-export interface RowRefused<Answer> {
-  readonly refused: Answer;
-}
-
-/** A write the service did not answer, which takes back what it drew. */
-class Unwritten extends Data.TaggedError("Unwritten") {}
-
 export interface TaskListDependencies {
   /** Draws the list as it now stands. */
   readonly draw: (read: LiveTaskList) => void;
   /** The followed list's wait for a write's transaction; none while the follow hands none. */
   readonly txWait: () => TxWait | undefined;
 }
-
-/**
- * A write to one row: what the row's fields become, from the row as it is
- * drawn now, or that it is gone, and the service call that writes it,
- * answering what the caller answers either way.
- */
-export type RowWrite<Row> = <Answer>(
-  key: string,
-  change: (row: Row) => Partial<Row> | typeof ROW_GONE,
-  written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
-) => Effect.Effect<Answer>;
 
 /** The account's task list in collections, for as long as its scope stands. */
 export interface TaskListCollections {
@@ -117,13 +83,9 @@ export function taskListCollections(
       }),
     );
 
-    /** The instant the clock alone next moves the list drawn, none where nothing waits on it. */
-    const edges = yield* Queue.sliding<number | undefined>(1);
-
     /** Draws the list as it stands now, what every standing write drew among it, and arms its next edge. */
-    const drawn: Effect.Effect<void> = Effect.gen(function* () {
-      if (!open) return;
-      const at = yield* Clock.currentTimeMillis;
+    const drawn = yield* drawnAtEdges((at) => {
+      if (!open) return undefined;
       const rows = { plans: rowsOf(plans.collection), agents: rowsOf(agents.collection) };
       dependencies.draw({
         list: taskListOfLiveRows(rows, at),
@@ -133,90 +95,8 @@ export function taskListCollections(
           row.$hasPendingWrites ? [row.id] : [],
         ),
       });
-      yield* Queue.offer(edges, taskListGraceEdge(rows, at));
+      return taskListGraceEdge(rows, at);
     });
-
-    // The list drawn again at each edge the clock alone moves it, the wait for one drawn since replacing the wait for the one before.
-    yield* Effect.forkScoped(
-      Stream.fromQueue(edges).pipe(
-        Stream.switchMap((edge) =>
-          edge === undefined
-            ? Stream.empty
-            : Stream.fromEffect(
-                Effect.flatMap(Clock.currentTimeMillis, (now) =>
-                  Effect.sleep(Duration.millis(Math.max(0, edge - now))),
-                ),
-              ),
-        ),
-        Stream.runForEach(() => drawn),
-      ),
-    );
-
-    /** Confirms a write on the followed list where it hands a wait, or takes the write's own answer in its place where it does not. */
-    const confirmed = (txid: string | undefined, answered: () => void) => {
-      const wait = dependencies.txWait();
-      return wait === undefined || txid === undefined
-        ? Effect.sync(answered)
-        : confirmWrite(wait, txid);
-    };
-
-    /** The writes to one collection's rows, each row's newest settling the next write to it waits on. */
-    function rowWrite<Row extends object>(
-      collection: AnsweredCollection<Row, string>,
-    ): RowWrite<Row> {
-      const lastWrites = new Map<string, Deferred.Deferred<void>>();
-      return <Answer>(
-        key: string,
-        change: (row: Row) => Partial<Row> | typeof ROW_GONE,
-        written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
-      ) =>
-        Effect.gen(function* () {
-          const before = lastWrites.get(key);
-          const settled = yield* Deferred.make<void>();
-          lastWrites.set(key, settled);
-          const answered: { value?: Answer } = {};
-          const draw = () => {
-            const row = collection.collection.get(key);
-            if (row === undefined) return;
-            const fields = change(row);
-            if (fields === ROW_GONE) collection.collection.delete(key);
-            else collection.collection.update(key, (draft) => Object.assign(draft, fields));
-          };
-          const work = Effect.gen(function* () {
-            yield* drawn;
-            if (before !== undefined) yield* Deferred.await(before);
-            const result = yield* written;
-            if ("refused" in result) {
-              answered.value = result.refused;
-              return yield* new Unwritten();
-            }
-            answered.value = result.answer;
-            yield* confirmed(result.txid, () => {
-              const { fields } = result;
-              if (fields === ROW_GONE) collection.confirmGone(key);
-              else
-                collection.confirmRow(key, (row) => {
-                  const drawnFields = fields ?? change(row);
-                  return drawnFields === ROW_GONE ? {} : drawnFields;
-                });
-            });
-          });
-          yield* optimistically(draw, work).pipe(
-            Effect.catchTag("Unwritten", () => Effect.void),
-            Effect.ensuring(drawn),
-            Effect.ensuring(
-              Effect.andThen(
-                Deferred.succeed(settled, undefined),
-                Effect.sync(() => {
-                  if (lastWrites.get(key) === settled) lastWrites.delete(key);
-                }),
-              ),
-            ),
-          );
-          // SAFETY: the work sets the answer before it settles, whether the service wrote or refused the row.
-          return answered.value as Answer;
-        });
-    }
 
     return {
       answer: (rows) =>
@@ -225,8 +105,8 @@ export function taskListCollections(
           agents.answer(rows.agents);
           return drawn;
         }),
-      writePlan: rowWrite(plans),
-      writeAgent: rowWrite(agents),
+      writePlan: rowWrites(plans, { drawn, txWait: dependencies.txWait }),
+      writeAgent: rowWrites(agents, { drawn, txWait: dependencies.txWait }),
     };
   });
 }
