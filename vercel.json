@@ -105,10 +105,6 @@
           "dest": "/api/default.js?route=triggers/sentry/installed"
         },
         {
-          "src": "/api/workspaces/linear/connected",
-          "dest": "/api/default.js?route=workspaces/linear/connected"
-        },
-        {
           "src": "/api/maintenance/sweep",
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
         },

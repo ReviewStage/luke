@@ -72,12 +72,11 @@ test("Members finds the members for every workspace", () => {
   }
 });
 
-test("Workspace connections, Integrations, Linear, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
+test("Workspace connections, Integrations, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
   const found = [SETTINGS_SECTION.GITHUB_REPOSITORIES];
   const queries = [
     "Workspace connections",
     "Integrations",
-    "Linear",
     "manage",
     "GitHub repositories",
     "GitHub",
