@@ -86,16 +86,28 @@ const onBox = (
  * The boot check run against a fake `smolvm` that writes each command it is
  * given to a file and fails the subcommand named, saying why on its last line
  * after a line of progress, through a fake `runuser` that runs what it is
- * handed as the test's own user. Answers what the shell printed and exited
- * with, and the commands smolvm was given.
+ * handed as the test's own user, on a box enrolled before where asked, whose
+ * unit and fake `systemctl` stand in the test's folder. Answers what the shell
+ * printed and exited with, the commands smolvm was given, and those systemctl was.
  */
-const bootCheck = (failAt: string) => {
+const bootCheck = (failAt: string, enrolled = false) => {
   const bin = linuxUname();
   const root = folder();
   const log = join(root, "smolvm.log");
   const kvm = join(root, "kvm");
   writeFileSync(kvm, "");
+  const systemctlLog = join(root, "systemctl.log");
+  writeFileSync(systemctlLog, "");
   writeFileSync(join(bin, "runuser"), '#!/bin/sh\nshift 3\nexec "$@"\n', { mode: 0o755 });
+  writeFileSync(join(bin, "systemctl"), '#!/bin/sh\nprintf \'%s\\n\' "$*" >>"$SYSTEMCTL_LOG"\n', {
+    mode: 0o755,
+  });
+  const unitFile = join(root, "luke-host.service");
+  if (enrolled) {
+    mkdirSync(join(root, "state"));
+    writeFileSync(join(root, "state", "device.json"), "{}");
+    writeFileSync(unitFile, "");
+  }
   writeFileSync(
     join(bin, "smolvm"),
     [
@@ -113,7 +125,7 @@ const bootCheck = (failAt: string) => {
   const answer = sh(
     [
       "-c",
-      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; require_vm_boots`,
+      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; require_vm_boots`,
     ],
     {
       LUKE_HOST_INSTALL_LIBRARY: "1",
@@ -121,6 +133,7 @@ const bootCheck = (failAt: string) => {
       PATH: `${bin}:${process.env.PATH}`,
       SMOLVM_LOG: log,
       SMOLVM_FAIL_AT: failAt,
+      SYSTEMCTL_LOG: systemctlLog,
       TMPDIR: folder(),
     },
   );
@@ -129,6 +142,7 @@ const bootCheck = (failAt: string) => {
     answer,
     user: ids.stdout,
     asked: readFileSync(log, "utf8").trim().split("\n"),
+    systemctl: readFileSync(systemctlLog, "utf8").trim().split("\n").filter(Boolean),
   };
 };
 
@@ -288,6 +302,24 @@ describe("the host's install script", () => {
     expect(answer.stdout).not.toContain("Booted");
     expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
     expect(answer.stderr).toContain("Luke host was not started");
+  });
+
+  it("restarts the service of a box enrolled before when its upgrade's VM will not boot", () => {
+    const { answer, systemctl } = bootCheck("start", true);
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
+    expect(answer.stderr).toContain(
+      "luke-host.service was restarted on this box's existing enrollment",
+    );
+    expect(systemctl).toContain("restart luke-host.service");
+  });
+
+  it("fails a VM that booted but could not be deleted, rather than leave it behind", () => {
+    const { answer } = bootCheck("delete");
+    expect(answer.status).toBe(1);
+    expect(answer.stdout).not.toContain("Booted");
+    expect(answer.stderr).toContain(`could not delete it`);
+    expect(answer.stderr).toContain(SMOLVM_FAILURE);
   });
 
   it("removes the throwaway VM when a command in it fails", () => {

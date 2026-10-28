@@ -208,6 +208,19 @@ UNIT_EOF
   systemctl daemon-reload
 }
 
+# Fails with why ($1), luke-host not started by this run. A box enrolled
+# before, whose service this run stopped to swap its files, has it restarted on
+# that enrollment, so a failed upgrade leaves it serving rather than offline.
+fail_unstarted() {
+  if [ -f "$HOST_HOME/state/device.json" ] && [ -f "$UNIT_FILE" ]; then
+    # Note that the unit is rewritten first, since the daemon just installed refuses to run under the previous release's, which names no smolvm.
+    write_unit
+    systemctl restart "$UNIT" || true
+    fail "$1. $UNIT was restarted on this box's existing enrollment."
+  fi
+  fail "$1. Luke host was not started."
+}
+
 # Runs smolvm as the luke-host user, in its home, as the daemon's service does:
 # $@ smolvm's arguments, after a timeout command and its seconds where $1 is
 # --within <seconds>.
@@ -244,23 +257,28 @@ fetch_sandbox_image() {
   if [ "$code" -ne 0 ]; then
     why="$(smolvm_said "$said" "$code")"
     rm -f "$said"
-    fail "Could not fetch the sandbox image (smolvm: $why). Luke host was not started."
+    fail_unstarted "Could not fetch the sandbox image (smolvm: $why)"
   fi
   rm -f "$said"
   ok "Fetched the sandbox image"
 }
 
-# Stops and deletes the boot check's machine, whatever it was left in.
+# Stops and deletes the boot check's machine, whatever it was left in, stopping
+# it at once where a graceful stop fails, as the daemon does; fails where it
+# could not be deleted, with what smolvm said written to the file $1.
 remove_boot_machine() {
-  smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine stop --name "$BOOT_MACHINE" >/dev/null 2>&1 || true
-  smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine delete --name "$BOOT_MACHINE" -f >/dev/null 2>&1 || true
+  smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine stop --name "$BOOT_MACHINE" >/dev/null 2>&1 ||
+    smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine stop --name "$BOOT_MACHINE" --timeout 0 \
+      >/dev/null 2>&1 || true
+  smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine delete --name "$BOOT_MACHINE" -f >/dev/null 2>"$1"
 }
 
 # Proves a VM boots before anything is started: one throwaway machine made from
 # the pinned image as the daemon makes every agent's (smolvm-sandbox.ts), with
 # the same smolvm, user and flags, nested where the box has $KVM_DEVICE on
 # Linux, started, `true` run in it as luke-host, then stopped and deleted
-# whether it booted or not. It fails with the step and smolvm's last line.
+# whether it booted or not. It fails with the step and smolvm's last line, and
+# where the machine booted but could not be deleted.
 require_vm_boots() {
   boot_nested=""
   if [ "$(uname -s)" = "Linux" ] && [ -e "$KVM_DEVICE" ]; then
@@ -268,8 +286,9 @@ require_vm_boots() {
   fi
   boot_user="$(id -u "$HOST_USER"):$(id -g "$HOST_USER")"
   said="$(mktemp)"
+  removal="$(mktemp)"
   # Note that one an interrupted run left behind is cleared first, so the name is free.
-  remove_boot_machine
+  remove_boot_machine "$removal" || true
   boot_step=create
   code=0
   smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine create --name "$BOOT_MACHINE" \
@@ -285,13 +304,19 @@ require_vm_boots() {
     smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine exec --name "$BOOT_MACHINE" \
       --user "$boot_user" -- true >/dev/null 2>"$said" || code=$?
   fi
-  remove_boot_machine
+  removed=0
+  remove_boot_machine "$removal" || removed=$?
   if [ "$code" -ne 0 ]; then
     why="$(smolvm_said "$said" "$code")"
-    rm -f "$said"
-    fail "No VM booted (smolvm machine $boot_step: $why). Luke host was not started."
+    rm -f "$said" "$removal"
+    fail_unstarted "No VM booted (smolvm machine $boot_step: $why)"
   fi
-  rm -f "$said"
+  if [ "$removed" -ne 0 ]; then
+    why="$(smolvm_said "$removal" "$removed")"
+    rm -f "$said" "$removal"
+    fail_unstarted "A VM booted, but smolvm could not delete it (smolvm machine delete --name $BOOT_MACHINE: $why)"
+  fi
+  rm -f "$said" "$removal"
   ok "Booted a VM from the sandbox image"
 }
 
