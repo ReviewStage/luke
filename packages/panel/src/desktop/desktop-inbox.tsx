@@ -425,17 +425,15 @@ export function DesktopInbox({
   });
   // A notice of the reader's own is acknowledged as it opens, on the same terms, once its holder's held read holds it.
   useNodOnOpen({ shown: opened, readerId: tasks.me, control: live });
-  // ⌘O opens what holds the keys in its full place: the agent the panel shows, in its task; else the item shown, in its task, or on its agent's page where it has none.
+  // ⌘O opens what holds the keys in its full place: the agent the panel shows while it holds them, in its task; else the item shown, in its task, or on its agent's page where it has none.
   const panelAgent =
     sideFocused && sidePanel.tab !== undefined && isTranscriptTab(sidePanel.tab)
       ? sidePanel.tab.transcript
       : undefined;
   const openInTask = (): (() => void) | undefined => {
     if (!tasks.shown) return undefined;
-    if (sideFocused) {
-      return panelAgent === undefined || taskId === undefined
-        ? undefined
-        : () => tasks.onShowAgent(taskId, panelAgent);
+    if (panelAgent !== undefined && taskId !== undefined) {
+      return () => tasks.onShowAgent(taskId, panelAgent);
     }
     if (opened === undefined) return undefined;
     const { holder, item } = opened;
