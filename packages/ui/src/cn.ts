@@ -611,6 +611,7 @@ const merge = extendTailwindMerge({
         "dialog-command",
         "tooltip",
         "tooltip-card",
+        "tooltip-card-wide",
         ...FEEDBACK_DISPLAY.container,
         ...CONTENT_TEXT.container,
         ...PAGE_PATTERNS.container,

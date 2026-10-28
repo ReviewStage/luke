@@ -3,6 +3,8 @@ import {
   Avatar,
   BUTTON_VARIANT,
   Button,
+  CARD_WIDTH,
+  type CardWidth,
   DocumentIcon,
   FolderIcon,
   GAP,
@@ -41,7 +43,9 @@ import { CatalogSection } from "../section";
  * is read. Each card shows once the pointer rests on
  * its control or the keyboard reaches it, and stands while the pointer is on
  * the control, on the card, or between them: the catalog's own stand-in for
- * the linger an app gives its cards.
+ * the linger an app gives its cards. A card whose main content is a list
+ * whose rows end in counts hangs wider, beside the same card at a card's
+ * width, whose rows cut their names short.
  */
 
 /** More agents than a card's list has height for, so the example scrolls. */
@@ -61,6 +65,35 @@ const CATALOG_TOOLS = [
   { title: "Read an issue", summary: "Read one issue." },
   { title: "Comment", summary: "Comment on an issue." },
 ] as const;
+
+/** A task's pull requests, each name ending in its lines, as a list-holding card names them. */
+const CATALOG_PULL_REQUESTS = [
+  { name: "feat(web): expire invitations after a week", end: "+120 −14" },
+  { name: "fix(service): resend an expired invitation", end: "+48 −9" },
+  { name: "docs(changelog): say invitations expire", end: "+6 −0" },
+] as const;
+
+/** A task's card listing its pull requests at `width`. */
+function ListCard({ width }: { width: CardWidth }): React.JSX.Element {
+  return (
+    <HoverCard width={width}>
+      <HoverCardHead name="Teammate invitations" corner="2h" />
+      <HoverCardRule />
+      <HoverCardList label="Pull requests">
+        {CATALOG_PULL_REQUESTS.map((pullRequest) => (
+          <li key={pullRequest.name}>
+            <HoverCardRow
+              glyph={<DocumentIcon />}
+              label={pullRequest.name}
+              end={pullRequest.end}
+              onPress={() => undefined}
+            />
+          </li>
+        ))}
+      </HoverCardList>
+    </HoverCard>
+  );
+}
 
 /** Whether the point `x`, `y` stands within the box spanning both rectangles, the gap between them included. */
 function withinBoth(x: number, y: number, one: DOMRect, other: DOMRect): boolean {
@@ -343,6 +376,12 @@ function HoverCards(): React.JSX.Element {
               </HoverCard>
             }
           />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="hover-card-widths" title="Widths">
+        <Inline gap={GAP.CONTROL}>
+          <Carded label="Wide list" card={<ListCard width={CARD_WIDTH.WIDE} />} />
+          <Carded label="Narrow list" card={<ListCard width={CARD_WIDTH.NARROW} />} />
         </Inline>
       </CatalogSection>
     </>

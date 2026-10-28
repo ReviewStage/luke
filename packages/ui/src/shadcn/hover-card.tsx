@@ -13,8 +13,11 @@ import { TOOLTIP_GAP, TOOLTIP_MARGIN, TOOLTIP_SURFACE } from "./tooltip.js";
  * menu item does; it shares the pill's type, motion, and leaving
  * (`tooltip.tsx`), takes the pointer and lets its words be selected, and is
  * left out of a session recording whole by the recorder's fixed
- * `ph-no-capture` class. It hangs from its control's start below it, turning
- * above where the window ends, or beside it, on the window's own layer; the
+ * `ph-no-capture` class. It stands wider, held inside the window by the
+ * same margin, where the card it holds says so (`HoverCard`'s `width`), so
+ * the many places one card hangs from need say nothing of it. It hangs from
+ * its control's start below it, turning above where the window ends, or
+ * beside it, on the window's own layer; the
  * positioner takes the control (`anchor`) and a fixed position, because
  * when it shows is `@luke/ui`'s `Tooltip`'s. shadcn's trigger is left out.
  * What an app draws is `@luke/ui`'s `TooltipCard`; this is its inside.
@@ -55,7 +58,7 @@ function HoverCardContent({
           data-slot="hover-card-content"
           className={cn(
             TOOLTIP_SURFACE,
-            "luke-tooltip-card ph-no-capture pointer-events-auto flex w-tooltip-card cursor-default flex-col items-stretch gap-1 rounded-menu border border-border-strong bg-popover px-tooltip-card-inline py-1.5 font-text text-popover-foreground shadow-menu wrap-normal select-text",
+            "luke-tooltip-card ph-no-capture pointer-events-auto flex w-tooltip-card cursor-default has-[[data-card-width=wide]]:w-tooltip-card-wide flex-col items-stretch gap-1 rounded-menu border border-border-strong bg-popover px-tooltip-card-inline py-1.5 font-text text-popover-foreground shadow-menu wrap-normal select-text",
             className,
           )}
           {...props}

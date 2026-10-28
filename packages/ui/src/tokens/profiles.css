@@ -222,11 +222,13 @@
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
      was shared, the widest it stands (the window, less twice tooltip.tsx's
-     TOOLTIP_MARGIN), and the width of a card hung in its place. */
+     TOOLTIP_MARGIN), and the width of a card hung in its place, and of a
+     card whose list's rows need room for their names beside their ends. */
   --luke-tooltip-radius: 7px;
   --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
   --luke-tooltip-max-width: calc(var(--luke-stage-width) - 12px);
   --luke-tooltip-card-width: 280px;
+  --luke-tooltip-card-wide-width: calc(var(--luke-tooltip-card-width) + var(--luke-space-64));
 
   /* A hover card's name is a label and the line under it a caption; what it
      keeps off the type scale is the code in its note, its own glyph, and the
@@ -481,11 +483,13 @@
 
   /* A hover hint: the pill's own corner and lift, as it was drawn before it
      was shared, the widest it stands (the window, less twice tooltip.tsx's
-     TOOLTIP_MARGIN), and the width of a card hung in its place. */
+     TOOLTIP_MARGIN), and the width of a card hung in its place, and of a
+     card whose list's rows need room for their names beside their ends. */
   --luke-tooltip-radius: 7px;
   --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
   --luke-tooltip-max-width: calc(var(--luke-stage-width) - 12px);
   --luke-tooltip-card-width: 280px;
+  --luke-tooltip-card-wide-width: calc(var(--luke-tooltip-card-width) + var(--luke-space-64));
 
   /* A hover card's name is a label and the line under it a caption; what it
      keeps off the type scale is the code in its note, its own glyph, and the

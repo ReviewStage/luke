@@ -23,6 +23,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import {
   AttentionMark,
   Badge,
+  CARD_WIDTH,
   cn,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -271,7 +272,7 @@ export function InboxItemCard({
       : undefined;
   const working = line !== undefined && agentStillWriting(line.status);
   return (
-    <HoverCard data-inbox-row-card="">
+    <HoverCard data-inbox-row-card="" width={CARD_WIDTH.WIDE}>
       <HoverCardHead
         glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}

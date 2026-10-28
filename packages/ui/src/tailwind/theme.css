@@ -416,6 +416,7 @@
   --spacing-dialog-command-sheet: var(--luke-command-sheet);
   --container-tooltip: var(--luke-tooltip-max-width);
   --container-tooltip-card: var(--luke-tooltip-card-width);
+  --container-tooltip-card-wide: min(var(--luke-tooltip-card-wide-width), var(--luke-tooltip-max-width));
   /* Breadcrumbs and DataTable. */
   --font-weight-dialog: var(--luke-type-dialog-weight);
   --leading-tag: var(--luke-type-tag-leading);

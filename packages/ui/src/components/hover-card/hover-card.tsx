@@ -144,13 +144,31 @@ type HoverCardRowAnchor = Omit<
   "className" | "style" | "children" | "role" | "tabIndex"
 >;
 
-/** A card's root: its parts in a column, one gap apart. */
+/**
+ * How wide a card hangs: a card's width, or wider where its main content is
+ * a list whose rows would otherwise cut their names short for their ends, as
+ * a task's agents and pull requests do beside their counts.
+ */
+export const CARD_WIDTH = {
+  NARROW: "narrow",
+  WIDE: "wide",
+} as const;
+
+export type CardWidth = (typeof CARD_WIDTH)[keyof typeof CARD_WIDTH];
+
+/**
+ * A card's root: its parts in a column, one gap apart. Note that its `width`
+ * is said here, on the card, rather than where it is hung, because a card
+ * hangs from many places and is the one that knows what it lists; the
+ * surface it stands on (`../../shadcn/hover-card.tsx`) reads it.
+ */
 export function HoverCard({
+  width = CARD_WIDTH.NARROW,
   children,
   ...marks
-}: { children: ReactNode } & HoverCardMarks): React.JSX.Element {
+}: { width?: CardWidth; children: ReactNode } & HoverCardMarks): React.JSX.Element {
   return (
-    <div {...marks} className={CARD}>
+    <div {...marks} data-card-width={width} className={CARD}>
       {children}
     </div>
   );

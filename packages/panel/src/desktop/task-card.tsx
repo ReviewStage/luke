@@ -4,6 +4,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import {
   AttentionMark,
   AVATAR_SIZE,
+  CARD_WIDTH,
   CountParts,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -282,7 +283,7 @@ export function TaskCard({
     (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
     (task.createdBy !== undefined || task.ownerId !== undefined);
   return (
-    <HoverCard data-task-card="">
+    <HoverCard data-task-card="" width={CARD_WIDTH.WIDE}>
       <HoverCardHead
         glyph={
           <StandingMark words={`Status: ${TASK_STATUS_WORDS[statusOf(task)]}`}>
