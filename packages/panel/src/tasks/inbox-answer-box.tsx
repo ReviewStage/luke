@@ -457,6 +457,9 @@ function AnswerCard({
   const [starting, setStarting] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const starts = newThread !== undefined && !asks && asNew;
+  // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
+  const standing = useRef(draft);
+  standing.current = draft;
   const sending = control.sending.has(item.id) || starting;
   // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
@@ -514,23 +517,27 @@ function AnswerCard({
     control.onAcknowledge(item);
   };
   // Note that the same words and files sent again go under the key they went under, so a retry starts one thread.
+  // The box lets go of what it sent at once, as a reply does, so words written while the start is out stay
+  // there; a start refused puts what it sent back only into a box that holds nothing, so neither is lost.
   const start = (offer: AnswerNewThread) => {
-    const text = draft.note.trim();
-    const words = JSON.stringify([text, draft.attachments]);
+    const sent = { note: draft.note, attachments: draft.attachments };
+    const text = sent.note.trim();
+    const words = JSON.stringify([text, sent.attachments]);
     const key = attempt.current?.words === words ? attempt.current.key : crypto.randomUUID();
     attempt.current = { key, words };
     setRefusal(undefined);
     setCut(false);
     setStarting(true);
-    void offer.onStart({ text, attachments: draft.attachments, clientKey: key }).then((refused) => {
+    control.onDraft(item, { ...draft, note: "", attachments: [] });
+    void offer.onStart({ text, attachments: sent.attachments, clientKey: key }).then((refused) => {
       setStarting(false);
-      if (refused !== undefined) {
-        setRefusal(refused);
+      if (refused === undefined) {
+        attempt.current = undefined;
+        setAsNew(false);
         return;
       }
-      attempt.current = undefined;
-      setAsNew(false);
-      control.onDraft(item, { ...draft, note: "", attachments: [] });
+      setRefusal(refused);
+      if (emptyBox(standing.current)) control.onDraft(item, { ...standing.current, ...sent });
     });
   };
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.

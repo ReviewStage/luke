@@ -40,7 +40,7 @@ import {
   fakeActsAnswer,
 } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { editorBundleLanded, typeInComposer } from "../testing/composer.js";
+import { composerEditor, editorBundleLanded, typeInComposer } from "../testing/composer.js";
 import {
   ACME,
   AGENT,
@@ -1308,6 +1308,82 @@ test("ticking the box's checkbox sends its words as a new thread to the item's a
     "the thread it started opens",
   );
   assert.equal(box().getAttribute("aria-checked"), "false", "its box is a reply again");
+});
+
+test("words written in the box while its new thread starts stay in it once the thread has started", async () => {
+  world.listedWorkspace = ACME;
+  world.inboxes = new Map([[BILLING.id, [noticeOf(THRESHOLD)]]]);
+  const answer = Promise.withResolvers<FakeActAnswer>();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.CODING_AGENTS_INBOX_START ? answer.promise : previous(request),
+  });
+  const { page } = mount();
+  await settle();
+
+  const pane = itemPane(page);
+  act(() =>
+    (
+      pane.querySelector<HTMLElement>('[role="checkbox"]') ??
+      assert.fail("the box offers a new thread")
+    ).click(),
+  );
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  typeInComposer(pane, "And the footer.");
+  world.inboxes.set(BILLING.id, [STARTED, noticeOf(THRESHOLD)]);
+  pushAgain();
+  await act(async () => answer.resolve({ status: FAKE_ANSWER.DONE, value: { item: STARTED } }));
+  await settle();
+  act(() => rowNamed(page, THRESHOLD.title).click());
+  await settle();
+
+  assert.equal(composerEditor(itemPane(page)).textContent, "And the footer.");
+});
+
+test("a thread started from an item of an archived channel lands in #general, and the Inbox turns to #general to open it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000aa",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  answerChannels({ archived: () => [old] });
+  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: old.id }]]]);
+  heldStarts();
+  const { page } = mount([], { channels: true });
+  await settle();
+  act(() => chooseChannel(old.id));
+  await settle();
+
+  const box =
+    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
+    assert.fail("the box offers a new thread");
+  assert.equal(box.closest("label")?.textContent, "Send as a new thread to Alerts in general");
+  act(() => box.click());
+  const pane = itemPane(page);
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  await settle();
+
+  assert.equal(headTitle(page), "#general");
+  assert.equal(itemPane(page).getAttribute("aria-label"), STARTED.title);
 });
 
 test("with Channels on, a row's ⋯ moves its thread to the channel picked", async () => {

@@ -68,6 +68,7 @@ import {
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import {
+  openChannelThread,
   useArchivedChannels,
   useChannelPlace,
   useChannels,
@@ -373,6 +374,8 @@ export function DesktopInbox({
             .then((answer) => {
               if ("failure" in answer) return messageFailureWords(answer.failure);
               startedIn(answer.item, item);
+              // An Inbox narrowed to a channel turns to the one the thread lands in, which is #general's where the item's is archived.
+              openChannelThread(answer.item.id, landsIn(item)?.id);
               const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
               view.onChoose({
                 ...(holder?.kind === INBOX_HOLDER.TASK
