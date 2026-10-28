@@ -26,7 +26,15 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { type AgentToolPin, NODE_LINUX_PINS, NODE_MAC_PIN } from "@luke/agent-runner/pins";
@@ -35,6 +43,8 @@ import { hostTarballName } from "@luke/features/host-release";
 
 const APP = join(import.meta.dirname, "..");
 const REPOSITORY = join(APP, "..", "..");
+/** Where a checked pinned archive is kept between runs: the repository's own scratch, which git ignores. */
+const KEPT_PINS = join(REPOSITORY, ".build", "pins");
 const RELEASE = join(APP, "dist", "release");
 const ROOT_FOLDER = "luke-host";
 
@@ -68,15 +78,37 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** The pin's archive fetched and checked, and its members kept under `folder` as the archive lays them out. */
-async function fetchPinned(pin: AgentToolPin, folder: string, scratch: string): Promise<void> {
+/** Whether `archive` is exactly the pinned build: its size and its SHA-256. */
+function isPinned(pin: AgentToolPin, archive: Uint8Array): boolean {
+  return archive.length === pin.BYTES && sha256(archive) === pin.SHA256;
+}
+
+/**
+ * The pin's archive: the copy kept in the repository's scratch from an
+ * earlier run where it still checks out, so a development start stages the
+ * host offline, and fetched and checked otherwise, then kept for the next.
+ */
+async function pinnedArchive(pin: AgentToolPin): Promise<Uint8Array> {
+  const kept = join(KEPT_PINS, `${pin.NAME}-${pin.SHA256}.tgz`);
+  if (existsSync(kept)) {
+    const archive = new Uint8Array(readFileSync(kept));
+    if (isPinned(pin, archive)) return archive;
+  }
   const response = await fetch(pin.ARCHIVE);
   if (!response.ok) throw new Error(`${pin.ARCHIVE} answered ${response.status}`);
   const archive = new Uint8Array(await response.arrayBuffer());
   if (archive.length !== pin.BYTES) {
     throw new Error(`${pin.ARCHIVE} is ${archive.length} bytes, not the pinned ${pin.BYTES}`);
   }
-  if (sha256(archive) !== pin.SHA256) throw new Error(`${pin.ARCHIVE} is not the pinned build`);
+  if (!isPinned(pin, archive)) throw new Error(`${pin.ARCHIVE} is not the pinned build`);
+  mkdirSync(KEPT_PINS, { recursive: true });
+  writeFileSync(kept, archive);
+  return archive;
+}
+
+/** The pin's archive, kept or fetched and checked, and its members kept under `folder` as the archive lays them out. */
+async function fetchPinned(pin: AgentToolPin, folder: string, scratch: string): Promise<void> {
+  const archive = await pinnedArchive(pin);
   const saved = join(scratch, `${pin.NAME}.tgz`);
   writeFileSync(saved, archive);
   const members = pin.MEMBERS.map((member) => `${pin.ROOT}/${member}`);
