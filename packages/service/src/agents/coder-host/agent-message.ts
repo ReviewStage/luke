@@ -166,7 +166,7 @@ export function runMessageAgent(
       const userId = callerUserId(caller);
       const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
-      const found = yield* workspaceAgent(userId, workspace.value, agentId);
+      const found = yield* workspaceAgent(userId, workspace.value, agentId, sender.id);
       if (Option.isNone(found)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
       const target = found.value;
       if (target.archivedAt !== null) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);

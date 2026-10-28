@@ -557,11 +557,12 @@ const choiceRefused = (
         Effect.catch((refusal) => Effect.succeed(refusalWords(refusal))),
       );
 
-/** Where runs land as the call names an agent, which must be one of the caller's workspace: none named leaves it as it stands. */
+/** Where runs land as the call names an agent, which must be one of the caller's workspace, the caller itself among them: none named leaves it as it stands. */
 const landingNamed = (
   userId: string,
   workspaceId: string,
   agentId: string | null | undefined,
+  callerId: string,
 ): Effect.Effect<
   Result.Result<AutomationTarget | undefined, string>,
   StoreFailure,
@@ -570,7 +571,7 @@ const landingNamed = (
   if (agentId === undefined) return Effect.succeed(Result.succeed(undefined));
   if (agentId === null)
     return Effect.succeed(Result.succeed({ kind: AUTOMATION_TARGET.NEW_AGENT }));
-  return Effect.map(workspaceAgent(userId, workspaceId, agentId), (found) =>
+  return Effect.map(workspaceAgent(userId, workspaceId, agentId, callerId), (found) =>
     Option.isNone(found)
       ? Result.fail(AUTOMATION_TOOL_REFUSAL.NO_AGENT)
       : Result.succeed({ kind: AUTOMATION_TARGET.SAME_AGENT, agentId: found.value.id }),
@@ -669,7 +670,12 @@ export function runCreateAutomation(
       if (sentry !== undefined) return agentToolRejected(sentry);
       const model = yield* choiceRefused(userId, choice, "Not made");
       if (model !== undefined) return agentToolRejected(model);
-      const landing = yield* landingNamed(userId, workspace.value, made.agentId);
+      const landing = yield* landingNamed(
+        userId,
+        workspace.value,
+        made.agentId,
+        call.caller.agent.id,
+      );
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const worked = yield* workedRepository(call.caller);
       const repositories = made.repositories ?? (worked === null ? undefined : [worked]);
@@ -768,7 +774,7 @@ export function runUpdateAutomation(
       }
       const model = yield* choiceRefused(userId, choice, "Not changed");
       if (model !== undefined) return agentToolRejected(model);
-      const landing = yield* landingNamed(userId, workspace.value, agentId);
+      const landing = yield* landingNamed(userId, workspace.value, agentId, call.caller.agent.id);
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const action: AutomationAction | undefined = changesAction
         ? {

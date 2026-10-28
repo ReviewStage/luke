@@ -6,8 +6,7 @@ import {
 import { queryBuilder } from "@luke/database/core/query";
 import {
   AGENT_WORKSPACE,
-  agentReachableBy,
-  agentSeenBy,
+  agentVisibleTo,
   taskReachableBy,
 } from "@luke/database/models/workspace-store";
 import { agentPin, taskPin } from "@luke/database/schemas";
@@ -15,7 +14,7 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/task";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import {
@@ -163,7 +162,6 @@ function agentsStatement(userId: string) {
       ),
     )
     .from(codingAgent)
-    .leftJoin(task, eq(task.id, codingAgent.taskId))
     .leftJoin(
       agentPin,
       and(eq(agentPin.codingAgentId, codingAgent.id), eq(agentPin.userId, userId)),
@@ -172,11 +170,8 @@ function agentsStatement(userId: string) {
     .leftJoin(archiver, eq(archiver.id, sql`${codingAgent.archivedBy} ->> 'userId'`))
     .leftJoinLateral(latest, sql`true`)
     .where(
-      or(
-        // An agent on a task is listed only where the account sees it too, as the held list reads it.
-        and(isNotNull(codingAgent.taskId), taskReachableBy(userId), agentSeenBy(userId)),
-        and(isNull(codingAgent.taskId), agentReachableBy(userId)),
-      ),
+      // An agent on a task is listed only where the account reaches the task too, as a read of it by its id is.
+      agentVisibleTo(userId),
     );
 }
 

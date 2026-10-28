@@ -25,6 +25,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
+  readCodingAgent,
   readVisibleAgentWorkspace,
 } from "@luke/database/models/coding-agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
@@ -64,6 +65,24 @@ export function agentWorkspace(
   agent: Pick<CodingAgent, "id">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return readVisibleAgentWorkspace(userId, agent.id);
+}
+
+/**
+ * The workspace of an agent acting as itself under its member, read as it
+ * reads itself (`readCodingAgent`), its task's visibility left out; none
+ * where the member no longer reaches the agent. Note that the task is left
+ * out on purpose, because an agent keeps its own tools and skills while its
+ * starter no longer sees its task; what a member reads of someone else's
+ * agent keeps `agentWorkspace`.
+ */
+export function ownAgentWorkspace(
+  userId: string,
+  agent: Pick<CodingAgent, "id">,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    readCodingAgent(userId, agent.id),
+    Option.map((found) => found.organizationId),
+  );
 }
 
 /** The member an agent's GitHub reads act as: its starter where it recorded the token's access, and none otherwise. */

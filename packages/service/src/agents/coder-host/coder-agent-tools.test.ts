@@ -1878,6 +1878,32 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
   assert.equal(eve.sent.length, 0);
 });
 
+test("an agent whose starter no longer sees its task keeps its own tools: it reads itself and messages an agent its starter still sees, while another agent of that starter reads it no longer", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const onBilling = await agentOn(agents.caller.userId, tasks.billing);
+  // The task moves onto its owner's own token, which the caller's starter keeps none to read through.
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, tasks.billing)),
+    ),
+  );
+  const readAs = async (caller: StartedAgent) =>
+    (await peerCaller(host, caller, eve.services))(CODER_TOOL.READ_AGENT, {
+      agentId: onBilling.id,
+    });
+
+  const itself = await readAs(onBilling);
+  assert.equal(itself.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(itself));
+  assert.deepEqual(await readAs(agents.caller), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+  });
+  const sent = await directMessage(host, onBilling, agents.caller, eve.services);
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+});
+
 test("update_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done with the first record kept, and brings it back with the record cleared", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);

@@ -78,6 +78,7 @@ import {
   readNativeRunStanding,
   readRunnerTokenConversation,
   readStandingOperator,
+  readVisibleCodingAgent,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
@@ -723,6 +724,44 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
           yield* listPublishedCodingAgentsById(outsider, [first.agentId, second.agentId]),
           [],
           "another workspace's agents are none of an outsider's",
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent the App reaches, on a task on its starter's own token, is read by id by its starter and by no teammate who does not see the task, while the read an agent makes of itself keeps the agent's reach alone",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const task = yield* createTask(starter, {
+          organizationId: workspace,
+          name: "Billing",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const started = yield* createCodingAgent(starter, {
+          taskId: task.id,
+          planSnapshot: "# Billing",
+          prompt: null,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.APP,
+        });
+        const agentId = Option.getOrThrow(started).agent.id;
+
+        assert.deepEqual(
+          [
+            Option.isSome(yield* readVisibleCodingAgent(starter, agentId)),
+            Option.isNone(yield* readVisibleCodingAgent(teammate, agentId)),
+            yield* listPublishedCodingAgentsById(teammate, [agentId]),
+            Option.isSome(yield* readCodingAgent(teammate, agentId)),
+          ],
+          [true, true, [], true],
         );
       }),
   );

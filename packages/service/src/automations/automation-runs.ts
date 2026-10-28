@@ -22,8 +22,8 @@ import {
   codingAgentConversation,
   discardCodingAgent,
   latestTurnsOfReached,
-  readCodingAgent,
   readCodingAgentByKey,
+  readVisibleCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { automationLineMetadata, storeWriter } from "@luke/database/models/writer";
@@ -355,7 +355,7 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   if (automation.targetKind !== AUTOMATION_TARGET.SAME_AGENT || automation.targetAgentId === null) {
     return true;
   }
-  const agent = yield* readCodingAgent(automation.userId, automation.targetAgentId);
+  const agent = yield* readVisibleCodingAgent(automation.userId, automation.targetAgentId);
   return Option.match(agent, {
     onNone: () => true,
     onSome: (held) => held.repository?.toLowerCase() === repository.toLowerCase(),
@@ -420,7 +420,7 @@ const steerClaimed = Effect.fnUntraced(function* (
   run: ActedRun,
   agentId: string,
 ) {
-  const found = yield* readCodingAgent(automation.userId, agentId);
+  const found = yield* readVisibleCodingAgent(automation.userId, agentId);
   if (Option.isNone(found) || found.value.archivedAt !== null) {
     return yield* failedRun(run, AUTOMATION_RUN_REASON.AGENT_GONE);
   }
@@ -461,7 +461,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null
-      ? yield* readCodingAgent(automation.userId, automation.targetAgentId)
+      ? yield* readVisibleCodingAgent(automation.userId, automation.targetAgentId)
       : Option.none();
   const agents = [
     ...started.filter((agent) =>

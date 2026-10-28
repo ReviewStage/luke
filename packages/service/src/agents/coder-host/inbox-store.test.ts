@@ -21,6 +21,7 @@ import { automationRun, automation as automationTable } from "@luke/database/sch
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
 import {
@@ -37,6 +38,7 @@ import {
   CODING_AGENT_KIND,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -70,6 +72,7 @@ import {
   accountWaitingItems,
   accountWaitingStamps,
   acknowledgeInboxItem,
+  agentInboxItems,
   answerInboxAsk,
   CHANNEL_MOVE_REFUSAL,
   type ChannelThreadPage,
@@ -1019,6 +1022,114 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Option.isNone(yield* answerDone(stranger, posted)));
       }),
   );
+
+  it.effect(
+    "an agent whose starter no longer sees its task still posts, reads, and moves its own asks, addressed to no one who cannot see them, while that starter, whom an ask on a task assigned to nobody waits on, reads, counts, and answers none of them, in the Inbox, a channel, or the task's or the agent's read",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const task = yield* startTask(owner, {
+          name: "Teammate invitations",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.APP,
+        });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        // The App reaches the agent for every member, so only its task's visibility keeps it from the teammate.
+        const started = yield* createCodingAgent(teammate, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.APP,
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        // The task moves onto its owner's own token, which the teammate keeps none to read through.
+        yield* Database.use((db) =>
+          db
+            .update(taskTable)
+            .set({ githubAccess: GITHUB_ACCESS.TOKEN })
+            .where(eq(taskTable.id, task.id)),
+        );
+        yield* updateTask(owner, task.id, { assigneeId: null });
+        const agent = {
+          userId: teammate,
+          taskId: task.id,
+          agentId: Option.getOrThrow(started).agent.id,
+        };
+        assert.deepEqual(
+          yield* postInboxThread(agent, {
+            ...SETTINGS,
+            key: "for-teammate",
+            addresseeId: teammate,
+          }),
+          Result.fail(INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE),
+          "an ask is addressed to no one who cannot see its thread",
+        );
+        // Addressed to nobody on a task assigned to nobody, the ask waits on its starter all the same.
+        const posted = yield* post(agent);
+        assert.deepEqual(
+          (yield* agentInboxItems(agent)).map((each) => each.id),
+          [posted.id],
+          "the agent reads its own ask, as it acts as itself",
+        );
+        const app = Result.getOrThrow(
+          yield* createChannel(
+            owner,
+            task.workspaceId,
+            { name: "app", purpose: "All about app.", project: false },
+            new Date(1),
+          ),
+        ).id;
+        assert.deepEqual(
+          [
+            yield* moveChannelThread(teammate, posted.id, app),
+            Result.isSuccess(yield* moveChannelThread(teammate, posted.id, app, agent.agentId)),
+          ],
+          [Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD), true],
+          "the agent moves its own thread as itself, which its starter moves not as a member",
+        );
+        const channelId =
+          Option.getOrThrow(yield* readInboxItem(owner, posted.id)).item.channelId ?? "";
+        const seen = (userId: string) =>
+          Effect.gen(function* () {
+            const account = yield* accountInboxPast(userId, INBOX_CURSOR_START);
+            const badges = yield* channelWaitingCounts(userId, task.workspaceId);
+            return {
+              item: Option.isSome(yield* readInboxItem(userId, posted.id)),
+              task: (yield* taskInboxItems(userId, task.id)).length,
+              agent: (yield* memberAgentInboxItems(userId, agent.agentId)).length,
+              account: account.items.length + account.plans.length,
+              stamps: (yield* accountWaitingStamps(userId)).length,
+              threads: (yield* firstPage(userId, channelId)).length,
+              badge: badges.get(channelId) ?? 0,
+            };
+          });
+
+        assert.deepEqual(yield* seen(owner), {
+          item: true,
+          task: 1,
+          agent: 1,
+          account: 2,
+          stamps: 1,
+          threads: 1,
+          badge: 0,
+        });
+        assert.deepEqual(yield* seen(teammate), {
+          item: false,
+          task: 0,
+          agent: 0,
+          account: 0,
+          stamps: 0,
+          threads: 0,
+          badge: 0,
+        });
+        assert.ok(Option.isNone(yield* answerDone(teammate, posted)));
+      }),
+  );
+
   it.effect(
     "a member's message, a teammate's as much as the starter's, stands on the thread of an open item and of an answered one, oldest first and naming its writer, leaves the status, the answer, and the revision as they stood, moves the item's last change and the plan read's cursor, and an outsider writes none",
     () =>

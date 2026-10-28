@@ -25,6 +25,7 @@ import {
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { createTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
@@ -49,6 +50,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -448,11 +450,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived fails as agent-gone",
+    "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived, or stands on a task its creator does not see, fails as agent-gone",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, automation } = yield* openAutomation({
+        const { owner, automation, workspaceId } = yield* openAutomation({
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
         });
         const first = yield* startedNow(eve, automation);
@@ -493,6 +495,36 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           reason: AUTOMATION_RUN_REASON.AGENT_GONE,
         });
         assert.equal(eve.sent.length, 1, "nothing was sent to the archived agent");
+
+        // A teammate's agent the App reaches, on a task on the teammate's own token, which the creator keeps none to read through.
+        const teammate = yield* openGithubUser();
+        yield* joinWorkspace(workspaceId, teammate);
+        const repository = `${RELAY.owner}/${RELAY.name}`;
+        const hidden = yield* createTask(teammate, {
+          organizationId: workspaceId,
+          name: "Billing",
+          repository,
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const theirs = yield* createCodingAgent(teammate, {
+          taskId: hidden.id,
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          repository,
+          githubAccess: GITHUB_ACCESS.APP,
+          planSnapshot: "# Billing\n",
+          prompt: null,
+        });
+        const aimed = yield* toSameAgent(automation, Option.getOrThrow(theirs).agent.id);
+        const unseen = yield* executeAutomationRun(eve.eveFor, yield* runNow(aimed)).pipe(
+          Effect.provide(services),
+        );
+        assert.deepEqual(unseen, {
+          status: AUTOMATION_RUN_STATUS.FAILED,
+          reason: AUTOMATION_RUN_REASON.AGENT_GONE,
+        });
+        assert.equal(eve.sent.length, 1, "nothing was sent to the agent its creator does not see");
       }),
   );
 

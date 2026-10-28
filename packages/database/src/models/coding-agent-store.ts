@@ -87,7 +87,6 @@ import { TaskAgentUnstopped } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
-  agentSeenBy,
   agentVisibleTo,
   reachableTask,
   taskReachableBy,
@@ -1500,11 +1499,11 @@ const AgentsOfTaskSchema = Schema.Struct({
   includeArchived: Schema.Boolean,
 });
 
-/** The condition that an agent stands on the task the account reaches, and is one the account sees as its GitHub access allows, archived only where asked for; read joined to its task. */
+/** The condition that an agent stands on the task the account reaches, and is one the account may read (`agentVisibleTo`), archived only where asked for; read joined to its task. */
 function ofReachedTask({ userId, taskId, includeArchived }: typeof AgentsOfTaskSchema.Type) {
   return and(
     reachableTask(userId, taskId),
-    agentSeenBy(userId),
+    agentVisibleTo(userId),
     includeArchived ? undefined : isNull(codingAgent.archivedAt),
   );
 }
@@ -1597,7 +1596,7 @@ const AgentsOfWorkspaceSchema = Schema.Struct({
 function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
   const { userId, organizationId, repository, taskId, words, includeArchived, ownOnly } = request;
   return and(
-    agentReachableBy(userId),
+    agentVisibleTo(userId),
     eq(AGENT_WORKSPACE, organizationId),
     ownOnly ? eq(codingAgent.userId, userId) : undefined,
     includeArchived ? undefined : isNull(codingAgent.archivedAt),
@@ -1658,7 +1657,7 @@ const findTasklessAgents = SqlSchema.findAll({
         .where(
           and(
             isNull(codingAgent.taskId),
-            agentReachableBy(userId),
+            agentVisibleTo(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
@@ -1739,8 +1738,7 @@ const findAgentsOfTasks = SqlSchema.findAll({
         .where(
           and(
             inArray(task.id, [...taskIds]),
-            taskReachableBy(userId),
-            agentSeenBy(userId),
+            agentVisibleTo(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
@@ -1786,7 +1784,7 @@ const findPublishedAgentsById = SqlSchema.findAll({
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
         .from(codingAgent)
-        .where(and(inArray(codingAgent.id, [...agentIds]), agentReachableBy(userId)))
+        .where(and(inArray(codingAgent.id, [...agentIds]), agentVisibleTo(userId)))
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
     ),
 });
@@ -1820,7 +1818,7 @@ const findStartedFrom = SqlSchema.findAll({
           and(
             // Note that the source is matched on the expression its index is built on.
             inArray(sql`(${codingAgent.startedFrom}->>'agentId')`, [...agentIds]),
-            agentReachableBy(userId),
+            agentVisibleTo(userId),
           ),
         )
         .as("ranked");
@@ -1884,6 +1882,19 @@ const findAgent = SqlSchema.findOneOption({
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
         .where(reachableAgent(userId, agentId))
+        .limit(1),
+    ),
+});
+
+const findVisibleAgent = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId)))
         .limit(1),
     ),
 });
@@ -2467,12 +2478,25 @@ export function readCodingAgentByKey(
   return findAgentByKey({ userId, idempotencyKey });
 }
 
-/** The agent under this id, or nothing for an agent of a workspace the account is not in. */
+/** The agent under this id, or nothing for an agent of a workspace the account is not in: the read an agent makes of itself, under the member who started it. */
 export function readCodingAgent(
   userId: string,
   agentId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgent({ userId, agentId });
+}
+
+/**
+ * The agent under this id, where the account may read and write it
+ * (`agentVisibleTo`), its task included; nothing otherwise. The read every
+ * door a member, or another agent, names an agent by its id through makes
+ * first, so an agent on a task they do not see is none to them.
+ */
+export function readVisibleCodingAgent(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return findVisibleAgent({ userId, agentId });
 }
 
 /** The agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent of a workspace the account is not in. */
