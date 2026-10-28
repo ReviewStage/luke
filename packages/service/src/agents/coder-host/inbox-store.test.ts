@@ -2037,12 +2037,12 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
         const operator = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: null,
             organizationId: workspaceId,
             planSnapshot: null,
             prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",

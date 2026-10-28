@@ -1354,14 +1354,14 @@ const findAutomationsWithItems = SqlSchema.findAll({
 
 /** How an agent with no task holding items is named, as an open item of it names it (`findTasklessWaitingItems`), its automation only to a reader who may read it. */
 const AGENT_HOLDING_NAMING = {
-  agentKind: codingAgent.kind,
+  agentKind: agentTable.kind,
   // The name the agent goes by: Luke for an operator, else its title.
-  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-  agentModel: codingAgent.model,
+  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+  agentModel: agentTable.model,
   automationId: automation.id,
   automationName: automation.name,
-  repository: codingAgent.repository,
-  workspaceId: codingAgent.organizationId,
+  repository: agentTable.repository,
+  workspaceId: agentTable.organizationId,
 };
 
 /** One agent with no task holding items as the account's read lists it, as a task is listed, and as an open item of it names it. */
@@ -1370,7 +1370,7 @@ const AgentItemsRowSchema = Schema.Struct({
   items: Schema.Number,
   toDo: Schema.Number,
   updatedAt: InstantColumnSchema,
-  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   automationId: Schema.NullOr(Schema.String),
@@ -1396,23 +1396,23 @@ const findAgentsWithItems = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          agentId: codingAgent.id,
+          agentId: agentTable.id,
           items: count(),
           toDo: toDoCount(userId),
           updatedAt: LATEST_ITEM,
           ...AGENT_HOLDING_NAMING,
         })
         .from(inboxItem)
-        .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
         .leftJoin(
           automation,
-          and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+          and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
         )
         .where(
           and(isNull(inboxItem.taskId), itemVisibleTo(userId), repositoryCarried(repositoryless)),
         )
-        .groupBy(codingAgent.id, automation.id)
-        .orderBy(desc(LATEST_ITEM), desc(codingAgent.id)),
+        .groupBy(agentTable.id, automation.id)
+        .orderBy(desc(LATEST_ITEM), desc(agentTable.id)),
     ),
 });
 
@@ -1524,19 +1524,19 @@ export function accountInboxLiveStatements(
     .groupBy(automation.id);
   const agents = queryBuilder
     .select({
-      ...liveSelection({ agentId: codingAgent.id, ...AGENT_HOLDING_NAMING }),
+      ...liveSelection({ agentId: agentTable.id, ...AGENT_HOLDING_NAMING }),
       items: LIVE_COUNT.as("items"),
       toDo: toDoCount(userId).as("toDo"),
       updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
     })
     .from(inboxItem)
-    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
     .leftJoin(
       automation,
-      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+      and(eq(automation.id, agentTable.automationId), automationReadableBy(userId)),
     )
     .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId), repositoryCarried(repositoryless)))
-    .groupBy(codingAgent.id, automation.id);
+    .groupBy(agentTable.id, automation.id);
   return Option.all({
     items: liveStatementOf(items),
     planless: liveStatementOf(planless),
