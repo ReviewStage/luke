@@ -1023,6 +1023,12 @@ async function inboxOn(item: InboxItem) {
     ),
   );
   await settle();
+  // Note that the tab chooses nothing by itself, so the item is opened as a press on its row opens it.
+  const row =
+    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main") ??
+    assert.fail("the item's row");
+  await act(async () => row.click());
+  await settle();
   const box = () => container.querySelector(".inbox-view") ?? assert.fail("the card's answer box");
   return {
     /** The words the card's note shows. */
