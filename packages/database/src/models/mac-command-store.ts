@@ -1,4 +1,8 @@
-import { AUTOMATION_FIRING, FIRING_HANDS_OUTSIDE_WORDS } from "@luke/features/automation-wire";
+import {
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_STATUS,
+  FIRING_HANDS_OUTSIDE_WORDS,
+} from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import {
   MAC_COMMAND_KIND,
@@ -246,8 +250,10 @@ const STARTED_ON_OUTSIDE_WORDS = inArray(
 /**
  * That a run fired by words its owner did not write was handed to the root's
  * agent: the run that started it, or one sent to it, which is claimed for
- * the agent before its line is sent. Note that the runs go with their
- * automation, so this holds only while it stands.
+ * the agent before its line is sent. A run that failed handed it nothing,
+ * since a send refused withdraws its line, so only one that started counts.
+ * Note that the runs go with their automation, so this holds only while it
+ * stands.
  */
 const HANDED_OUTSIDE_RUN = exists(
   queryBuilder
@@ -259,6 +265,7 @@ const HANDED_OUTSIDE_RUN = exists(
           eq(automationRun.claimedAgentId, startedAgent.id),
           eq(automationRun.codingAgentId, startedAgent.id),
         ),
+        eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
         inArray(sql<string>`${automationRun.firing} ->> 'kind'`, OUTSIDE_FIRINGS),
       ),
     ),
