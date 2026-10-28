@@ -2225,6 +2225,12 @@ export function useTasksTab(input: {
   });
 
   const opensNewTask = useAppSlice(OPENS_NEW_TASK);
+  // A task opened from a list, its pin no longer chosen, and on its plan in a narrow room.
+  const selectListed = (taskId: string) => {
+    setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+    select(taskId);
+    if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
+  };
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
@@ -2328,9 +2334,11 @@ export function useTasksTab(input: {
 
   // A task started without opening says so in a toast whose Open opens it
   // as the sidebar would, on the agent's tab where its agent started, or on
-  // the draft saying why where it did not, which the toast says too.
-  const selectNow = useRef(select);
-  selectNow.current = select;
+  // the draft saying why where it did not, which the toast says too. Note
+  // that Open asks first while a page stands unsaved work, as the sidebar's
+  // press does, and reads the opener of the render it is pressed in.
+  const selectNow = useRef(guard(selectListed));
+  selectNow.current = guard(selectListed);
   const sayStarted = (planId: string, agentRan: boolean) =>
     toast({
       words: agentRan ? TASK_STARTED_NOTE : TASK_STARTED_AGENT_REFUSED_NOTE,
@@ -3047,11 +3055,7 @@ export function useTasksTab(input: {
     // screen on the plan's tab, rather than on whatever tab it last showed;
     // a link names its own place (`openLink`), and the history opens a task
     // through `onRestoreTask` instead, standing the pane its step held.
-    onSelect: guard((taskId: string) => {
-      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
-      select(taskId);
-      if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
-    }),
+    onSelect: guard(selectListed),
     onRestoreTask: guard((taskId: string) => {
       setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);

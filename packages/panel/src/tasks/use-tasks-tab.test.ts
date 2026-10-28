@@ -503,7 +503,7 @@ const readQuiet = Schema.decodeUnknownOption(
   Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),
 );
 
-test("with Open a task once it starts off, New task starts the task without opening it, and its toast's Open opens it", async () => {
+test("with Open a task once it starts off, New task starts the task without opening it, and its toast's Open opens it, asking first while a page stands unsaved work", async () => {
   handState({}, { settings: appSettingsWire(settingsView({ openNewTask: false })) });
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -526,10 +526,18 @@ test("with Open a task once it starts off, New task starts the task without open
     dialog: tab.control().newTask.open,
     says: newestToastSays(),
   };
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
   act(() => (newestToastAction() ?? assert.fail("the toast offers Open")).click());
+  await settle();
+  const whileAsked = opensAsked(tab.payloads);
+  act(() => asked[0]?.());
   await settle();
 
   assert.deepEqual(started, { quiet: [true], dialog: false, says: "Task startedOpen" });
+  assert.deepEqual(whileAsked, [], "Open asks first while a page stands unsaved work");
   assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID]);
   handState({});
 });
