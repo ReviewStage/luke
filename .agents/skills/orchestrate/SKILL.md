@@ -210,7 +210,11 @@ them to reply, to kick off the PRs above, to restack, and to archive.
 
 Do not poll workers in a loop. Workers message you when something happens,
 and each message arrives as a new turn; in Luke, a worker's
-`message_agent` arrives the same way. On each report:
+`message_agent` arrives the same way.
+
+While you wait on the user's answer in a thread or on a worker's message,
+end your turn and schedule no fallback `ScheduleWakeup`: the answer and the
+message each arrive as a new turn of their own. On each report:
 
 - **PR opened**: if a PR is waiting on this one, kick its worker off now
   (Step 1) with this PR's branch as its base.
