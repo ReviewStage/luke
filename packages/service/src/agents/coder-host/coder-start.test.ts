@@ -8,11 +8,12 @@ import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { Effect, Layer, Option, Result, Stream } from "effect";
 import { MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
@@ -189,7 +190,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a fresh agent on eve, whose prompt eve's receipt writes as its first line with no sender, has heard from no one but its starter, so its Mac is still its own",
+    "a fresh agent on eve, whose prompt stands as its first line, the Start's brief sent by its starter, and eve's receipt takes that line rather than writing a typed one, has heard from no one but its starter, so its Mac is still its own",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
@@ -226,7 +227,12 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 
         const db = yield* Database;
         const lines = yield* db
-          .select({ id: messages.id })
+          .select({
+            sender: messages.sender,
+            senderUserId: messages.senderUserId,
+            metadata: messages.metadata,
+            taken: isNotNull(messages.turnId),
+          })
           .from(messages)
           .where(
             and(
@@ -234,7 +240,18 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
               eq(messages.role, MESSAGE_ROLE.USER),
             ),
           );
-        assert.equal(lines.length, 1, "the prompt is the conversation's one line");
+        assert.deepEqual(
+          lines,
+          [
+            {
+              sender: MESSAGE_SENDER.MEMBER,
+              senderUserId: owner,
+              metadata: { channel: "start", brief: "prompt" },
+              taken: true,
+            },
+          ],
+          "the prompt is the conversation's one line",
+        );
         assert.equal(yield* heardFromAnotherAccount(target), false);
       }),
   );
