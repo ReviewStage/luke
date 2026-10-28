@@ -16,9 +16,7 @@
     "./voice-view": "./src/voice-view.js",
     "./microphone-access": "./src/microphone-access.js",
     "./volume-hint": "./src/volume-hint.js",
-    "./settings-controls": "./src/settings-controls.js",
-    "./transcript-model": "./src/transcript-model.js",
-    "./code-pane-model": "./src/code-pane-model.js"
+    "./transcript-model": "./src/transcript-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {

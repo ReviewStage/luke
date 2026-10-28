@@ -18,9 +18,9 @@ import {
 import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { SkillOption } from "@luke/ui/skill-mention";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Effect } from "effect";

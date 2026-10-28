@@ -2,12 +2,12 @@ import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
 import { ANNOUNCE, ErrorState, FileCodeCard, SpinnerRegion, TabNotice } from "@luke/ui";
-import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { CodeSnippet } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
+import { copiedLines, fileRefText } from "./file-ref-model.js";
 import type { ReadFileWindow } from "./file-tab.js";
 import {
   CODE_READ,

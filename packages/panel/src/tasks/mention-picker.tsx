@@ -66,7 +66,6 @@ import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@luke/ui
 import { searchTokens } from "@luke/ui/search-tokens";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -104,6 +103,7 @@ import {
   useDatePicker,
 } from "./date-picker.js";
 import { FileCard } from "./file-ref.js";
+import { fileFolder, fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { PageCard } from "./page-card.js";
 import { PullRequestMark } from "./pull-request-mark.js";

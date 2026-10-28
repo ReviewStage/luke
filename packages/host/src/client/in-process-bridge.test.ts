@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { Context, Effect } from "effect";
 import type { AppStateDelivery } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";

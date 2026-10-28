@@ -5,6 +5,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { rendererRegistry, rendererServicesNow } from "@luke/panel/renderer-runtime";
+import { openPreferredMicrophone } from "@luke/panel/tasks/microphone-choice";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
@@ -13,9 +14,8 @@ import {
   useAppSlice,
 } from "@luke/panel/use-app-state";
 import { createBrowserSilence } from "@luke/panel/voice/live-peer";
-import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
 import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { hostedVoiceFailure } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { WindowPushes } from "../act-port/push-procedures.js";

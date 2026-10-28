@@ -128,7 +128,6 @@ import {
   taskRow,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@luke/ui/tasks-model";
-import { fileName } from "@luke/voice/code-pane-model";
 import {
   Fragment,
   isValidElement,
@@ -174,6 +173,7 @@ import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../ta
 import { ChannelCard } from "../tasks/channel-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook } from "../tasks/file-ref.js";
+import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";

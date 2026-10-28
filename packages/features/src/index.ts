@@ -128,7 +128,6 @@ export {
   taskCodeFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
-  webSocketOrigin,
 } from "./live-contract.js";
 export {
   HostedMacCommandClient,
@@ -153,6 +152,7 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export { webSocketOrigin } from "./socket-origin.js";
 export {
   HostedTaskClient,
   type HostedTaskClientOptions,

@@ -9,11 +9,11 @@ import {
   type ProviderKeysAnswer,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/settings/microphone";
+import { type MicrophoneControl, NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
-import { type MicrophoneControl, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

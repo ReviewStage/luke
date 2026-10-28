@@ -1,6 +1,7 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_ENDPOINT } from "@luke/host/update-service";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+import type { UpdateControl } from "@luke/settings/settings-controls";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@luke/settings/update-row";
 import {
   BUTTON_VARIANT,
@@ -15,7 +16,6 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@luke/ui";
-import type { UpdateControl } from "@luke/voice/settings-controls";
 import { useAct } from "../act.js";
 
 /**

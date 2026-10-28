@@ -1,9 +1,9 @@
+/**
+ * file-ref-model.ts -- how a file and its lines are named, apart from drawing them: how a range of lines is said, a file's name and folder, and what a copy of the lines pointed at carries.
+ */
+
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCode } from "@luke/features/tasks-view";
-
-/**
- * code-pane-model.ts -- how a file and its lines are named, apart from drawing them: how a range of lines is said, a file's name and folder, and what a copy of the lines pointed at carries.
- */
 
 /** A reference as a place names it, read from a call's input or a stored note, its lines absent for a whole file. */
 export interface NamedLines {

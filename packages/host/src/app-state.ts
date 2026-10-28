@@ -3,10 +3,11 @@ import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import type { MicrophoneRoute, MicrophoneStatus } from "@luke/settings/microphone";
+import type { NotificationsStatus } from "@luke/settings/settings-controls";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
-import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
-import type { NotificationsStatus } from "@luke/voice/settings-controls";
+import type { OutputAudioState } from "@luke/voice/audio";
 import {
   callTranscriptChangeBetween,
   isVoiceCallTranscriptChange,

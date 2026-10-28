@@ -1,5 +1,6 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import {
   BUTTON_SHAPE,
   CALL_DEVICE,
@@ -12,8 +13,7 @@ import {
   Tooltip,
   WaveformIcon,
 } from "@luke/ui";
-import { callStatus, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/tasks-model";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { callStatus, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/call-card-model";
 import {
   callInProgress,
   VOICE_COMMAND,

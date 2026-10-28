@@ -43,7 +43,6 @@ import {
   pageName,
 } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
-import { fileRefText } from "@luke/voice/code-pane-model";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -54,6 +53,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
+import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
 

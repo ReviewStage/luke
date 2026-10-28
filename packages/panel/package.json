@@ -51,6 +51,7 @@
     "./styles/settings.css": "./src/styles/settings.css",
     "./styles/shell.css": "./src/styles/shell.css",
     "./styles/tasks.css": "./src/styles/tasks.css",
+    "./tasks/microphone-choice": "./src/tasks/microphone-choice.js",
     "./tasks/tasks-fixture-loader": "./src/tasks/tasks-fixture-loader.js",
     "./testing/action-label": "./src/testing/action-label.js",
     "./testing/app-bridge": "./src/testing/app-bridge.js",
@@ -63,7 +64,6 @@
     "./use-app-state": "./src/use-app-state.js",
     "./use-voice-view": "./src/use-voice-view.js",
     "./voice/live-peer": "./src/voice/live-peer.js",
-    "./voice/microphone-choice": "./src/voice/microphone-choice.js",
     "./voice/voice-level-meter": "./src/voice/voice-level-meter.js"
   },
   "scripts": {

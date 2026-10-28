@@ -5,8 +5,8 @@ import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
-  type OutputAudioState,
-} from "@luke/voice/audio";
+} from "@luke/settings/microphone";
+import type { OutputAudioState } from "@luke/voice/audio";
 import { Schema } from "effect";
 import { systemPreferences } from "electron";
 import { MediaDuckController } from "../native/media-duck";

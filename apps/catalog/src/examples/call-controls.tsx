@@ -15,7 +15,7 @@ import {
   Inline,
   Stack,
 } from "@luke/ui";
-import type { CallStatus } from "@luke/ui/tasks-model";
+import type { CallStatus } from "@luke/ui/call-card-model";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";

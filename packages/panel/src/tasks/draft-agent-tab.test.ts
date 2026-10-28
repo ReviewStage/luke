@@ -25,7 +25,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import { CALL_LABEL } from "@luke/ui/tasks-model";
+import { CALL_LABEL } from "@luke/ui/call-card-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

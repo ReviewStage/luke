@@ -57,13 +57,8 @@ import { skillWord } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
-import {
-  callEndedLine,
-  callOfLine,
-  callPlaces,
-  type TranscriptCallRow,
-} from "@luke/voice/transcript-model";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import { callEndedLine, callPlaces, type TranscriptCallRow } from "@luke/voice/transcript-model";
+import { callOfLine, type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
