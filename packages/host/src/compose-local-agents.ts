@@ -58,7 +58,7 @@ import {
   type LocalAgentSandboxCommand,
   Reporter,
 } from "./effect/seams.js";
-import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
+import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
 import type { HostKernel } from "./host-kernel.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 import type { RunMode } from "./run-mode.js";
@@ -251,7 +251,21 @@ export interface LocalAgentsDependencies {
   client: LocalAgentClient;
 }
 
-export type LocalAgentsComposer = Composer;
+export interface LocalAgentsComposer extends Composer {
+  /** Waits until no follow of this follower's stands, its runners stopped and the machine's lease given back; a gate shut before it is asked ends the follow within `IDLE`. */
+  readonly idle: Effect.Effect<void>;
+  /**
+   * The account's device id on this machine, minted the first time as a
+   * follow would, with every launch it kept under the account handed to the
+   * device itself, so the follower that runs on the device's own secret
+   * (`@luke/host/daemon`), whose account is its device, settles them.
+   */
+  readonly handedToDevice: (userId: string) => Effect.Effect<string>;
+  /** The account the device id given was minted for on this machine, as its state keeps it; none where it names none. */
+  readonly ownerOf: (deviceId: string) => Effect.Effect<string | undefined>;
+  /** The device registered under the id given as preparing (`DEVICE_SETUP.PREPARING`), which takes no agent; whether the service took it. */
+  readonly registeredPreparing: (deviceId: string) => Effect.Effect<boolean>;
+}
 
 /** A runner this Mac started: the launch line it settles, its stdin, and the process it is. */
 interface Runner {
@@ -308,12 +322,17 @@ export function composeLocalAgents(
     );
     const state = yield* Ref.make(yield* readState);
     const writing = yield* Semaphore.make(1);
+    /** The state read again from its file, as the other follower left it. */
+    const reread = writing.withPermit(Effect.flatMap(readState, (read) => Ref.set(state, read)));
 
     /**
      * The state changed and written whole, one change at a time, so a write
      * never lands over a newer one; written beside the file and moved over
      * it, so a write cut off leaves the last whole one. A write that cannot
-     * land is reported, and the next one tries again.
+     * land is reported, and the next one tries again. Note that the other
+     * follower this machine may run writes the file too, never while this
+     * one follows (`follower-lock.ts`), so the state is read again whenever
+     * this one takes the machine's lease (`reread`).
      */
     const updateState = (change: (current: LocalAgentState) => LocalAgentState) =>
       writing.withPermit(
@@ -1085,12 +1104,43 @@ export function composeLocalAgents(
         yield* presence(userId, deviceId);
       });
 
+    /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
+    const holder = kernel.createId();
+    /** Held for as long as a follow of this follower's stands, the machine's lease with it, which `idle` waits out. */
+    const following = yield* Semaphore.make(1);
+    /** Whether this follower last found the machine's lease held by another, so it says so once rather than every turn. */
+    const refusedLock = yield* Ref.make(false);
+
+    /**
+     * The machine's lease, taken for as long as the scope stands and renewed
+     * every `IDLE` while it does; whether it was taken. A lease another
+     * follower holds is said once, and the turn rests as a shut gate does.
+     */
+    const leased = Effect.gen(function* () {
+      if (!(yield* takeFollowerLock(kernel.stateRoot, holder))) {
+        if (!(yield* Ref.getAndSet(refusedLock, true))) {
+          report("another follower runs this machine's local agents, so this one follows none");
+        }
+        return false;
+      }
+      yield* Ref.set(refusedLock, false);
+      yield* Effect.addFinalizer(() => releaseFollowerLock(kernel.stateRoot, holder));
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.andThen(Effect.sleep(IDLE), renewFollowerLock(kernel.stateRoot, holder)),
+        ),
+      );
+      yield* reread;
+      return true;
+    });
+
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
-     * device registered, every launch it kept from a runner that ended with the
-     * app or the gate settled as gone, and the account's agents followed
-     * until the gate shuts or the account changes, when the follow's scope
-     * closes and every runner it started is stopped with its group.
+     * machine's lease taken, the device registered, every launch it kept
+     * from a runner that ended with the app or the gate settled as gone, and
+     * the account's agents followed until the gate shuts or the account
+     * changes, when the follow's scope closes, every runner it started is
+     * stopped with its group, and the lease is given back.
      */
     const turn = Effect.gen(function* () {
       const userId = dependencies.accountId();
@@ -1099,31 +1149,42 @@ export function composeLocalAgents(
         yield* Ref.set(readyTried, false);
         return yield* Effect.sleep(IDLE);
       }
-      const deviceId = yield* deviceOf(userId);
-      const { tools } = platform.sandbox;
-      const registered = (setup: DeviceSetupRegister) =>
-        client.register(deviceId, {
-          name: platform.deviceName,
-          platform: platform.devicePlatform,
-          arch: platform.deviceArch,
-          isolation: platform.deviceIsolation,
-          home: home.value,
-          claudeExecutable: tools.claude,
-          codexExecutable: tools.codex,
-          signedIn: NOT_SIGNED_IN,
-          capabilities: platform.deviceCapabilities,
-          ...setup,
-        });
-      // Note that the device registers as ready only once it has what its VMs run on, so Start never takes one that cannot run an agent.
-      if (!(yield* readyForOpening(userId, deviceId, registered))) return yield* Effect.sleep(IDLE);
-      const shellVariables = yield* shellEnvironment;
-      if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
-      const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
-      for (const launch of left) {
-        if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
-      }
-      yield* Effect.scoped(follow(userId, deviceId, home.value, shellVariables));
+      yield* following.withPermit(Effect.scoped(openTurn(userId, home.value)));
     });
+
+    /** An open gate's turn for the account `userId` names, from its home folder, under the machine's lease. */
+    const openTurn = (userId: string, folder: string) =>
+      Effect.gen(function* () {
+        // Note that the gate is read again under the permit, since `idle` may have waited on a turn that shut it.
+        if (!(yield* gateOpen) || dependencies.accountId() !== userId) return;
+        if (!(yield* leased)) return yield* Effect.sleep(IDLE);
+        const deviceId = yield* deviceOf(userId);
+        const { tools } = platform.sandbox;
+        const registered = (setup: DeviceSetupRegister) =>
+          client.register(deviceId, {
+            name: platform.deviceName,
+            platform: platform.devicePlatform,
+            arch: platform.deviceArch,
+            isolation: platform.deviceIsolation,
+            home: folder,
+            claudeExecutable: tools.claude,
+            codexExecutable: tools.codex,
+            signedIn: NOT_SIGNED_IN,
+            capabilities: platform.deviceCapabilities,
+            ...setup,
+          });
+        // Note that the device registers as ready only once it has what its VMs run on, so Start never takes one that cannot run an agent.
+        if (!(yield* readyForOpening(userId, deviceId, registered))) {
+          return yield* Effect.sleep(IDLE);
+        }
+        const shellVariables = yield* shellEnvironment;
+        if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
+        const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
+        for (const launch of left) {
+          if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
+        }
+        yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
+      });
 
     const lifetime = Effect.gen(function* () {
       // A turn that died is reported and the follow rests before the next, as a shut gate does.
@@ -1136,7 +1197,56 @@ export function composeLocalAgents(
       yield* Effect.forkScoped(Effect.forever(guarded));
     });
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {};
-    return { methods, lifetime } satisfies LocalAgentsComposer;
+    const idle = following.withPermit(Effect.void);
+
+    const ownerOf = (deviceId: string) =>
+      Effect.map(
+        Effect.andThen(reread, Ref.get(state)),
+        ({ devices }) => Object.entries(devices).find(([, kept]) => kept === deviceId)?.[0],
+      );
+
+    const registeredPreparing = (deviceId: string) =>
+      Option.match(home, {
+        onNone: () => Effect.succeed(false),
+        onSome: (folder) =>
+          asked(
+            client.register(deviceId, {
+              name: platform.deviceName,
+              platform: platform.devicePlatform,
+              arch: platform.deviceArch,
+              isolation: platform.deviceIsolation,
+              home: folder,
+              claudeExecutable: platform.sandbox.tools.claude,
+              codexExecutable: platform.sandbox.tools.codex,
+              signedIn: NOT_SIGNED_IN,
+              capabilities: platform.deviceCapabilities,
+              setup: DEVICE_SETUP.PREPARING,
+            }),
+          ),
+      });
+
+    const handedToDevice = (userId: string) =>
+      Effect.gen(function* () {
+        yield* reread;
+        const deviceId = yield* deviceOf(userId);
+        yield* updateState((current) => ({
+          ...current,
+          launches: current.launches.map((launch) =>
+            launch.userId === userId ? { ...launch, userId: deviceId } : launch,
+          ),
+        }));
+        return deviceId;
+      });
+
+    // Note that the follower answers nothing itself: the panel asks This Mac's luke-host (`compose-this-mac-host.ts`).
+    const methods: Composer["methods"] = {};
+    return {
+      methods,
+      lifetime,
+      idle,
+      handedToDevice,
+      ownerOf,
+      registeredPreparing,
+    } satisfies LocalAgentsComposer;
   });
 }

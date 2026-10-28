@@ -74,6 +74,7 @@ import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import { SwitchRow } from "./switch-row.js";
+import { ThisMacHostRow } from "./this-mac-host-row.js";
 import type { SettingsWrites } from "./writes.js";
 
 /**
@@ -506,8 +507,9 @@ function CodingAgentsSection({
 /**
  * The page's schema rows, under the page's own groups: whether this Mac runs
  * the account's local agents, drawn only while the Local agents experiment is
- * on in the desktop app (`@luke/settings`'s schema says so). Nothing, not
- * even its group, where no row stands.
+ * on in the desktop app (`@luke/settings`'s schema says so), with where This
+ * Mac's `luke-host` stands under it. Nothing, not even its group, where no
+ * row stands.
  */
 function AgentSchemaRows({
   view,
@@ -524,6 +526,7 @@ function AgentSchemaRows({
   return (
     <SettingsSection>
       <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.CODING_AGENTS} view={view} writes={writes} />
+      <ThisMacHostRow />
     </SettingsSection>
   );
 }

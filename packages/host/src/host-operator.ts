@@ -431,6 +431,7 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type { AppAccessSlice } from "./app-state.js";
+import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
   type MacCommandAsk,
@@ -478,6 +479,10 @@ export interface HostOperator {
   setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
   /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
+  /** Where This Mac's `luke-host` stands; none where the host could not answer. */
+  thisMacHostStanding(): Effect.Effect<ThisMacHostStanding | undefined>;
+  /** This Mac's `luke-host` turned on by the member's own act; where it then stands, or none where the host could not answer. */
+  turnOnThisMacHost(): Effect.Effect<ThisMacHostStanding | undefined>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -1244,6 +1249,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           command: entry.command,
         }),
         answerOf(macRepositoriesAnswerSchema, undefined),
+      ),
+    thisMacHostStanding: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.THIS_MAC_HOST_READ),
+        answerOf(thisMacHostStandingSchema, undefined),
+      ),
+    turnOnThisMacHost: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON),
+        answerOf(thisMacHostStandingSchema, undefined),
       ),
     answerMacCommand: (answer) =>
       Effect.map(

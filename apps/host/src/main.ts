@@ -95,11 +95,22 @@ const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
  * where its state lives, under the home its service hands it: the
  * `luke-host` user's from systemd, the member's from launchd.
  */
-const runtime = hostRuntime({
+const runtimeOfOs = hostRuntime({
   platform: process.platform,
   home: process.env.HOME ?? os.homedir(),
   app: { developerIdSigned: buildCarriesDeveloperIdSigning() },
 });
+
+/**
+ * The runtime the daemon runs as, its state folder named by
+ * `LUKE_HOST_STATE_ROOT` where a development build of the desktop app runs
+ * it as a child (`apps/desktop/src/main/native/host-login-item.ts`), since
+ * that build's own state folder is not the one a packaged app's is.
+ */
+const runtime: HostRuntime | undefined =
+  runtimeOfOs === undefined || process.env.LUKE_HOST_STATE_ROOT === undefined
+    ? runtimeOfOs
+    : { ...runtimeOfOs, stateRoot: process.env.LUKE_HOST_STATE_ROOT };
 
 const nodeServices = Layer.mergeAll(
   NodeChildProcessSpawner.layer.pipe(
@@ -132,6 +143,13 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
       );
       yield* Effect.sleep(UNENROLLED_REST);
       return false;
+    }
+    // Note that a box Luke refused before is not asked again on the dead secret: it rests removed until it is enrolled again.
+    if (device.value.refused === true) {
+      reportToStderr(
+        "Luke host: Luke refused this box's secret before, so it was removed. Enroll it again to follow its agents.",
+      );
+      return true;
     }
     const boxArch = yield* arch(runtime);
     const platform = hostPlatform({

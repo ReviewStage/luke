@@ -36,6 +36,8 @@ export {
   type HostEnrollOutcome,
   HostedDeviceAgentClient,
   type HostedDeviceAgentClientOptions,
+  OWN_ENROLL_OUTCOME,
+  type OwnEnrollOutcome,
 } from "./device-agent-client.js";
 export {
   GITHUB_CONNECTION_CALL_FAILURE,

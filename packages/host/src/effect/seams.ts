@@ -21,6 +21,7 @@ import {
   Layer,
   Logger,
   type Path,
+  type Result,
   type Stream,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
@@ -311,6 +312,56 @@ export class LocalAgentPlatform extends Context.Service<
   LocalAgentPlatform,
   LocalAgentPlatformSeam
 >()("@luke/host/LocalAgentPlatform") {}
+
+/** What may be asked of This Mac's `luke-host` login item. */
+export const HOST_LOGIN_ITEM_ACT = {
+  REGISTER: "register",
+  UNREGISTER: "unregister",
+  STATUS: "status",
+} as const;
+
+export type HostLoginItemAct = (typeof HOST_LOGIN_ITEM_ACT)[keyof typeof HOST_LOGIN_ITEM_ACT];
+
+/** Where This Mac's `luke-host` login item stands (`SMAppService.Status`). */
+export const HOST_LOGIN_ITEM_STATUS = {
+  ENABLED: "enabled",
+  NOT_REGISTERED: "not-registered",
+  /** Registered, and waiting on the member in System Settings › General › Login Items. */
+  REQUIRES_APPROVAL: "requires-approval",
+  /** The app carries no such item. */
+  NOT_FOUND: "not-found",
+} as const;
+
+export type HostLoginItemStatus =
+  (typeof HOST_LOGIN_ITEM_STATUS)[keyof typeof HOST_LOGIN_ITEM_STATUS];
+
+/**
+ * This Mac's `luke-host` as the desktop runs it (`compose-this-mac-host.ts`):
+ * its login item asked an act, and the version of the `luke-host` the app
+ * carries, which its enroll names. Each answers, never fails: what it
+ * answered, or the words it could not with. A development build carries no
+ * login item, so its shell answers the same acts by running the same
+ * `luke-host` as a child of the app. Only the local agents concern asks for
+ * it.
+ */
+export interface ThisMacHostSeam {
+  readonly loginItem: (
+    act: HostLoginItemAct,
+  ) => Effect.Effect<
+    Result.Result<HostLoginItemStatus, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
+  readonly version: Effect.Effect<
+    Result.Result<string, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
+}
+
+export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(
+  "@luke/host/ThisMacHost",
+) {}
 
 /**
  * Where the account's identity and credentials come from, as the shell

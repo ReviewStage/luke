@@ -25,6 +25,7 @@ import {
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { ConfigProvider, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import {
@@ -64,6 +65,9 @@ const LAUNCH: DeviceAgentClaimedLine = {
   secrets: { env: SECRET_ENV, stdin: "{}\n" },
 };
 
+/** Every follower a test started, by the files it was handed, so each mints a lease holder of its own. */
+const holders: Map<string, string>[] = [];
+
 /** The clock nudged until the condition holds, as the follower's fibers run up to their next wait. */
 const until = (holds: () => boolean) =>
   Effect.gen(function* () {
@@ -87,9 +91,14 @@ const followingDevice = (
     readonly formerlyDirect?: boolean;
     /** The service refuses a register naming a setup, as one from before the field does. */
     readonly refusesSetup?: boolean;
+    /** The files of the machine's state, shared with another follower on the same machine where given. */
+    readonly files?: Map<string, string>;
   } = {},
 ) =>
   Effect.gen(function* () {
+    const files = options.files ?? new Map<string, string>();
+    holders.push(files);
+    let minted = 0;
     const spawner = scriptedSpawner((program, args) => {
       if (program === "/bin/bash" && args[0] === "-l")
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
@@ -148,8 +157,27 @@ const followingDevice = (
       FileSystem.layerNoop({
         exists: (path) => Effect.succeed(options.madeBare === true && path === LAYOUT.checkoutPath),
         makeDirectory: () => Effect.void,
-        writeFileString: () => Effect.void,
-        rename: () => Effect.void,
+        readFileString: (path) => {
+          const held = files.get(path);
+          return held === undefined
+            ? Effect.fail(
+                systemError({
+                  _tag: "NotFound",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              )
+            : Effect.succeed(held);
+        },
+        writeFileString: (path, data) => Effect.sync(() => void files.set(path, data)),
+        rename: (from, to) =>
+          Effect.sync(() => {
+            const held = files.get(from);
+            files.delete(from);
+            if (held !== undefined) files.set(to, held);
+          }),
+        remove: (path) => Effect.sync(() => void files.delete(path)),
       }),
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
@@ -171,7 +199,8 @@ const followingDevice = (
     const composer = yield* composeLocalAgents({
       kernel: {
         stateRoot: "/Users/dev/Library/Application Support/Luke",
-        createId: () => "device-1",
+        // Note that each follower mints its own lease holder first, then the account's device id.
+        createId: () => (minted++ === 0 ? `holder-${holders.length}` : "device-1"),
         runMode: { sendsNetwork: true },
       },
       account: { capabilitiesActive: () => true },
@@ -364,6 +393,27 @@ it.effect(
         assert.equal(settled.length, 0);
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => settled.some((each) => each.id === LINE_ID));
+      }),
+    ),
+);
+
+it.effect(
+  "a second follower on the same machine follows nothing while the first holds its lease, and says why",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const files = new Map<string, string>();
+        const first = yield* followingDevice(() => Effect.void, { files });
+        yield* until(() => first.spawned.some((each) => each.program === VM_RUNNER));
+        const second = yield* followingDevice(() => Effect.void, { files });
+        yield* until(() => second.reported.length > 0);
+        yield* TestClock.adjust(Duration.seconds(30));
+
+        assert.deepEqual(second.registered, []);
+        assert.deepEqual(second.spawned, []);
+        assert.deepEqual(second.reported, [
+          "another follower runs this machine's local agents, so this one follows none",
+        ]);
       }),
     ),
 );

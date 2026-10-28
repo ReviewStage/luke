@@ -9,7 +9,7 @@ import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { scriptedOpenSocket } from "@luke/voice/testing";
 import { noNetwork } from "@luke/wire/testing";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { ConfigProvider, Effect, Layer, Result } from "effect";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { HostAssemblyTag, HostTag, hostStandingLayer } from "./effect/host.js";
 import { hostKernelLayer } from "./effect/kernel.js";
@@ -25,6 +25,7 @@ import {
   SignInConsent,
   StateRoot,
   TerminalSocket,
+  ThisMacHost,
   VoiceSocket,
 } from "./effect/seams.js";
 import {
@@ -154,6 +155,10 @@ describe("the host's platform concerns", () => {
               deviceIsolation: DEVICE_ISOLATION.SANDBOX,
               deviceCapabilities: [],
               worktreeScript: () => "exit 1",
+            }),
+            Layer.succeed(ThisMacHost, {
+              loginItem: () => Effect.succeed(Result.fail("no login item in a fixture")),
+              version: Effect.succeed(Result.fail("no luke-host in a fixture")),
             }),
           ),
         ),

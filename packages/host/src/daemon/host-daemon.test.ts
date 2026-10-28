@@ -10,9 +10,10 @@ import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
+import { readHostDevice } from "../host-device-record.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
-import { enrollHostDevice, readHostDevice } from "./host-device.js";
+import { enrollHostDevice } from "./host-device.js";
 import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
 import { hostPlatform } from "./host-platform.js";
 
