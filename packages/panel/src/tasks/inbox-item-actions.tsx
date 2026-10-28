@@ -1,6 +1,5 @@
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { type InboxClose, type InboxCloser, useInboxClose } from "./inbox-close.js";
@@ -60,10 +59,7 @@ export function useInboxItemActions(
   const read =
     onMark === undefined
       ? undefined
-      : {
-          ...markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }),
-          ...(keyed ? { command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ } : {}),
-        };
+      : markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }, keyed);
   const copyLink = useCopyLinkItem()(inboxItemPlace(holder, item));
   const close = useInboxClose(item, onClose, shown);
   const groups = (lead: readonly MenuAction[][] = [], own: readonly MenuAction[][] = []) =>

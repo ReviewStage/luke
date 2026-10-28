@@ -773,13 +773,16 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   assert.equal(labels.includes("Cancel task"), true);
 });
 
-test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permanently delete, which act on it, another task's menu prints none, and Open on GitHub wears the GitHub mark", () => {
+test("the open task's ⋯ prints the chords that act on it, Mark done none, another task's row prints only U and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountToolbar(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⇧⌘C"],
-    ["Mark done", "⇧⌘A"],
+    ["Copy plan", "⌥⌘C"],
+    ["Mark as unread", "U"],
+    ["Version history", "⌥⇧⌘H"],
+    ["Pin", "P"],
+    ["Open on GitHub", "⇧⌘O"],
     ["Permanently delete", "⌘⌫"],
   ]);
   const github = menuItems().find((item) => itemLabel(item) === "Open on GitHub");
@@ -795,8 +798,12 @@ test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permane
   // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
   assert.deepEqual(
     itemChords(),
-    [["Show details", "⌥↓"]],
-    "no chord acts on a task that is not open",
+    [
+      ["Mark as unread", "U"],
+      ["Pin", "P"],
+      ["Show details", "⌥↓"],
+    ],
+    "no chord but the focused row's letters acts on a task that is not open",
   );
 });
 

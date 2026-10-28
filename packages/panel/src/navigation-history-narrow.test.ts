@@ -345,7 +345,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The path ⌥⌘C copies where the window stands. */
+/** The path ⇧⌘C copies where the window stands. */
 function copiedHere(): string {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });

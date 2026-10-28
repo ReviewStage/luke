@@ -219,7 +219,8 @@ function markRows(): string[] {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
   type("mark");
-  return rows().filter((row) => row.startsWith("Mark as"));
+  // Note that the Keyboard shortcuts page's own U row is found by the word too, and is no mark of the plan's.
+  return rows().filter((row) => row.startsWith("Mark as") && !row.endsWith("· Keyboard shortcuts"));
 }
 
 test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
@@ -1685,7 +1686,7 @@ function itemChord(label: string): string | null {
   return item.querySelector(".luke-shortcut")?.textContent ?? null;
 }
 
-test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K naming the task where the ⋯ says the verb alone", () => {
+test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none in either", () => {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
@@ -1699,11 +1700,11 @@ test("a task's command wears the same chord in ⌘K as in the open task's ⋯, �
   );
   openPalette(tasks);
   type("permanently delete");
-  const deleteKeys = rowChord("Permanently delete task");
+  const deleteKeys = rowChord("Permanently delete");
   type("mark done");
   const doneKeys = rowChord("Mark done");
   type("copy plan");
-  const copyKeys = rowChord("Copy plan");
+  const copyKeys = rowChord("Copy plan or transcript");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
@@ -1713,9 +1714,9 @@ test("a task's command wears the same chord in ⌘K as in the open task's ⋯, �
   act(() => more.click());
   assert.equal(deleteKeys, "⌘⌫");
   assert.equal(itemChord("Permanently delete"), deleteKeys);
-  assert.equal(doneKeys, "⇧⌘A");
+  assert.equal(doneKeys, null);
   assert.equal(itemChord("Mark done"), doneKeys);
-  assert.equal(copyKeys, "⇧⌘C");
+  assert.equal(copyKeys, "⌥⌘C");
   assert.equal(itemChord("Copy plan"), copyKeys);
 });
 
@@ -1811,7 +1812,7 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
   }),
 });
 
-test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥⌘C, then to the task, and choosing one copies its link and says Link copied", async () => {
+test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧⌘C, then to the task, and choosing one copies its link and says Link copied", async () => {
   const copied = installClipboard();
   drawToasts();
   openPalette(ON_AGENT_TAB);
@@ -1826,14 +1827,14 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
     "Copy link to agent · Expire old invites",
     `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
-  assert.equal(chord, "⌥⌘C");
+  assert.equal(chord, "⇧⌘C");
   assert.deepEqual(copied, [
     `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
   ]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
-test("⌥⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {
+test("⇧⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {
   const copied = installClipboard();
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
@@ -1875,7 +1876,7 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   ]);
 });
 
-test("on an agent's page with a page it showed open in the panel, ⌥⌘C copies the page's link under the agent's while the panel fills the window, and the agent's own otherwise", async () => {
+test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies the page's link under the agent's while the panel fills the window, and the agent's own otherwise", async () => {
   const copied = installClipboard();
   const pageId = "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f";
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
@@ -1905,7 +1906,7 @@ test("on an agent's page with a page it showed open in the panel, ⌥⌘C copies
   ]);
 });
 
-test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⌥⌘C copies their page's link in the workspace it opened in", async () => {
+test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⇧⌘C copies their page's link in the workspace it opened in", async () => {
   const copied = installClipboard();
   const [acme] = ON_AGENT_TAB.workspaces;
   openPalette(
@@ -1929,7 +1930,7 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
 });
 
-test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
+test("on the home page nothing has a link, so ⇧⌘C is not offered and ⌘K lists no Copy link", () => {
   openPalette(tasksControl());
   type("copy link");
 
@@ -1940,7 +1941,7 @@ test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K li
   assert.equal(appCommandOffered(APP_COMMAND.COPY_LINK), false);
 });
 
-test("with the side panel filling the window over an agent's tab, ⌥⌘C copies the panel's tab, which is what shows", async () => {
+test("with the side panel filling the window over an agent's tab, ⇧⌘C copies the panel's tab, which is what shows", async () => {
   const copied = installClipboard();
   openPalette(
     tasksControl({
@@ -1964,7 +1965,7 @@ test("with the side panel filling the window over an agent's tab, ⌥⌘C copies
   ]);
 });
 
-test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⌥⌘C, as ⌥⌘C there copies", () => {
+test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⇧⌘C, as ⇧⌘C there copies", () => {
   const panel = document.body.appendChild(document.createElement("div"));
   panel.className = "side-panel";
   const field = panel.appendChild(document.createElement("button"));
@@ -1986,10 +1987,10 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
       `Copy link to task · ${DOCUMENT_TASK.name}`,
     ],
   );
-  assert.equal(chord, "⌥⌘C");
+  assert.equal(chord, "⇧⌘C");
 });
 
-test("on an agent's page in another workspace than the one listed, ⌥⌘C names the agent's workspace, which the page read", async () => {
+test("on an agent's page in another workspace than the one listed, ⇧⌘C names the agent's workspace, which the page read", async () => {
   const copied = installClipboard();
   openPalette(
     tasksControl({
@@ -2336,7 +2337,9 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
       }),
     );
     type("mark");
-    return rows().filter((row) => row.startsWith("Mark as"));
+    return rows().filter(
+      (row) => row.startsWith("Mark as") && !row.endsWith("· Keyboard shortcuts"),
+    );
   };
 
   assert.deepEqual(draw(undefined), []);
@@ -2399,7 +2402,7 @@ function pinRows(): string[] {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
   type("pin");
-  return rows().filter((row) => /^(Pin|Unpin) /u.test(row));
+  return rows().filter((row) => /^(Pin|Unpin) task$/u.test(row));
 }
 
 test("with a task open, ⌘K offers Pin task, which pins it under Pinned and turns to Unpin task", () => {

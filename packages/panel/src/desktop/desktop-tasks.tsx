@@ -348,11 +348,13 @@ function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Ele
 }
 
 /**
- * Copy plan's chord, the toolbar's while a task is drawn: the press itself
+ * ⌥⌘C on the plan, the toolbar's while a task is drawn: the press itself
  * stands in the ⋯ menu, and what came of it is said in the window's toast.
+ * A focused agent's pane or tab offers its transcript's copy over it
+ * (`main-tabs.tsx`, `side-panel.tsx`).
  */
 function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
-  useAppCommand(APP_COMMAND.COPY_PLAN, copy.onPress);
+  useAppCommand(APP_COMMAND.COPY_CONTENT, copy.onPress);
   return null;
 }
 

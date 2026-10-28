@@ -8,6 +8,14 @@
  * offers is left to whatever else wants it. A menu-bar item reaches the same
  * offer, which is why the menu needs no state of its own.
  *
+ * Where two things offer one command, the open task's Permanently delete
+ * and the agent's in its column, the latest offer answers unless another
+ * says it answers over the rest at the press (`over`): the focused sidebar
+ * row's U and P over the open thing's, or the focused column's agent over
+ * the plan (`FOCUSED_OFFER`). So which thing a chord acts
+ * on is read where the keyboard stands as it is pressed, never as offers
+ * happened to mount.
+ *
  * An overlay that holds the keyboard, a dialog's card or the command palette,
  * holds off the menu bar's Back and Forward while it stands, as it holds off
  * their chords, so a click on the menu or a mouse's back button (which a
@@ -30,7 +38,11 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { capabilityNow } from "./use-app-state.js";
 
-type CommandRun = { current: () => void };
+/** One offer: the latest `run` a press calls, and the latest `over`, which says at the press whether it answers over the offers that say nothing. */
+type CommandRun = {
+  current: () => void;
+  over: { current: (() => boolean) | undefined };
+};
 
 /** The offers standing for each command, the latest last: a remount's offer replaces the one it follows. */
 const offers = new Map<AppCommand, CommandRun[]>();
@@ -70,12 +82,25 @@ function typingInto(target: EventTarget | null): boolean {
 }
 
 /**
+ * The offer a press of `command` runs now: the latest that answers over the
+ * rest at this moment, else the latest that claims nothing, else the latest.
+ */
+function answeringOffer(command: AppCommand): CommandRun | undefined {
+  const held = offers.get(command) ?? [];
+  return (
+    held.findLast((offer) => offer.over.current?.() === true) ??
+    held.findLast((offer) => offer.over.current === undefined) ??
+    held.at(-1)
+  );
+}
+
+/**
  * Runs a command's standing offer, answering whether there was one: how the
  * keymap and the menu bar run a command, and how the window's layered Escape
  * runs one of the commands it leaves the keymap.
  */
 export function runAppCommand(command: AppCommand): boolean {
-  const offer = offers.get(command)?.at(-1);
+  const offer = answeringOffer(command);
   if (offer === undefined) return false;
   offer.current();
   return true;
@@ -86,19 +111,31 @@ export function appCommandOffered(command: AppCommand): boolean {
   return (offers.get(command)?.length ?? 0) > 0;
 }
 
+/** The `over` of an offer made only while its thing is focused, which answers over the open thing's for as long as it stands. */
+export const FOCUSED_OFFER = (): boolean => true;
+
 /**
  * Offers a command while `run` is given. The latest `run` is the one a press
  * calls, so a caller hands a fresh closure each render without re-offering.
+ * `over`, read at the press, says whether this offer answers over those that
+ * say nothing, as the focused thing's does over the open thing's; one whose
+ * `over` says no gives way to them.
  */
-export function useAppCommand(command: AppCommand, run: (() => void) | undefined): void {
+export function useAppCommand(
+  command: AppCommand,
+  run: (() => void) | undefined,
+  over?: () => boolean,
+): void {
   const latest = useRef(run);
+  const latestOver = useRef(over);
   useLayoutEffect(() => {
     latest.current = run;
+    latestOver.current = over;
   });
   const offered = run !== undefined;
   useEffect(() => {
     if (!offered) return;
-    const offer: CommandRun = { current: () => latest.current?.() };
+    const offer: CommandRun = { current: () => latest.current?.(), over: latestOver };
     offers.set(command, [...(offers.get(command) ?? []), offer]);
     return () => {
       offers.set(

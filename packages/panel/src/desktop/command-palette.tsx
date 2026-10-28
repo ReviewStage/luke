@@ -437,12 +437,13 @@ function escapeOnly(command: KeyedCommand): boolean {
   return APP_SHORTCUTS[command].chord.key === SHORTCUT_KEY.ESCAPE;
 }
 
-/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
+/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only, then the menu bar's own chordless commands, then its own, the sidebar's view of its tasks. */
 const LISTED_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands).filter(
     (command) => !escapeOnly(command),
   ),
   APP_COMMAND.NEW_TERMINAL,
+  APP_COMMAND.MARK_TASK_DONE,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
   ...PALETTE_COMMANDS,
@@ -1180,26 +1181,47 @@ const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
  * something open takes it.
  */
 const OPEN_THING_COMMANDS: readonly AppCommand[] = [
-  APP_COMMAND.COPY_PLAN,
+  APP_COMMAND.COPY_CONTENT,
+  APP_COMMAND.COPY_FULL_TRANSCRIPT,
   APP_COMMAND.COMMENT_ON_SELECTION,
   APP_COMMAND.REPLY_TO_SELECTION,
   APP_COMMAND.MENTION_LINES,
   APP_COMMAND.INSERT_PICTURE,
-  APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+  APP_COMMAND.TOGGLE_READ,
   APP_COMMAND.MARK_TASK_DONE,
 ];
+
+/**
+ * The commands a row of the open thing's own offers with its chord
+ * (`readMarkRows`, `taskPinRows`, `taskCommandRows`), so no run of commands
+ * lists them again: U, but the Inbox's, which only the run lists, P,
+ * Version history, and Open on GitHub.
+ */
+const OWN_ROW_COMMANDS: ReadonlySet<AppCommand> = new Set([
+  APP_COMMAND.PIN,
+  APP_COMMAND.VERSION_HISTORY,
+  APP_COMMAND.OPEN_ON_GITHUB,
+]);
+
+/** The open thing's commands as its run lists them: U only while the Inbox stands, whose chosen item no row of its own marks. */
+function openThingCommands(tasks: TasksControl): readonly AppCommand[] {
+  return OPEN_THING_COMMANDS.filter(
+    (command) => command !== APP_COMMAND.TOGGLE_READ || tasks.inboxView.open,
+  );
+}
 
 /** The open thing's Show terminal, listed beside its other Show rows. */
 const OPEN_THING_SHOW_COMMANDS: readonly AppCommand[] = [APP_COMMAND.SHOW_TERMINAL];
 
 /** The open thing's command that cannot be undone, which ends its commands as it ends the task's ⋯ menu. */
-const OPEN_THING_LAST_COMMANDS: readonly AppCommand[] = [APP_COMMAND.DELETE_TASK];
+const OPEN_THING_LAST_COMMANDS: readonly AppCommand[] = [APP_COMMAND.DELETE];
 
 /** Every command the open thing's runs name, which the window's run leaves out. */
 const OPEN_THING_ALL: ReadonlySet<AppCommand> = new Set([
   ...OPEN_THING_COMMANDS,
   ...OPEN_THING_SHOW_COMMANDS,
   ...OPEN_THING_LAST_COMMANDS,
+  ...OWN_ROW_COMMANDS,
 ]);
 
 /** The places ⌘K goes to, in the Keyboard shortcuts page's order, which it lists after the open thing's commands. */
@@ -1281,7 +1303,7 @@ function opensTaskItems(tasks: TasksControl): boolean {
 /**
  * Copy link to each thing the window can copy a link to now, the most
  * specific first (`links-at-hand.ts`), named by what it is and, where the
- * window holds it, its name; the first wears ⌥⌘C, which copies it.
+ * window holds it, its name; the first wears ⇧⌘C, which copies it.
  */
 function copyLinkRows(
   links: readonly LinkAtHand[],
@@ -1337,8 +1359,8 @@ function panelTabRows(
  * so, as the plan's menus offer it; none while no plan is looked at. Note
  * that a plan Settings or the Inbox covers is offered nothing, because the
  * row does not name the plan, and going back to it opens it, which takes
- * the mark back before it is ever seen. No chord reaches it, since Mail's
- * ⇧⌘U is Automations' here.
+ * the mark back before it is ever seen. It wears U, which marks the plan
+ * open while no sidebar row has the keyboard, as ⌘K's own field has it.
  */
 function readMarkRows(
   tasks: TasksControl,
@@ -1348,14 +1370,15 @@ function readMarkRows(
   if (tasks.region.kind !== DOCUMENT_REGION.READY) return [];
   const { task } = tasks.region;
   if (task.id !== reads.watched) return [];
-  const item = markReadItem({
-    unread: reads.markedUnread(task.id),
-    onMark: (unread) => reads.mark(task, unread),
-  });
+  const item = markReadItem(
+    { unread: reads.markedUnread(task.id), onMark: (unread) => reads.mark(task, unread) },
+    true,
+  );
   return [
     {
       icon: item.icon,
       label: item.label,
+      command: item.command,
       terms: [item.label],
       onChoose: () => choose(item.onSelect),
     },
@@ -1377,14 +1400,15 @@ function agentReadMarkRows(
   const { standing, archived } = tasks.listedAgents;
   const agent = [...standing, ...archived].find((each) => each.id === agentId);
   if (agent === undefined) return [];
-  const item = markReadItem({
-    unread: reads.markedUnread(agent.id),
-    onMark: (unread) => reads.mark(agent, unread),
-  });
+  const item = markReadItem(
+    { unread: reads.markedUnread(agent.id), onMark: (unread) => reads.mark(agent, unread) },
+    true,
+  );
   return [
     {
       icon: item.icon,
       label: item.label,
+      command: item.command,
       terms: [item.label],
       onChoose: () => choose(item.onSelect),
     },
@@ -1411,6 +1435,7 @@ function taskPinRows(
     {
       icon: item.icon,
       label,
+      command: item.command,
       terms: [label],
       onChoose: () => choose(() => tasks.onMarkTask(task.id, mark)),
     },
@@ -1437,6 +1462,7 @@ function agentPinRows(
     {
       icon: item.icon,
       label,
+      command: item.command,
       terms: [label],
       onChoose: () => choose(() => tasks.onPinAgent(agent.id, !pinned)),
     },
@@ -1448,9 +1474,10 @@ function agentPinRows(
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
  * the door its ⋯ asks, Version history, Cancel task on a task not already
  * canceled, Change repository, and Open on GitHub where it has a
- * repository; each runs what its menu item runs. None while no plan is
- * looked at. Note that Copy link, Mark as read, Pin, Mark done, and
- * Permanently delete are rows of their own.
+ * repository; each runs what its menu item runs, Version history and Open
+ * on GitHub wearing their chords. None while no plan is looked at. Note
+ * that Copy link, Mark as read, Pin, Mark done, and Permanently delete are
+ * rows of their own.
  */
 function taskCommandRows(
   tasks: TasksControl,
@@ -1479,8 +1506,48 @@ function taskCommandRows(
   ];
   return commands.map(({ item, run }) => {
     const label = commandWords(item, COMMAND_PLACE.PALETTE);
-    return { icon: item.icon, label, terms: [label], onChoose: () => choose(run) };
+    return {
+      icon: item.icon,
+      label,
+      command: item.command,
+      terms: [label],
+      onChoose: () => choose(run),
+    };
   });
+}
+
+/**
+ * U and P on what is open, while no sidebar row has the keyboard, whose
+ * own answer over these (`useFocusedRowKeys`): the plan on screen, marked
+ * read or unread and pinned as its menus do, or the agent whose page
+ * stands, the pin only while it is not archived and is no Luke, whose row
+ * offers none. Note that the Inbox's U
+ * is its chosen item's (`use-inbox-read-marks.ts`), so nothing here stands
+ * while the Inbox does.
+ */
+function useOpenThingKeys(tasks: TasksControl, reads: ReadMarks, agentReads: AgentReadMarks): void {
+  const inbox = tasks.inboxView.open;
+  const task = inbox || reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
+  const agent = inbox ? undefined : openAgentOf(tasks);
+  const standing =
+    agent === undefined
+      ? undefined
+      : withoutLuke(tasks.listedAgents.standing).find((each) => each.id === agent.id);
+  const toggleRead =
+    task !== undefined
+      ? () => reads.mark(task, !reads.markedUnread(task.id))
+      : agent !== undefined
+        ? () => agentReads.mark(agent, !agentReads.markedUnread(agent.id))
+        : undefined;
+  const togglePin =
+    task !== undefined
+      ? () =>
+          tasks.onMarkTask(task.id, task.pinnedAt === undefined ? TASK_MARK.PIN : TASK_MARK.UNPIN)
+      : standing !== undefined
+        ? () => tasks.onPinAgent(standing.id, standing.pinnedAt === undefined)
+        : undefined;
+  useAppCommand(APP_COMMAND.TOGGLE_READ, toggleRead);
+  useAppCommand(APP_COMMAND.PIN, togglePin);
 }
 
 /** The agent on no task whose page stands, archived or not; none while no agent's page stands, or while Luke's does, who is not archived. */
@@ -2068,6 +2135,7 @@ export function CommandPalette({
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
   const agentReads = useAgentReadMarks();
+  useOpenThingKeys(tasks, reads, agentReads);
   // The open agent's Archive, asked of `OpenAgentArchive` by the agent it was chosen for.
   const openAgent = openAgentOf(listedTasks);
   const [archiveAsks, setArchiveAsks] = useState<{ agentId: string; asked: number }>(
@@ -2194,7 +2262,7 @@ export function CommandPalette({
     [PALETTE_FILTER.COMMANDS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
-        ...actionRows(OPEN_THING_COMMANDS, runCommand, experiments),
+        ...actionRows(openThingCommands(tasks), runCommand, experiments),
         ...readMarkRows(tasks, reads, choose),
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),

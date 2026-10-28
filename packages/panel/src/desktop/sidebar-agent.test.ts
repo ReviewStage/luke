@@ -164,11 +164,16 @@ function rightClick(row: HTMLElement): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 }
 
+/** What a menu item says, its chord left out. */
+function wordsOf(item: Element | undefined): string | null | undefined {
+  return item?.querySelector(".luke-menu-item-label")?.textContent ?? item?.textContent;
+}
+
 /** The item under `label` among those offered, or a failure saying it is not offered. */
 function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonElement {
   return (
-    items.find((each) => each.textContent === label) ??
-    assert.fail(`offers ${label}: ${JSON.stringify(items.map((each) => each.textContent))}`)
+    items.find((each) => wordsOf(each) === label) ??
+    assert.fail(`offers ${label}: ${JSON.stringify(items.map((each) => wordsOf(each)))}`)
   );
 }
 
@@ -202,7 +207,7 @@ test("a teammate's agent the list read at rest but whose page reads it working i
 
   assert.deepEqual(archives, []);
   const stop = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => each.textContent === "Stop and archive",
+    (each) => wordsOf(each) === "Stop and archive",
   );
   assert.ok(stop, "the archive asks first");
   await act(async () => stop.click());
@@ -214,7 +219,7 @@ test("a teammate's agent the list read at rest but whose page reads it working i
 test("an archived agent's row offers Unarchive in Archive's place and no pin, and Unarchive brings it back", async () => {
   const row = mount({ ...RUN, archivedAt: 3 });
   const items = rightClick(row);
-  const labels = items.map((each) => each.textContent);
+  const labels = items.map((each) => wordsOf(each));
   assert.ok(!labels.includes("Archive"));
   assert.ok(!labels.includes("Pin"));
   await act(async () => item(items, "Unarchive").click());
@@ -378,7 +383,7 @@ function heard(row: HTMLElement): string {
 
 test("an agent's row offers Mark as unread after Copy link and before Rename, and the mark by hand reads it unread, as a task's row does", async () => {
   const row = mount(RUN);
-  const labels = rightClick(row).map((each) => each.textContent);
+  const labels = rightClick(row).map((each) => wordsOf(each));
   assert.ok(labels.indexOf("Mark as unread") > labels.indexOf("Copy link"));
   assert.ok(labels.indexOf("Mark as unread") < labels.indexOf("Rename"));
   assert.ok(!heard(row).includes("(unread)"));
@@ -390,7 +395,7 @@ test("an agent's row offers Mark as unread after Copy link and before Rename, an
   assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
     [AGENT_ID]: { unread: true },
   });
-  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as read"));
+  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as read"));
 });
 
 test("Mark as read on an agent marked unread by hand reads it again, in the store a task's marks are kept in", async () => {
@@ -404,7 +409,7 @@ test("Mark as read on an agent marked unread by hand reads it again, in the stor
   assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
     [AGENT_ID]: RUN.activityAt,
   });
-  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
+  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
 });
 
 test("an agent whose turn ended unseen offers Mark as read, which clears main's unseen dot and moves the mark to its row's time", async () => {
@@ -422,7 +427,7 @@ test("an agent whose turn ended unseen offers Mark as read, which clears main's 
 
 test("an archived agent's row offers the read mark too, as a task's does", () => {
   const row = mount({ ...RUN, archivedAt: 3 });
-  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
+  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
 });
 
 /** The open dialog's button with these words, or a failure saying it offers none. */
@@ -431,7 +436,7 @@ function dialogAnswer(words: string): HTMLButtonElement {
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("a dialog asks");
   return (
     [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-      (each) => each.textContent === words,
+      (each) => wordsOf(each) === words,
     ) ?? assert.fail(`the dialog offers ${words}`)
   );
 }
@@ -439,7 +444,7 @@ function dialogAnswer(words: string): HTMLButtonElement {
 test("Permanently delete stands last and alone in the row's right-click, asks first naming the agent, and once answered deletes it and leaves its page", async () => {
   const row = mount(RUN);
   const items = rightClick(row);
-  assert.equal(items.at(-1)?.textContent, "Permanently delete");
+  assert.equal(wordsOf(items.at(-1)), "Permanently delete");
   act(() => item(items, "Permanently delete").click());
   await settle();
 
@@ -523,7 +528,7 @@ test("every action an agent's tab and page offer stands in its row's right-click
   for (const agent of [RUN, { ...RUN, archivedAt: 3 }]) {
     const shared = sharedOnRow(agent);
     const row = mount(agent);
-    const labels = rightClick(row).map((each) => each.textContent);
+    const labels = rightClick(row).map((each) => wordsOf(each));
     act(() => root?.unmount());
     root = undefined;
     document.body.innerHTML = "";
@@ -544,7 +549,7 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
   assert.ok(more, "the row draws a ⋯");
   assert.equal(more.tabIndex, 0);
   const labels = () =>
-    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => wordsOf(each));
   act(() => more.click());
   const fromMore = labels();
   assert.ok(fromMore.includes("Archive"));
@@ -554,7 +559,7 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
     );
   });
   assert.deepEqual(
-    rightClick(row).map((each) => each.textContent),
+    rightClick(row).map((each) => wordsOf(each)),
     fromMore,
   );
 });

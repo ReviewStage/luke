@@ -33,7 +33,7 @@ import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
-import { type RowMark, RowMarks } from "./task-actions.js";
+import { type RowMark, RowMarks, useFocusedRowKeys } from "./task-actions.js";
 import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
 
 /**
@@ -85,8 +85,8 @@ function starterOf(
 /** Pin or Unpin, whichever the agent is not yet, as a task's row offers them. */
 function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAction {
   return agent.pinnedAt === undefined
-    ? commandAction(PANEL_COMMAND.PIN_AGENT, () => onPin(true), false)
-    : commandAction(PANEL_COMMAND.UNPIN_AGENT, () => onPin(false), false);
+    ? commandAction(PANEL_COMMAND.PIN_AGENT, () => onPin(true), true)
+    : commandAction(PANEL_COMMAND.UNPIN_AGENT, () => onPin(false), true);
 }
 
 /**
@@ -175,6 +175,11 @@ export function SidebarAgent({
   const { rename } = actions;
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
+  useFocusedRowKeys(
+    item,
+    () => reads.mark(agent, !isUnread),
+    onPin === undefined ? undefined : () => onPin(agent.pinnedAt === undefined),
+  );
   const renameItem: MenuAction | undefined =
     onRename === undefined ? undefined : commandAction(PANEL_COMMAND.RENAME, onRename, false);
   const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
@@ -182,7 +187,8 @@ export function SidebarAgent({
   const groups: MenuEntry[][] = [
     [
       ...(copyLink === undefined ? [] : [copyLink]),
-      markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }),
+      // Note that U and P print on the row's menu, since they act on the row while it is focused.
+      markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }, true),
       ...(renameItem === undefined ? [] : [renameItem]),
     ],
     [

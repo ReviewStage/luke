@@ -40,6 +40,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { useChordLinks } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import { useEditedLinksHost } from "../link-menu.js";
@@ -830,8 +831,9 @@ function TitleMenu({
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const items = [
-    copyTaskLinkItem(copy, linked.taskId, linked.place),
+    copyTaskLinkItem(copy, linked.taskId, linked.place, chord),
     ...(readMark === undefined ? [] : [markReadItem(readMark)]),
     ...(onRename === undefined ? [] : [renameTaskItem(onRename)]),
     ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),

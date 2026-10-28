@@ -402,7 +402,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
  * its menu, which names the key that does the same to the
- * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
+ * chosen item (`APP_COMMAND.TOGGLE_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
  * do not head is the person page's, or the Inbox's own grouped by anything

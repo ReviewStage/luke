@@ -54,6 +54,7 @@ import {
 } from "../tasks/task-mentions.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
 import {
@@ -188,6 +189,21 @@ function AgentPageBar({
 }): React.JSX.Element {
   const label = agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
+  // The page's agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫, as its ⋯'s items run them.
+  const { onCopy, deletion } = actions.doors;
+  const copies = shown ? onCopy : undefined;
+  useAppCommand(
+    APP_COMMAND.COPY_CONTENT,
+    copies === undefined ? undefined : () => copies(TRANSCRIPT_COPY.CONCISE),
+  );
+  useAppCommand(
+    APP_COMMAND.COPY_FULL_TRANSCRIPT,
+    copies === undefined ? undefined : () => copies(TRANSCRIPT_COPY.FULL),
+  );
+  useAppCommand(
+    APP_COMMAND.DELETE,
+    shown && deletion !== undefined && deletion.disabled !== true ? deletion.onSelect : undefined,
+  );
   const menu = useMenu(shown);
   const groups = contentActionGroups({
     chosen: true,

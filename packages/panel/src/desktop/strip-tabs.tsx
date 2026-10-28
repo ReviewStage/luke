@@ -1,5 +1,5 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   IconButton,
   type MenuRow,
@@ -127,6 +127,17 @@ export type HandTabActions = (actions: TabActionGroups | undefined) => void;
  */
 export const HandTabActionsContext = createContext<HandTabActions | undefined>(undefined);
 
+/** The press of the action a tab's body hands up that runs `command`, as a Pull request tab's Open on GitHub runs ⇧⌘O; none where it hands none. */
+export function handedCommand(
+  groups: TabActionGroups,
+  command: KeyedCommand,
+): (() => void) | undefined {
+  for (const action of groups.flat()) {
+    if (!("onAsk" in action) && action.command === command) return action.onSelect;
+  }
+  return undefined;
+}
+
 /** The menu items a ⋯ drops for `groups`, an item opening a menu of the body's own opening it under `opener`. */
 export function tabActionItems(
   groups: readonly (readonly TabAction[])[],
@@ -170,20 +181,25 @@ function contentActions(doors: TabDoors): ContentActions {
       ...(onCopy === undefined
         ? []
         : [
+            // ⌥⌘C and ⇧⌥⌘C copy the chosen tab's transcript, so only the chosen tab's copies say them.
             commandAction(
               PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
               () => onCopy(TRANSCRIPT_COPY.CONCISE),
-              false,
+              doors.chosen,
             ),
             commandAction(
               PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
               () => onCopy(TRANSCRIPT_COPY.FULL),
-              false,
+              doors.chosen,
             ),
           ]),
     ],
     archive: archive === undefined ? [] : [archive],
-    deletion: deletion === undefined ? [] : [deletion],
+    // ⌘⌫ deletes the chosen agent, so only the chosen tab's Permanently delete says it.
+    deletion:
+      deletion === undefined
+        ? []
+        : [doors.chosen ? { ...deletion, command: APP_COMMAND.DELETE } : deletion],
   };
 }
 
@@ -220,7 +236,12 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
     [
       ...close,
       {
-        ...commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, () => doors.onCloseOthers?.(), false),
+        // ⌥⌘W closes the others of the tab chosen, so only its Close others says it.
+        ...commandAction(
+          PANEL_COMMAND.CLOSE_OTHER_TABS,
+          () => doors.onCloseOthers?.(),
+          doors.chosen,
+        ),
         disabled: doors.onCloseOthers === undefined,
       },
     ],

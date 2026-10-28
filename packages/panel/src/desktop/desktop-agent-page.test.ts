@@ -1569,10 +1569,10 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show ter
     "Rename",
     "Show terminal⌘J",
     "Copy link",
-    "Copy concise transcript",
-    "Copy full transcript",
+    "Copy concise transcript⌥⌘C",
+    "Copy full transcript⌥⇧⌘C",
     "Archive",
-    "Permanently delete",
+    "Permanently delete⌘⌫",
   ]);
 });
 
@@ -1593,7 +1593,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Show terminal⌘J", "Copy link", "Copy concise transcript⌥⌘C", "Copy full transcript⌥⇧⌘C"],
   );
 });
 
@@ -2253,7 +2253,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   const page = mount(tasksControl({ agentView }));
   await settle();
 
-  const remove = pageMenuItem(page, "Permanently delete");
+  const remove = pageMenuItem(page, "Permanently delete⌘⌫");
   act(() => remove.click());
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
@@ -2286,7 +2286,7 @@ test("a delete the service refused for an agent still starting says why in the d
   const page = mount(tasksControl({ agentView }));
   await settle();
 
-  const remove = pageMenuItem(page, "Permanently delete");
+  const remove = pageMenuItem(page, "Permanently delete⌘⌫");
   act(() => remove.click());
   await act(async () => dialogAnswer("Permanently delete").click());
   await settle();
