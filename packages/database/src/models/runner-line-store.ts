@@ -3,11 +3,12 @@
  *
  * Every function is an effect over the ambient `SqlClient`, keyed by the
  * account, so no account queues for, reads, or acknowledges another's
- * agent. A line is queued only for an agent of the account, under the
- * agent's runner lease, as every write to a runner is
- * (`./coding-agent-runner-lease.ts`): the sequence is shared by every agent
- * and holds no lock, so the lease is what keeps one agent's lines committed
- * in their order, and a runner that read up to one never passes over a line
+ * agent. A line is queued only for an agent of the account, in a
+ * transaction that holds the agent's own advisory lock from before its
+ * place is drawn until it commits: the sequence is shared by every agent and
+ * holds no lock, so the lock is what keeps one agent's lines committed in
+ * their order, whoever writes them and whether or not they hold the agent's
+ * runner lease, and a runner that read up to one never passes over a line
  * below it (`../schemas/runner-line.ts`).
  *
  * A launch reads its own lines past its cursor, and beside them the
@@ -24,7 +25,7 @@
 
 import { and, asc, eq, gt, gte, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { runnerLine } from "../schemas/runner-line.js";
@@ -37,6 +38,14 @@ type RunnerLineEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
  * nothing a launch could still be handed goes.
  */
 const RUNNER_LINE_EXPIRY = Duration.days(1);
+
+/**
+ * The launch a message queued before any launch reads it is written for:
+ * one below every launch's first event number, or that number itself for an
+ * agent's first launch, so whichever launch runs next is handed it while no
+ * launch took it, and takes it over as it queues it again (`queueRunnerLine`).
+ */
+export const ANY_LAUNCH = 0;
 
 /** A message line's id as the column holds it: a UUID. */
 const LINE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -74,12 +83,16 @@ const insertLine = SqlSchema.findAll({
             .from(codingAgent)
             .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
         )
-        // Note that a send repeated under its key rewrites nothing the capture watches, so it
-        // notifies nothing, and is answered the line it queued first.
+        // Note that a send repeated under its key is answered the line it queued first, in its
+        // place. A message queued for whichever launch runs next (launch 0) is taken over by the
+        // launch that queues it again, as a Start's launch does its first message; any other line
+        // keeps its launch, so a repeat rewrites nothing the capture watches and notifies nothing.
         .onConflictDoUpdate({
           target: [runnerLine.agentId, runnerLine.lineId],
           targetWhere: isNotNull(runnerLine.lineId),
-          set: { lineId: sql`excluded.line_id` },
+          set: {
+            launch: sql`case when ${runnerLine.launch} = ${ANY_LAUNCH} then excluded.launch else ${runnerLine.launch} end`,
+          },
         })
         .returning({ seq: runnerLine.seq }),
     ),
@@ -220,8 +233,8 @@ const writeAccepted = SqlSchema.void({
 
 /**
  * Queues one line for the account's agent's runner, written for the launch
- * named by its first event number, its caller holding the agent's runner
- * lease, and drops the agent's lines past their expiry; answers the line's
+ * named by its first event number, under the agent's advisory lock, and
+ * drops the agent's lines past their expiry; answers the line's
  * place, the place it was queued at first for a message line queued again
  * under its id, or none where the account holds no such agent.
  */
@@ -235,20 +248,26 @@ export function queueRunnerLine(
     readonly lineId?: string;
   },
 ): RunnerLineEffect<Option.Option<number>> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    const before = new Date(now.getTime() - Duration.toMillis(RUNNER_LINE_EXPIRY));
-    yield* deleteExpired({ userId, agentId: line.agentId, before });
-    const rows = yield* insertLine({
-      userId,
-      agentId: line.agentId,
-      launch: line.launch,
-      text: line.text,
-      lineId: line.lineId ?? null,
-      now,
-    });
-    return Option.map(Option.fromNullishOr(rows[0]), (row) => row.seq);
-  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        // Note that the lock is taken before the insert draws its place, so the agent's next line draws a later one.
+        yield* client`select pg_advisory_xact_lock(hashtextextended(${line.agentId}, 0))`;
+        const now = yield* DateTime.nowAsDate;
+        const before = new Date(now.getTime() - Duration.toMillis(RUNNER_LINE_EXPIRY));
+        yield* deleteExpired({ userId, agentId: line.agentId, before });
+        const rows = yield* insertLine({
+          userId,
+          agentId: line.agentId,
+          launch: line.launch,
+          text: line.text,
+          lineId: line.lineId ?? null,
+          now,
+        });
+        return Option.map(Option.fromNullishOr(rows[0]), (row) => row.seq);
+      }),
+    ),
+  );
 }
 
 /**

@@ -100,6 +100,7 @@ import {
   readNativeRewind,
 } from "@luke/database/models/conversation-rewind";
 import {
+  ANY_LAUNCH,
   clearRunnerLines,
   queueRunnerLine,
   runnerLinesWaiting,
@@ -160,7 +161,7 @@ import { CODER } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
 import type { RunnerBundle } from "./runner-bundle.js";
-import { holdingRunner } from "./runner-lease.js";
+import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -1282,7 +1283,9 @@ export const runnerSessions = <
       // refused at once, as before; the sandbox, the checkout, and the launch run past the answer of
       // the request that asked (`after-response.ts`), under the runner lease, as eve's open hands its
       // message over and returns. The caller's after-response door is kept beside the sessions' own
-      // services for that. A message sent meanwhile waits on the lease, then finds the runner.
+      // services for that. On a machine whose runner reads its lines, the first message is queued
+      // before the answer, so no message sent after it can be read ahead of it; the launch's own
+      // queue of it finds it queued under its id, and a message sent meanwhile is queued behind it.
       open: (message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
@@ -1291,19 +1294,25 @@ export const runnerSessions = <
             const credential = yield* harness.launch(agent);
             const layout = yield* machine.layout(agent);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
+            const first = messageLine(message, layout);
+            if (layout.linesRead) {
+              const opened = yield* openedLine(agent, sessionId, first, true);
+              yield* queued(agent, ANY_LAUNCH, [opened.line]);
+            }
+            // Note that a launch that failed takes its first message back, as its turn reads failed.
+            const failedLaunch = (failure: { readonly _tag: string }) =>
+              Effect.andThen(
+                layout.linesRead
+                  ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
+                  : Effect.void,
+                launchFailed(agent)(failure),
+              );
             yield* afterResponse(
               `A ${harness.name} launch`,
               holdingRunner(
                 agent.id,
-                openedPlace(
-                  agent,
-                  sessionId,
-                  layout,
-                  messageLine(message, layout),
-                  credential,
-                  true,
-                ),
-              ).pipe(Effect.catch(launchFailed(agent))),
+                openedPlace(agent, sessionId, layout, first, credential, true),
+              ).pipe(Effect.catch(failedLaunch)),
             );
             return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
           }).pipe(
@@ -1321,6 +1330,10 @@ export const runnerSessions = <
       // a sandbox a message sent meanwhile relaunched is written to rather than opened twice, and
       // let go again for another wait where the relaunch finds the image's snapshot gone. A
       // caller with no after-response door is answered that the image is being prepared, as before.
+      // A message to a runner that reads its lines never waits behind another call's lease, as a
+      // Start's launch holds it while its sandbox comes up: it is queued at once, read by the runner
+      // that call leaves running, and handed on past the answer where none does (`deliverWaiting`).
+      // Note that one naming files waits as before, since they are written into a running place.
       send: (sessionId, message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
@@ -1328,9 +1341,14 @@ export const runnerSessions = <
             const agent = yield* agentOf(message.conversationId);
             const layout = yield* machine.layout(agent);
             const sent = messageLine(message, layout);
-            return yield* holdingRunner(
-              agent.id,
-              sendHolding(sessionId, message, layout, sent),
+            const queues = layout.linesRead && sent.files.length === 0 && Option.isSome(after);
+            const handed = yield* (
+              queues
+                ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
+                : Effect.map(
+                    holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
+                    Option.some,
+                  )
             ).pipe(
               Effect.catchIf(
                 (failure) => failure instanceof ImagePreparing && Option.isSome(after),
@@ -1350,14 +1368,27 @@ export const runnerSessions = <
                         Effect.catch(launchFailed(agent)),
                       ),
                     ),
-                    {
+                    Option.some({
                       outcome: EVE_SEND_OUTCOME.ACCEPTED,
                       sessionId,
                       deliveryId: sent.line.uuid,
-                    } as const,
+                    } as const),
                   ),
               ),
             );
+            if (Option.isSome(handed)) return handed.value;
+            const opened = yield* openedLine(agent, sessionId, sent, false);
+            yield* queued(agent, ANY_LAUNCH, [opened.line]);
+            yield* opened.taken;
+            yield* afterResponse(
+              `A ${harness.name} hand-on`,
+              holdingRunner(agent.id, deliverWaitingHolding(sessionId, agent)),
+            );
+            return {
+              outcome: EVE_SEND_OUTCOME.ACCEPTED,
+              sessionId,
+              deliveryId: sent.line.uuid,
+            } as const;
           }).pipe(
             Effect.catch(failed("send")),
             Effect.provideContext(

@@ -2124,6 +2124,49 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "messages sent while another call holds the lease, as a launch does, are answered at once and read by the launch after its first, in the order sent",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // Another instance's call holds the lease, as a launch elsewhere does.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        const kept = keptAfterResponse();
+
+        const answers = yield* Effect.forEach(["Now the emails.", "And the docs."], (text) =>
+          sessions.send(opened.sessionId, message(agent, text)).pipe(Effect.provide(kept.layer)),
+        );
+
+        assert.deepEqual(
+          answers.map((answer) => answer.outcome),
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: 3,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        assert.deepEqual(
+          read.map((line) => developerContent(JSON.parse(line.text) as InputLine)),
+          [
+            [{ type: "text", text: "Fix the invitations." }],
+            [{ type: "text", text: "Now the emails." }],
+            [{ type: "text", text: "And the docs." }],
+          ],
+        );
+      }),
+  );
+  it.effect(
     "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
     () =>
       Effect.gen(function* () {
