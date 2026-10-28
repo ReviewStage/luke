@@ -444,7 +444,8 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   return (
     <>
       {loaded && ordered.length === 0 && !thisMacAlone ? null : (
-        <SettingsSection>
+        // Note that the section holds the search anchor until Add hosts is drawn, so a result lands while the list is read or failed.
+        <SettingsSection anchor={loaded ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
           {!signedIn ? (
             <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
           ) : loaded ? (
