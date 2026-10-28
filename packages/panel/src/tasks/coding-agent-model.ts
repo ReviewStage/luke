@@ -16,6 +16,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
   CODING_AGENT_PAYER,
   CODING_AGENT_RUNTIME,
   CODING_AGENT_SENDER,
@@ -24,6 +25,7 @@ import {
   type CodingAgentArchivedBy,
   type CodingAgentAttachment,
   type CodingAgentFailure,
+  type CodingAgentKind,
   type CodingAgentMessage,
   type CodingAgentPartCut,
   type CodingAgentPayer,
@@ -261,16 +263,28 @@ export function agentActorState(status: CodingAgentStatus): ActorState {
   return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
 }
 
-/** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
+/**
+ * An agent as its tile draws it: its harness, read off its model, or Luke's
+ * face for a member's operator, known by its kind, wearing where it stands
+ * (at rest where that is not known), under the name it goes by.
+ */
 export function agentActor(
-  agent: { readonly model: string; readonly status: CodingAgentStatus },
+  agent: {
+    readonly model: string;
+    readonly status?: CodingAgentStatus | undefined;
+    readonly kind?: CodingAgentKind | undefined;
+  },
   name: string,
 ): Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }> {
   return {
     kind: ACTOR_KIND.AGENT,
     name,
     provider: providerOf(agent.model),
-    state: ACTOR_STATE_OF_GLYPH[agentGlyphState(agent.status)],
+    ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { operator: true } : undefined),
+    state:
+      agent.status === undefined
+        ? ACTOR_STATE.REST
+        : ACTOR_STATE_OF_GLYPH[agentGlyphState(agent.status)],
   };
 }
 

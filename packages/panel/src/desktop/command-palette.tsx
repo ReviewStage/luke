@@ -57,6 +57,7 @@
 
 import type { Channel } from "@luke/features/channel-wire";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
@@ -197,7 +198,7 @@ import {
 import { useCapability, useExperiment, useExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
-import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
+import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
 import { useTasksWaiting } from "./places-waiting.js";
 import {
@@ -1823,14 +1824,13 @@ const PaletteDialog = memo(function PaletteDialog({
  * the render that finds it gone. It opens on All with nothing typed.
  */
 /** The window's tasks with Luke left out of the agents listed, since Ask Luke stands for him. */
-function withoutLukeIn(tasks: TasksControl, operator: LukeOperator | undefined): TasksControl {
-  if (operator === undefined) return tasks;
+function withoutLukeIn(tasks: TasksControl): TasksControl {
   return {
     ...tasks,
     // Note that a Luke a Reset retired is left out too, since he is known by his kind and the row he stood in now opens his successor.
     listedAgents: {
-      standing: withoutLuke(tasks.listedAgents.standing, operator),
-      archived: withoutLuke(tasks.listedAgents.archived, operator),
+      standing: withoutLuke(tasks.listedAgents.standing),
+      archived: withoutLuke(tasks.listedAgents.archived),
     },
   };
 }
@@ -1850,7 +1850,7 @@ function askLukeRow(
     icon: <WingFace />,
     label: ASK_LUKE_LABEL,
     command: APP_COMMAND.ASK_LUKE,
-    terms: [ASK_LUKE_LABEL, LUKE_NAME],
+    terms: [ASK_LUKE_LABEL, OPERATOR_NAME],
     onChoose: () =>
       agentId === undefined
         ? choose(operator.retry)
@@ -2033,7 +2033,7 @@ export function CommandPalette({
     accountId: tasks.me,
     workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
   });
-  const listedTasks = useMemo(() => withoutLukeIn(tasks, operator), [tasks, operator]);
+  const listedTasks = useMemo(() => withoutLukeIn(tasks), [tasks]);
   const askLuke = operator === undefined ? undefined : askLukeRow(operator, onTasks, choose, tasks);
   const askLukeShown =
     open &&

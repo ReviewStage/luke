@@ -1874,7 +1874,7 @@ function SidebarColumn({
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows } = tasks;
   const listedAgents = {
-    standing: withoutLuke(tasks.listedAgents.standing, operator),
+    standing: withoutLuke(tasks.listedAgents.standing),
     archived: tasks.listedAgents.archived,
   };
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
@@ -2188,8 +2188,7 @@ function SidebarColumn({
                     <SidebarLuke
                       operator={operator}
                       agent={tasks.listedAgents.standing.find(
-                        (agent) =>
-                          agent.workspaceId === operator.workspaceId && isLuke(agent, operator),
+                        (agent) => agent.workspaceId === operator.workspaceId && isLuke(agent),
                       )}
                       current={lukeId !== undefined && lukeId === agentShown}
                       unread={lukeId !== undefined && context.unseenAgent(lukeId)}
