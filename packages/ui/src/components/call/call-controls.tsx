@@ -14,6 +14,11 @@
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  type CallStatus,
+  MUTE_MICROPHONE_LABEL,
+  UNMUTE_MICROPHONE_LABEL,
+} from "../../call-card-model.js";
+import {
   MicrophoneIcon,
   MicrophoneOffIcon,
   SpeakerIcon,
@@ -21,11 +26,6 @@ import {
 } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { STATUS_TONE } from "../../status-tone.js";
-import {
-  type CallStatus,
-  MUTE_MICROPHONE_LABEL,
-  UNMUTE_MICROPHONE_LABEL,
-} from "../../tasks-model.js";
 import { BUTTON_SHAPE, BUTTON_VARIANT, type ButtonShape, IconButton } from "../button/button.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { ThinkingDots } from "../thinking-dots/thinking-dots.js";

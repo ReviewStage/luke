@@ -13,7 +13,7 @@ import {
   Tooltip,
   WaveformIcon,
 } from "@luke/ui";
-import { callStatus, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/tasks-model";
+import { callStatus, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/call-card-model";
 import {
   callInProgress,
   VOICE_COMMAND,

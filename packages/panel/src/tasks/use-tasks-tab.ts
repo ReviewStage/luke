@@ -50,7 +50,7 @@ import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import type { MicrophoneStatus } from "@luke/settings/microphone";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
-import { callTaskName } from "@luke/ui/call-card-model";
+import { callTaskName, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/call-card-model";
 import { pendingShown, pendingWithout } from "@luke/ui/pending-values";
 import {
   isAgentTab,
@@ -80,10 +80,8 @@ import {
   documentRegion,
   type LinearIssuesAsk,
   MARK_FAILED_NOTES,
-  MICROPHONE_PRESS,
   markAsked,
   markedView,
-  microphoneButton,
   NO_PENDING_STANDINGS,
   type PendingAgentPins,
   type PendingMarks,
