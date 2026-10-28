@@ -13,8 +13,6 @@ import {
   type AssistantMessageMetadata,
   isRecord,
   isWireString,
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   SCHEMA_REFUSAL,
   type SchemaPath,
@@ -164,50 +162,9 @@ function refusedPart(
   return undefined;
 }
 
-/**
- * The keys an earlier build wrote on a user row that this vocabulary no
- * longer admits: `delivery`, which named how a developer's line to a coding
- * agent was to be delivered while it awaited its turn; `author`, on every
- * line but a spoken ask's, which its channel or source already says; and
- * `from`, an agent message's sender, which the row's sender columns hold.
- * The migration that rewrote the stored rows leaves none of them behind, but
- * a release still serving beside this one may write one while it drains, so
- * a stored-row read drops them and the row reads as the line it is, rather
- * than refusing the page it stands on. The write door drops nothing: a
- * message written today naming one is outside the vocabulary and is refused.
- */
-const LEGACY_USER_METADATA_KEY = {
-  DELIVERY: "delivery",
-  AUTHOR: "author",
-  FROM: "from",
-} as const;
-
-/** What an earlier build wrote as an assistant row's author for the model that answered the turn. */
-const LEGACY_MODEL_AUTHOR = "brain";
-
-/** The user metadata with the legacy keys gone; anything else exactly as it came, for the schema to judge. */
-function withoutLegacyUserKeys(metadata: UnparsedWireValue): UnparsedWireValue {
-  if (!isRecord(metadata)) return metadata;
-  const spoken = metadata.channel === MESSAGE_CHANNEL.VOICE;
-  const legacy = new Set<string>(
-    Object.values(LEGACY_USER_METADATA_KEY).filter(
-      (key) => key in metadata && !(spoken && key === LEGACY_USER_METADATA_KEY.AUTHOR),
-    ),
-  );
-  if (legacy.size === 0) return metadata;
-  return Object.fromEntries(Object.entries(metadata).filter(([key]) => !legacy.has(key)));
-}
-
-/** The assistant metadata with the legacy author read as the model; anything else exactly as it came. */
-function withLegacyAssistantAuthor(metadata: UnparsedWireValue): UnparsedWireValue {
-  if (!isRecord(metadata) || metadata.author !== LEGACY_MODEL_AUTHOR) return metadata;
-  return { ...metadata, author: MESSAGE_AUTHOR.MODEL };
-}
-
-/** A validated row typed by its role, its metadata read under that role's schema; a stored-row read forgives the legacy keys, the write door does not. */
+/** A validated row typed by its role, its metadata read under that role's schema. */
 function readStoredMessage(
   message: ValidatedMessage,
-  storedRow: boolean,
 ): Result.Result<StoredUIMessage, SchemaRefusalError> {
   const part = refusedPart(message.parts);
   if (part) return refuse(SCHEMA_REFUSAL.MALFORMED, part);
@@ -216,17 +173,21 @@ function readStoredMessage(
   switch (message.role) {
     case MESSAGE_ROLE.USER: {
       const role = message.role;
-      return Result.map(
-        underMetadata(readUserMetadata(storedRow ? withoutLegacyUserKeys(metadata) : metadata)),
-        (value) => ({ id, role, parts, metadata: value }),
-      );
+      return Result.map(underMetadata(readUserMetadata(metadata)), (value) => ({
+        id,
+        role,
+        parts,
+        metadata: value,
+      }));
     }
     case MESSAGE_ROLE.ASSISTANT: {
       const role = message.role;
-      const read = readAssistantMetadata(
-        storedRow ? withLegacyAssistantAuthor(metadata) : metadata,
-      );
-      return Result.map(underMetadata(read), (value) => ({ id, role, parts, metadata: value }));
+      return Result.map(underMetadata(readAssistantMetadata(metadata)), (value) => ({
+        id,
+        role,
+        parts,
+        metadata: value,
+      }));
     }
     case MESSAGE_ROLE.SYSTEM:
       if (metadata !== undefined) return refuse(SCHEMA_REFUSAL.MALFORMED, ["metadata"]);
@@ -237,11 +198,10 @@ function readStoredMessage(
 /** Every validated message read under this build's metadata and tool-state set, or the first refusal with the row's index ahead of its path. */
 function readStoredMessages(
   messages: readonly ValidatedMessage[],
-  storedRow: boolean,
 ): Result.Result<StoredUIMessage[], SchemaRefusalError> {
   const stored: StoredUIMessage[] = [];
   for (const [messageIndex, message] of messages.entries()) {
-    const read = readStoredMessage(message, storedRow);
+    const read = readStoredMessage(message);
     if (Result.isFailure(read)) {
       return Result.fail(
         new SchemaRefusalError({
@@ -263,11 +223,10 @@ function readStoredMessages(
  * already passed. The registry is the catalog's `tool()`
  * declarations keyed by the name a part spells. A tool part naming a tool the
  * registry does not hold is refused or dropped as `unregistered` says, the
- * write door refusing and a stored-row read dropping, and a stored-row read
- * forgives the legacy metadata named above on the same terms, since
- * `unregistered` is where the two doors tell themselves apart; a refusal is the same
- * word and path a wire schema answers with, so a store can tell a malformed
- * row from one naming a tool this build does not register. A conversation
+ * write door refusing and a stored-row read dropping, since `unregistered` is
+ * where the two doors tell themselves apart; a refusal is the same word and
+ * path a wire schema answers with, so a store can tell a malformed row from
+ * one naming a tool this build does not register. A conversation
  * with no rows yet reads as no messages: the SDK refuses an empty array, and
  * an empty conversation is not a malformed one.
  */
@@ -302,9 +261,7 @@ export function readStoredUIMessagesEither(
     ),
   );
   return Effect.map(validated, (result) =>
-    result.success
-      ? readStoredMessages(result.data, storedRow)
-      : refuse(SCHEMA_REFUSAL.MALFORMED, []),
+    result.success ? readStoredMessages(result.data) : refuse(SCHEMA_REFUSAL.MALFORMED, []),
   );
 }
 
