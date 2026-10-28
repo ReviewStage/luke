@@ -33,6 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { FILE_TREE_WIDTH, type FileTreeWidth } from "../desktop/folded-groups.js";
 import { KEY_LAYERS, PANE_FLOAT, type PaneFloat } from "../desktop/hover-pane.js";
@@ -538,11 +539,9 @@ export function paneToggleAction(
 /** Open on GitHub as an item of a phone's ⋯, dimmed with no page to open yet, as the bar's button is. */
 export function gitHubAction(onGitHub: (() => void) | undefined, detail?: string): MenuAction {
   return {
-    label: "Open on GitHub",
-    icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
+    ...commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => onGitHub?.(), false),
     detail,
     disabled: onGitHub === undefined,
-    onSelect: () => onGitHub?.(),
   };
 }
 

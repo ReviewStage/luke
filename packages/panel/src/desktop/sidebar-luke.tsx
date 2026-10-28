@@ -12,6 +12,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { RotateCcwIcon, RotateCwIcon } from "lucide-react";
+import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { agentGlyphState } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
@@ -31,8 +32,9 @@ import { RowMarks } from "./task-actions.js";
  * call into him stands, the failed mark at its end, and the unseen dot,
  * main's or one set by hand. It stands above every pin and section and in
  * none of them, so it offers neither Pin nor Move to section, and neither
- * Archive nor Permanently delete: its ⋯, right-click, and menu key offer its read mark and,
- * once he stands, Reset, which asks nothing: it archives this Luke and opens
+ * Archive nor Permanently delete: its ⋯, right-click, and menu key offer Copy
+ * link to his page, its read mark, and, last and alone, once he stands,
+ * Reset, which asks nothing: it archives this Luke and opens
  * a fresh one at once, and its toast's Undo archives the fresh one and opens
  * this one again. A press opens his page. While his ensure is on its way the
  * row stands muted, and once it failed it offers a quiet retry at its end,
@@ -118,7 +120,11 @@ export function SidebarLuke({
         ),
       );
   };
+  const copyLink = useCopyLinkItem();
+  const linkItem =
+    agentId === undefined ? undefined : copyLink(agentPlace({ id: agentId, planId: null }));
   const groups: MenuEntry[][] = [
+    linkItem === undefined ? [] : [linkItem],
     agent === undefined
       ? []
       : [markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) })],

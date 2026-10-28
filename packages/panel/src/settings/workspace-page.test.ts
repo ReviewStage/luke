@@ -2597,13 +2597,13 @@ test("an installed workspace's Sentry names its organization, its ⋯ disconnect
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
-test("in the window, each member's ⋯ opens their profile first, in the workspace the page shows", async () => {
+test("in the window, each member's ⋯ offers Copy link first, then opens their profile in the workspace the page shows", async () => {
   const opened: [string, string | undefined, string | undefined][] = [];
   const { page } = await mount(ACME, [], (userId, name, workspaceId) =>
     opened.push([userId, name, workspaceId]),
   );
 
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Open profile", "Copy link"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Copy link", "Open profile"]);
   await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);

@@ -148,7 +148,7 @@ export function RunRow({
     subject === undefined
       ? undefined
       : { label: subject.label, icon: <ExternalLinkIcon />, onSelect: () => openLink(subject.url) };
-  const items = [copyLink, openSubject].filter((item) => item !== undefined);
+  const groups = [copyLink, openSubject].flatMap((item) => (item === undefined ? [] : [[item]]));
   // A run a link named is brought into the middle of the box that scrolls it, once, as it is drawn.
   const row = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -197,7 +197,7 @@ export function RunRow({
             ? undefined
             : () => openLink(subject.url)
       }
-      menu={rowMenu(RUN_THING, [items])}
+      menu={rowMenu(RUN_THING, groups)}
     />
   );
 }
