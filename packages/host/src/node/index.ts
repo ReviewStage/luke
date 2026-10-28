@@ -5,7 +5,6 @@
  * Node process that composes the host, such as the desktop's main process.
  */
 export { jsonStateFile } from "./json-state-file.js";
-export { macDeviceName } from "./mac-device-name.js";
 export {
   closeEveryMacTerminal,
   type MacTerminal,
@@ -13,8 +12,6 @@ export {
   startMacTerminal,
 } from "./mac-terminal.js";
 export {
-  agentUnsavedWorkScript,
-  agentWorktreeScript,
   cloneFolder,
   openOnMacScript,
   worktreeFolder,

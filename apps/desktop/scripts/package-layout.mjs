@@ -34,13 +34,6 @@ export const NATIVE_HELPERS = [
     frameworks: ["CoreAudio"],
     folder: BUNDLE_FOLDER.RESOURCES,
   },
-  // A local agent's runner started so it answers for its own privacy decisions, not Luke's.
-  {
-    source: "AgentLauncher.swift",
-    binary: "luke-agent-launcher",
-    frameworks: [],
-    folder: BUNDLE_FOLDER.RESOURCES,
-  },
   // This Mac's `luke-host` command and login item (`HOST_LOGIN_ITEM`), in
   // `MacOS`, where `Bundle.main` is the app `SMAppService` registers it for.
   {
@@ -74,10 +67,10 @@ export const HOST_LOGIN_ITEM = {
 
 /**
  * The local agents' runner bundle (`packages/agent-runner`), shipped in the
- * app's resources (`src/main/services/local-agent-platform.ts`). The Node it
- * runs on and the Claude Code CLI it drives are not shipped: the host fetches
- * each pinned release the first time a Mac turns local agents on
- * (`@luke/host`'s `localAgentTool`, `@luke/agent-runner/pins`).
+ * app's resources, which This Mac's `luke-host` mounts into its agents' VMs
+ * (`@luke/host/daemon`'s `host-os.ts`), as every VM the app made before it
+ * does. The Node it runs on and the Claude Code CLI it drives are the
+ * sandbox image's own.
  */
 export const AGENT_RUNNER_RESOURCES = {
   directory: "agent-runner",

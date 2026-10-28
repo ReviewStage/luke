@@ -38,7 +38,6 @@ import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
-import { composeLocalAgents } from "./compose-local-agents.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
@@ -53,7 +52,6 @@ import {
   type AccountSource,
   type AppIdentity,
   type Environment,
-  type LocalAgentPlatform,
   Reporter,
   ShutdownSignal,
   SignInConsent,
@@ -108,43 +106,11 @@ type HostAssemblyRequirements =
 /** What each platform concern adds to the assembly's requirements when it is chosen. */
 interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]:
-    | ChildProcessSpawner.ChildProcessSpawner
-    | LocalAgentPlatform
-    | ThisMacHost;
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
-
-/**
- * This Mac's local agents: the app's own follower, composed but stopped for
- * good, since `luke-host` follows the Mac's agents now and the app never
- * does in its place, and This Mac's `luke-host` turned on and off by the
- * switch (`compose-this-mac-host.ts`), which stops that follower before it
- * registers `luke-host` and keeps the account's device ids through it.
- */
-const composeThisMacHostConcern = (
-  dependencies: Omit<Parameters<typeof composeThisMacHost>[0], "follower" | "kernel"> & {
-    readonly kernel: Parameters<typeof composeLocalAgents>[0]["kernel"] &
-      Parameters<typeof composeThisMacHost>[0]["kernel"];
-    readonly client: HostedDeviceAgentClient;
-  },
-) =>
-  Effect.gen(function* () {
-    const follower = yield* composeLocalAgents({
-      kernel: dependencies.kernel,
-      account: dependencies.account,
-      accountId: dependencies.accountId,
-      switchedOn: Effect.succeed(false),
-      client: dependencies.client,
-    });
-    const thisMacHost = yield* composeThisMacHost({ ...dependencies, follower });
-    return {
-      methods: thisMacHost.methods,
-      lifetime: Effect.andThen(follower.lifetime, thisMacHost.lifetime),
-    } satisfies Composer;
-  });
 
 /**
  * Every concern constructed, linked, and merged, with nothing yet begun: the
@@ -295,7 +261,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
     const localAgents = platform.has(HOST_PLATFORM_CONCERN.LOCAL_AGENTS)
-      ? yield* composeThisMacHostConcern({
+      ? yield* composeThisMacHost({
           kernel,
           account,
           accountId,

@@ -1,9 +1,10 @@
 /**
- * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the desktop turns it on: the app's own follower stopped before the login item is registered, the Mac enrolled under the device id the app already had, and a Mac Luke removed never enrolled again but by the member's own act.
+ * compose-this-mac-host.test.ts -- This Mac's `luke-host` as the desktop turns it on: the Mac enrolled under the device id the app already had before the login item is registered, and a Mac Luke removed never enrolled again but by the member's own act.
  *
- * The composer runs over a real state folder of its own, a fake follower,
- * service, and login item that each say what they were asked, on the test's
- * clock. Synthetic ids and secrets throughout.
+ * The composer runs over a real state folder of its own, holding the device
+ * id the account already had, and a fake service and login item that each
+ * say what they were asked, on the test's clock. Synthetic ids and secrets
+ * throughout.
  */
 
 import assert from "node:assert/strict";
@@ -26,6 +27,7 @@ import {
   ThisMacHost,
 } from "./effect/seams.js";
 import { readHostDevice, writeHostDevice } from "./host-device-record.js";
+import { writeLocalAgentState } from "./local-agent-state.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const USER_ID = "user-fixture";
@@ -49,8 +51,8 @@ const until = (holds: () => boolean) =>
 
 /**
  * This Mac's `luke-host` composed over a state folder of its own, with the
- * switch on until the test turns it off, the app's follower taking a second
- * to stop, a service that enrolls the Mac, and a login item that refuses as
+ * switch on until the test turns it off, the account's device id already
+ * kept there, a service that enrolls the Mac, and a login item that refuses as
  * many unregisters as `refusedUnregisters` says; what each fake was asked,
  * in the order it was asked.
  */
@@ -68,16 +70,9 @@ const thisMac = (stateRoot: string, options: { refusedUnregisters?: number } = {
           return { outcome: OWN_ENROLL_OUTCOME.ENROLLED, deviceSecret: SECRET };
         }),
     };
-    const follower = {
-      idle: Effect.andThen(
-        Effect.sleep(Duration.seconds(1)),
-        Effect.sync(() => asked.push("follower stopped")),
-      ),
-      deviceIdOf: () => Effect.succeed(DEVICE_ID),
-      handedToDevice: () => Effect.void,
-      ownerOf: (deviceId: string) => Effect.succeed(deviceId === DEVICE_ID ? USER_ID : undefined),
-      registeredPreparing: () => Effect.succeed(true),
-    };
+    yield* Effect.orDie(
+      writeLocalAgentState(stateRoot, { devices: { [USER_ID]: DEVICE_ID }, launches: [] }),
+    );
     const loginItem = (act: HostLoginItemAct) =>
       Effect.sync(() => {
         asked.push(`login item ${act}`);
@@ -92,11 +87,15 @@ const thisMac = (stateRoot: string, options: { refusedUnregisters?: number } = {
         );
       });
     const composer = yield* composeThisMacHost({
-      kernel: { stateRoot, hostedServiceBaseUrl: SERVICE, runMode: { sendsNetwork: true } },
+      kernel: {
+        stateRoot,
+        hostedServiceBaseUrl: SERVICE,
+        createId: () => "never-minted",
+        runMode: { sendsNetwork: true },
+      },
       account: { capabilitiesActive: () => true },
       accountId: () => USER_ID,
       switchedOn: Effect.sync(() => on),
-      follower,
       client,
     }).pipe(
       Effect.provide(
@@ -130,7 +129,7 @@ const thisMac = (stateRoot: string, options: { refusedUnregisters?: number } = {
   });
 
 it.effect(
-  "turning on stops the app's follower before it enrolls and registers luke-host, under the device id the app already had",
+  "turning on enrolls before it registers luke-host, under the device id the app already had",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -138,8 +137,7 @@ it.effect(
         const { asked, enrolled } = yield* thisMac(stateRoot);
         yield* until(() => asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`));
 
-        assert.deepEqual(asked.slice(0, 3), [
-          "follower stopped",
+        assert.deepEqual(asked.slice(0, 2), [
           "enroll",
           `login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`,
         ]);
