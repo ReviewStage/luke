@@ -365,6 +365,9 @@ export const START_CODING_AGENT_REFUSAL = {
   NO_PROMPT:
     "Not started: you work on no task, so there is no plan to hand it; give it a prompt, or name " +
     `a task by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
+  BRANCH_NO_REPOSITORY:
+    "Not started: the agent works in no repository, so there is no branch to clone; name a " +
+    "repository with the branch, or leave branch out.",
   REPOSITORY_ON_TASK:
     "Not started: an agent on a task works in the task's own repository; leave repository out " +
     "where you start it on a task, or from another agent.",
@@ -1788,6 +1791,13 @@ export function runStartAgent(
         (place.taskId === null && from === undefined && prompt === undefined)
       ) {
         return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_PROMPT);
+      }
+      if (
+        place.taskId === null &&
+        place.repository === null &&
+        asked.success.branch !== undefined
+      ) {
+        return agentToolRejected(START_CODING_AGENT_REFUSAL.BRANCH_NO_REPOSITORY);
       }
       // The pictures it is handed are read as the caller may read them, and refused whole where one is not.
       const images =

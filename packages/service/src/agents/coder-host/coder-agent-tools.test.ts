@@ -1653,6 +1653,17 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     ),
     [null, workspaceId, null],
   );
+  assert.deepEqual(
+    await fromNoTask(
+      CODER_TOOL.START_AGENT,
+      { prompt: "Talk the release through.", repository: null, branch: "release" },
+      "call-bare-branch",
+    ),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.BRANCH_NO_REPOSITORY,
+    },
+  );
   const onTask = await fromNoTask(
     CODER_TOOL.START_AGENT,
     { taskId: taskIds.invitations, prompt: "Sweep the invitation tests." },
