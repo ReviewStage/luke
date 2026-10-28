@@ -41,7 +41,11 @@ import type {
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import type { ChannelThreadAgent } from "@luke/features/channel-wire";
-import { CODING_AGENT_KIND, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentAttachment,
+  type CodingAgentKind,
+} from "@luke/features/coding-agent-wire";
 import type { ConversationMediaType } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -192,6 +196,8 @@ export const INBOX_POST_REFUSAL = {
   NO_CHANNEL: "no-channel",
   /** The post addresses its ask to an account that is no member of the agent's workspace. */
   NO_ADDRESSEE: "no-addressee",
+  /** The post is an operator's and addresses its ask to anyone but its own member, the one account that sees its threads. */
+  NOT_ITS_MEMBER: "not-its-member",
 } as const;
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
@@ -565,13 +571,14 @@ function itemReachableBy(userId: string): SQL {
 /** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
 const AGENT_WORKSPACE_STEP = sql<string>`coalesce((select ${organization.slug} from ${organization} where ${organization.id} = ${AGENT_WORKSPACE}), ${AGENT_WORKSPACE})`;
 
-/** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts. */
+/** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts; its kind says whom they may wait on. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
   Result: Schema.Struct({
     id: Schema.String,
     organizationId: Schema.String,
     workspaceStep: Schema.String,
+    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
   }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
@@ -580,6 +587,7 @@ const lockAgent = SqlSchema.findOneOption({
           id: codingAgent.id,
           organizationId: AGENT_WORKSPACE,
           workspaceStep: AGENT_WORKSPACE_STEP,
+          kind: codingAgent.kind,
         })
         .from(codingAgent)
         .where(
@@ -2172,10 +2180,13 @@ const findWorkspaceChannel = SqlSchema.findOneOption({
  * agent: the channel it names, refused where that is no open channel of the
  * agent's workspace, so one archived since the agent chose it takes nothing;
  * and the member it is addressed to, refused where they are no member of
- * that workspace.
+ * that workspace, or, for an operator, anyone but its own member. Note that
+ * an operator's threads are its member's alone (`itemAgentSeenBy`), so an
+ * ask it addressed to anyone else would wait on someone who never sees it.
  */
 function placeOf(
-  workspace: LockedWorkspace,
+  agent: InboxAgent,
+  locked: LockedWorkspace & { readonly kind: CodingAgentKind },
   post: InboxThreadPost,
 ): InboxStoreEffect<
   Result.Result<
@@ -2184,12 +2195,16 @@ function placeOf(
   >
 > {
   return Effect.gen(function* () {
-    const { organizationId } = workspace;
+    const { organizationId } = locked;
     if (post.channelId !== undefined) {
       const found = yield* findWorkspaceChannel({ organizationId, channelId: post.channelId });
       if (Option.isNone(found)) return Result.fail(INBOX_POST_REFUSAL.NO_CHANNEL);
     }
     if (post.addresseeId !== undefined) {
+      const operator = locked.kind === CODING_AGENT_KIND.OPERATOR;
+      if (operator && post.addresseeId !== agent.userId) {
+        return Result.fail(INBOX_POST_REFUSAL.NOT_ITS_MEMBER);
+      }
       const member = yield* isWorkspaceMember(post.addresseeId, organizationId);
       if (!member) return Result.fail(INBOX_POST_REFUSAL.NO_ADDRESSEE);
     }
@@ -2337,7 +2352,7 @@ export function postInboxThread(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const standing = yield* findAgentItem({ ...agent, key: post.key });
-        const placed = yield* placeOf(locked.value, post);
+        const placed = yield* placeOf(agent, locked.value, post);
         if (Result.isFailure(placed)) return Result.fail(placed.failure);
         if (post.ask === undefined && Option.isSome(standing) && standing.value.asking) {
           const itemId = standing.value.id;
@@ -4019,7 +4034,7 @@ const MemberAskRowSchema = Schema.Struct({
 
 type MemberAskRow = typeof MemberAskRowSchema.Type;
 
-/** One open item of a member's own agent, as `memberOpenAsks` answers it: the ask that waits by its kind, null for a notice that waits only to be read, and its agent's words. */
+/** One open item waiting on a member, as `memberOpenAsks` answers it: the ask that waits by its kind, null for a notice that waits only to be read, and its agent's words. */
 export type MemberOpenAsk = Omit<MemberAskRow, "askType"> & {
   readonly askType: InboxAsk["type"] | null;
 };
@@ -4074,7 +4089,7 @@ const findMemberOpenAsks = SqlSchema.findAll({
         .leftJoin(inboxMessage, eq(inboxMessage.id, inboxItem.openAskMessageId))
         .where(
           and(
-            eq(inboxItem.userId, userId),
+            sql`${WAITS_ON} = ${userId}`,
             eq(inboxItem.organizationId, workspaceId),
             itemReachableBy(userId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
@@ -4086,14 +4101,14 @@ const findMemberOpenAsks = SqlSchema.findAll({
 });
 
 /**
- * Every item still open that one of the member's own agents posted in the
- * workspace, whichever agent and task it is on, the latest changed first and
- * at most `limit`: what the member's operator reads across their agents, as
- * an agent's own read reads only its own threads. An item is the member's
- * where an agent they started posted it, which is whose inbox it waits in;
- * a teammate's agent's item is never among them, nor one of a workspace the
- * member has left. A notice, which asks nothing, is read with its agent's
- * latest words.
+ * Every item still open in the workspace that waits on the member
+ * (`WAITS_ON`), whichever agent and task it is on, the latest changed first
+ * and at most `limit`: what the member's operator reads across their agents,
+ * as an agent's own read reads only its own threads. An item a teammate's
+ * agent addressed to the member is among them, and one the member's own
+ * agent addressed to a teammate, or that waits on a teammate assigned its
+ * task, is not, nor one of a workspace the member has left. A notice, which
+ * asks nothing, is read with its agent's latest words.
  */
 export function memberOpenAsks(
   userId: string,
