@@ -1726,26 +1726,44 @@ function githubAppService(
 
     /**
      * The token `publicReadToken` answers, as its declaration says. Note that
-     * the installation is chosen by the status the store holds, which every
-     * reach mends, rather than read from GitHub, so a preview of a public
-     * repository costs the App no read beyond its one mint an hour.
+     * the installation is chosen by the status the store holds rather than
+     * read from GitHub, so a preview of a public repository costs the App no
+     * read beyond its one mint an hour; and that a mint GitHub refuses moves
+     * on to the next active one, because a reach that found the owner's
+     * installation stops there and leaves an earlier link a missed webhook
+     * left active unmended.
      */
     const publicReadToken = (organizationId: string, member: string) =>
       Effect.gen(function* () {
         const held = yield* memberReadToken(member);
         if (Option.isSome(held)) return held;
         const connected = yield* installationsOfWorkspace(organizationId);
-        const active = connected.find((one) => one.status === GITHUB_INSTALLATION_STATUS.ACTIVE);
-        if (active === undefined) return Option.none<GitHubPublicReadToken>();
-        const key = new TokenKey({
-          organizationId,
-          member: undefined,
-          installationId: active.installationId,
-          repository: undefined,
-          permissions: INSTALLATION_TOKEN_PERMISSIONS.READ,
-        });
-        const { token } = yield* Cache.get(tokens, key);
-        return Option.some<GitHubPublicReadToken>({ token, access: { kind: GITHUB_ACCESS.APP } });
+        for (const one of connected) {
+          if (one.status !== GITHUB_INSTALLATION_STATUS.ACTIVE) continue;
+          const key = new TokenKey({
+            organizationId,
+            member: undefined,
+            installationId: one.installationId,
+            repository: undefined,
+            permissions: INSTALLATION_TOKEN_PERMISSIONS.READ,
+          });
+          const minted = yield* Cache.get(tokens, key).pipe(
+            Effect.map((kept) => Option.some(kept.token)),
+            Effect.catch((failure) =>
+              Effect.as(
+                Effect.logWarning(`A public read token was not minted: ${failure.message}`),
+                Option.none<Redacted.Redacted>(),
+              ),
+            ),
+          );
+          if (Option.isSome(minted)) {
+            return Option.some<GitHubPublicReadToken>({
+              token: minted.value,
+              access: { kind: GITHUB_ACCESS.APP },
+            });
+          }
+        }
+        return Option.none<GitHubPublicReadToken>();
       });
 
     /**

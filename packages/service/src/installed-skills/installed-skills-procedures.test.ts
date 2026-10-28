@@ -438,6 +438,32 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
   );
 
   it.effect(
+    "a public source previews past an earlier installation GitHub no longer runs, which the reach of its owner never read",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit");
+        commitTo(kit, "main", { "skills/review/SKILL.md": skillFile("review", "Review it.") });
+        const gone = installationFor(fakeRepository("old-org", "app"));
+        const onOwner = installationFor(fakeRepository("acme", "other"));
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, gone);
+        yield* connectWorkspaceGitHub(workspace, onOwner);
+        const ask = yield* routes(
+          githubReaching([onOwner], undefined, {}, anonymousLimited(repositoryScript(kit))),
+        );
+
+        const previewed = sourcePreview(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, "npx skills add acme/kit")),
+        );
+        assert.deepEqual(
+          previewed.skills.map((skill) => skill.name),
+          ["review"],
+        );
+      }),
+  );
+
+  it.effect(
     "a source keeping skills in folders by category finds each one by name, and a skill's own subfolders stay its files",
     () =>
       Effect.gen(function* () {
