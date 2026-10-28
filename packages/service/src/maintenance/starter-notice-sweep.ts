@@ -91,18 +91,12 @@ const tell = (eveFor: EveForAccount, due: DueStarterNotice) =>
     if (Option.isNone(starter) || starter.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);
-    yield* steerAgent(
-      eve,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      due.userId,
-      starter.value,
-      {
-        text: noticeLine(due, step),
-        clientKey: due.key,
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), due.userId, starter.value, {
+      text: noticeLine(due, step),
+      clientKey: due.key,
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
     return true;
   }).pipe(
     // The failure's kind alone: nothing of the agent or its member rides the line.

@@ -76,8 +76,8 @@ import {
 import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT, OPERATOR_OPENING } from "./instructions.js";
 import {
-  acceptedAgentChoice,
   type AgentStarted,
+  acceptedAgentChoice,
   type StartServices,
   startAgent,
   startCredentialStands,
@@ -186,18 +186,12 @@ const openedOnItsOpening = (
 ) =>
   Effect.gen(function* () {
     const sessions = yield* eve;
-    yield* steerAgent(
-      sessions,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      operator.userId,
-      operator,
-      {
-        text: OPERATOR_OPENING,
-        clientKey: randomUUID(),
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), operator.userId, operator, {
+      text: OPERATOR_OPENING,
+      clientKey: randomUUID(),
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
   }).pipe(
     Effect.catch((refusal) =>
       Effect.logWarning(`operator ${operator.id} was not opened: ${refusal.error}`),

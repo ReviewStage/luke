@@ -60,8 +60,8 @@ import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@
 import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import { type MemberOpenAsk, memberOpenAsks } from "../inbox/inbox-store.js";
+import { type AgentCall, agentToolRejected, orStoreRefusal } from "./agent-tools.js";
 import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
-import { agentToolRejected, type AgentCall, orStoreRefusal } from "./agent-tools.js";
 import { isOperator } from "./steward.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 

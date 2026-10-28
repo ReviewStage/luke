@@ -17,15 +17,15 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
 import {
-  agentToolRejected,
   AGENT_TOOL_REFUSAL,
   type AgentCall,
+  agentToolRejected,
   callerUserId,
   callerWorkspace,
   orStoreRefusal,
 } from "./agent-tools.js";
+import { calledId } from "./called-id.js";
 
 /**
  * task-section-tools.ts -- the tools every agent keeps the developer's sidebar sections by: make one, and delete one.

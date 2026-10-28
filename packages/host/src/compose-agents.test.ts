@@ -966,10 +966,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
       { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
     );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
-      { agent: AGENT },
-    );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_PIN, { agentId: AGENT_ID, pinned: true }), {
+      agent: AGENT,
+    });
     assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }), {
       deleted: true,
       txid: "9102",
@@ -981,18 +980,12 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID }),
-      CHANGES,
-    );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID }), CHANGES);
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
       CHANGES,
     );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS, { agentId: AGENT_ID }),
-      CHAPTERS,
-    );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS, { agentId: AGENT_ID }), CHAPTERS);
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, {
         agentId: AGENT_ID,
@@ -1211,10 +1204,9 @@ it.effect(
       assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.AGENTS_MODELS), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
-      assert.deepEqual(
-        yield* offline.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }),
-        { failure: AGENT_CALL_FAILURE.UNANSWERED },
-      );
+      assert.deepEqual(yield* offline.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }), {
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
+      });
       assert.deepEqual(signedOut.asked, []);
       assert.deepEqual(offline.asked, []);
     }),

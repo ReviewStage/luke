@@ -71,17 +71,13 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 const REFUSAL = {
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]:
     "Could not acknowledge the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]:
-    "Could not close the inbox item on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: "Could not close the inbox item on this system.",
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]:
-    "Could not mark the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]:
-    "Could not mark the inbox read on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: "Could not mark the inbox item on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: "Could not mark the inbox read on this system.",
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]:
     "Could not read the inbox item's image on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]:
-    "Could not read the agent's picture on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: "Could not read the agent's picture on this system.",
 } as const;
 
 type HostAsk = AgentInboxProceduresDependencies["host"];
@@ -335,8 +331,7 @@ it("an answer's key its kind's view schema does not name is left out of what the
   const { call } = windowPort(PANEL, {
     answers: {
       agentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
-      agentInboxMessage: () =>
-        Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
+      agentInboxMessage: () => Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
     },
   });
 
@@ -413,10 +408,7 @@ async function until(ready: () => boolean): Promise<void> {
 it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
   const listeners = new Set<(changed: AgentInboxChanged) => void>();
-  const follows: Pick<
-    HostAsk,
-    "agentInboxFollow" | "agentInboxUnfollow" | "onInboxChanged"
-  > = {
+  const follows: Pick<HostAsk, "agentInboxFollow" | "agentInboxUnfollow" | "onInboxChanged"> = {
     agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
     agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
     onInboxChanged: (listener) => {

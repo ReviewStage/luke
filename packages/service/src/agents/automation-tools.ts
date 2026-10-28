@@ -56,18 +56,18 @@ import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
-import { acceptedAgentChoice } from "./coder-host/start.js";
 import {
-  agentToolRejected,
   AGENT_TOOL_REFUSAL,
   type AgentCall,
+  agentToolRejected,
   callerUserId,
   callerWorkspace,
   choiceRefusal,
   orStoreRefusal,
   workedRepository,
 } from "./agent-tools.js";
+import { calledId } from "./called-id.js";
+import { acceptedAgentChoice } from "./coder-host/start.js";
 import { workspaceAgent } from "./workspace-agents.js";
 
 /**
@@ -597,8 +597,7 @@ export function runListAutomations(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found =
         automationId === undefined
@@ -649,8 +648,7 @@ export function runCreateAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       // A call run again finds the automation it made first, as it was made.
@@ -760,8 +758,7 @@ export function runUpdateAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -820,8 +817,7 @@ export function runDeleteAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -856,8 +852,7 @@ export function runRunAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);

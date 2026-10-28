@@ -122,8 +122,7 @@ function agentOf(
     now,
     awaitingLineAt: standing.awaitingLineAt,
   });
-  const failureReason =
-    status === AGENT_STATUS.FAILED ? agentFailureOf(standing.turn) : undefined;
+  const failureReason = status === AGENT_STATUS.FAILED ? agentFailureOf(standing.turn) : undefined;
   return {
     id,
     title,

@@ -53,9 +53,7 @@ export interface AgentInboxProceduresDependencies {
     agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
     agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
-    agentInboxReadState(
-      params: AgentInboxReadStateParams,
-    ): Effect.Effect<AgentInboxReadStateView>;
+    agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
     agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
     agentInboxAttachment(
       params: AgentInboxAttachmentParams,
@@ -175,11 +173,11 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       return yield* host.agentInboxAttachment(input);
     }),
     // Note that the picture's answer, a failure among them, is the panel's to read, as an inbox image's is.
-    [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: actPort[
-      AGENT_INBOX_ACT_KIND.AGENTS_PICTURE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentPicture(input);
-    }),
+    [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: actPort[AGENT_INBOX_ACT_KIND.AGENTS_PICTURE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentPicture(input);
+      },
+    ),
   };
 }

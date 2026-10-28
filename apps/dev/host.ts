@@ -5,6 +5,7 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment, type SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { agentToolRejected } from "@luke/service/agents/agent-tools";
 import { type AgentBrowser, browserSessionOf } from "@luke/service/agents/browser/agent-browser";
 import {
   BROWSER_TOOL,
@@ -49,7 +50,6 @@ import {
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
-import { agentToolRejected } from "@luke/service/agents/agent-tools";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,

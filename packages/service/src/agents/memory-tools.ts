@@ -15,12 +15,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import {
-  AGENT_CALLER,
-  type AgentCall,
-  callerUserId,
-  callerWorkspace,
-} from "./agent-tools.js";
+import { AGENT_CALLER, type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
 /**

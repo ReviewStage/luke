@@ -173,14 +173,7 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   const now = yield* Clock.currentTimeMillis;
   return {
     agents: agents.map((agent) =>
-      agentSummary(
-        agent,
-        standing(agent.conversationId),
-        now,
-        names,
-        continuedBy(agent.id),
-        macs,
-      ),
+      agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
     ),
   };
 });

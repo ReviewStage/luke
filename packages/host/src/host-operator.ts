@@ -737,9 +737,7 @@ export interface HostOperator {
   /** A followed list or history as it now stands, each time it moves while followed. */
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
-  agentPullRequest(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentPullRequestAnswerView>;
+  agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
   pullRequestChapters(
     params: PullRequestChaptersParams,
@@ -799,9 +797,7 @@ export interface HostOperator {
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
-  agentReviewOptions(
-    params: AgentPullRequestParams,
-  ): Effect.Effect<AgentReviewOptionsAnswerView>;
+  agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   agentOverviewChecks(
     params: AgentPullRequestReadParams,
@@ -851,9 +847,7 @@ export interface HostOperator {
   /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
-  agentInboxReadState(
-    params: AgentInboxReadStateParams,
-  ): Effect.Effect<AgentInboxReadStateView>;
+  agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
   agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
@@ -877,9 +871,7 @@ export interface HostOperator {
   transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
   /** A followed transcript's next page, or why there is none, each time it moves. */
   onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
-  agentInboxAttachment(
-    params: AgentInboxAttachmentParams,
-  ): Effect.Effect<AgentInboxAttachmentView>;
+  agentInboxAttachment(params: AgentInboxAttachmentParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
   agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
@@ -1944,10 +1936,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     pullRequestChaptersGenerate: (params) =>
       Effect.map(
-        client.call(
-          GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE,
-          pullRequestChaptersRead(params),
-        ),
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chaptersModelRead: () =>
@@ -2128,9 +2117,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         answerOf(dictationTranscribeAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentInboxFollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id }),
-      ),
+      fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id })),
     agentInboxUnfollow: (scope) =>
       fire(
         client.call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, {
@@ -2232,9 +2219,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         listener,
       ),
     transcriptFollow: (transcript) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript)),
-      ),
+      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript))),
     transcriptOlder: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
@@ -2244,9 +2229,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         answerOf(agentTranscriptOlderAnswerSchema, AGENT_UNANSWERED),
       ),
     transcriptUnfollow: (transcript) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript)),
-      ),
+      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript))),
     onTranscriptChanged: (listener) =>
       on(
         GATEWAY_EVENT.TRANSCRIPT_CHANGED,

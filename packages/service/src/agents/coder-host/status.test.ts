@@ -52,8 +52,7 @@ function turn(times: {
 test("a line sent to an idle agent reads it running for the grace its turn opens in, and failed past it, unanswered", () => {
   const settled = turn({ queuedAt: 2_000, startedAt: 2_500, settledAt: 3_000 });
   const awaitingLineAt = new Date(10_000);
-  const at = (now: number) =>
-    agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
+  const at = (now: number) => agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
   expect(at(10_000 + LINE_GRACE_MS)).toBe(AGENT_STATUS.RUNNING);
   expect(at(10_001 + LINE_GRACE_MS)).toBe(AGENT_STATUS.FAILED);
 });
@@ -95,8 +94,7 @@ test("a line older than the newest turn's queueing that the turn never took read
 test("a line sent while the newest turn was queued, and never taken, reads the agent failed past the grace from that turn's end", () => {
   const settled = turn({ queuedAt: 4_000, startedAt: 6_000, settledAt: 9_000 });
   const awaitingLineAt = new Date(5_000);
-  const at = (now: number) =>
-    agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
+  const at = (now: number) => agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
   expect(at(9_000 + LINE_GRACE_MS)).toBe(AGENT_STATUS.RUNNING);
   expect(at(9_001 + LINE_GRACE_MS)).toBe(AGENT_STATUS.FAILED);
 });

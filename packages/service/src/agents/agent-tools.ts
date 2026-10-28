@@ -504,11 +504,7 @@ export interface AgentCall {
 }
 
 /** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
-export type AgentToolServices =
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog;
+export type AgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 const AGENT_ID = describeWire(
   wireUuidSchema,
@@ -1459,8 +1455,7 @@ export function runListAgents(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const { agents, taskOf } = yield* workspaceAgentsOf(callerUserId(caller), workspace.value, {
         taskId: narrowed.success,
         except: caller.agent.id,
@@ -1690,9 +1685,7 @@ function startInputRefusal(
     return START_AGENT_REFUSAL.FROM_WITH_PROMPT;
   }
   const self = from.agentId === caller.agent.id;
-  return self && from.messageId === undefined
-    ? START_AGENT_REFUSAL.SELF_CONTINUE
-    : undefined;
+  return self && from.messageId === undefined ? START_AGENT_REFUSAL.SELF_CONTINUE : undefined;
 }
 
 /**
@@ -1729,8 +1722,7 @@ export function runStartAgent(
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const named = asked.success.taskId;
   const ownTask = callerTask(caller);
-  if (eve === undefined)
-    return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.NO_SERVICE));
+  if (eve === undefined) return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.NO_SERVICE));
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {

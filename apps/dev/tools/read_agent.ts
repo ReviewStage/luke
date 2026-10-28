@@ -1,5 +1,5 @@
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { CODER_READ_AGENT_TOOL } from "@luke/service/agents/agent-tools";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { agentToolFor } from "../host.js";
 
 /**

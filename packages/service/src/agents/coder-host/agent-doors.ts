@@ -40,16 +40,9 @@ import {
 } from "../../tasks/picture-look.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
-  runCreateAutomation,
-  runDeleteAutomation,
-  runListAutomations,
-  runRunAutomation,
-  runUpdateAutomation,
-} from "../automation-tools.js";
-import {
   AGENT_CALLER,
-  agentToolRejected,
   AGENT_TOOL_REFUSAL,
+  agentToolRejected,
   runListAgents,
   runListModels,
   runListTasks,
@@ -60,6 +53,13 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../agent-tools.js";
+import {
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runRunAutomation,
+  runUpdateAutomation,
+} from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";

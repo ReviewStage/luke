@@ -81,18 +81,12 @@ const wake = (eveFor: EveForAccount, due: DueOperatorWake, now: Date) =>
     if (Option.isNone(operator) || operator.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);
-    yield* steerAgent(
-      eve,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      due.userId,
-      operator.value,
-      {
-        text: wakeLine(due, step),
-        clientKey: wakeKey(due),
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), due.userId, operator.value, {
+      text: wakeLine(due, step),
+      clientKey: wakeKey(due),
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
     yield* recordOperatorWake(due.operatorId, due.agentId, now);
     return true;
   }).pipe(

@@ -302,11 +302,7 @@ export const steerAgent = (
   userId: string,
   agent: Agent,
   line: SteerLine,
-) =>
-  Effect.map(
-    steerAgentWritten(eve, writer, userId, agent, line),
-    (written) => written.outcome,
-  );
+) => Effect.map(steerAgentWritten(eve, writer, userId, agent, line), (written) => written.outcome);
 
 /** As `steerAgent`, with the transaction that wrote the line beside what it came to. */
 export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (

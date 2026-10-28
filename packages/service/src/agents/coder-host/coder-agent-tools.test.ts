@@ -124,17 +124,17 @@ import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
-import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
-  START_AGENT_TOOL,
   START_AGENT_REFUSAL,
+  START_AGENT_TOOL,
   STOP_AGENT_REFUSAL,
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../agent-tools.js";
+import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { claimRuntimeSession } from "../eve-host/conversation.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
@@ -1979,14 +1979,8 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
     rejected(UPDATE_AGENT_REFUSAL.WORKING),
   );
   assert.deepEqual(await archive(agents.caller.id), rejected(UPDATE_AGENT_REFUSAL.SELF));
-  assert.deepEqual(
-    await archive(agents.otherWorkspaces.id),
-    rejected(AGENT_TOOL_REFUSAL.NO_AGENT),
-  );
-  assert.deepEqual(
-    await archive(agents.strangers.id),
-    rejected(AGENT_TOOL_REFUSAL.NO_AGENT),
-  );
+  assert.deepEqual(await archive(agents.otherWorkspaces.id), rejected(AGENT_TOOL_REFUSAL.NO_AGENT));
+  assert.deepEqual(await archive(agents.strangers.id), rejected(AGENT_TOOL_REFUSAL.NO_AGENT));
   assert.deepEqual(
     await call(CODER_TOOL.UPDATE_AGENT, { agentId: agents.strangers.id, archived: false }),
     rejected(AGENT_TOOL_REFUSAL.NO_AGENT),

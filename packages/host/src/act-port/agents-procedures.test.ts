@@ -62,11 +62,9 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_MODELS]: "Could not read the models on this system.",
   [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: "Could not read the default model on this system.",
-  [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]:
-    "Could not change the default model on this system.",
+  [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: "Could not change the default model on this system.",
   [AGENT_ACT_KIND.AGENTS_LIST]: "Could not read the task's agents on this system.",
-  [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]:
-    "Could not read the workspace's agents on this system.",
+  [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: "Could not read the workspace's agents on this system.",
   [AGENT_ACT_KIND.AGENTS_START]: "Could not start an agent on this system.",
   [AGENT_ACT_KIND.AGENTS_MESSAGES]: "Could not read the agent's transcript on this system.",
   [AGENT_ACT_KIND.AGENTS_PART]: "Could not read the agent's output on this system.",
@@ -75,8 +73,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_MESSAGE]: "Could not message the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_CHOOSE]: "Could not change the agent's model on this system.",
   [AGENT_ACT_KIND.AGENTS_RENAME]: "Could not rename the agent on this system.",
-  [AGENT_ACT_KIND.AGENTS_SERVERS]:
-    "Could not switch the agent's MCP servers on this system.",
+  [AGENT_ACT_KIND.AGENTS_SERVERS]: "Could not switch the agent's MCP servers on this system.",
   [AGENT_ACT_KIND.AGENTS_STOP]: "Could not stop the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_PIN]: "Could not pin the agent on this system.",
@@ -85,8 +82,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.AGENTS_SEEN]: "Could not mark the agent as read on this system.",
   [AGENT_ACT_KIND.AGENTS_PAGE]: "Could not read the agent on this system.",
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]:
-    "Could not read the agent's pull request on this system.",
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]:
     "Could not read the agent's pull request on this system.",
@@ -96,10 +92,8 @@ const REFUSAL = {
     "Could not read the pull request's checks on this system.",
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]:
     "Could not read the pull request's conversation on this system.",
-  [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]:
-    "Could not read the pull request's image on this system.",
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]:
-    "Could not change the pull request on this system.",
+  [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: "Could not read the pull request's image on this system.",
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: "Could not change the pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]:
     "Could not read which files you viewed on this system.",
 } as const;
@@ -528,8 +522,7 @@ it("a panel's change to an agent's pull request reaches the host as asked and he
   };
   const { call, asked, noted } = windowPort(PANEL, {
     answers: {
-      agentPullRequestAction: () =>
-        Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
+      agentPullRequestAction: () => Effect.succeed({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }),
       agentPullRequestViewed: () => Effect.succeed(viewed),
     },
   });
@@ -542,10 +535,9 @@ it("a panel's change to an agent's pull request reaches the host as asked and he
   assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION, change), {
     answer: { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
   });
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
-    { answer: viewed },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }), {
+    answer: viewed,
+  });
   assert.deepEqual(asked, [
     ["agentPullRequestAction", change],
     ["agentPullRequestViewed", { agentId: AGENT_ID }],
@@ -568,10 +560,9 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked nor anything noted", async () => {
   const { call, asked, noted } = windowPort(PANEL);
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.AGENTS_STOP, { agentId: AGENT_ID, stray: true }),
-    { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_STOP] },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_STOP, { agentId: AGENT_ID, stray: true }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_STOP],
+  });
   assert.deepEqual(
     await call(AGENT_ACT_KIND.AGENTS_SHOWN, {
       agentId: AGENT_ID,
@@ -612,12 +603,9 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
     }),
     { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE] },
   );
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.AGENTS_CHANGES, { agentId: AGENT_ID, number: 0 }),
-    {
-      refused: REFUSAL[AGENT_ACT_KIND.AGENTS_CHANGES],
-    },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.AGENTS_CHANGES, { agentId: AGENT_ID, number: 0 }), {
+    refused: REFUSAL[AGENT_ACT_KIND.AGENTS_CHANGES],
+  });
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
 });

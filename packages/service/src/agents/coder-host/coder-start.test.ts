@@ -239,9 +239,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         const openedOnEve = (ask: StartAsk) =>
           Effect.gen(function* () {
             const { opened, eve } = fakeEve();
-            const { agent } = yield* startAgent(eve, owner, ask).pipe(
-              Effect.provide(services),
-            );
+            const { agent } = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
             return yield* openedThroughRelay(owner, agent.conversationId, opened);
           });
         const ranFor = (firing: AutomationFiring): StartAsk => ({

@@ -604,10 +604,7 @@ const MAIN_WAITING: readonly AppInboxTask[] = [
 ];
 
 /** The account's feed of every item, as the host streams it: each task's items whole, then nothing more until the window lets it go. */
-const ACCOUNT_FEED: Pick<
-  FakeActPort,
-  typeof AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW
-> = {
+const ACCOUNT_FEED: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW> = {
   [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
     let sent = false;
     const closed = Promise.withResolvers<void>();

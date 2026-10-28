@@ -24,13 +24,11 @@ import {
 } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
-import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import {
-  agentToolRejected,
   AGENT_TOOL_REFUSAL,
   type AgentCall,
   type AgentToolServices,
+  agentToolRejected,
   callerTask,
   callerUserId,
   callerWorkspace,
@@ -41,6 +39,8 @@ import {
   taskStandingOf,
   workedRepository,
 } from "./agent-tools.js";
+import { calledId } from "./called-id.js";
+import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 

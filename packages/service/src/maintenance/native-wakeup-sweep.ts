@@ -70,18 +70,12 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
     if (Option.isNone(agent)) return true;
     if (!(yield* agentWakeupStands(wakeup.id))) return true;
     const eve = yield* eveFor(wakeup.userId);
-    yield* steerAgent(
-      eve,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      wakeup.userId,
-      agent.value,
-      {
-        text: wakeup.prompt,
-        clientKey: wakeupKey(wakeup),
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), wakeup.userId, agent.value, {
+      text: wakeup.prompt,
+      clientKey: wakeupKey(wakeup),
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
     yield* deleteAgentWakeup(wakeup.id);
     return true;
   }).pipe(

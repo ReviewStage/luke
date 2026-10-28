@@ -115,9 +115,7 @@ export const agentActsContract = {
   )
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_LIST]: actProcedure(
-    "Could not read the task's agents on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_LIST]: actProcedure("Could not read the task's agents on this system.")
     .input(exactInput(agentListParamsSchema))
     .output(EffectSchema.flip(agentListAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: actProcedure(
@@ -138,9 +136,7 @@ export const agentActsContract = {
   )
     .input(exactInput(agentTranscriptKeySchema))
     .output(eventIterator(type<AgentTranscriptPage>())),
-  [AGENT_ACT_KIND.AGENTS_PART]: actProcedure(
-    "Could not read the agent's output on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_PART]: actProcedure("Could not read the agent's output on this system.")
     .input(exactInput(agentPartParamsSchema))
     .output(EffectSchema.flip(agentPartViewSchema)),
   [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: actProcedure(
@@ -148,14 +144,10 @@ export const agentActsContract = {
   )
     .input(exactInput(agentTranscriptOlderParamsSchema))
     .output(EffectSchema.flip(agentTranscriptOlderAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_MESSAGE]: actProcedure(
-    "Could not message the agent on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_MESSAGE]: actProcedure("Could not message the agent on this system.")
     .input(exactInput(agentMessageParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_CHOOSE]: actProcedure(
-    "Could not change the agent's model on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_CHOOSE]: actProcedure("Could not change the agent's model on this system.")
     .input(exactInput(agentChooseParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
   [AGENT_ACT_KIND.AGENTS_RENAME]: actProcedure("Could not rename the agent on this system.")
@@ -172,30 +164,22 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_REWIND]: actProcedure("Could not rewind the agent on this system.")
     .input(exactInput(agentRewindParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_ARCHIVE]: actProcedure(
-    "Could not archive the agent on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_ARCHIVE]: actProcedure("Could not archive the agent on this system.")
     .input(exactInput(agentArchiveParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
   [AGENT_ACT_KIND.AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(agentPinParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
-  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actProcedure(
-    "Could not reach Luke on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actProcedure("Could not reach Luke on this system.")
     .input(exactInput(agentOperatorEnsureParamsSchema))
     .output(EffectSchema.flip(agentOperatorEnsureAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
     .input(exactInput(agentStopParamsSchema))
     .output(EffectSchema.flip(agentDeleteAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_SHOWN]: actProcedure(
-    "Could not note which agent is shown on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_SHOWN]: actProcedure("Could not note which agent is shown on this system.")
     .input(exactInput(shownParamsSchema))
     .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.AGENTS_SEEN]: actProcedure(
-    "Could not mark the agent as read on this system.",
-  )
+  [AGENT_ACT_KIND.AGENTS_SEEN]: actProcedure("Could not mark the agent as read on this system.")
     .input(exactInput(EffectSchema.Struct({ agentId: exactId })))
     .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")

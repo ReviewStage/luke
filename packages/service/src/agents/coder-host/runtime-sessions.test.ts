@@ -923,17 +923,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
           const send = Effect.result(
-            steerAgent(
-              sessions,
-              storeWriter({ tools: CODER_TOOL_SET }),
-              owner,
-              onClaudeCode,
-              {
-                text: "Also the emails.",
-                clientKey: randomUUID(),
-                sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
-              },
-            ),
+            steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onClaudeCode, {
+              text: "Also the emails.",
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
           );
 
           claudeCode.answers.status = 422;
@@ -970,17 +964,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
           const send = Effect.result(
-            steerAgent(
-              sessions,
-              storeWriter({ tools: CODER_TOOL_SET }),
-              owner,
-              onClaudeCode,
-              {
-                text: "Also the emails.",
-                clientKey: randomUUID(),
-                sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
-              },
-            ),
+            steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onClaudeCode, {
+              text: "Also the emails.",
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
           );
 
           claudeCode.answers.status = 422;
@@ -1013,17 +1001,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const sessions = yield* routedSessions(eve.sessions, owner);
 
           const sent = yield* Effect.result(
-            steerAgent(
-              sessions,
-              storeWriter({ tools: CODER_TOOL_SET }),
-              owner,
-              onClaudeCode,
-              {
-                text: "Also the emails.",
-                clientKey: randomUUID(),
-                sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
-              },
-            ),
+            steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onClaudeCode, {
+              text: "Also the emails.",
+              clientKey: randomUUID(),
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+            }),
           );
 
           assert.ok(Result.isFailure(sent));
@@ -1776,14 +1758,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             byAgent.owner,
             startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
           ).pipe(Effect.provide(layers(agentRuns.native)));
-          yield* startAgent(
-            routedSessions(agentRuns.eve.sessions, byAgent.owner),
-            byAgent.owner,
-            {
-              ...startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
-              startedBy: starting.agent,
-            },
-          ).pipe(Effect.provide(layers(agentRuns.native)));
+          yield* startAgent(routedSessions(agentRuns.eve.sessions, byAgent.owner), byAgent.owner, {
+            ...startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
+            startedBy: starting.agent,
+          }).pipe(Effect.provide(layers(agentRuns.native)));
           const opened = [];
           for (const handed of agentRuns.claudeCode.messages) {
             const [row] = yield* db
@@ -2317,11 +2295,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           yield* TestClock.adjust("1 minute");
           claudeCode.answers.open = EVE_SEND_OUTCOME.ACCEPTED;
-          const started = yield* startAgent(
-            routedSessions(eve.sessions, owner),
-            owner,
-            ask,
-          ).pipe(Effect.provide(layers));
+          const started = yield* startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+            Effect.provide(layers),
+          );
           assert.equal(started.created, true);
           assert.deepEqual(heard(claudeCode), ["open", "open"]);
           assert.deepEqual(eve.calls, []);

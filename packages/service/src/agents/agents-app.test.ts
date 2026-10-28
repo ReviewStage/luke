@@ -239,6 +239,7 @@ import {
   sourceSandbox,
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
+import { agentsApp } from "./agents-app.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -246,7 +247,6 @@ import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { agentsApp } from "./agents-app.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
   type AgentSessions,

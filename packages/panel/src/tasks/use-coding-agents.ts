@@ -1707,18 +1707,16 @@ export function useCodingAgents(input: {
       numberedAsks.current.set(agentId, ofAgent);
       const ask = (ofAgent.get(number) ?? 0) + 1;
       ofAgent.set(number, ask);
-      return act(ACT_KIND.AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
-        (answer) => {
-          if ("failure" in answer) return false;
-          if (ofAgent.get(number) === ask) {
-            const tab = { changes: agentId, number };
-            setNumberedPullRequests((was) =>
-              withPullRequestTab(was, tab, answer.pullRequest ?? undefined),
-            );
-          }
-          return answer.pullRequest !== null;
-        },
-      );
+      return act(ACT_KIND.AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then((answer) => {
+        if ("failure" in answer) return false;
+        if (ofAgent.get(number) === ask) {
+          const tab = { changes: agentId, number };
+          setNumberedPullRequests((was) =>
+            withPullRequestTab(was, tab, answer.pullRequest ?? undefined),
+          );
+        }
+        return answer.pullRequest !== null;
+      });
     },
     [act],
   );
@@ -1787,8 +1785,7 @@ export function useCodingAgents(input: {
   );
 
   const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
-    (agentId, number) =>
-      act(ACT_KIND.AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
+    (agentId, number) => act(ACT_KIND.AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
     [act],
   );
 

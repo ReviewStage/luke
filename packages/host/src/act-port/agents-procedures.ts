@@ -106,16 +106,12 @@ export interface AgentProceduresDependencies {
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
     agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
-    agentPullRequest(
-      params: AgentPullRequestReadParams,
-    ): Effect.Effect<AgentPullRequestAnswerView>;
+    agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
     agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
     agentOverviewPullRequest(
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
-    agentReviewOptions(
-      params: AgentPullRequestParams,
-    ): Effect.Effect<AgentReviewOptionsAnswerView>;
+    agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
     agentOverviewChecks(
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewChecksAnswerView>;
@@ -229,24 +225,25 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         "agent" in value && value.agent.planId === null ? host.tasksRefresh() : Effect.void,
     );
   return {
-    [AGENT_ACT_KIND.AGENTS_MODELS]: actPort[AGENT_ACT_KIND.AGENTS_MODELS].effect(
+    [AGENT_ACT_KIND.AGENTS_MODELS]: actPort[AGENT_ACT_KIND.AGENTS_MODELS].effect(function* ({
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentModels();
+    }),
+    [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: actPort[AGENT_ACT_KIND.AGENTS_DEFAULT_READ].effect(
       function* ({ context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentModels();
+        return yield* host.agentDefaultRead();
       },
     ),
-    [AGENT_ACT_KIND.AGENTS_DEFAULT_READ]: actPort[
-      AGENT_ACT_KIND.AGENTS_DEFAULT_READ
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentDefaultRead();
-    }),
-    [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: actPort[
-      AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentDefaultWrite(input);
-    }),
+    [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: actPort[AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentDefaultWrite(input);
+      },
+    ),
     [AGENT_ACT_KIND.HOSTS_LIST]: actPort[AGENT_ACT_KIND.HOSTS_LIST].effect(function* ({
       context,
       errors,
@@ -281,184 +278,218 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsRevokeInstallToken(input.id);
     }),
-    [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: actPort[
-      AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST]: actPort[AGENT_ACT_KIND.AGENTS_WORKSPACE_LIST].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentWorkspaceList(input);
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_LIST]: actPort[AGENT_ACT_KIND.AGENTS_LIST].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentWorkspaceList(input);
+      return yield* noted(host.agentList(input), (answer) => {
+        if ("agents" in answer) notices.observeAgents(answer.agents);
+        else if (answer.failure === AGENT_CALL_FAILURE.NOT_FOUND) {
+          notices.observeTaskGone(input.taskId);
+        }
+      });
     }),
-    [AGENT_ACT_KIND.AGENTS_LIST]: actPort[AGENT_ACT_KIND.AGENTS_LIST].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* noted(host.agentList(input), (answer) => {
-          if ("agents" in answer) notices.observeAgents(answer.agents);
-          else if (answer.failure === AGENT_CALL_FAILURE.NOT_FOUND) {
-            notices.observeTaskGone(input.taskId);
-          }
-        });
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_START]: actPort[AGENT_ACT_KIND.AGENTS_START].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentStart(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_MESSAGES]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGES].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // A worker's page says where the worker stands and what it is called, which is no word on the agent.
-        return yield* noted(host.agentMessages(input), (answer) => {
-          if ("status" in answer && input.callId === undefined) {
-            notices.observeStatus(input.agentId, answer.status);
-          }
-        });
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_PART]: actPort[AGENT_ACT_KIND.AGENTS_PART].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentPart(input);
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actPort[
-      AGENT_ACT_KIND.AGENTS_TRANSCRIPT
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_START]: actPort[AGENT_ACT_KIND.AGENTS_START].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const pages = transcriptPages(host, openTranscripts, input).pipe(
-        Stream.tap((page) =>
-          Effect.sync(() => {
-            // A worker's page says where the worker stands, which is no word on the agent.
-            if (!("status" in page)) return;
-            if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
-            notices.observeStatus(input.agentId, page.status);
-          }),
-        ),
-      );
-      return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      return yield* notedAgent(host.agentStart(input));
     }),
+    [AGENT_ACT_KIND.AGENTS_MESSAGES]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGES].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // A worker's page says where the worker stands and what it is called, which is no word on the agent.
+      return yield* noted(host.agentMessages(input), (answer) => {
+        if ("status" in answer && input.callId === undefined) {
+          notices.observeStatus(input.agentId, answer.status);
+        }
+      });
+    }),
+    [AGENT_ACT_KIND.AGENTS_PART]: actPort[AGENT_ACT_KIND.AGENTS_PART].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentPart(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actPort[AGENT_ACT_KIND.AGENTS_TRANSCRIPT].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const pages = transcriptPages(host, openTranscripts, input).pipe(
+          Stream.tap((page) =>
+            Effect.sync(() => {
+              // A worker's page says where the worker stands, which is no word on the agent.
+              if (!("status" in page)) return;
+              if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
+              notices.observeStatus(input.agentId, page.status);
+            }),
+          ),
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: actPort[
       AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.transcriptOlder(input);
     }),
-    [AGENT_ACT_KIND.AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* noted(host.agentMessage(input), (answer) => {
-          if ("agent" in answer) notices.observeMessaged(answer.agent);
-        });
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_CHOOSE]: actPort[AGENT_ACT_KIND.AGENTS_CHOOSE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentChoose(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_RENAME]: actPort[AGENT_ACT_KIND.AGENTS_RENAME].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentRename(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_SERVERS]: actPort[AGENT_ACT_KIND.AGENTS_SERVERS].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentServers(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_STOP]: actPort[AGENT_ACT_KIND.AGENTS_STOP].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentStop(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_REWIND]: actPort[AGENT_ACT_KIND.AGENTS_REWIND].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentRewind(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_ARCHIVE]: actPort[AGENT_ACT_KIND.AGENTS_ARCHIVE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentArchive(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_PIN]: actPort[AGENT_ACT_KIND.AGENTS_PIN].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* notedAgent(host.agentPin(input));
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actPort[
-      AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_MESSAGE]: actPort[AGENT_ACT_KIND.AGENTS_MESSAGE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that an ensure that wrote a row made the operator, or a fresh one in a reset's place, so the plan list, which carries it, is read again.
-      return yield* Effect.tap(host.agentEnsureOperator(input), (answer) =>
-        "txid" in answer ? host.tasksRefresh() : Effect.void,
-      );
+      return yield* noted(host.agentMessage(input), (answer) => {
+        if ("agent" in answer) notices.observeMessaged(answer.agent);
+      });
     }),
-    [AGENT_ACT_KIND.AGENTS_DELETE]: actPort[AGENT_ACT_KIND.AGENTS_DELETE].effect(
+    [AGENT_ACT_KIND.AGENTS_CHOOSE]: actPort[AGENT_ACT_KIND.AGENTS_CHOOSE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentChoose(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_RENAME]: actPort[AGENT_ACT_KIND.AGENTS_RENAME].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentRename(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_SERVERS]: actPort[AGENT_ACT_KIND.AGENTS_SERVERS].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentServers(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_STOP]: actPort[AGENT_ACT_KIND.AGENTS_STOP].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentStop(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_REWIND]: actPort[AGENT_ACT_KIND.AGENTS_REWIND].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentRewind(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_ARCHIVE]: actPort[AGENT_ACT_KIND.AGENTS_ARCHIVE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentArchive(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_PIN]: actPort[AGENT_ACT_KIND.AGENTS_PIN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentPin(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR]: actPort[AGENT_ACT_KIND.AGENTS_ENSURE_OPERATOR].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        // Note that the plan list is read again, which carries every agent with no plan, so the sidebar's row goes.
-        return yield* Effect.tap(host.agentDelete(input), (answer) =>
-          "deleted" in answer ? host.tasksRefresh() : Effect.void,
+        // Note that an ensure that wrote a row made the operator, or a fresh one in a reset's place, so the plan list, which carries it, is read again.
+        return yield* Effect.tap(host.agentEnsureOperator(input), (answer) =>
+          "txid" in answer ? host.tasksRefresh() : Effect.void,
         );
       },
     ),
-    [AGENT_ACT_KIND.AGENTS_SHOWN]: actPort[AGENT_ACT_KIND.AGENTS_SHOWN].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        notices.shown(input.agentId);
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_SEEN]: actPort[AGENT_ACT_KIND.AGENTS_SEEN].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        notices.seen(input.agentId);
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_PAGE]: actPort[AGENT_ACT_KIND.AGENTS_PAGE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentPage(input);
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actPort[
-      AGENT_ACT_KIND.AGENTS_PULL_REQUEST
-    ].effect(function* ({ input, context, errors }) {
+    [AGENT_ACT_KIND.AGENTS_DELETE]: actPort[AGENT_ACT_KIND.AGENTS_DELETE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentPullRequest(input);
+      // Note that the plan list is read again, which carries every agent with no plan, so the sidebar's row goes.
+      return yield* Effect.tap(host.agentDelete(input), (answer) =>
+        "deleted" in answer ? host.tasksRefresh() : Effect.void,
+      );
     }),
-    [AGENT_ACT_KIND.AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.AGENTS_CHANGES].effect(
+    [AGENT_ACT_KIND.AGENTS_SHOWN]: actPort[AGENT_ACT_KIND.AGENTS_SHOWN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      notices.shown(input.agentId);
+    }),
+    [AGENT_ACT_KIND.AGENTS_SEEN]: actPort[AGENT_ACT_KIND.AGENTS_SEEN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      notices.seen(input.agentId);
+    }),
+    [AGENT_ACT_KIND.AGENTS_PAGE]: actPort[AGENT_ACT_KIND.AGENTS_PAGE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentPage(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actPort[AGENT_ACT_KIND.AGENTS_PULL_REQUEST].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentChanges(input);
+        return yield* host.agentPullRequest(input);
       },
     ),
+    [AGENT_ACT_KIND.AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.AGENTS_CHANGES].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentChanges(input);
+    }),
     [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: actPort[
       AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentOverviewPullRequest(input);
     }),
-    [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actPort[
-      AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentReviewOptions(input);
-    }),
-    [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[
-      AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentOverviewChecks(input);
-    }),
+    [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actPort[AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentReviewOptions(input);
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentOverviewChecks(input);
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: actPort[
       AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION
     ].effect(function* ({ input, context, errors }) {
@@ -466,12 +497,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       return yield* host.agentOverviewConversation(input);
     }),
     // Note that the image's answer, a failure among them, is the panel's to read, as an agent's picture's is.
-    [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: actPort[
-      AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentGitHubImage(input);
-    }),
+    [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: actPort[AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentGitHubImage(input);
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: actPort[
       AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION
     ].effect(function* ({ input, context, errors }) {

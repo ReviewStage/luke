@@ -843,11 +843,7 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
   };
   const tab = mount({ taskId: TASK, repository: "acme/relay" });
   tab.answer(ACT_KIND.AGENTS_LIST, { agents: [source] }, { agents: [source] });
-  tab.answer(
-    ACT_KIND.AGENTS_START,
-    { failure: AGENT_CALL_FAILURE.UNANSWERED },
-    { agent: forked },
-  );
+  tab.answer(ACT_KIND.AGENTS_START, { failure: AGENT_CALL_FAILURE.UNANSWERED }, { agent: forked });
   await tab.mount();
 
   // A draft already written in takes the fork, and keeps its words.

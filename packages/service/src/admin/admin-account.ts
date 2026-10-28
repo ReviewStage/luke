@@ -130,8 +130,7 @@ function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgen
     now,
     awaitingLineAt: source.awaitingLineAt,
   });
-  const failure =
-    status === AGENT_STATUS.FAILED ? (agentFailureOf(source.turn) ?? null) : null;
+  const failure = status === AGENT_STATUS.FAILED ? (agentFailureOf(source.turn) ?? null) : null;
   return {
     id: source.id,
     createdAt: source.createdAt.getTime(),

@@ -195,10 +195,7 @@ it.effect(
         requests.map((request) => [request.method, request.params]),
         [
           [GATEWAY_METHOD.AGENTS_START, { idempotencyKey: "press-1", from }],
-          [
-            GATEWAY_METHOD.AGENTS_START,
-            { taskId: "task-1", idempotencyKey: "press-2", from },
-          ],
+          [GATEWAY_METHOD.AGENTS_START, { taskId: "task-1", idempotencyKey: "press-2", from }],
           [
             GATEWAY_METHOD.AGENTS_START,
             { taskId: "task-1", idempotencyKey: "press-3", blank: true, call: true },

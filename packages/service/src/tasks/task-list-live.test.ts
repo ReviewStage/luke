@@ -192,9 +192,7 @@ const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
     const agents = yield* listAgents(userId, taskId);
     const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
-    return agents.map((agent) =>
-      agentSummary(agent, standing(agent.conversationId), now, names),
-    );
+    return agents.map((agent) => agentSummary(agent, standing(agent.conversationId), now, names));
   });
 
 /**
