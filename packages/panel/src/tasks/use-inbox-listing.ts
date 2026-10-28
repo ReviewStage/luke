@@ -2,7 +2,7 @@ import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import {
   type InboxViewChoices,
@@ -13,7 +13,6 @@ import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
   EVERYONES,
-  firstChoice,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -274,7 +273,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     waitingTaskless.some((each) => !taskless.items.has(each.agentId));
   // An item asked for by a link or a notification that no read holds once every read has landed is
   // not there for the reader, whether it was deleted or is of a task they cannot read, and its pane
-  // says so rather than giving way to the first item.
+  // says so rather than standing empty.
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     taskId !== undefined
@@ -302,16 +301,8 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     retryLive();
     retryAgents();
   }, [retryLive, retryAgents]);
-  // Note that an item a link or a notification asked for is never given way to, found or not, and that only an Inbox standing has an item to stand in.
-  const standIn =
-    view.open && chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
-      ? firstChoice(list)
-      : undefined;
   const { onChoose } = view;
   const choose = useCallback((listed: InboxListed) => onChoose(choiceOf(listed)), [onChoose]);
-  useEffect(() => {
-    if (standIn !== undefined) choose(standIn);
-  }, [standIn, choose]);
   // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   // Note that a task list that failed leaves the Inbox holding nothing to read, which would otherwise say it was empty.

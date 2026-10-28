@@ -467,7 +467,7 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const title = stepTitle(tab, tasks, false);
+  const title = stepTitle(tab, tasks);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;

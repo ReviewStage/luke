@@ -73,6 +73,10 @@
           "dest": "/api/default.js?route=agents/runner-events"
         },
         {
+          "src": "/api/agents/runner-lines",
+          "dest": "/api/default.js?route=agents/runner-lines"
+        },
+        {
           "src": "/api/agents/runner-token",
           "dest": "/api/default.js?route=agents/runner-token"
         },

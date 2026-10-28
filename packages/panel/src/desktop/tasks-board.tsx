@@ -123,7 +123,7 @@ import {
 import { useTasksWaiting } from "./places-waiting.js";
 import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -346,6 +346,7 @@ function TaskBoardCard({
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
@@ -466,11 +467,7 @@ function TaskBoardCard({
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskAgentsMark
-              agents={task.agents}
-              waiting={waiting}
-              size={TASK_AGENTS_MARK_SIZE.MEDIUM}
-            />
+            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
         <span className="tasks-board-card-more pointer-events-auto flex flex-none">

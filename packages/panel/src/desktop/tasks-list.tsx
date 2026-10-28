@@ -5,6 +5,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
+import { isAgentEntry } from "@luke/features/task-section-writes";
 import {
   TASK_BOUNDS,
   TASK_PRIORITY_ORDER,
@@ -79,7 +80,6 @@ import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@luke/ui/icons";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
-  isAgentEntry,
   placeWrites,
   restoreWrites,
   sectionEntries,
@@ -131,7 +131,7 @@ import { useTasksWaiting } from "./places-waiting.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -706,6 +706,7 @@ function TaskListRow({
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
@@ -843,11 +844,7 @@ function TaskListRow({
       )}
       {cell(
         TASK_PROPERTY.AGENTS,
-        <TaskAgentsMark
-          agents={task.agents}
-          waiting={waiting}
-          size={TASK_AGENTS_MARK_SIZE.MEDIUM}
-        />,
+        <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />,
       )}
       {cell(
         TASK_PROPERTY.UPDATED,

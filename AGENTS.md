@@ -155,8 +155,8 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (the root `vercel.jso
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
-`TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
-agent's turn, whose one turn is its whole run). It also starts due automation runs, and for coding agents on a member's GitHub
+`TURN_ABANDON`: an hour after it started, or twenty-five hours for an
+agent's turn, whose one turn is its whole run). It also starts due automation runs, and for agents on a member's GitHub
 token it reads their open pull requests' reviews, comments, and checks on that
 token and wakes the agent with them, as the webhook does for the App.
 
@@ -175,7 +175,7 @@ reader alone. Move a rule from `[review]` to a check wherever one can hold it.
 pnpm exec vitest run <path>              # the file you changed
 pnpm check:affected                      # what changed since origin/main, from cache
 ./scripts/check.sh                       # everything CI runs bar Postgres
-pnpm --filter @luke/web test:agent       # offline brain eval, by hand
+pnpm --filter @luke/web test:agent       # the coder's offline eval, by hand
 ```
 
 - `[review]` Run the test files you touched, then push: CI runs the rest and
@@ -336,6 +336,11 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
+- **`packages/host/src/live-collection.ts`** — TanStack DB takes a write's
+  work as a promise it awaits before it keeps or takes back what the write
+  drew, so the one wait for that work to settle runs on the services the
+  caller handed it; the work itself stays on the caller's fiber. What would
+  end this row is an Effect transaction in TanStack DB.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,

@@ -212,7 +212,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   },
   {
     kind: TASKS_ACT_KIND.TASKS_WRITE_SECTION,
-    payload: { kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null },
+    payload: { writes: [{ kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null }] },
   },
   { kind: TASKS_ACT_KIND.TASKS_REPOSITORIES, payload: { workspaceId: "workspace-acme" } },
   { kind: TASKS_ACT_KIND.TASKS_SET_REPOSITORY, payload: { ...TASK, repository: "acme/relay" } },
@@ -309,7 +309,8 @@ function windowPort(
     tasksPin: (params) => ask(`pin:${params.taskId}:${params.pinned}`, () => true),
     tasksPinRepository: (params) =>
       ask(`pin-repository:${params.repository}:${params.pinned}`, () => true),
-    tasksWriteSection: (params) => ask(`section:${params.kind}`, () => true),
+    tasksWriteSection: (params) =>
+      ask(`section:${params.writes.map((write) => write.kind).join(",")}`, () => true),
     tasksStart: (request) =>
       ask(`start:${request.name ?? ""}`, () =>
         // A key no start answer names, carried on purpose to show the port drops it.
@@ -536,9 +537,7 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
   );
   assert.deepEqual(
     await ask(TASKS_ACT_KIND.TASKS_WRITE_SECTION, {
-      kind: TASK_SECTION_WRITE.PLACE,
-      taskId: TASK_ID,
-      sectionId: null,
+      writes: [{ kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null }],
     }),
     { answer: true },
   );

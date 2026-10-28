@@ -2,36 +2,22 @@
 
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_ASK,
-  INBOX_ASK_STATUS,
-  INBOX_MESSAGE_AUTHOR,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-  type InboxItem,
-} from "@luke/features/inbox-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { type InboxSettler, useInboxSettler } from "../tasks/inbox-settling.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { useTasksWaiting } from "./places-waiting.js";
-import { PullRequestLine, TaskRowStatus, taskCardOf } from "./task-card.js";
+import { PullRequestLine, taskCardOf } from "./task-card.js";
 
 /**
  * task-card.test.ts -- a task's hover card leads with where the task stands,
  * its key, its status, its priority, and who is on it, and keeps where it
- * lives, its repository, at its foot under what is moving on it; and a
- * task's row wears waiting on you exactly while the Inbox counts a question
- * waiting on the reader.
+ * lives, its repository, at its foot under what is moving on it.
  */
 
 const ACME = {
@@ -164,100 +150,4 @@ test("a pull request's line on the card counts its size as every figure is count
       ["−56", "danger"],
     ],
   );
-});
-
-/** A question of the task's agent's to Dean, its ask still open, as the window's Inbox holds it. */
-const QUESTION: InboxItem = {
-  id: "a1b2c3d4-0000-4000-8000-000000000001",
-  agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  key: "0001",
-  revision: 1,
-  version: INBOX_WIRE_VERSION,
-  title: "Invite links: 7 days or 14?",
-  needsReply: true,
-  status: INBOX_STATUS.OPEN,
-  thread: [
-    {
-      id: "d1b2c3d4-0000-4000-8000-000000000001",
-      author: INBOX_MESSAGE_AUTHOR.AGENT,
-      text: "Invite links: 7 days or 14?",
-      ask: {
-        type: INBOX_ASK.DECIDE,
-        options: [{ label: "7 days" }, { label: "14 days" }],
-        status: INBOX_ASK_STATUS.OPEN,
-      },
-      createdAt: 1_000,
-    },
-  ],
-  postedAt: 1_000,
-  updatedAt: 1_000,
-};
-
-/** Main's read of the task's open items: a notice and a teammate's question, which wait on no answer of Dean's, and `asked` beside them. */
-function openItems(asked: readonly InboxItem[]): readonly AppInboxTask[] {
-  const listed = (id: string, asking: boolean) => ({
-    id,
-    agentId: QUESTION.agentId,
-    title: "Synthetic words",
-    postedAt: 1_000,
-    asking,
-  });
-  return [
-    {
-      taskId: TASK.id,
-      items: [
-        listed("a1b2c3d4-0000-4000-8000-000000000002", false),
-        listed("a1b2c3d4-0000-4000-8000-000000000003", true),
-        ...asked.map((item) => listed(item.id, true)),
-      ],
-    },
-  ];
-}
-
-/** What main counts on the task as Dean's to do: `toDo` of its `items` open items. */
-function holding(items: number, toDo: number): readonly AppInboxTaskHolding[] {
-  return [{ taskId: TASK.id, items, toDo, updatedAt: 1_000 }];
-}
-
-test("a task's row wears waiting on you the moment main's Inbox read counts a question waiting on the reader, with no new read of the tasks, and drops it the moment the window answers, a notice and a teammate's question never wearing it", () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const registry = AtomRegistry.make();
-  const probe: { settler: InboxSettler | undefined } = { settler: undefined };
-  function Row({ tasks }: { tasks: TasksControl }) {
-    const waitingOn = useTasksWaiting(tasks);
-    probe.settler = useInboxSettler();
-    return createElement(TaskRowStatus, { task: TASK, waiting: waitingOn.get(TASK.id) ?? 0 });
-  }
-  // Note that the task's summary is the same object throughout, as no read of the task list lands.
-  const draw = (inbox: readonly AppInboxTask[], inboxTasks: readonly AppInboxTaskHolding[]) =>
-    act(() =>
-      root.render(
-        onRegistry(
-          registry,
-          createElement(Row, {
-            tasks: tasksControl({ me: "user-dean", tasks: [TASK], inbox, inboxTasks }),
-          }),
-        ),
-      ),
-    );
-  const wears = () =>
-    container.querySelector('[role="img"]')?.getAttribute("aria-label") ?? undefined;
-
-  draw(openItems([]), holding(2, 0));
-  assert.equal(
-    wears(),
-    undefined,
-    "a notice and a teammate's question wait on no answer of Dean's",
-  );
-
-  draw(openItems([QUESTION]), holding(3, 1));
-  assert.equal(wears(), "Waiting on you");
-
-  act(() => {
-    probe.settler?.close(QUESTION);
-  });
-  assert.equal(wears(), undefined, "answered, though main still lists it open");
 });

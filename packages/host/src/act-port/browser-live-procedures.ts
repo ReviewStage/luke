@@ -1,5 +1,5 @@
 /**
- * browser-live-procedures.ts -- a cloud Browser tab's live view as the act port carries it: each view a panel attaches gets a port of its own, its socket opened by the host, from a panel alone and only while the experiment is on.
+ * browser-live-procedures.ts -- a cloud Browser tab's live view as the act port carries it: each view a panel attaches gets a port of its own, its socket opened by the host, from a panel alone.
  *
  * An attach mints a connection for the asking panel and that one view, opens
  * a channel, and posts the channel's other end to that panel alone under
@@ -11,9 +11,8 @@
  * to the one port and is let go (root `AGENTS.md`'s cloud browser line). A
  * panel that attaches a view it already holds has the older port closed
  * first, and a panel whose page is gone has every port it held closed and
- * every connection let go. A cloud Browser tab is drawn in a panel and
- * behind Settings › Experimental, so an attach from any other window, or
- * from a panel while the account has the experiment off, is refused.
+ * every connection let go. A cloud Browser tab is drawn in a panel alone,
+ * so an attach from any other window is refused.
  */
 
 import {
@@ -58,8 +57,6 @@ export interface BrowserLiveActsDependencies<Sender> {
     | "onBrowserLiveClosed"
   >;
   ports: BrowserLivePortSeam<Sender>;
-  /** Whether the account has the Browser tab experiment on now. */
-  experimentOn: () => boolean;
   /** A fresh connection id. */
   createId: () => string;
   /** Runs what a port's message asks of the host, from the port's own callback. */
@@ -78,7 +75,7 @@ export function browserLiveProcedures<Sender>(
   dependencies: BrowserLiveActsDependencies<Sender>,
 ): Pick<PlatformActProcedures<Sender>, BrowserLiveActKind> {
   const browserLivePort = actPortFor<Sender>();
-  const { host, ports, experimentOn, createId, run } = dependencies;
+  const { host, ports, createId, run } = dependencies;
   /** Each panel's attached views, by the id the panel minted. */
   const panels = new Map<Sender, Map<string, Attached>>();
   /** Every attached view, by connection, which is how the host names its events. */
@@ -124,9 +121,9 @@ export function browserLiveProcedures<Sender>(
     return fresh;
   };
 
-  /** The asking panel's contents, or nothing where it is no panel or the experiment is off. */
+  /** The asking panel's contents, or nothing where it is no panel. */
   const panelOf = (actor: ActSender<Sender>): Sender | undefined =>
-    actor.panel && experimentOn() ? actor.sender : undefined;
+    actor.panel ? actor.sender : undefined;
 
   return {
     [BROWSER_LIVE_ACT_KIND.BROWSER_LIVE_ATTACH]: browserLivePort[
@@ -157,7 +154,6 @@ export function browserLiveProcedures<Sender>(
       yield* release(attached);
       return yield* Effect.fail(errors.REFUSED());
     }),
-    // Note that a detach is answered even with the experiment off, because a view standing as it went off must still be let go.
     [BROWSER_LIVE_ACT_KIND.BROWSER_LIVE_DETACH]: browserLivePort[
       BROWSER_LIVE_ACT_KIND.BROWSER_LIVE_DETACH
     ].effect(function* ({ input, context, errors }) {

@@ -104,6 +104,7 @@
     "./agents/luke-mcp/sandbox-door": "./src/agents/luke-mcp/sandbox-door.js",
     "./agents/native-events/native-title": "./src/agents/native-events/native-title.js",
     "./agents/native-events/runner-events-app": "./src/agents/native-events/runner-events-app.js",
+    "./agents/native-events/runner-lines-app": "./src/agents/native-events/runner-lines-app.js",
     "./agents/native-events/runner-token-app": "./src/agents/native-events/runner-token-app.js",
     "./agents/automation-tools": "./src/agents/automation-tools.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",

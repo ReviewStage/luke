@@ -691,26 +691,26 @@ test("the experiments the service answered stand for the account signed in, acro
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
-  const browserOn = { [EXPERIMENT.BROWSER]: true };
+  const memoryOn = { [EXPERIMENT.MEMORY]: true };
 
   assert.deepEqual((await store.snapshot()).experiments, {});
-  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, browserOn), true);
-  assert.deepEqual((await store.snapshot()).experiments, browserOn);
-  assert.deepEqual((await storeIn(directory).snapshot()).experiments, browserOn);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn), true);
+  assert.deepEqual((await store.snapshot()).experiments, memoryOn);
+  assert.deepEqual((await storeIn(directory).snapshot()).experiments, memoryOn);
 
   // The same answer again changes nothing, and an answer for an account not signed in is no choice of this one's.
-  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, browserOn), false);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn), false);
   assert.equal(await store.cacheExperiments("someone-else@example.com", {}), false);
-  assert.deepEqual((await store.snapshot()).experiments, browserOn);
+  assert.deepEqual((await store.snapshot()).experiments, memoryOn);
 });
 
 test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
-  const browserOn = { [EXPERIMENT.BROWSER]: true };
+  const memoryOn = { [EXPERIMENT.MEMORY]: true };
 
   const signedOut = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(signedOut);
   await store.setAccount(TEST_ACCOUNT);
-  await store.cacheExperiments(TEST_ACCOUNT.email, browserOn);
+  await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn);
   await store.clearAccount();
   assert.deepEqual((await store.snapshot()).experiments, {});
   await store.setAccount(TEST_ACCOUNT);
@@ -719,7 +719,7 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
   const switched = await temporaryDirectory(t, "luke-settings-");
   const other = storeIn(switched);
   await other.setAccount(TEST_ACCOUNT);
-  await other.cacheExperiments(TEST_ACCOUNT.email, browserOn);
+  await other.cacheExperiments(TEST_ACCOUNT.email, memoryOn);
   await other.setAccount({ ...TEST_ACCOUNT, email: "teammate@example.com" });
   assert.deepEqual((await storeIn(switched).snapshot()).experiments, {});
 });

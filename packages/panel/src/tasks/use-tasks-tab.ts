@@ -17,6 +17,7 @@ import { planMarkdown } from "@luke/features/plan-markdown";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
+  type RepositoryPin,
   type Task,
   type TaskRunsOnRequest,
   type TaskStanding,
@@ -53,11 +54,7 @@ import {
   type StripTab,
   sameTab,
 } from "@luke/ui/tab-strip-model";
-import {
-  applySectionWrite,
-  NO_TASK_SECTIONS,
-  SECTION_WRITE_FAILED_NOTE,
-} from "@luke/ui/task-sections-model";
+import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import {
   AGENT_PIN_FAILED_NOTES,
   agentsPinned,
@@ -72,12 +69,9 @@ import {
   type PendingMarks,
   type PendingPinPositions,
   type PendingRenames,
-  type PendingRepositoryPin,
-  type PendingRepositoryPins,
   type PendingStandings,
   PIN_MOVE_FAILED_NOTE,
   type PinMove,
-  pinnedRepositories,
   positionedView,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
@@ -108,7 +102,6 @@ import {
   undoStillDue,
   unsettledAgentPins,
   unsettledPinPositions,
-  unsettledRepositoryPins,
   withStanding,
   workspaceReaches,
 } from "@luke/ui/tasks-model";
@@ -200,12 +193,6 @@ import {
 } from "./use-side-panel.js";
 import { sayRestored } from "./version-view.js";
 
-/** A change to the sections drawn before the service answered it, and when it was asked. */
-interface PendingSectionWrite {
-  readonly write: TaskSectionWrite;
-  readonly at: number;
-}
-
 /**
  * use-tasks-tab.ts -- the panel's Tasks tab as one control: which page shows, the presses each page makes, and the host's read of the tasks as the tab shows.
  *
@@ -243,7 +230,7 @@ export type InboxChoice = (
   | { readonly taskId: string; readonly itemId: string }
   | { readonly agentId: string; readonly itemId: string }
 ) & {
-  /** Whether the item itself is shown where the Inbox shows one column: a notification's ask, rather than a row's choice the list stays standing for. */
+  /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
   readonly opened?: true;
 };
 
@@ -252,18 +239,17 @@ export type InboxChoice = (
  * items of every task holding one in a column of their own, and the chosen
  * item beside them. It is the window's alone, as a version history is, so
  * it leaves the task the host has open, and the call bound to it, as they
- * stand; opening any task, or a new one, leaves it. The item chosen is kept
- * while it stands, so the item answered stays in sight, and after it is
- * left, so opening it again in the same workspace stands on the item last read
- * beside the list. A narrow room, a phone's, keeps the choice too but opens
- * on the list, since there the list is the place: an item stands alone only
- * once a row is pressed or a link asks for it (`onOpenItem`).
+ * stand; opening any task, or a new one, leaves it. Nothing is chosen in it
+ * until a row is pressed or a link asks for an item (`onOpenItem`), and the
+ * item chosen is kept while it stands, so the item answered stays in sight;
+ * it opens again on nothing chosen, its list beside an empty pane, or alone
+ * where the Inbox shows one column (`inbox-columns.ts`).
  */
 interface InboxViewControl {
   readonly open: boolean;
-  /** The item chosen in it, none until one is, where the list's first stands in. */
+  /** The item chosen in it, none until one is. */
   readonly chosen: InboxChoice | undefined;
-  /** Opens the Inbox, as the places bar, the sidebar, and its chord do: on its list in a narrow room, whatever stood there, and as it was left in a wide one; asked first where leaving would lose unsaved work. */
+  /** Opens the Inbox, as the places bar, the sidebar, and its chord do, on nothing chosen; asked first where leaving would lose unsaved work. */
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
@@ -279,19 +265,11 @@ interface InboxViewControl {
   /**
    * Opens the Inbox narrowed to a channel with Channels on, from wherever
    * the window stands: the sidebar's row, the command palette. It chooses
-   * no item, so the channel's first stands chosen, and one column opens on
-   * its list, as the Inbox's own row opens it.
+   * no item, as the Inbox's own row opens it.
    */
   readonly onOpenChannel: (channelId: string) => void;
-  /**
-   * Whether the list stands alone rather than the item chosen, where the
-   * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
-   * Show all, and given up by a row pressed. It is held here rather than in
-   * the Inbox, so the window's history can record it and go back to it.
-   */
-  readonly listed: boolean;
-  /** Stands the list alone, or the item chosen. */
-  readonly onListed: (listed: boolean) => void;
+  /** Chooses no item, which stands the list alone where the Inbox shows one column. */
+  readonly onClear: () => void;
   /** Whether the open Inbox shows one column by its own width (`inbox-columns.ts`), which the window's history steps between its list and its item by. */
   readonly single?: boolean;
   /** Says whether the Inbox shows one column. */
@@ -357,8 +335,6 @@ type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
       readonly chosen: InboxChoice | undefined;
-      /** Whether the list stands alone rather than the item chosen, where the Inbox shows one column. */
-      readonly listed: boolean;
     }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | {
@@ -831,14 +807,14 @@ export interface TasksControl {
   onMovePins: (moves: readonly PinMove[], putBack?: () => void) => void;
   /**
    * The sections the account made in its sidebars and the tasks it keeps
-   * in them, every workspace's, as the service last answered them with the
-   * writes still out drawn over them.
+   * in them, every workspace's, as main draws them, the writes still out
+   * among them.
    */
   taskSections: TaskSections;
   /**
-   * Writes changes to the sections, in order, on the account: drawn at
-   * once, sent one after another, and let go as each is answered, so a
-   * refused one goes back with a toast.
+   * Writes a drag's or a menu's changes to the sections, in order, on the
+   * account: drawn by main at once, and put back with a toast if the
+   * service refuses one.
    */
   onWriteSections: (writes: readonly TaskSectionWrite[]) => void;
   /** Deletes a task, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
@@ -971,8 +947,8 @@ const NO_PENDING_RENAMES: PendingRenames = new Map();
 /** No task pin given here and still waiting on main's view. */
 const NO_PENDING_MARKS: PendingMarks = new Map();
 
-/** No repository pin given here and still waiting on main's view. */
-const NO_PENDING_PINS: PendingRepositoryPins = new Map();
+/** No repository pinned, as before main's view carries the sidebar. */
+const NO_REPOSITORY_PINS: readonly RepositoryPin[] = [];
 
 /** No agent pin given here and still waiting on main's view. */
 const NO_PENDING_AGENT_PINS: PendingAgentPins = new Map();
@@ -1045,38 +1021,6 @@ function inWorkspace<Entry extends { readonly taskId: string }>(
     tasks.filter((task) => task.workspaceId === workspaceId).map((task) => task.id),
   );
   return entries.filter((entry) => listed.has(entry.taskId));
-}
-
-/**
- * The Inbox's last choice, by the account signed in and the workspace listed
- * as it was made, so another account on this Mac, or another workspace,
- * never opens on it.
- */
-interface RememberedInboxChoice {
-  readonly account: string | undefined;
-  readonly workspaceId: string | undefined;
-  readonly chosen: InboxChoice;
-}
-
-/**
- * The Inbox's choice to stand on as it opens again: the one last made, where
- * it was made by the account signed in now in the workspace listed, else none,
- * where the list's first stands in. Note that it comes back as a row's choice
- * rather than an ask, so an item gone since gives way to the first rather than
- * saying it is missing.
- */
-function rememberedChoice(
-  remembered: RememberedInboxChoice | undefined,
-  now: { readonly account: string | undefined; readonly workspaceId: string | undefined },
-): InboxChoice | undefined {
-  if (remembered === undefined) return undefined;
-  if (remembered.account !== now.account || remembered.workspaceId !== now.workspaceId) {
-    return undefined;
-  }
-  const { chosen } = remembered;
-  return "taskId" in chosen
-    ? { taskId: chosen.taskId, itemId: chosen.itemId }
-    : { agentId: chosen.agentId, itemId: chosen.itemId };
 }
 
 /**
@@ -1155,8 +1099,6 @@ export function useTasksTab(input: {
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
-  /** The item last chosen in the Inbox, by whom and where, which opening the Inbox again stands on. */
-  const lastInboxChoice = useRef<RememberedInboxChoice | undefined>(undefined);
   // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
   const tasksFixture = loadedTasksFixture();
   /** A file an inbox item opens on a task not yet open, opened once the host has it open. */
@@ -1220,18 +1162,6 @@ export function useTasksTab(input: {
       return next;
     });
   }, []);
-  // A repository's pin given here stands until main's view carries it, as a
-  // task's does. Note that a sign-out lets every one go, because a pin names
-  // a repository rather than a row of this account's own, so one left
-  // standing would be drawn on the next account to sign in.
-  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
-  useEffect(
-    () =>
-      setRepositoryPins((held) =>
-        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
-      ),
-    [viewed, accountSignedIn],
-  );
   // An agent's pin given here stands until main's view carries it, as a plan's does.
   const [agentPins, setAgentPins] = useState<PendingAgentPins>(NO_PENDING_AGENT_PINS);
   useEffect(
@@ -1252,25 +1182,11 @@ export function useTasksTab(input: {
       ),
     [viewed, accountSignedIn],
   );
-  // A change to the sections stands drawn until its act settles, by which
-  // time main's view carries the service's answer to it. Note that a
-  // sign-out lets every one go, as it does a repository's pin.
-  const [sectionWrites, setSectionWrites] = useState<readonly PendingSectionWrite[]>([]);
-  useEffect(() => {
-    if (!accountSignedIn) setSectionWrites([]);
-  }, [accountSignedIn]);
   // Note that every list step below is memoized on what it reads, because
   // this runs on every render of the window and each step walks every task
-  // of every workspace.
-  const viewedSections = viewed.taskSections ?? NO_TASK_SECTIONS;
-  const taskSections = useMemo(
-    () =>
-      sectionWrites.reduce(
-        (held, pending) => applySectionWrite(held, pending.write, pending.at),
-        viewedSections,
-      ),
-    [sectionWrites, viewedSections],
-  );
+  // of every workspace. A repository's pin and a change to the sections are
+  // drawn by main the moment they are asked, so the view already carries them.
+  const taskSections = viewed.taskSections ?? NO_TASK_SECTIONS;
   // A tab closed names a task of the account it was closed under, so a sign-out lets them go.
   useEffect(() => {
     if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
@@ -1491,8 +1407,8 @@ export function useTasksTab(input: {
     [inboxAgent],
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
-  // The cloud Browser tabs, while the Browser tab experiment is on, which the panel draws by its holder:
-  // an agent's page its agent's, on a task or on none, and a task's own panel its agents', never the Inbox's.
+  // The cloud Browser tabs, which the panel draws by its holder: an agent's page its agent's,
+  // on a task or on none, and a task's own panel its agents', never the Inbox's.
   const activeTaskId = viewed.activeTaskId;
   const cloudPlace = useMemo(
     () =>
@@ -1505,10 +1421,9 @@ export function useTasksTab(input: {
             : { taskId: activeTaskId },
     [inboxView, pageAgent, activeTaskId],
   );
-  const cloudOn = useExperiment(EXPERIMENT.BROWSER);
-  const cloudListed = useCloudBrowserTabs(cloudPlace, cloudOn);
+  const cloudListed = useCloudBrowserTabs(cloudPlace, cloudPlace !== undefined);
   // A draft of a tab in an agent's browser stands in the strip after the tabs the service lists.
-  const cloudDrafts = useCloudBrowserDrafts(cloudPlace, cloudOn);
+  const cloudDrafts = useCloudBrowserDrafts(cloudPlace, cloudPlace !== undefined);
   // Note that a panel off its holder lists none, rather than none read yet, so a cloud tab chosen there gives way.
   const cloudBrowsers = useMemo(
     () =>
@@ -1578,6 +1493,36 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (viewed.activeTaskId !== undefined) onRenamePins(viewed.activeTaskId, pinLabels);
   }, [viewed.activeTaskId, pinLabels, onRenamePins]);
+  // A Plan tab an earlier version pinned to the sidebar on this Mac becomes
+  // the task's own pin on the account, since the Plan tab's Pin is the
+  // task's now (`task-actions.tsx`), once the list names the task, and
+  // leaves this Mac's pins only once the account's pin landed, so a refusal
+  // keeps it for the next launch to try again; one the list does not name
+  // yet waits there too, drawn nowhere (`desktop-sidebar.tsx`). A task
+  // already pinned only lets the tab's pin go. Note that each task is asked
+  // once a launch, and that the mark is read as the effect runs, so it is
+  // the newest, as a press's would be.
+  const markTaskNow = useRef<(taskId: string, mark: TaskMark) => Promise<boolean>>(() =>
+    Promise.resolve(false),
+  );
+  const migratedPins = useRef(new Set<string>());
+  const { onUnpin } = sidePanel;
+  useEffect(() => {
+    for (const pin of sidePanel.pins) {
+      if (pin.tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(pin.task)) continue;
+      const pinned = tasks.tasks.find((each) => each.id === pin.task);
+      if (pinned === undefined) continue;
+      migratedPins.current.add(pin.task);
+      const { tab } = pin;
+      if (pinned.pinnedAt !== undefined) {
+        onUnpin(pin.task, tab);
+        continue;
+      }
+      markTaskNow.current(pinned.id, TASK_MARK.PIN).then((changed) => {
+        if (changed) onUnpin(pin.task, tab);
+      });
+    }
+  }, [sidePanel.pins, tasks.tasks, onUnpin]);
   // Main hears which agent's tab, or which task's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the task's
   // place, the side panel fills the window over the column, or the column
@@ -1630,16 +1575,6 @@ export function useTasksTab(input: {
     reportedAgent.current = shownAgent;
     tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
-  // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
-  useEffect(() => {
-    if (inboxChosen !== undefined) {
-      lastInboxChoice.current = {
-        account: input.account,
-        workspaceId: listedWorkspaceId,
-        chosen: inboxChosen,
-      };
-    }
-  }, [inboxChosen, input.account, listedWorkspaceId]);
 
   // The tab showing is what asks the host to read the tasks again; the open
   // task and its call stand through it going away, and a call's drafts reach
@@ -1852,12 +1787,14 @@ export function useTasksTab(input: {
   // A fixture's tasks are marked nowhere, as they are read from nowhere. A
   // pin says nothing once it lands, since the row it moves is in sight; a
   // refusal puts back the mark it drew only while no later press replaced
-  // it, and says so in a toast, since the menu that asked has closed.
-  const markTask = (taskId: string, mark: TaskMark) => {
-    if (fixture !== undefined) return;
+  // it, and says so in a toast, since the menu that asked has closed. It
+  // answers whether the service kept the mark, which the pin migration
+  // above waits on.
+  const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
     const next = markAsked(marks, viewed, taskId, mark, Date.now());
     setMarks((held) => new Map(held).set(taskId, next));
-    act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
+    return act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
       .catch(() => false)
       .then((changed) => {
         if (!changed) {
@@ -1868,25 +1805,21 @@ export function useTasksTab(input: {
             hold: TOAST_HOLD.FAILED,
           });
         }
+        return changed;
       });
   };
+  markTaskNow.current = markTask;
   // A fixture's repositories are pinned nowhere, as its tasks are marked
-  // nowhere. A pin says nothing once it lands, since the group it moves is
-  // in sight; a refusal puts the group back only while no later press
-  // replaced it, and says so in a toast, since the menu that asked has closed.
+  // nowhere. Main draws a pin at once and puts the group back where the
+  // service refused it (`@luke/host`'s `sidebar-collections.ts`); a pin says
+  // nothing once it lands, since the group it moves is in sight, and a
+  // refusal says so in a toast, since the menu that asked has closed.
   const pinRepository = (repository: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    const next: PendingRepositoryPin = { pinned, at: Date.now() };
-    setRepositoryPins((held) => new Map(held).set(repository, next));
     act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })
       .catch(() => false)
       .then((changed) => {
         if (changed) return;
-        setRepositoryPins((held) =>
-          held.get(repository) === next
-            ? new Map([...held].filter(([pending]) => pending !== repository))
-            : held,
-        );
         toast({
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
           tone: STATUS_TONE.DANGER,
@@ -1996,35 +1929,24 @@ export function useTasksTab(input: {
     });
   };
 
-  // Each change to the sections waits on the one before it, so the service
-  // takes them in the order they were drawn. A fixture run draws them and
-  // sends none, so its sections stand as dragged until it ends.
-  const sectionFlight = useRef<Promise<unknown>>(Promise.resolve());
+  // A drag's or a menu's changes to the sections go to main as one ask,
+  // which draws them at once and writes them in order after every ask
+  // before them, putting them back where the service refused one
+  // (`@luke/host`'s `sidebar-collections.ts`). A fixture's sections are
+  // changed nowhere, as its repositories are pinned nowhere.
   const writeSections = (writes: readonly TaskSectionWrite[]) => {
-    const now = Date.now();
-    const pending = writes.map((write): PendingSectionWrite => ({ write, at: now }));
-    if (pending.length === 0) return;
-    setSectionWrites((held) => [...held, ...pending]);
-    if (fixture !== undefined) return;
-    const pressedBy = input.account;
-    for (const each of pending) {
-      const flight = sectionFlight.current.then(() =>
-        accountNow.current === pressedBy
-          ? act(ACT_KIND.TASKS_WRITE_SECTION, each.write).catch(() => false)
-          : undefined,
-      );
-      sectionFlight.current = flight;
-      flight.then((changed) => {
-        setSectionWrites((held) => held.filter((one) => one !== each));
-        if (changed === false) {
-          toast({
-            words: SECTION_WRITE_FAILED_NOTE,
-            tone: STATUS_TONE.DANGER,
-            hold: TOAST_HOLD.FAILED,
-          });
-        }
+    const [first, ...rest] = writes;
+    if (first === undefined || fixture !== undefined) return;
+    act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })
+      .catch(() => false)
+      .then((changed) => {
+        if (changed) return;
+        toast({
+          words: SECTION_WRITE_FAILED_NOTE,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+        });
       });
-    }
   };
 
   // Each task's status choices made here so far, counted as each is sent,
@@ -2175,17 +2097,9 @@ export function useTasksTab(input: {
     !restoring &&
     listSettled
   ) {
-    const rest = restingPage({
-      fresh: fresh && tasks.listStatus === TASKS_READ.READY,
-      remembered: rememberedChoice(lastInboxChoice.current, {
-        account: input.account,
-        workspaceId: listedWorkspaceId,
-      }),
-    });
+    const rest = restingPage(fresh && tasks.listStatus === TASKS_READ.READY);
     const on: StandIn | undefined =
-      rest.kind === RESTING_PAGE.INBOX
-        ? { kind: STAND_IN.INBOX, chosen: rest.chosen, listed: true }
-        : undefined;
+      rest === RESTING_PAGE.INBOX ? { kind: STAND_IN.INBOX, chosen: undefined } : undefined;
     if (on !== undefined) {
       setRested({
         kind: on.kind,
@@ -2725,16 +2639,9 @@ export function useTasksTab(input: {
         return;
       }
       case LINK_PLACE.INBOX: {
-        // Note that a link to the Inbox opens it as its sidebar row does, on the item last chosen in the workspace it lists, and in a narrow room on its list.
-        const workspaceId = listLinked(workspace);
-        standInFor({
-          kind: STAND_IN.INBOX,
-          chosen: rememberedChoice(lastInboxChoice.current, {
-            account: input.account,
-            workspaceId,
-          }),
-          listed: input.room === SHELL_ROOM.NARROW,
-        });
+        // Note that a link to the Inbox opens it as its sidebar row does, on nothing chosen.
+        listLinked(workspace);
+        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
       case LINK_PLACE.INBOX_ITEM: {
@@ -2760,7 +2667,6 @@ export function useTasksTab(input: {
             "planId" in place
               ? { taskId: place.planId, itemId: place.itemId, opened: true }
               : { agentId: place.agentId, itemId: place.itemId, opened: true },
-          listed: false,
         });
         return;
       }
@@ -2769,12 +2675,8 @@ export function useTasksTab(input: {
         listLinked(workspace);
         if (!channelsOn) return;
         standChannelPlace(place.channelId);
-        // Note that a channel's link opens it as its row does: on no item, and on its list in a narrow room.
-        standInFor({
-          kind: STAND_IN.INBOX,
-          chosen: undefined,
-          listed: input.room === SHELL_ROOM.NARROW,
-        });
+        // Note that a channel's link opens it as its row does: on no item.
+        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
       case LINK_PLACE.AUTOMATIONS:
@@ -3158,24 +3060,12 @@ export function useTasksTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
-      // Note that it opens on the list though it keeps the item last chosen, so one column shows the list and two stand that item beside it (`inbox-columns.ts`).
+      // Note that it opens on nothing chosen, so one column shows the list and two an empty pane beside it (`inbox-columns.ts`).
       // With Channels on, it leaves any channel shown, so the Inbox lists every channel's items.
       onOpen: guard(() => {
         setHistoryFor(undefined);
         if (channelsOn) leaveChannel();
-        const remembered = lastInboxChoice.current;
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, listed: true }
-            : {
-                kind: STAND_IN.INBOX,
-                chosen: rememberedChoice(remembered, {
-                  account: input.account,
-                  workspaceId: listedWorkspaceId,
-                }),
-                listed: true,
-              },
-        );
+        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
@@ -3186,19 +3076,18 @@ export function useTasksTab(input: {
         // An item opened by a press is a place of its own, as a link's is, not the Inbox rested on.
         setRested(undefined);
         setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX
-            ? { ...held, chosen, listed: false }
-            : { kind: STAND_IN.INBOX, chosen, listed: false },
+          held?.kind === STAND_IN.INBOX ? { ...held, chosen } : { kind: STAND_IN.INBOX, chosen },
         );
       }),
       onOpenChannel: guard((channelId: string) => {
         setHistoryFor(undefined);
         chooseChannel(channelId);
-        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined, listed: true });
+        setStandIn({ kind: STAND_IN.INBOX, chosen: undefined });
       }),
-      listed: inboxView?.listed ?? false,
-      onListed: (listed) =>
-        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
+      onClear: () =>
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX ? { ...held, chosen: undefined } : held,
+        ),
       single: inboxView !== undefined && inboxSingle,
       onSingle: setInboxSingle,
       pages: inboxPages.pages,
@@ -3368,7 +3257,7 @@ export function useTasksTab(input: {
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
     onSettleTasks: settleTasks,
-    pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
+    pinnedRepositories: (viewed.repositoryPins ?? NO_REPOSITORY_PINS).map((pin) => pin.repository),
     onPinRepository: pinRepository,
     taskSections,
     onWriteSections: writeSections,

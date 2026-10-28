@@ -260,6 +260,7 @@ const onHub = <A, E, R>(
       Effect.map(Sync, (hub) => ({
         watch: (topics, fallback) =>
           Effect.map(hub.watch(topics, fallback), (watch) => ({
+            ...watch,
             next: Effect.andThen(Queue.offer(looking, undefined), watch.next),
           })),
       })),

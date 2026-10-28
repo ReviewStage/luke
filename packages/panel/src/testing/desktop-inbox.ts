@@ -35,6 +35,7 @@ import {
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import type { TasksFileParams } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -219,6 +220,12 @@ export const RETRY: InboxItem = answeredBy(
 );
 export const EXPIRY = item("a1b2c3d4-0000-4000-8000-000000000003", "Expire after 7 days?", 4_000);
 
+/** The Billing item chosen, as a press on its row chooses it. */
+export const ON_THRESHOLD = { taskId: BILLING.id, itemId: THRESHOLD.id } as const;
+
+/** The Invites item chosen. */
+export const ON_EXPIRY = { taskId: INVITES.id, itemId: EXPIRY.id } as const;
+
 /** The item given as a notice: its opening message asking nothing. */
 export function noticeOf(asked: InboxItem): InboxItem {
   const [opening, ...rest] = asked.thread ?? [];
@@ -317,6 +324,8 @@ class InboxWorld {
   readMarkRefused = false;
   /** The listed workspace's members, as a read of them answers. */
   members: readonly WorkspaceMember[] = [];
+  /** Every read of a file's lines, in order, each answered with as many numbered lines as it asks for. */
+  fileReads: TasksFileParams[] = [];
 }
 
 export const world = new InboxWorld();
@@ -401,6 +410,7 @@ beforeEach(() => {
   world.readMarks = [];
   world.readMarkRefused = false;
   world.members = [];
+  world.fileReads = [];
   world.main = followedInboxes((scope) =>
     scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id),
   );
@@ -459,6 +469,27 @@ beforeEach(() => {
               branch: "main",
               entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
               truncated: false,
+            },
+          },
+        });
+      }
+      if (request.kind === ACT_KIND.TASKS_FILE) {
+        world.fileReads.push(request.payload);
+        const { path, firstLine, lastLine } = request.payload;
+        const lines = Array.from(
+          { length: lastLine - firstLine + 1 },
+          (_, at) => `line ${firstLine + at}`,
+        );
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: {
+            file: {
+              path,
+              repository: "acme/relay",
+              branch: "main",
+              firstLine,
+              lineCount: 40,
+              lines,
             },
           },
         });
@@ -529,13 +560,13 @@ interface Asked {
   newTasks: number;
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 /** Main's word of what waits on the reader on each task: the one open question on each. */
 const MAIN_WAITING: readonly AppInboxTask[] = [
   { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
   { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
 ];
 
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded, on nothing chosen or on `chosen`; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 export function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
   {
@@ -549,6 +580,7 @@ export function mount(
     readerKnown = true,
     toasts = false,
     channels = false,
+    chosen: firstChosen,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -567,6 +599,8 @@ export function mount(
     toasts?: boolean;
     /** Whether the Inbox is narrowed to #general, chosen as the sidebar's row chooses it. */
     channels?: boolean;
+    /** The item the Inbox opens on, as a row's press chose it before; none where nothing is chosen yet. */
+    chosen?: InboxChoice;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -583,9 +617,7 @@ export function mount(
   function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
     // The drafts are handed to the account signed in, none here, as the panel's root hands them.
     useDraftsOwner(undefined);
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    // Whether the list was asked for, which the window keeps as the Tasks tab does.
-    const [listAsked, setListAsked] = useState(false);
+    const [chosen, setChosen] = useState<InboxChoice | undefined>(firstChosen);
     const [inboxOpen, setOpen] = useState(true);
     world.setInboxOpen = setOpen;
     world.chooseFromOutside = setChosen;
@@ -628,8 +660,7 @@ export function mount(
         onChoose: setChosen,
         onOpenItem: setChosen,
         onOpenChannel: chooseChannel,
-        listed: listAsked,
-        onListed: setListAsked,
+        onClear: () => setChosen(undefined),
         pages: undefined,
         onTaskAgents: () => undefined,
       },

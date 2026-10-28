@@ -193,9 +193,9 @@ function withOpened(
 /**
  * The holder's cloud Browser tabs, the oldest first: the agent's its page
  * shows, or the open task's agents'; none while unread, and none at all
- * where `listing` is off: the Browser tab experiment off, or no holder. A
- * tab opened here stands from its open, and is let go of once a read lists
- * it, so one its agent closes afterwards goes.
+ * where `listing` is off: no holder, or a panel that draws none. A tab
+ * opened here stands from its open, and is let go of once a read lists it,
+ * so one its agent closes afterwards goes.
  */
 export function useCloudBrowserTabs(
   place: BrowserTabsPlace | undefined,

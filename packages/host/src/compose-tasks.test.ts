@@ -194,10 +194,16 @@ interface FakeService extends TasksClient {
   pins: RepositoryPin[];
   /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
+  /** The transaction a pin's write answers it committed in, where a test names one. */
+  pinTxid: string | undefined;
+  /** What a pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
+  pinAnswered: Effect.Effect<void>;
   /** The account's sidebar sections as the service keeps them; none where it does not answer, as before any test sets them. */
   sections: TaskSections | undefined;
   /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
+  /** The kind of section change the service refuses, where a test names one. */
+  sectionRefused: TaskSectionWrite["kind"] | undefined;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -504,8 +510,11 @@ function fakeService(tasks: Task[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    pinTxid: undefined,
+    pinAnswered: Effect.void,
     sections: undefined,
     sectionWrites: [],
+    sectionRefused: undefined,
     get memberships() {
       return memberships;
     },
@@ -776,20 +785,24 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
-      Effect.sync(() => {
-        if (service.pinsFail) return undefined;
-        const others = service.pins.filter((pin) => pin.repository !== repository);
-        const standing = service.pins.find((pin) => pin.repository === repository);
-        service.pins = pinned
-          ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
-          : others;
-        return { pins: service.pins };
-      }),
+      Effect.andThen(
+        Effect.sync(() => {
+          if (service.pinsFail) return undefined;
+          const others = service.pins.filter((pin) => pin.repository !== repository);
+          const standing = service.pins.find((pin) => pin.repository === repository);
+          service.pins = pinned
+            ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
+            : others;
+          const txid = service.pinTxid;
+          return { pins: service.pins, ...(txid === undefined ? undefined : { txid }) };
+        }),
+        (answer) => Effect.as(service.pinAnswered, answer),
+      ),
     // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync(() => {
         service.sectionWrites.push(write);
-        return service.sections;
+        return write.kind === service.sectionRefused ? undefined : service.sections;
       }),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
@@ -1686,11 +1699,11 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
 );
 
 it.effect(
-  "the sidebar's sections and pins are followed from the first refresh and never read again, a change takes the service's answer, one refused leaves them, and another Mac's change is pushed",
+  "the sidebar's sections and pins are followed from the first refresh and never read again, a change takes the service's answer, one refused leaves them, and another Mac's change is told at once",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, last, settled } = yield* subject(service);
+      const { call, last, told, settled } = yield* subject(service);
       const launch: TaskSection = {
         id: SECTION_ID,
         workspaceId: PERSONAL.id,
@@ -1710,7 +1723,9 @@ it.effect(
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
       service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place), { changed: true });
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [place] }), {
+        changed: true,
+      });
       assert.deepEqual(last()?.taskSections, {
         sections: [launch],
         entries: [placed],
@@ -1719,7 +1734,7 @@ it.effect(
 
       service.sections = undefined;
       const removal = { ...place, sectionId: null };
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, removal), {
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [removal] }), {
         changed: false,
       });
       assert.deepEqual(last()?.taskSections, {
@@ -1740,8 +1755,11 @@ it.effect(
         { repository: "acme/relay", pinnedAt: 3 },
         { repository: "acme/web", pinnedAt: 9 },
       ];
+      const before = told.length;
       service.live.sidebar.move();
       yield* nextPoll(settled);
+      // Note that an answer moving two parts is told once, so no window draws one moved without the other.
+      assert.equal(told.length - before, 1);
       assert.deepEqual(
         last()?.taskSections?.sections.map((section) => section.title),
         ["Launch", "Later"],
@@ -1750,6 +1768,38 @@ it.effect(
         last()?.repositoryPins?.map((pin) => pin.repository),
         ["acme/web", "acme/relay"],
       );
+    }),
+);
+
+it.effect(
+  "a drag's change the service refused takes back only what it drew, so the changes the service kept before it stay drawn",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      // The service keeps the section, then refuses to put the task in it.
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
+      service.sectionRefused = TASK_SECTION_WRITE.PLACE;
+      const writes = [
+        {
+          kind: TASK_SECTION_WRITE.CREATE,
+          id: SECTION_ID,
+          workspaceId: PERSONAL.id,
+          title: "Launch",
+        },
+        { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID },
+      ];
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes }), {
+        changed: false,
+      });
+      assert.deepEqual(last()?.taskSections, service.sections);
     }),
 );
 
@@ -1771,6 +1821,76 @@ it.effect(
         ["acme/web", "acme/relay"],
       );
     }),
+);
+
+it.effect(
+  "a pin stands from the press until the followed sidebar carries its transaction, through an answer from before it, and a refused one is put back",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, told, settled } = yield* subject(service);
+      const pinned = (view: TasksView | undefined) =>
+        view?.repositoryPins?.map((pin) => pin.repository) ?? [];
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      service.live.sidebar.set({}, ["tx-earlier"]);
+      yield* nextPoll(settled);
+
+      service.pinTxid = "tx-pin";
+      const from = told.length;
+      const pin = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/relay", pinned: true }),
+      );
+      yield* settled;
+      // Another Mac's change from before the pin landed is answered without it.
+      service.live.sidebar.set({ pins: [] }, ["tx-other"]);
+      yield* nextPoll(settled);
+      service.live.sidebar.set({ pins: service.pins }, ["tx-pin"]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(pin), { changed: true });
+      assert.ok(told.length > from);
+      assert.deepEqual(
+        told.slice(from).filter((view) => !pinned(view).includes("acme/relay")),
+        [],
+        "the pin is never drawn back",
+      );
+
+      service.pinsFail = true;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
+        { changed: false },
+      );
+      assert.deepEqual(pinned(last()), ["acme/relay"]);
+    }),
+);
+
+it.effect("a pin still being written when the account signs out is drawn for nobody after", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, told, tasks, settled } = yield* subject(service);
+    const answered = yield* Deferred.make<void>();
+    service.pinAnswered = Deferred.await(answered);
+
+    const pin = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/secret", pinned: true }),
+    );
+    yield* settled;
+    const from = told.length;
+    // Note that the sign-out waits on the pin's service call, which holds the one lock reads take.
+    const signingOut = yield* Effect.forkChild(tasks.reset);
+    yield* settled;
+    yield* Deferred.succeed(answered, undefined);
+    yield* Fiber.join(pin);
+    yield* Fiber.join(signingOut);
+    yield* settled;
+
+    assert.deepEqual(
+      told.slice(from).flatMap((view) => view.repositoryPins ?? []),
+      [],
+    );
+  }),
 );
 
 it.effect("a sign-out drops the view the window drew", () =>

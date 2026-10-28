@@ -205,7 +205,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
   );
 
   it.effect(
-    "a write that commits while the first read runs wakes the look after it, which carries its txid",
+    "a write that commits while the first read runs wakes the look after it, which carries its txid and when it was heard",
     () =>
       onHub(({ asleep }) =>
         Effect.gen(function* () {
@@ -222,6 +222,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
             return false;
           });
 
+          const writtenAt = yield* Clock.currentTimeMillis;
           const held = yield* Effect.forkChild(
             heldUntil(read, (moved) => moved, [task], NEVER_REACHED, Duration.hours(2)),
             { startImmediately: true },
@@ -229,7 +230,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
 
           assert.deepEqual(
             yield* driven({ fiber: held, asleep }, STEP),
-            Option.some({ read: true, txids: [txid] }),
+            Option.some({ read: true, txids: [txid], heardAt: Option.some(writtenAt) }),
           );
         }),
       ),

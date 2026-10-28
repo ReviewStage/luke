@@ -13,7 +13,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import { TaskRowStatus, taskCardOf } from "./task-card.js";
 
 /**
@@ -40,7 +40,6 @@ export function RecentRow({
   now,
   face = true,
   unread,
-  waiting,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -50,8 +49,6 @@ export function RecentRow({
   face?: boolean;
   /** Whether it is unread as the sidebar's row counts it: marked so by hand, or saved since the developer last looked (`useUnreadTasks`). */
   unread: boolean;
-  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
-  waiting: number;
   onOpen: () => void;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
@@ -61,6 +58,7 @@ export function RecentRow({
     rename: rename.begin,
     drawn: true,
     unread,
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const row = useRef<HTMLElement | null>(null);
   const hold = useCallback((press: HTMLElement | null) => {
@@ -100,7 +98,7 @@ export function RecentRow({
                   {task.repository ?? "No repository"}
                 </OneLine>
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-                <TaskRowStatus task={task} waiting={waiting} />
+                <TaskRowStatus task={task} />
                 <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
               </span>
             )

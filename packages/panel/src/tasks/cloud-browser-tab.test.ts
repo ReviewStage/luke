@@ -50,7 +50,7 @@ import {
 
 /**
  * The side panel's cloud Browser tabs: the task's tabs as the service lists
- * them, read only while the Browser tab experiment is on; each drawn in the
+ * them, read only while a panel lists them; each drawn in the
  * strip, kept chosen while the list is on its way, and closed in this window
  * alone; and one tab's pane, which waits quietly for the page, draws it once
  * a frame arrives, takes the tab over and hands it back, and steers it from
@@ -149,7 +149,7 @@ function pushedFollow<View>(): {
   };
 }
 
-test("the task's cloud Browser tabs are read once and then followed live, the agent's pointer moving with them, let go as no reader stands, and not read at all while the experiment is off", async () => {
+test("the task's cloud Browser tabs are read once and then followed live, the agent's pointer moving with them, let go as no reader stands, and not read at all while nothing lists them", async () => {
   const asked: SentPortAct[] = [];
   const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] } | { failure: string }>();
   fakeActPortAnswering((request) => {
