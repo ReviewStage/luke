@@ -29,6 +29,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   FAILED_RUN_WINDOW_MILLIS,
   LIVE_SIGNED_OUT,
+  type SealedLiveQueryWire,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
 import type { MemorySummary } from "@luke/features/memory-wire";
@@ -235,11 +236,13 @@ function fakeService() {
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
   let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
+  let itemsLive: typeof LIVE_ANSWERED | undefined;
   // Each live read's rows, polled; every followed scope's inbox reads the one script.
   const live = {
     transcript: polledLive(TRANSCRIPT_PARTS),
     scope: polledLive(SCOPE_PARTS),
     account: polledLive(ACCOUNT_PARTS),
+    items: polledLive(ITEMS_PARTS),
   };
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
@@ -631,6 +634,16 @@ function fakeService() {
         if (typeof accountLive === "object") return Effect.succeed(accountLive);
         return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
       }),
+    accountInboxItemsLive: (userId, since, poll, after) =>
+      Effect.suspend((): ReturnType<CodingAgentClient["accountInboxItemsLive"]> => {
+        if (poll !== true) asked.push(`account-items-live:${userId}`);
+        if (itemsLive === undefined) {
+          return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        }
+        if (poll !== true) return Effect.succeed(changedSince(live.items.first(), since));
+        if (after === undefined) asked.push(`account-items-again:${since}`);
+        return Effect.map(live.items.poll(after), (answer) => changedSince(answer, since));
+      }),
   };
   return {
     client,
@@ -670,6 +683,10 @@ function fakeService() {
     sealAccount: (next: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined) => {
       accountLive = next;
     },
+    /** Whether the service answers the account's items' live read; none answers unanswered. */
+    sealItems: (next: typeof LIVE_ANSWERED | undefined) => {
+      itemsLive = next;
+    },
     /** The transaction a Start answers it committed in; none answers none. */
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
@@ -698,6 +715,25 @@ const TRANSCRIPT_PARTS = [
 ] as const;
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
+const ITEMS_PARTS = ["stamps", "items", "messages", "files"] as const;
+
+/** The account's items' read as the service answers it: every stamp, and the items changed at or after `since` alone, every one where it names none. */
+function changedSince<Answer extends { readonly queries: { readonly items: SealedLiveQueryWire } }>(
+  answer: Answer,
+  since: number | undefined,
+): Answer {
+  const { items } = answer.queries;
+  if (items.rows === undefined) return answer;
+  const rows = items.rows.filter(
+    (row) =>
+      typeof row === "object" &&
+      row !== null &&
+      "updatedAt" in row &&
+      typeof row.updatedAt === "number" &&
+      row.updatedAt >= (since ?? 0),
+  );
+  return { ...answer, queries: { ...answer.queries, items: { ...items, rows } } };
+}
 
 /** Every step a follow has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
@@ -759,6 +795,7 @@ function subject(
       sendTxid: service.sendTxid,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
+      sealItems: service.sealItems,
       commitIn: service.commitIn,
       live: service.live,
       /** Every answer of the followed account inbox the host told, in order. */
@@ -766,6 +803,17 @@ function subject(
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
         ),
+      /** Every telling of the followed account's items, each one's scopes in the order of their ids. */
+      accountItems: () =>
+        events.flatMap((event): unknown[] => {
+          if (event.kind !== GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED) return [];
+          const told = event.payload;
+          if (!isRecord(told) || !Array.isArray(told.scopes)) return [told];
+          const scopes = told.scopes.toSorted((one, other) =>
+            JSON.stringify(one) < JSON.stringify(other) ? -1 : 1,
+          );
+          return [{ ...told, scopes }];
+        }),
       /** Every followed plan's or agent's inbox the host told, in order. */
       told: () =>
         events.flatMap((event) =>
@@ -2250,6 +2298,189 @@ it.effect(
       assert.deepEqual(asked, ["account-inbox-live:user-dana", "account-inbox-live:user-dana"]);
       assert.deepEqual(accountInboxes(), []);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
+    }),
+);
+
+/** The channel the account's items live in, and another one moved to. */
+const CHANNEL_ID = "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9";
+const OTHER_CHANNEL_ID = "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d";
+
+/** The item as the account's items read sends it, in its channel. */
+const HELD_ITEM: InboxItem = { ...LIVE_ITEM, channelId: CHANNEL_ID };
+
+/** A second task of the account's, and an item on it changed a minute before the first. */
+const OTHER_TASK_ID = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f";
+const OTHER_PLAN_SCOPE = { kind: "plan", id: OTHER_TASK_ID } as const;
+const OTHER_ITEM: InboxItem = {
+  ...HELD_ITEM,
+  id: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d",
+  key: "deploy",
+  title: "Deploy to staging?",
+  updatedAt: ITEM.updatedAt - 60_000,
+};
+
+/** Where an item on `planId` stands as its stamp carries it, waiting on Dana with nothing on its thread, unless `moved` says otherwise. */
+function stampOf(item: InboxItem, planId: string, moved: Record<string, unknown> = {}) {
+  return {
+    id: item.id,
+    planId,
+    agentId: item.agentId,
+    revision: item.revision,
+    version: item.version,
+    status: item.status,
+    updatedAt: item.updatedAt,
+    unread: item.unread ?? false,
+    waitsOn: "user-dana",
+    channelId: item.channelId ?? CHANNEL_ID,
+    messages: 0,
+    ...moved,
+  };
+}
+
+/** The account's items' read moved to the stamps given, the items given its rows, each as `row` writes it. */
+function deliverItems(
+  live: { readonly items: PolledLive<(typeof ITEMS_PARTS)[number]> },
+  stamps: readonly unknown[],
+  items: readonly (InboxItem | Record<string, unknown>)[],
+) {
+  live.items.set({
+    stamps,
+    items: items.map((item) => ({ ...ITEM_ROW, ...item })),
+    messages: [],
+    files: [],
+  });
+}
+
+it.effect(
+  "the account's items are told whole by plan once their rows land, then only the plan an item moved on",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealItems, live, accountItems } = yield* subject();
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* settled;
+      const both = [stampOf(HELD_ITEM, TASK_ID), stampOf(OTHER_ITEM, OTHER_TASK_ID)];
+      deliverItems(live, both, [HELD_ITEM, OTHER_ITEM]);
+      yield* toldTimes(accountItems, 1);
+
+      const moved = { ...HELD_ITEM, revision: 3, updatedAt: HELD_ITEM.updatedAt + 1_000 };
+      deliverItems(live, [stampOf(moved, TASK_ID), both[1]], [moved, OTHER_ITEM]);
+      yield* nextPoll;
+      yield* toldTimes(accountItems, 2);
+
+      assert.deepEqual(accountItems(), [
+        {
+          whole: true,
+          scopes: [
+            { scope: OTHER_PLAN_SCOPE, items: [OTHER_ITEM] },
+            { scope: PLAN_SCOPE, items: [HELD_ITEM] },
+          ],
+        },
+        { whole: false, scopes: [{ scope: PLAN_SCOPE, items: [moved] }] },
+      ]);
+    }),
+);
+
+it.effect(
+  "an item's read mark and channel moving with no resend are patched from its stamp, and who it waits on moving asks for it again from its change",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealItems, live, accountItems } = yield* subject();
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* settled;
+      deliverItems(
+        live,
+        [stampOf(HELD_ITEM, TASK_ID), stampOf(OTHER_ITEM, OTHER_TASK_ID)],
+        [HELD_ITEM, OTHER_ITEM],
+      );
+      yield* toldTimes(accountItems, 1);
+
+      // Only the stamp moves: the item changed before the latest held, so it is not sent.
+      const marked = { ...OTHER_ITEM, unread: true, channelId: OTHER_CHANNEL_ID };
+      deliverItems(
+        live,
+        [stampOf(HELD_ITEM, TASK_ID), stampOf(marked, OTHER_TASK_ID)],
+        [HELD_ITEM, OTHER_ITEM],
+      );
+      yield* nextPoll;
+      yield* toldTimes(accountItems, 2);
+
+      const reassigned = { ...marked, waitsOn: { userId: "user-sam", name: "Sam" } };
+      deliverItems(
+        live,
+        [stampOf(HELD_ITEM, TASK_ID), stampOf(marked, OTHER_TASK_ID, { waitsOn: "user-sam" })],
+        [HELD_ITEM, { ...marked, waitsOn: "user-sam", waitsOnName: "Sam" }],
+      );
+      yield* nextPoll;
+      yield* nextPoll;
+      yield* toldTimes(accountItems, 3);
+
+      assert.deepEqual(accountItems().slice(1), [
+        { whole: false, scopes: [{ scope: OTHER_PLAN_SCOPE, items: [marked] }] },
+        { whole: false, scopes: [{ scope: OTHER_PLAN_SCOPE, items: [reassigned] }] },
+      ]);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("account-items-again:")),
+        [`account-items-again:${OTHER_ITEM.updatedAt}`],
+      );
+    }),
+);
+
+it.effect("an item no stamp names any more is dropped, its plan told holding nothing", () =>
+  Effect.gen(function* () {
+    const { call, sealItems, live, accountItems } = yield* subject();
+    sealItems(LIVE_ANSWERED);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+    yield* settled;
+    deliverItems(
+      live,
+      [stampOf(HELD_ITEM, TASK_ID), stampOf(OTHER_ITEM, OTHER_TASK_ID)],
+      [HELD_ITEM, OTHER_ITEM],
+    );
+    yield* toldTimes(accountItems, 1);
+
+    deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
+    yield* nextPoll;
+    yield* toldTimes(accountItems, 2);
+
+    assert.deepEqual(accountItems()[1], {
+      whole: false,
+      scopes: [{ scope: OTHER_PLAN_SCOPE, items: [] }],
+    });
+  }),
+);
+
+it.effect(
+  "a window following the account's items through a sign-out is told there are none, then the next account's items whole once it signs in",
+  () =>
+    Effect.gen(function* () {
+      let signedIn: string | undefined = "user-dana";
+      const { call, asked, sealItems, live, accountItems, reset } = yield* subject({
+        accountId: () => signedIn,
+      });
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* settled;
+      deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
+      yield* toldTimes(accountItems, 1);
+
+      signedIn = undefined;
+      yield* reset;
+      yield* settled;
+      signedIn = "user-sam";
+      deliverItems(live, [stampOf(OTHER_ITEM, OTHER_TASK_ID)], [OTHER_ITEM]);
+      yield* TestClock.adjust("5 seconds");
+      yield* toldTimes(accountItems, 3);
+
+      assert.deepEqual(accountItems().slice(1), [
+        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        { whole: true, scopes: [{ scope: OTHER_PLAN_SCOPE, items: [OTHER_ITEM] }] },
+      ]);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("account-items-live:")),
+        ["account-items-live:user-dana", "account-items-live:user-sam"],
+      );
     }),
 );
 
