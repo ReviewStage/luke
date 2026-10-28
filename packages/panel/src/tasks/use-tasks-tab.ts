@@ -1236,6 +1236,12 @@ export function useTasksTab(input: {
   const newTaskStands = useRef(false);
   newTaskStands.current = newTaskAsk !== undefined;
   const lastStart = useRef<string | undefined>(undefined);
+  // The words of starts refused while a New task card stood, put back in the draft once it closes.
+  const heldWords = useRef<(() => void)[]>([]);
+  useEffect(() => {
+    if (newTaskAsk !== undefined) return;
+    for (const restore of heldWords.current.splice(0)) restore();
+  }, [newTaskAsk]);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
   const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
@@ -2643,8 +2649,10 @@ export function useTasksTab(input: {
     const refusedWith = (note: Failure): Failure => {
       if (handed !== undefined) {
         letGoOfPage();
+        const restore = from.restore ?? (() => undefined);
         const reopen = () => {
-          from.restore?.();
+          heldWords.current = heldWords.current.filter((held) => held !== restore);
+          restore();
           setNewTaskAsk({
             preset:
               card === undefined
@@ -2656,9 +2664,13 @@ export function useTasksTab(input: {
           });
         };
         // Note that a refusal answered after New task was opened again, or another start pressed,
-        // says why in a toast rather than taking the card, its words, or the page they stand on,
-        // and its Open brings the refused card back, over whatever card stands then.
+        // says why in a toast rather than taking the card or the page they stand on, and its Open
+        // brings the refused card back, over whatever card stands then. Its words go back in the
+        // draft where it holds nothing, at once with no card standing and else once the card
+        // standing closes, so they are never lost and never fill a card the developer is looking at.
         if (newTaskStands.current || lastStart.current !== handed.idempotencyKey) {
+          if (newTaskStands.current) heldWords.current.push(restore);
+          else restore();
           toast({
             words: `${START_REFUSED_LEAD} ${note.text}`,
             tone: STATUS_TONE.DANGER,
