@@ -26,6 +26,7 @@ export default defineConfig({
     name: "desktop",
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     setupFiles: [
+      "../../packages/wire/src/testing/file-time-cap.ts",
       "../../packages/panel/src/testing/resize-observer.ts",
       "../../packages/panel/src/testing/match-media.ts",
     ],

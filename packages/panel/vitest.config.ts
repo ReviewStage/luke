@@ -32,7 +32,11 @@ export default defineConfig({
   test: {
     name: "panel",
     include: ["src/**/*.test.ts"],
-    setupFiles: ["src/testing/resize-observer.ts", "src/testing/match-media.ts"],
+    setupFiles: [
+      "../wire/src/testing/file-time-cap.ts",
+      "src/testing/resize-observer.ts",
+      "src/testing/match-media.ts",
+    ],
     css: { include: [PANEL_STYLESHEETS] },
     server: { deps: { inline: ["streamdown", "@pierre/diffs"] } },
     // CI's shards split the files by their recorded time (`scripts/lib/test-shards.mjs`).

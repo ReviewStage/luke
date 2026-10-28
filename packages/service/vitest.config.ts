@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     name: "service",
     include: ["src/**/*.test.ts"],
+    setupFiles: ["../wire/src/testing/file-time-cap.ts"],
     // One migrated PGlite per run, which every file's opening loads.
     globalSetup: ["../database/src/testing/migrated-pglite-setup.ts"],
     // CI's shards split the files by their recorded time (`scripts/lib/test-shards.mjs`).
