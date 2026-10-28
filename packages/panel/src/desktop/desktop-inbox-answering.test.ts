@@ -148,9 +148,7 @@ function answeredPicks(page: HTMLElement): (string | null | undefined)[] {
 function optionHeads(page: HTMLElement): (string | null)[] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
-  return [...pane.querySelectorAll<HTMLElement>('[role="radio"], [role="checkbox"]')].map((each) =>
-    wordsOf(each),
-  );
+  return openOptions(pane).map((each) => wordsOf(each));
 }
 
 test("an open item's ⋯ menu in the pane's bar, and the × on its question's card, offer Resolve without answering, the menu beside Mark as read or unread and Copy link, which asks first and then settles it at the revision drawn, its ask saying who resolved it; a settled item's menu offers Copy link alone", async () => {
