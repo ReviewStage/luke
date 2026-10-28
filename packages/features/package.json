@@ -59,6 +59,7 @@
     "./github-repositories-wire": "./src/github-repositories-wire.js",
     "./github-installation-wire": "./src/github-installation-wire.js",
     "./inbox-wire": "./src/inbox-wire.js",
+    "./inbox-writes": "./src/inbox-writes.js",
     "./device-agent-wire": "./src/device-agent-wire.js",
     "./host-wire": "./src/host-wire.js",
     "./host-release": "./src/host-release.js",

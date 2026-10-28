@@ -962,9 +962,6 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   await act(async () => inbox.row("Ship it?")?.click());
   assert.equal(inbox.title(), "Ship it?");
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
-  const dot = (title: string) =>
-    inbox.row(title)?.querySelector(".luke-unread-gutter .luke-unread-dot") !== null;
-  assert.deepEqual([dot("Ship it?"), dot("Roll back?")], [false, true]);
   const mark = inbox
     .row("Roll back?")
     ?.closest("li")
@@ -972,7 +969,6 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   assert.ok(mark, "an unread row offers Mark as read over its time");
   await act(async () => mark.click());
   assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
-  assert.equal(dot("Roll back?"), false);
   inbox.unmount();
 });
 

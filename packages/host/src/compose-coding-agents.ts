@@ -37,6 +37,7 @@ import {
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessageParamsSchema,
+  codingAgentInboxReadAllParamsSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxScopeSchema,
   codingAgentInboxStartParamsSchema,
@@ -79,7 +80,13 @@ import {
   providerKeySaveParamsSchema,
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
-import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import {
+  acknowledgedNow,
+  answeredNow,
+  closedNow,
+  type InboxReader,
+} from "@luke/features/inbox-writes";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
@@ -101,7 +108,12 @@ import { type AccountItems, accountItems, followSignedInItems } from "./account-
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type InboxTxWaits, inboxTxWaits } from "./inbox-tx-waits.js";
+import {
+  INBOX_CHANGE,
+  type InboxReads,
+  type InboxWritten,
+  inboxReads,
+} from "./inbox-collections.js";
 import type { RowWrite } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
@@ -217,6 +229,8 @@ export interface CodingAgentsDependencies {
   client: CodingAgentClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
+  /** The member signed in now, as an answer or a close drawn before the service says how it stands names them; none where nobody is. */
+  reader?: () => InboxReader | undefined;
   /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every agent's row (`TasksComposer.listed`), so a
@@ -275,7 +289,7 @@ export function composeCodingAgents(
       accountId: dependencies.accountId,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
-    const txWaits = inboxTxWaits();
+    const reads = inboxReads();
     const held = yield* transcriptHeld<TranscriptKey>();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
@@ -285,16 +299,16 @@ export function composeCodingAgents(
             : client.agentInboxLive(scope.id, userId, poll, after),
         ),
       accountId: dependencies.accountId,
-      txWaits,
+      reads,
     });
     const accounts = yield* accountInboxes({
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
-      txWaits,
+      reads,
     });
     const items = yield* accountItems({
       seal: (userId, since, poll, after) =>
         asked(client.accountInboxItemsLive(userId, since, poll, after)),
-      txWaits,
+      reads,
     });
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
@@ -303,7 +317,7 @@ export function composeCodingAgents(
       dependencies,
       http,
       { transcripts, followed, held },
-      { inboxes, followed: inboxFollows, txWaits },
+      { inboxes, followed: inboxFollows, reads },
       { accounts, followed: accountFollow },
       { items, followed: itemsFollow },
     );
@@ -322,7 +336,7 @@ interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
   readonly followed: FiberMap.FiberMap<InboxScopeKey>;
   /** The followed inboxes' waits, the account's among them, which a mark, an answer, or a close waits on. */
-  readonly txWaits: InboxTxWaits;
+  readonly reads: InboxReads;
 }
 
 /** The account's subscriptions, and the one follow main asked for. */
@@ -342,7 +356,7 @@ function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   { transcripts, followed, held }: Transcripts,
-  { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
+  { inboxes, followed: inboxFollows, reads }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
   /** Every item the account reaches, and the windows' one follow of them. */
@@ -374,18 +388,18 @@ function composed(
     };
   };
 
-  /**
-   * A member's write on the inbox answered once a followed inbox has its
-   * transaction, so the window's next draw already shows it
-   * (`inbox-tx-waits.ts`); at once where it changed nothing, failed, or no
-   * followed inbox hands a wait.
-   */
-  const confirmed = <A extends object>(answer: Effect.Effect<A>): Effect.Effect<A> =>
-    Effect.tap(answer, (written) =>
-      txWaits.confirm(
-        "txid" in written && typeof written.txid === "string" ? written.txid : undefined,
-      ),
-    );
+  /** The member signed in now, whom a write drawn before the service answers names. */
+  const reader = () => dependencies.reader?.();
+
+  /** What the service answered of a write on items: its transaction, the item it names, and whether it was kept, as a nod or a close is only where taken. */
+  const writtenOf = (
+    answer:
+      | { readonly failure: unknown }
+      | { readonly txid?: string; readonly item?: InboxItem; readonly taken?: boolean },
+  ): InboxWritten =>
+    "failure" in answer
+      ? { txid: undefined, item: undefined, kept: false }
+      : { txid: answer.txid, item: answer.item, kept: answer.taken !== false };
 
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
   const agentTranscriptOf = (
@@ -946,7 +960,15 @@ function composed(
           params,
           "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
         );
-        const answer = yield* confirmed(asked(client.answerInbox(itemId, request)));
+        const answer = yield* reads.write(
+          {
+            kind: INBOX_CHANGE.SETTLED,
+            itemId,
+            item: (item) => acknowledgedNow(item, reader(), kernel.now()),
+          },
+          asked(client.answerInbox(itemId, request)),
+          writtenOf,
+        );
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE]: (params) =>
@@ -956,7 +978,15 @@ function composed(
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
         );
-        const answer = yield* confirmed(asked(client.closeInbox(itemId, request)));
+        const answer = yield* reads.write(
+          {
+            kind: INBOX_CHANGE.SETTLED,
+            itemId,
+            item: (item) => closedNow(item, reader(), kernel.now()),
+          },
+          asked(client.closeInbox(itemId, request)),
+          writtenOf,
+        );
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE]: (params) =>
@@ -966,7 +996,19 @@ function composed(
           params,
           "a message on an inbox item names the item, the words or files, and the message's key",
         );
-        const answer = yield* confirmed(asked(client.messageInbox(itemId, request)));
+        // Note that a reply carrying an answer settles the ask, where a plain one only leaves the item read, its words drawn by the window's own box while they go.
+        const { answers, clientKey: key, text } = request;
+        const answer = yield* reads.write(
+          answers === undefined
+            ? { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }
+            : {
+                kind: INBOX_CHANGE.SETTLED,
+                itemId,
+                item: (item) => answeredNow(item, { key, text, answers }, reader(), kernel.now()),
+              },
+          asked(client.messageInbox(itemId, request)),
+          writtenOf,
+        );
         return carried<CodingAgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_START]: (params) =>
@@ -976,7 +1018,8 @@ function composed(
           params,
           "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
         );
-        const answer = yield* confirmed(asked(client.startInboxThread(request)));
+        const answer = yield* asked(client.startInboxThread(request));
+        yield* reads.confirmAccountWide("failure" in answer ? undefined : answer.txid);
         return carried<CodingAgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>
@@ -986,19 +1029,27 @@ function composed(
           params,
           "marking an inbox item names the item and whether it reads as unread",
         );
-        const answer = yield* confirmed(
+        const answer = yield* reads.write(
+          { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread },
           asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
+          writtenOf,
+          true,
         );
         return carried<CodingAgentInboxReadStateView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL]: (params) =>
       Effect.gen(function* () {
-        const request = yield* readParams(
-          inboxReadAllRequestSchema,
+        const { itemIds, ...request } = yield* readParams(
+          codingAgentInboxReadAllParamsSchema,
           params,
-          "marking the inbox read names no more than the workspace it lists",
+          "marking the inbox read names the workspace it lists, where it lists one, and the items it lists there",
         );
-        const answer = yield* confirmed(asked(client.markInboxRead(request)));
+        const answer = yield* reads.write(
+          { kind: INBOX_CHANGE.MARKED, itemIds: new Set(itemIds), unread: false },
+          asked(client.markInboxRead(request)),
+          writtenOf,
+          true,
+        );
         return carried<CodingAgentInboxReadAllView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>

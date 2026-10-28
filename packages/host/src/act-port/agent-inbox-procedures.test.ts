@@ -114,7 +114,7 @@ const ACTS: readonly {
   },
   {
     kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL,
-    payload: { workspaceId: WORKSPACE_ID },
+    payload: { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] },
     ask: "codingAgentInboxReadAll",
   },
   {
@@ -275,16 +275,19 @@ it("a panel marks an inbox item read or unread, or its whole Inbox read in one w
     { answer: { id: ITEM.id, unread: true } },
   );
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
+    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {
+      workspaceId: WORKSPACE_ID,
+      itemIds: [ITEM.id],
+    }),
     { answer: { marked: 3 } },
   );
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { itemIds: [] }), {
     answer: { marked: 3 },
   });
   assert.deepEqual(asked, [
     ["codingAgentInboxReadState", { itemId: ITEM.id, unread: true }],
-    ["codingAgentInboxReadAll", { workspaceId: WORKSPACE_ID }],
-    ["codingAgentInboxReadAll", {}],
+    ["codingAgentInboxReadAll", { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] }],
+    ["codingAgentInboxReadAll", { itemIds: [] }],
   ]);
 });
 
@@ -337,7 +340,7 @@ it("an answer's key its kind's view schema does not name is left out of what the
     },
   });
 
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { itemIds: [] }), {
     answer: { marked: 3 },
   });
   assert.deepEqual(

@@ -51,6 +51,7 @@ import {
   inboxItemSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
+  inboxReadAllRequestSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
   inboxStartRequestSchema,
@@ -745,6 +746,18 @@ export const codingAgentInboxReadStateViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentInboxReadStateView = typeof codingAgentInboxReadStateViewSchema.Type;
+
+/**
+ * Every item of the Inbox marked read, as the window asks it: the workspace
+ * the service marks, as its request names it, and the items the window
+ * lists there, which the host draws read the moment it is asked.
+ */
+export const codingAgentInboxReadAllParamsSchema = EffectSchema.Struct({
+  ...inboxReadAllRequestSchema.fields,
+  itemIds: EffectSchema.Array(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentInboxReadAllParams = typeof codingAgentInboxReadAllParamsSchema.Type;
 
 /** Every item of the Inbox marked read, as the window hears it: how many were unread, or why there is no answer. */
 export const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);

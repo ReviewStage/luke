@@ -171,6 +171,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       kernel,
       account,
       accountId,
+      reader: () => {
+        const signedIn = account.session.snapshot();
+        return signedIn.status === ACCOUNT_STATUS.SIGNED_IN && signedIn.id !== undefined
+          ? { userId: signedIn.id, name: signedIn.name ?? signedIn.email }
+          : undefined;
+      },
       client: codingAgentClient,
       listed: tasks.listed,
       writeAgent: tasks.writeAgent,

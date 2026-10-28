@@ -6,9 +6,16 @@ import {
   accountInboxOfLiveRows,
   nextFailedRunExpiry,
 } from "@luke/features/live-wire";
-import { Clock, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
-import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, LIVE_STATE, restarting } from "./live-follow.js";
+import { Clock, Duration, Effect, Queue, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
+import {
+  changedIds,
+  INBOX_CHANGE,
+  type InboxChange,
+  type InboxReads,
+  settles,
+} from "./inbox-collections.js";
+import { answeredCollection, drawRows, rowsOf } from "./live-collection.js";
+import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over the service's held poll and told to main each time it moves.
@@ -20,6 +27,13 @@ import { decodedLiveRows, LIVE_STATE, restarting } from "./live-follow.js";
  * out of the last week with no row moving, so the answer is built again as
  * it does. A read refused as signed out ends the follow, which is read again
  * after `LIVE_RESTART`. Only the answer built from the rows leaves.
+ *
+ * The rows of its open items, those of agents with no task, and the tasks
+ * holding them stand in collections among the reads an inbox write reaches
+ * (`inbox-collections.ts`), each answer taken as its poll answers. So an
+ * item the reader settles leaves what waits, its task counting one question
+ * fewer where it asked the reader, and a mark flips its dot, the moment the
+ * write is asked, and the answer is built again as each lands.
  */
 
 /** How long a follow no reader holds is kept, so a reader started again soon finds it standing. */
@@ -49,8 +63,8 @@ export interface AccountInboxDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxLiveAnswer | SealFailure>;
-  /** Where the account inbox's wait for a write's transaction stands while it is followed, which the inbox's writes wait on. */
-  readonly txWaits: InboxTxWaits;
+  /** The reads an inbox write reaches, among which each account's stands while it is followed. */
+  readonly reads: InboxReads;
 }
 
 /** Each account's follow, by its id, held while main reads it and a while after. */
@@ -72,6 +86,68 @@ function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer
   );
 }
 
+/** An open item as the read lists it, a task's or an agent's with no task. */
+type Entry = AccountInboxLiveRows["items"][number] | AccountInboxLiveRows["planless"][number];
+
+/** What a change leaves of an open item: gone where it settles it, its read mark where it flips it, and none where it leaves it alone. */
+function entryChanged<Row extends Entry>(
+  change: InboxChange,
+  entry: Row,
+): Row | "gone" | undefined {
+  if (!changedIds(change).includes(entry.id)) return undefined;
+  if (settles(change)) return "gone";
+  const unread =
+    change.kind === INBOX_CHANGE.MARKED
+      ? change.unread
+      : change.kind === INBOX_CHANGE.ANSWERED
+        ? change.item.unread === true
+        : false;
+  return (entry.unread === true) === unread ? undefined : { ...entry, unread };
+}
+
+/** Whether a task's open item is a question waiting on the reader, as its task's count counts it. */
+function counted(entry: AccountInboxLiveRows["items"][number], readerId: string): boolean {
+  const waitsOn = entry.waitsOn ?? entry.startedBy ?? readerId;
+  return entry.asking !== false && waitsOn === readerId;
+}
+
+/** The parts of the read a write changes. */
+type Changeable = Pick<AccountInboxLiveRows, "items" | "planless" | "plans">;
+
+/**
+ * The rows a change leaves of the read: each open item it settles gone and
+ * its task counting it no longer, and each it marks flipped; none where it
+ * moves no row.
+ */
+function rowsChanged(
+  rows: Changeable,
+  change: InboxChange,
+  readerId: string,
+): Changeable | undefined {
+  const answered = new Map<string, number>();
+  let moved = false;
+  const kept = <Row extends Entry>(each: readonly Row[]) =>
+    each.flatMap((entry) => {
+      const changed = entryChanged(change, entry);
+      if (changed === undefined) return [entry];
+      moved = true;
+      if (changed !== "gone") return [changed];
+      if ("planId" in entry && counted(entry, readerId)) {
+        answered.set(entry.planId, (answered.get(entry.planId) ?? 0) + 1);
+      }
+      return [];
+    });
+  const items = kept(rows.items);
+  const planless = kept(rows.planless);
+  const plans = rows.plans.map((plan) => {
+    const fewer = answered.get(plan.planId) ?? 0;
+    return fewer === 0 || plan.toDo === undefined
+      ? plan
+      : { ...plan, toDo: Math.max(0, plan.toDo - fewer) };
+  });
+  return moved ? { items, planless, plans } : undefined;
+}
+
 /** The map a composer holds for as long as it stands. */
 export function accountInboxes(
   dependencies: AccountInboxDependencies,
@@ -83,18 +159,71 @@ export function accountInboxes(
         const first = yield* dependencies.seal(userId, false);
         if ("failure" in first) return { kind: LIVE_STATE.BROKEN } as const;
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        const rows = decodedLiveRows(
+        const items = yield* answeredCollection({ getKey: (row: Entry) => row.id });
+        const planless = yield* answeredCollection({ getKey: (row: Entry) => row.id });
+        const plans = yield* answeredCollection({
+          getKey: (row: AccountInboxLiveRows["plans"][number]) => row.planId,
+        });
+        let wait: TxWait | undefined;
+        /** The rows as the read last answered them, or a write's own answer took them in its place; none before it first answers. */
+        let answered: AccountInboxLiveRows | undefined;
+        /** Takes rows as the read's own, every part's. */
+        const taken = (rows: AccountInboxLiveRows) => {
+          items.answer(rows.items);
+          planless.answer(rows.planless);
+          plans.answer(rows.plans);
+          answered = rows;
+        };
+        const shown = (): Changeable => ({
+          // SAFETY: each collection holds only the rows of its own part, which the read answered.
+          items: rowsOf(items.collection) as AccountInboxLiveRows["items"],
+          planless: rowsOf(planless.collection) as AccountInboxLiveRows["planless"],
+          plans: rowsOf(plans.collection),
+        });
+        // The answer built again from the rows as they stand each time they move, and as a failed run they carry ages out.
+        const standing = yield* Queue.sliding<AccountInboxLiveRows>(1);
+        const drawn = Effect.suspend(() =>
+          answered === undefined ? Effect.void : Queue.offer(standing, { ...answered, ...shown() }),
+        );
+        yield* dependencies.reads.stand({
+          draw: (change) => {
+            const next = rowsChanged(shown(), change, userId);
+            if (next === undefined) return false;
+            drawRows(items.collection, next.items);
+            drawRows(planless.collection, next.planless);
+            drawRows(plans.collection, next.plans);
+            return true;
+          },
+          take: (change) => {
+            const next = answered === undefined ? undefined : rowsChanged(answered, change, userId);
+            if (answered !== undefined && next !== undefined) taken({ ...answered, ...next });
+          },
+          txWait: () => wait,
+          drawn,
+          accountWide: true,
+        });
+        const follow = followTakingRows(
           {
             poll: (after) => dependencies.seal(userId, true, after),
-            onTxWait: dependencies.txWaits.hook(),
+            onTxWait: (handed) => {
+              wait = handed;
+            },
           },
           first,
           accountInboxLiveRowsSchema,
+          (rows) =>
+            Effect.suspend(() => {
+              taken(rows);
+              return drawn;
+            }),
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(Stream.switchMap(rows, answersOf), (answer) =>
+          Stream.runForEach(Stream.switchMap(Stream.fromQueue(standing), answersOf), (answer) =>
             SubscriptionRef.set(inbox, { kind: LIVE_STATE.STANDING, answer }),
-          ).pipe(
+          ),
+        );
+        yield* Effect.forkScoped(
+          follow.pipe(
             Effect.catch(() => Effect.void),
             Effect.ensuring(SubscriptionRef.set(inbox, { kind: LIVE_STATE.BROKEN })),
           ),

@@ -55,7 +55,6 @@ import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./se
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { HeldInboxesProvider } from "./tasks/held-inboxes.js";
-import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
@@ -215,7 +214,6 @@ function AppWindow(): React.JSX.Element {
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
   const [launched] = useState(() => {
     const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
