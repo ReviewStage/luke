@@ -27,8 +27,8 @@ import { reachTaskRepository, refused } from "./task-file.js";
  * repository and mints a token for that one repository, used for the one
  * listing and going nowhere else; the listing is of the head of the
  * repository's default branch, and names it. A secret file is listed by
- * its name, as GitHub and every editor list it, because the rule
- * `show_code` is held to (`shown-file.ts`) keeps a secret file's contents
+ * its name, as GitHub and every editor list it, because the rule a shown
+ * file is held to (`shown-file.ts`) keeps a secret file's contents
  * off the screen, and the File tab refuses to read one when it is opened;
  * a folder named as a secret file is, or one inside it, is not listed, so
  * nothing held inside one is named either. A link and a submodule are listed as files,

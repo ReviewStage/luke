@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -18,8 +17,8 @@ import type { RepositoryChooser } from "./repository-chip.js";
  * new-task-workspace.test.ts -- New task starts in the workspace listed and
  * offers no other: its head row's repository chip lists that workspace's
  * repositories, and the task starts there. Where the owner's workspace
- * changes under the composer, as Home's does, a repository or a Linear
- * search of the other's is let go. Each test starts a bare task, ⌘Return on
+ * changes under the composer, as Home's does, a repository of the other's
+ * is let go. Each test starts a bare task, ⌘Return on
  * an empty box, which starts with or without a repository. Synthetic
  * throughout.
  */
@@ -192,105 +191,4 @@ test("the owner's workspace changing to one with no GitHub connected lets the ot
   assert.equal(offered.includes("acme-corp/relay"), false);
   assert.equal(note, "Personal has no GitHub connected yet.");
   assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
-});
-
-test("the owner's workspace changing closes the Linear search, and the chip then lists the issues of the workspace listed", async () => {
-  const issuesOf = (workspaceId: string): readonly LinearIssueSummary[] => [
-    {
-      id: `${workspaceId}-1`,
-      identifier: workspaceId === ACME.id ? "ACME-1" : "ME-1",
-      title: "Rotate the deploy key",
-      url: "https://linear.app/x/issue/1",
-    },
-  ];
-  const control = tasksControl();
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  const draw = (listed: string) =>
-    act(() =>
-      root.render(
-        createElement(NewTaskDialog, {
-          newTask: {
-            ...control.newTask,
-            open: true,
-            workspaces: [PERSONAL, ACME],
-            workspaceId: listed,
-            repositoriesIn: chooserFor,
-            linearIssuesIn: (workspaceId) =>
-              workspaceId === undefined ? undefined : () => Promise.resolve(issuesOf(workspaceId)),
-          },
-        }),
-      ),
-    );
-  draw(PERSONAL.id);
-  await settle();
-  const openLinear = async () => {
-    const chip =
-      document.querySelector<HTMLButtonElement>('[aria-label="Choose an issue"]') ??
-      assert.fail("the Issue chip stands");
-    act(() => chip.click());
-    await settle();
-  };
-  const listed = () =>
-    [...document.querySelectorAll('[role="dialog"][aria-label="Issues"] [role="option"]')].map(
-      (option) => option.textContent,
-    );
-  await openLinear();
-  const before = listed();
-
-  draw(ACME.id);
-  await settle();
-
-  const afterSwitch = listed();
-  await openLinear();
-
-  assert.deepEqual(before, ["Rotate the deploy keyME-1"]);
-  assert.deepEqual(afterSwitch, []);
-  assert.deepEqual(listed(), ["Rotate the deploy keyACME-1"]);
-});
-
-test("Linear let go while its search stands closes the search, and its coming back draws none until the chip is pressed", async () => {
-  const issues: readonly LinearIssueSummary[] = [
-    {
-      id: "acme-1",
-      identifier: "ACME-1",
-      title: "Rotate the deploy key",
-      url: "https://linear.app/x/issue/1",
-    },
-  ];
-  const control = tasksControl();
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  const draw = (connected: boolean) =>
-    act(() =>
-      root.render(
-        createElement(NewTaskDialog, {
-          newTask: {
-            ...control.newTask,
-            open: true,
-            workspaces: [ACME],
-            workspaceId: ACME.id,
-            repositoriesIn: chooserFor,
-            linearIssuesIn: () => (connected ? () => Promise.resolve(issues) : undefined),
-          },
-        }),
-      ),
-    );
-  const search = () => document.querySelector('[role="dialog"][aria-label="Issues"]');
-  draw(true);
-  await settle();
-  const chip =
-    document.querySelector<HTMLButtonElement>('[aria-label="Choose an issue"]') ??
-    assert.fail("the Issue chip stands");
-  act(() => chip.click());
-  await settle();
-  const opened = search() !== null;
-
-  draw(false);
-  await settle();
-  draw(true);
-  await settle();
-
-  assert.equal(opened, true);
-  assert.equal(search() !== null, false, "no search is drawn");
 });

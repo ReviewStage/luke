@@ -40,6 +40,7 @@ import type { Actor } from "@luke/ui/actor-model";
 import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
+import { MarkdownMessage } from "../markdown-message.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -50,6 +51,7 @@ import {
   doDecision,
   fieldValueOf,
   type InboxDraft,
+  RECOMMENDED,
   shownTicks,
   withDoPress,
   withStep,
@@ -58,6 +60,7 @@ import {
 import { ANSWER_STATUS_TONE } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
+import { useOpenLink } from "./use-open-link.js";
 
 /**
  * inbox-ask-controls.tsx -- what an ask asks for, drawn as the Inbox draws it: a `decide`'s options or its two presses, a `do`'s steps and presses, an `answer`'s fields, open or as an answer left them, and the words an ask stands at once it no longer waits.
@@ -89,9 +92,6 @@ const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
-
-/** The badge an option the agent recommends wears, a choice's or a form's select's. */
-const RECOMMENDED = "Recommended";
 
 /** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 function choiceOptions(
@@ -423,18 +423,23 @@ export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
 }
 
+/** Whether a key goes to a link, a step's say, whose own Enter opens it. */
+function opensLink(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.matches("a[href]");
+}
+
 /**
  * Enter in an open item's question, on an option or in a form's field,
  * sends the answer, and never presses the option it stands on, which Space
- * or a press picks. Shift+Enter is no send, and an editor's Enter is the
- * editor's own to hand on.
+ * or a press picks. Shift+Enter is no send, and an editor's Enter and a
+ * link's are their own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
-  if (writesLines(event.target)) return;
+  if (writesLines(event.target) || opensLink(event.target)) return;
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
@@ -461,12 +466,15 @@ interface AskDoors {
 function AskPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
+  recommended = false,
   pressed,
   disabled,
   onPress,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  /** Whether the agent recommends it, which its badge says. */
+  recommended?: boolean;
   pressed: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -475,6 +483,7 @@ function AskPress({
     <Button
       variant={variant}
       size={BUTTON_SIZE.COMPACT}
+      badge={recommended ? RECOMMENDED : undefined}
       pressed={pressed}
       disabled={disabled}
       onClick={onPress}
@@ -482,6 +491,15 @@ function AskPress({
       {label}
     </Button>
   );
+}
+
+/**
+ * A to-do's step as its box's words: its inline Markdown drawn, bold, code,
+ * and links among it, a list or a fence in it run into the line (`inline`),
+ * and a link pressed opening its page without ticking the box (`TextLink`).
+ */
+function StepWords({ step }: { step: string }): React.JSX.Element {
+  return <MarkdownMessage words={step} inline openLink={useOpenLink()} />;
 }
 
 /** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
@@ -537,6 +555,7 @@ function OpenControls({
               <AskPress
                 key={option.label}
                 label={option.label}
+                recommended={recommendedLabels(ask).includes(option.label)}
                 pressed={picked}
                 disabled={disabled}
                 onPress={() => onDraft({ ...draft, choices: picked ? [] : [option.label] })}
@@ -571,7 +590,7 @@ function OpenControls({
                     disabled={disabled}
                     onChange={() => onDraft(withStep(ask, draft, at))}
                   >
-                    {step}
+                    <StepWords step={step} />
                   </Checkbox>
                 </li>
               ))}
@@ -635,11 +654,14 @@ function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
 function AnsweredPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
+  recommended = false,
   tone,
   pressed,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  /** Whether the agent recommended it, which its badge goes on saying. */
+  recommended?: boolean;
   tone: AnswerTone;
   pressed: boolean;
 }): React.JSX.Element {
@@ -647,6 +669,7 @@ function AnsweredPress({
     <Button
       variant={variant}
       size={BUTTON_SIZE.COMPACT}
+      badge={recommended ? RECOMMENDED : undefined}
       pressed={pressed}
       readOnly
       icon={pressed ? <ToneGlyph tone={tone} /> : undefined}
@@ -695,6 +718,7 @@ function LeftControls({
             <AnsweredPress
               key={option.label}
               label={option.label}
+              recommended={recommendedLabels(ask).includes(option.label)}
               tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
               pressed={draft.choices.includes(option.label)}
             />
@@ -714,7 +738,7 @@ function LeftControls({
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
                   <Checkbox checked={ticked.has(at)} readOnly onChange={heldStill}>
-                    {step}
+                    <StepWords step={step} />
                   </Checkbox>
                 </li>
               ))}

@@ -4,8 +4,10 @@
  * The follower runs over the real client, its held read and claims answered
  * by a scripted service, so an answer is decoded as the wire decodes it; on
  * a real temporary folder, so what a line leaves on the disk is what the
- * test reads; and over a scripted spawner, on the test's clock. Synthetic
- * ids throughout.
+ * test reads; and over a scripted spawner, on the test's clock. Each test
+ * waits for the service to take the discard's settle, never on the clock,
+ * since nothing on the way there sleeps and the disk answers in its own
+ * time. Synthetic ids throughout.
  */
 
 import assert from "node:assert/strict";
@@ -23,9 +25,8 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Duration, Effect, Layer } from "effect";
+import { ConfigProvider, Deferred, Effect, Exit, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
-import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { fakeSandbox } from "./testing/fake-sandbox.js";
@@ -67,7 +68,8 @@ const held = () => new Promise<Response>(() => {});
 /**
  * The follower on a device whose agent's folder holds a file, its held read
  * answered once with the lines given and every line claimable, with the
- * folder and the line ids it settled.
+ * folder, the line ids it settled, and what waits for the service to take
+ * the discard's settle.
  */
 const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
@@ -79,6 +81,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
     yield* fileSystem.writeFileString(path.join(folder, "repository", "notes.md"), "unpushed\n");
 
     const settled: string[] = [];
+    const discardSettled = Deferred.makeUnsafe<void>();
     let linesRead = 0;
     const fetchLike = async (url: string | URL | Request, init?: RequestInit) => {
       const { pathname } = new URL(String(url));
@@ -92,6 +95,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
           if (init?.method === "POST") {
             settled.push(body.id);
+            if (body.id === DISCARD.id) Deferred.doneUnsafe(discardSettled, Exit.void);
             return json({ done: true });
           }
           return linesRead++ === 0 ? json({ lines }) : held();
@@ -143,24 +147,14 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       }),
     }).pipe(Effect.provide(services));
     yield* composer.lifetime;
-    return { folder, settled };
-  });
-
-/** The clock nudged until the condition holds, as the follower's fibers run up to their next wait, each round yielding to the disk's real reads too. */
-const until = (holds: () => boolean) =>
-  Effect.gen(function* () {
-    for (let round = 0; round < 400 && !holds(); round += 1) {
-      yield* TestClock.adjust(Duration.millis(100));
-      yield* Effect.yieldNow;
-    }
-    assert.ok(holds(), "the follower never got there");
+    return { folder, settled, discardSettled: Deferred.await(discardSettled) };
   });
 
 it.effect("a discard line removes the agent's folder from the device and is settled", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const { folder, settled } = yield* following([DISCARD]);
-      yield* until(() => settled.includes(DISCARD.id));
+      const { folder, settled, discardSettled } = yield* following([DISCARD]);
+      yield* discardSettled;
 
       const fileSystem = yield* FileSystem.FileSystem;
       assert.equal(yield* fileSystem.exists(folder), false, "the agent's folder is still there");
@@ -174,8 +168,8 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { folder, settled } = yield* following([NEWER_KIND, DISCARD]);
-        yield* until(() => settled.includes(DISCARD.id));
+        const { folder, settled, discardSettled } = yield* following([NEWER_KIND, DISCARD]);
+        yield* discardSettled;
 
         const fileSystem = yield* FileSystem.FileSystem;
         assert.deepEqual(settled, [NEWER_KIND.id, DISCARD.id]);
@@ -194,8 +188,8 @@ for (const [name, check, kept] of [
     () =>
       Effect.scoped(
         Effect.gen(function* () {
-          const { folder, settled } = yield* following([DISCARD], check);
-          yield* until(() => settled.includes(DISCARD.id));
+          const { folder, settled, discardSettled } = yield* following([DISCARD], check);
+          yield* discardSettled;
 
           const fileSystem = yield* FileSystem.FileSystem;
           assert.equal(yield* fileSystem.exists(folder), kept);

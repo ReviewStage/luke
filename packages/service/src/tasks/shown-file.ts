@@ -1,19 +1,16 @@
-import { isSecretFile, SHOWN_CODE_BOUNDS } from "@luke/features/task-wire";
+import { isSecretFile, TASK_FILE_BOUNDS } from "@luke/features/task-wire";
 
 /**
- * shown-file.ts -- the one rule a file of the task's repository is put on the developer's screen by, whichever reader read it.
+ * shown-file.ts -- the one rule a file of the task's repository is put on the developer's screen by.
  *
- * Two readers put a repository's lines on a Mac: `show_code`, from the
- * brain session's checkout (`show-code.ts`), and the File tab's read of
- * a whole file, from GitHub through the Luke GitHub App (`task-file.ts`).
- * Each finds out the same facts of a file in its own way, and both hand
- * them here, so what is refused and how a line is cut cannot drift between
- * them: a secret file is never read, only a regular file is shown, a file
- * past the size bound or holding a NUL among its first bytes is not text,
- * and every line travels cut to `SHOWN_CODE_BOUNDS.MAX_LINE_CHARS`.
+ * The File tab's read of a whole file, from GitHub through the Luke GitHub
+ * App (`task-file.ts`), finds out a file's facts and hands them here: a
+ * secret file is never read, only a regular file is shown, a file past the
+ * size bound or holding a NUL among its first bytes is not text, and every
+ * line travels cut to `TASK_FILE_BOUNDS.MAX_LINE_CHARS`.
  */
 
-/** Why a file is not shown, whichever reader read it. */
+/** Why a file is not shown. */
 export const SHOWN_FILE_REFUSAL = {
   /** A `.env` file, or one whose name starts with `.env`, wherever it sits. */
   SECRET: "secret",
@@ -32,7 +29,7 @@ export const SHOWN_FILE_BOUNDS = {
   TEXT_PROBE_BYTES: 8192,
 } as const;
 
-/** What a reader found out about a file before any of its lines leaves. */
+/** What the reader found out about a file before any of its lines leaves. */
 export interface ShownFileFacts {
   readonly path: string;
   /** Whether the path names a regular file inside the repository, links followed only as far as the reader allows. */
@@ -64,7 +61,7 @@ export function fileLines(text: string): string[] {
 
 /** One line as it travels: cut to the bound. */
 export function shownLine(line: string): string {
-  return line.slice(0, SHOWN_CODE_BOUNDS.MAX_LINE_CHARS);
+  return line.slice(0, TASK_FILE_BOUNDS.MAX_LINE_CHARS);
 }
 
 /** Lines of text as they travel: at most `count` of them, each cut to the bound. */

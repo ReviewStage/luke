@@ -11,6 +11,7 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option } from "effect";
@@ -44,7 +45,7 @@ import {
   subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
 
 /**
@@ -110,7 +111,7 @@ const nightly = (taskId: string): NewAutomation => ({
 
 it.layer(getTestDB())("the automation store", (it) => {
   it.effect(
-    "an operator's heartbeat re-aims the member's own automations aimed at the operator it replaced, a teammate's left as they stood, and is made only where none is then aimed at it",
+    "an operator's heartbeat re-aims the member's own automations aimed at their archived operator in the workspace, a teammate's left as they stood, and is made only where none is then aimed at it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -129,22 +130,27 @@ it.layer(getTestDB())("the automation store", (it) => {
           role: "member",
           createdAt: now,
         });
-        const agentOf = (userId: string) =>
+        const operatorOf = (userId: string) =>
           Effect.map(
             createCodingAgent(userId, {
               taskId: null,
               organizationId: workspace,
               planSnapshot: null,
-              prompt: "Watch the agents.",
+              prompt: null,
+              kind: CODING_AGENT_KIND.OPERATOR,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
               effort: "high",
-              repository: "acme/api",
+              repository: null,
             }),
             (made) => Option.getOrThrow(made).agent.id,
           );
-        const retired = yield* agentOf(owner);
-        const fresh = yield* agentOf(owner);
+        // Archived by hand, as the archive or update_agent does it, with no Reset to name it.
+        const archived = (userId: string, agentId: string) =>
+          Effect.asVoid(archiveCodingAgent(userId, agentId, true));
+        const retired = yield* operatorOf(owner);
+        yield* archived(owner, retired);
+        const fresh = yield* operatorOf(owner);
         const aimedAt = (userId: string, agentId: string) =>
           Effect.map(
             createAutomation(userId, {
@@ -170,17 +176,9 @@ it.layer(getTestDB())("the automation store", (it) => {
 
         const reaimed = yield* aimOperatorHeartbeat(owner, {
           operatorId: fresh,
-          retiredId: retired,
+          workspaceId: workspace,
           heartbeat,
         });
-        const another = yield* agentOf(owner);
-        const made = Option.getOrThrow(
-          yield* aimOperatorHeartbeat(owner, {
-            operatorId: another,
-            retiredId: undefined,
-            heartbeat,
-          }),
-        );
 
         assert.deepEqual(reaimed, Option.some([owners]), "re-aimed, and none made beside it");
         const targetOf = (userId: string, id: string) =>
@@ -190,6 +188,17 @@ it.layer(getTestDB())("the automation store", (it) => {
           );
         assert.deepEqual(yield* targetOf(owner, owners), Option.some(fresh));
         assert.deepEqual(yield* targetOf(teammate, teammates), Option.some(retired));
+
+        assert.ok(yield* deleteAutomation(owner, owners));
+        yield* archived(owner, fresh);
+        const another = yield* operatorOf(owner);
+        const made = Option.getOrThrow(
+          yield* aimOperatorHeartbeat(owner, {
+            operatorId: another,
+            workspaceId: workspace,
+            heartbeat,
+          }),
+        );
         assert.equal(made.length, 1);
         const [madeId = ""] = made;
         assert.deepEqual(

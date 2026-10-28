@@ -14,6 +14,8 @@ import { CheckIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
+import { STATUS_TONE } from "../../status-tone.js";
+import { Badge } from "../badge/badge.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
 import { useSettled } from "../spinner/settle-wait.js";
 import { SpinnerRing } from "../spinner/spinner.js";
@@ -84,6 +86,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * does, yet stands at full strength, so it reads as a press given rather
  * than one waiting; `pressed` draws the one that was given as a toggle
  * standing on.
+ *
+ * A labelled Button may wear a `badge` after its words, a short word
+ * saying what sets it apart from the presses beside it (the agent's
+ * "Recommended"): in the attention tone while it offers its press, and the
+ * neutral one once it is `readOnly`, a record rather than a call to act, as
+ * a choice list's badge is. Its words are part of the button's name.
  *
  * A ButtonLink is a Button's look on a link, for an act that is going
  * somewhere: a download, another site, an app's own scheme. The browser
@@ -508,6 +516,7 @@ function landedProps<Props extends ButtonBase>(props: Props, landed: boolean): P
 export function Button({
   icon,
   trailing,
+  badge,
   label,
   size,
   pressed,
@@ -521,6 +530,8 @@ export function Button({
   icon?: ReactNode;
   /** A count or note after its words, inside its fill, in the caption's quiet type (a fold's \"3\"). */
   trailing?: ReactNode;
+  /** A short word after its words, inside its fill, the agent's "Recommended". */
+  badge?: string | undefined;
   /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
   label?: string | undefined;
   size?: ButtonSize | undefined;
@@ -566,6 +577,11 @@ export function Button({
       >
         {icon}
         <span className={WORDS}>{children}</span>
+        {badge === undefined ? null : (
+          <span className="luke-button-badge inline-flex flex-none">
+            <Badge tone={readOnly ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}>{badge}</Badge>
+          </span>
+        )}
         {trailing === undefined ? null : (
           <span className="luke-button-trailing flex-none text-muted-foreground text-caption tabular-nums">
             {trailing}

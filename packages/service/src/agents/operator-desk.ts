@@ -28,11 +28,12 @@
  * notices were all read and whose work stands as it did hands nothing new
  * and the history stays cached.
  *
- * `list_open_asks` is the operator's read of every ask waiting on its member
- * across all their agents, where `read_inbox` reads only the caller's own
- * threads (`../inbox/inbox-store.ts`'s `memberOpenAsks`): only an operator is
- * offered it, and any other caller is refused. A member's own agents are the
- * ones whose row is theirs, started by them or by any of their agents, the
+ * `list_open_asks` is the operator's read of every ask waiting on its member,
+ * whichever agent asked it, a teammate's that addressed them included, where
+ * `read_inbox` reads only the caller's own threads
+ * (`../inbox/inbox-store.ts`'s `memberOpenAsks`): only an operator is offered
+ * it, and any other caller is refused. A member's own agents are the ones
+ * whose row is theirs, started by them or by any of their agents, the
  * operator among them; a teammate's never.
  */
 
@@ -96,8 +97,8 @@ export const LIST_OPEN_ASKS_REFUSAL = {
 export const LIST_OPEN_ASKS_TOOL = {
   name: AGENT_TOOL.LIST_OPEN_ASKS,
   description:
-    "List every thread waiting on the developer, across all of their own agents in this workspace, " +
-    "yours among them, and none of a teammate's: each with its key, its title, the agent that posted it (its id, " +
+    "List every thread waiting on the developer in this workspace, whichever agent posted it, " +
+    "yours and a teammate's agent's alike: each with its key, its title, the agent that posted it (its id, " +
     "name, and mention) and its task (null for none), the kind of ask that waits (decide, do, or answer; null for a " +
     "post that only waits to be read) and its words, the latest changed first and at most " +
     `${OPERATOR_DESK.ASKS_LISTED}. It only reads: never answer an ask for the developer. ${AGENT_TOOL.READ_THREADS} ` +
@@ -368,7 +369,7 @@ function askWords(text: string | null): string | null {
 
 /**
  * One call of `list_open_asks`: every thread waiting on the operator's
- * member across their own agents in its workspace, or the refusal for any
+ * member in its workspace, whichever agent posted it, or the refusal for any
  * caller that is no operator. Note that the caller's input is read for
  * nothing, since the tool takes none, so an extra field asks nothing.
  */

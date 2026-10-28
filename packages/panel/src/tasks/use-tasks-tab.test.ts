@@ -16,7 +16,6 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
@@ -2078,29 +2077,6 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-test("a task started hands on its issue and starts with no planning", async () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
-
-  await tab.control().newTask.start("", null, "workspace-acme", {
-    issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
-  });
-  await tab.control().newTask.start("", null, "workspace-acme");
-
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
-      .map((asked) => asked.payload),
-    [
-      {
-        workspaceId: "workspace-acme",
-        issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
-        planning: false,
-      },
-      { workspaceId: "workspace-acme", planning: false },
-    ],
-  );
-});
-
 test("Settings' GitHub row is the connection main's view holds, its Connect and Disconnect ask main, and a refused Disconnect says why", async () => {
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
@@ -3144,7 +3120,7 @@ test("New task's agent start opens no draft beside its agent while the task stan
   assert.deepEqual(tab.control().mainTabs.tabs, [{ agent: AGENT_ID }], "the agent's tab alone");
 });
 
-test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why, over the version history it was asked from", async () => {
+test("New task's agent start refused after its page opened opens the card again on the repository, model, and press it held, saying why, over the version history it was asked from", async () => {
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -3168,11 +3144,10 @@ test("New task's agent start refused after its page opened opens the card again 
   };
   const card = {
     repository: "acme/web",
-    links: [],
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
     press: {
       key: AGENT_KEY,
-      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
     words: handed.prompt,
   };
@@ -3216,11 +3191,10 @@ test("Create with an agent opens New task's card for an automation's agent over 
   const card = {
     purpose: NEW_TASK_PURPOSE.AUTOMATION,
     repository: "acme/web",
-    links: [],
     choice: undefined,
     press: {
       key: AGENT_KEY,
-      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
     words: handed.prompt,
   };

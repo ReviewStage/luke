@@ -97,7 +97,6 @@ import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
-import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
@@ -153,8 +152,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * running past the card's edge: the chips that change its priority and its
  * assignee where it stands, their marks alone as the List draws them, the
  * assignee's left off under an assignee's column, its repository, the one
- * icon of how its agents stand (`TaskAgentsMark`), and the issues it
- * links, and a ⋯ at their end dropping the task's own menu, the sidebar
+ * icon of how its agents stand (`TaskAgentsMark`), and a ⋯ at their end dropping the task's own menu, the sidebar
  * row's, which a right-click and the menu key drop too (`useRowMenu`) and
  * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
  * card for the whole task, since it already says what that card would;
@@ -246,20 +244,6 @@ const BOARD_CARD_PILLS =
   "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark)]:pointer-events-auto";
 
 /**
- * The issues a card's task links, oldest first, a tag each among its pills
- * (`../tasks/task-issue-links.tsx`). Nothing for a task that links none.
- */
-function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element {
-  return (
-    <>
-      {(task.issues ?? []).map((tag) => (
-        <TaskIssueTagChip key={tag.id} tag={tag} taskId={task.id} repository={task.repository} />
-      ))}
-    </>
-  );
-}
-
-/**
  * A card's repository as a pill: its owner's picture and its own name, its
  * whole name in its hint, and a press that opens it on GitHub, as the
  * task's menu does.
@@ -298,8 +282,8 @@ function TaskBoardRepository({
  * status's mark before its name, which wraps; and a row under it, wrapping
  * onto as many lines as they take, so nothing is cut off at the card's edge:
  * its priority's and its assignee's marks, drawn as the List draws them, then
- * pills for its repository and the issues it links, each a press of its own
- * and each hanging its own card where it has more to say, and the icon of
+ * a pill for its repository, a press of its own
+ * hanging its own card, and the icon of
  * how its agents stand, rather than one card for the whole task, which
  * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
  * the task's own menu, which a right-click opens too. One press, under its
@@ -454,7 +438,6 @@ function TaskBoardCard({
               size={TASK_AGENTS_MARK_SIZE.MEDIUM}
             />
           ) : null}
-          <TaskBoardTags task={task} />
         </div>
         <span className="tasks-board-card-more pointer-events-auto flex flex-none">
           {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}

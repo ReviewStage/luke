@@ -102,7 +102,6 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         createId: deps.createId,
         report: deps.report,
         ...(session.onActivity ? { onActivity: session.onActivity } : undefined),
-        ...(session.onCode ? { onCode: session.onCode } : undefined),
         ...(session.onCallEnding ? { onCallEnding: session.onCallEnding } : undefined),
         ...(session.onTrace ? { onTrace: session.onTrace } : undefined),
       });

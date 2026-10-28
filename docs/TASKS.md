@@ -54,11 +54,10 @@ A reviewer can hold the build to these as easily as to the layout:
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
 - The work column is the agents'. Each agent started on the task stands in
-  a tab of its own, and any of them takes a call; everything else, the plan's document, the task's Inbox,
-  and the code its agents put on screen, stands
+  a tab of its own, and any of them takes a call; everything else, the plan's document and the task's Inbox, stands
   in a side panel ("Side panel" below) that the developer opens and closes.
-  A task opens with the panel shown on its plan; only first code or an Inbox
-  item not yet seen opens it on its own, and there are no second documents.
+  A task opens with the panel shown on its plan; only an Inbox item not yet
+  seen opens it on its own, and there are no second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -234,8 +233,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 ### New task
 
 One composer card whose words start a coding agent: the repository chip in
-its head row, the Issue chip beside it, and at its foot the model chip on
-the account's default, Dictate, and Start.
+its head row, and at its foot the model chip on the account's default,
+Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
@@ -244,8 +243,8 @@ the account's default, Dictate, and Start.
    listing the repositories the workspace's GitHub reaches. An agent needs a
    repository, so Start is held without one, and the card says so.
 2. **Start**, the round button; Return presses it. It starts the task with
-   an empty plan and no call, named by its issue where one was picked and
-   Untitled until the agent names it, and the agent on the words, the files,
+   an empty plan and no call, Untitled until the agent names it, and the
+   agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
    which needs no repository. There is no Plan mode: starting a task never

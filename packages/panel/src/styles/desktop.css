@@ -759,19 +759,14 @@ body,
   margin-top: 1.5em;
 }
 
-/* A task's key stands tight over its title, its status and priority
-   chips close under it, and its linked issues' chips close under those, as
-   one head rather than four blocks. */
+/* A task's key stands tight over its title, and its status and priority
+   chips close under it, as one head rather than three blocks. */
 .desktop-document .plan-body > .plan-task-key + * {
   margin-top: var(--luke-list-gap);
 }
 
 .desktop-document .plan-body > .plan-task-standing {
   margin-top: var(--luke-block-gap);
-}
-
-.desktop-document .plan-body > .plan-task-standing + .task-issue-links {
-  margin-top: var(--luke-item-gap);
 }
 
 .desktop-document .luke-markdown-heading {
@@ -1259,15 +1254,14 @@ body,
   }
 }
 
+/* The first heading stands level with the chevron, so its fold's hover ends
+   short of the chevron rather than running under it. */
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
-  > .section-heading,
-.task-summary-card-body > .task-summary-section:first-of-type > .section-heading {
-  display: flex;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  margin-bottom: 0;
+  .luke-group-header-head,
+.task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
+  margin-right: calc(var(--luke-control-height) + var(--luke-tight-gap));
 }
 
 .task-summary-archived-agent > .task-summary-row {
@@ -1577,7 +1571,7 @@ body,
 
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
-:is(.new-task-composer .issue-picker-chip, .new-task-composer .agent-model-chip) {
+.new-task-composer .agent-model-chip {
   display: flex;
   flex-shrink: 0;
 }

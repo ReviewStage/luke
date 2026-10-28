@@ -567,17 +567,14 @@ agent runs, and Claude Code or Codex itself start with every Linux capability
 dropped, so none of them can read another process's environment or a file
 kept from it, or become root.
 
-**Code on screen during a call.** When a coding agent wants to
-show you code, it names a file and lines, and our service reads them from
-its sandbox checkout. The path, the commit the checkout read it at, the
-line numbers, the lines (at most 200, each cut to 400 characters), and the
-model's note on why it showed them (at most 280 characters) are stored with
-the agent's transcript; nothing is read from
-your Mac's disk, and Luke on your Mac neither draws nor keeps them. The
-service refuses a path outside the checkout and never
-reads a file named `.env` or starting with `.env`. The voice model is told
-the path and line numbers on screen, so the voice can refer to them. It is
-never part of the task's plan.
+**Code an agent showed in an earlier version.** Earlier versions let a
+coding agent show you code: it named a file and lines, and our service read
+them from its sandbox checkout, never a file named `.env` or starting with
+`.env`. The path, the commit the checkout read it at, the line numbers, the
+lines (at most 200, each cut to 400 characters), and the model's note on why
+it showed them (at most 280 characters) stay stored with that agent's
+transcript, and are deleted with it. No agent shows code now, and none of
+it is part of the task's plan.
 
 **A whole file in a File tab.** A file named in a mention or an inbox item
 opens whole in a File tab. Our service reads the file from GitHub at the
@@ -910,18 +907,12 @@ rather than under their account, and our service handles the token as it
 does an account's, sending it only to Linear. We keep the workspace
 connection's state, who last began its sign-in, when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. While it is connected, every member
-of the workspace can list the issues that Linear account can see, private
-teams' issues included, and start a plan from one, and Luke's agents working
-on that workspace's plans and coding agents use this connection for Linear in
-place of a member's own, so what they change in Linear shows as made by the
-person who connected it. Starting a plan from an issue copies the issue's
-key, title, address, and description onto the plan, where it stays with the
-plan, is handed to the plan's coding agents with the task, and is
-deleted with the plan. Once you pause typing in New task's name field, what
-you typed is sent to Linear through this connection as a search, or, where it
-is an issue's key or a link to one, as a read of that one issue; neither what
-was sent nor what Linear answered is kept. Where a plan, a reply, or an Inbox item shows a link
+one-time value that matches its return. While it is connected, Luke's agents
+working on that workspace's plans and coding agents use this connection for
+Linear in place of a member's own, so what they change in Linear shows as made
+by the person who connected it. A plan started from an issue by an earlier
+version of Luke keeps the issue's key, title, address, and description, which
+are deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title,
 state, and assignee's name, which it reads through this connection as you
 look and keeps nowhere; the app shows them on the link, and they go no

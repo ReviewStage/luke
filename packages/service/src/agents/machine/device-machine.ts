@@ -39,9 +39,8 @@
  * stop line after it for the same reason, so a message sent next relaunches
  * rather than landing behind a line the runner ends on.
  *
- * `readFile` and `runRepositoryCommand` queue a request under an id they
- * mint, wait for its answer at most `MAC_MACHINE.ANSWER_WAIT`, and withdraw
- * it however the wait ends; a Mac that has not beaten within
+ * `readFile` queues a request under an id it mints, waits for its answer
+ * at most `MAC_MACHINE.ANSWER_WAIT`, and withdraws it however the wait ends; a Mac that has not beaten within
  * `MAC_PRESENCE.FRESH_MS` is away, and the call is unavailable at once, as a
  * stopped sandbox's is. `launchRunner`, `writeFiles`, and `writeLine` refuse
  * an away Mac at once too, as a Start on it is refused
@@ -100,7 +99,6 @@ import { agentCommitIdentity, type CheckoutServices } from "../coder-host/checko
 import {
   COMMAND_GONE,
   type CommandExit,
-  type CommandRun,
   NOT_FOUND_STATUS,
   type SandboxFile,
   SandboxUnavailable,
@@ -538,24 +536,6 @@ function deviceMachineOver(
           answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE && answer.bytes !== null
             ? answer.bytes
             : undefined,
-      ),
-
-    // Note that the command runs in the agent's worktree whatever folder it names, because a
-    // repository's command names the folder its sandbox keeps the checkout in.
-    runRepositoryCommand: (session, command) =>
-      Effect.flatMap(
-        asked(session, DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND, {
-          command: command.command,
-          ...(command.env === undefined ? {} : { env: command.env }),
-        }),
-        (answer): Effect.Effect<CommandRun, SandboxUnavailable> =>
-          answer.kind === DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND
-            ? Effect.succeed({
-                exitCode: answer.exitCode,
-                stdout: answer.stdout,
-                stderr: answer.stderr,
-              })
-            : Effect.fail(unavailable()),
       ),
   };
 }

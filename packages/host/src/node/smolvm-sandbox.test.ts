@@ -1,5 +1,5 @@
 /**
- * smolvm-sandbox.test.ts -- a sandboxed device's agents as the operating system sees the follower run them through `smolvm`: the VM made with the agent's folder at its own path and GitHub's credential fed from files outside it, the runner and a tool's command run in it, the token renewed in those files, the runner signalled before its command is ended, the VM stopped once the runner ends, and deleted before the agent's folder.
+ * smolvm-sandbox.test.ts -- a sandboxed device's agents as the operating system sees the follower run them through `smolvm`: the VM made with the agent's folder at its own path and GitHub's credential fed from files outside it, the runner run in it, the token renewed in those files, the runner signalled before its command is ended, the VM stopped once the runner ends, and deleted before the agent's folder.
  *
  * The follower runs over a scripted spawner standing in for `smolvm`, a
  * real temporary folder for the device's home and state, and a fake service
@@ -17,7 +17,6 @@ import type { AgentToolPin } from "@luke/agent-runner/pins";
 import type { DeviceAgentClaimedLine, DeviceAgentDevice } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
-  DEVICE_AGENT_REQUEST_KIND,
   DEVICE_ARCH,
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
@@ -47,14 +46,6 @@ const FIFTY_MINUTES = Duration.minutes(50);
 
 /** The platform's check of an agent's folder for unsaved work, named so a spawn of it can be told. */
 const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
-
-/** A command one of the agent's tools asks the box to run in its worktree. */
-const COMMAND = {
-  id: "3c2b1a0f-9e8d-4c7b-a6f5-e4d3c2b1a0f9",
-  agentId: AGENT_ID,
-  kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-  args: { command: "git status" },
-};
 
 type Spawned = ScriptedSpawner["spawned"][number];
 
@@ -115,8 +106,7 @@ const plainLine = (id: string, seq: number, kind: DeviceAgentLine["kind"]): Devi
 
 /**
  * The follower on a sandboxed box, with or without `/dev/kvm`, handed the
- * lines given in one read, and a command of the agent's tools a second in;
- * `runnerExits` is how long its runner runs before it exits by itself, or
+ * lines given in one read; `runnerExits` is how long its runner runs before it exits by itself, or
  * never. `smolvm machine start` finds no machine until one is made.
  */
 const following = (input: {
@@ -157,7 +147,6 @@ const following = (input: {
     const asked: string[] = [];
     const registered: DeviceAgentDevice[] = [];
     let linesRead = 0;
-    let requestsRead = 0;
     const client = {
       register: (_deviceId: string, registration: DeviceAgentDevice) =>
         Effect.sync(() => registered.push(registration)).pipe(Effect.as(true)),
@@ -167,12 +156,8 @@ const following = (input: {
       claimLine: (_deviceId: string, id: string) =>
         Effect.succeed(claimed.find((each) => each.line.id === id)),
       settleLine: () => Effect.succeed(true),
-      // Note that the command is asked once the runner runs, so the launch's spawns come first.
-      requests: () =>
-        requestsRead++ === 0
-          ? Effect.sleep(Duration.seconds(1)).pipe(Effect.as([COMMAND]))
-          : Effect.never,
-      claimRequest: () => Effect.succeed(COMMAND),
+      requests: () => Effect.never,
+      claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
       githubToken: (agentId: string) =>
         Effect.sync(() => {
@@ -222,7 +207,7 @@ const following = (input: {
   });
 
 it.effect(
-  "a sandboxed agent's VM is made with its folder at its own path and GitHub's credential fed from files outside it, its runner and its tools' commands run in it as the box's user, and its token is renewed in those files",
+  "a sandboxed agent's VM is made with its folder at its own path and GitHub's credential fed from files outside it, its runner runs in it as the box's user, and its token is renewed in those files",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -332,18 +317,6 @@ it.effect(
         );
         assert.equal(spawned.filter(isSmolvm("create")).length, 1);
         assert.equal(spawned.some(isSmolvm("stop")), false);
-
-        // A command the agent's tools ask runs in its VM, never on the box.
-        const isCommand = (each: Spawned) => each.args.includes(COMMAND.args.command);
-        yield* until(() => spawned.some(isCommand));
-        const command = spawned.find(isCommand);
-        assert.equal(command?.program, SMOLVM);
-        assert.deepEqual(command?.args.slice(command.args.indexOf("--") + 5), [
-          "/bin/bash",
-          "-l",
-          "-c",
-          COMMAND.args.command,
-        ]);
 
         // The turn ends by itself, and the VM is stopped with it.
         yield* TestClock.adjust(Duration.minutes(10));

@@ -21,11 +21,7 @@ import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-c
  * nothing unread is ever described as read (`coder-host/checkout.ts`).
  */
 
-/**
- * Why the checkout could not be reached, in words the model can act on,
- * without the verb each tool puts ahead of them: `show_code` says that lines
- * were not shown.
- */
+/** Why the checkout could not be reached, in words the model can act on, without the verb each tool puts ahead of them. */
 export const REPOSITORY_REFUSAL = {
   NO_REPOSITORY:
     "this task has no repository yet; the developer picks one in the app. " +
@@ -152,9 +148,6 @@ export interface RepositorySandbox {
   readonly run: SandboxSession["run"];
   readonly setNetworkPolicy?: VercelSandboxSession["setNetworkPolicy"];
 }
-
-/** The door to the session's sandbox, opened on first use: eve's `ctx.getSandbox()`, or a test's double. */
-export type RepositorySandboxDoor = () => Promise<RepositorySandbox>;
 
 /** What a command answered: its exit code and its two outputs, each cut to the bound. */
 interface CommandResult {
