@@ -110,7 +110,7 @@ export function useInboxCloser({
         }
         return false;
       };
-      return act(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, {
+      return act(ACT_KIND.AGENTS_INBOX_CLOSE, {
         itemId: item.id,
         revision: item.revision,
         clientKey: key,

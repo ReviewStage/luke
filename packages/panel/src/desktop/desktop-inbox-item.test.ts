@@ -432,7 +432,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ATTACHMENT) return previous(request);
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value:
@@ -1028,7 +1028,7 @@ function heldAnswers(): AgentInboxAnswerParams[] {
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ANSWER) return previous(request);
       sent.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -1188,7 +1188,7 @@ test("a message's file whose read failed says so under the files, and Retry read
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ATTACHMENT) return previous(request);
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: failing
@@ -1385,10 +1385,10 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       // Note that only the answered items' task's agents are counted, because the item chosen next reads its own task's for its card.
-      if (request.kind === ACT_KIND.CODING_AGENTS_LIST && request.payload.taskId === BILLING.id) {
+      if (request.kind === ACT_KIND.AGENTS_LIST && request.payload.taskId === BILLING.id) {
         listReads.push(request);
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
         nods.push(request.payload);
         const asked = request.payload.itemId === heard.id ? heard : quiet;
         const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
@@ -1582,7 +1582,7 @@ test("words selected in an open item's question quote into its box, its reply ca
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -1693,7 +1693,7 @@ test("a message refused as naming no agent says the agent is archived where it i
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_ARCHIVE) return previous(request);
       unarchived.push(request.payload);
       // Brought back, the agent is listed so from then on.
       const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
@@ -1756,7 +1756,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_ARCHIVE) return previous(request);
       const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
       // Held until the test lands it, after the second send was refused.
       return new Promise((resolve) => {
@@ -2327,13 +2327,13 @@ function noticeWrites(refusing: () => boolean = () => false): {
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
         answered.push(request.payload);
         if (!refusing()) return new Promise(() => undefined);
         const value = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       messaged.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -2465,7 +2465,7 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       // The service answers once the test says so.
       return new Promise((resolve) =>
@@ -2537,7 +2537,7 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       const answer = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(request.payload);
       if (!("failure" in answer)) landed.push(answer.item);
       return new Promise((resolve) =>
@@ -2608,7 +2608,7 @@ test("words written in a reply's box while the reply is out stay there, whether 
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       const { payload } = request;
       const landed = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000020")(payload);
       return new Promise((resolve) =>
@@ -2658,7 +2658,7 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       return new Promise((resolve) =>
         refuse.push(() =>
           resolve({

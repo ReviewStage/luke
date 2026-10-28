@@ -27,7 +27,7 @@ export function useAgentReadMarks(): AgentReadMarks {
     markedUnread: reads.markedUnread,
     mark: (agent, unread) => {
       reads.mark({ id: agent.id, updatedAt: agent.activityAt }, unread);
-      if (!unread) tell(ACT_KIND.CODING_AGENTS_SEEN, { agentId: agent.id });
+      if (!unread) tell(ACT_KIND.AGENTS_SEEN, { agentId: agent.id });
     },
   };
 }

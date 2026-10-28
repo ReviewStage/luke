@@ -126,15 +126,15 @@ import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import {
-  CODING_AGENT_TOOL_REFUSAL,
+  AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
   START_AGENT_TOOL,
-  START_CODING_AGENT_REFUSAL,
+  START_AGENT_REFUSAL,
   STOP_AGENT_REFUSAL,
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
 import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { claimRuntimeSession } from "../eve-host/conversation.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
@@ -701,7 +701,7 @@ test("read_agent reads a teammate's agent on another task of the caller's worksp
   for (const other of [agents.otherWorkspaces, agents.strangers]) {
     assert.deepEqual(await call(CODER_TOOL.READ_AGENT, { agentId: other.id }), {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+      reason: AGENT_TOOL_REFUSAL.NO_AGENT,
     });
   }
   assert.equal(eve.sent.length, 0, "a read sends nothing");
@@ -804,7 +804,7 @@ test("start_agent hands over a prompt and a note each as long as a start allows,
   ] as const) {
     assert.deepEqual(await call(CODER_TOOL.START_AGENT, refused, key), {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+      reason: START_AGENT_REFUSAL.UNREADABLE,
     });
   }
   assert.equal(eve.sent.length, 0, "a start past the bound starts nothing");
@@ -946,7 +946,7 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
     ],
     [
       Array.from({ length: AGENT_BOUNDS.MAX_ATTACHMENTS + 1 }, () => randomUUID()),
-      START_CODING_AGENT_REFUSAL.UNREADABLE,
+      START_AGENT_REFUSAL.UNREADABLE,
     ],
   ] as const) {
     assert.deepEqual(
@@ -994,7 +994,7 @@ test("start_agent with a title names the agent by it from the start, and a title
   ] as const) {
     assert.deepEqual(await call(CODER_TOOL.START_AGENT, { title: refused }, key), {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+      reason: START_AGENT_REFUSAL.UNREADABLE,
     });
   }
 });
@@ -1010,12 +1010,12 @@ test("start_agent with a branch starts an agent whose checkout is cloned at that
 
   assert.deepEqual(
     await call(CODER_TOOL.START_AGENT, { prompt, branch: "luke/never-pushed" }, "call-missing"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_BRANCH },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.NO_BRANCH },
   );
   assert.equal(eve.sent.length, 0, "a branch GitHub does not hold starts nothing");
   assert.deepEqual(
     await call(CODER_TOOL.START_AGENT, { prompt, branch: "two words" }, "call-unreadable"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.UNREADABLE },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.UNREADABLE },
   );
 
   const started = await call(
@@ -1363,7 +1363,7 @@ test("start_agent from another agent refuses, in words the model acts on and sta
       status: ACTION_RESULT_STATUS.REJECTED,
       reason,
     });
-  const R = START_CODING_AGENT_REFUSAL;
+  const R = START_AGENT_REFUSAL;
   await saidTurnOn(caller, "Done with the expiry.");
 
   for (const other of [agents.otherWorkspaces, agents.strangers]) {
@@ -1445,7 +1445,7 @@ test("start_agent refuses to continue an agent whose session died while it still
 
   assert.deepEqual(await call(CODER_TOOL.START_AGENT, { from }, "call-1"), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: START_CODING_AGENT_REFUSAL.SOURCE_RUNNING,
+    reason: START_AGENT_REFUSAL.SOURCE_RUNNING,
   });
   // eve runs no turn on the dead session, so the Stop stops nothing there, yet the turn reads cancelled.
   const stopped = await call(CODER_TOOL.STOP_AGENT, from, "call-2");
@@ -1554,7 +1554,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(Array.isArray(paged.tasks) ? paged.tasks.length : -1, 1);
   assert.deepEqual(await call(CODER_TOOL.LIST_TASKS, { offset: -1 }), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
+    reason: AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
   });
 
   const started = await call(
@@ -1595,7 +1595,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
       { taskId: taskIds.billing, prompt: "Add the invoice export." },
       "call-billing",
     ),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_SUCH_TASK },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.NO_SUCH_TASK },
   );
   assert.equal(eve.sent.length, 1, "the call run again starts nothing");
 
@@ -1605,7 +1605,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
       { taskId: taskIds.elsewhere, prompt: "Add the invoice export." },
       "call-elsewhere",
     ),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_SUCH_TASK },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.NO_SUCH_TASK },
   );
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
@@ -1641,7 +1641,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     ),
     {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: START_CODING_AGENT_REFUSAL.BRANCH_NO_REPOSITORY,
+      reason: START_AGENT_REFUSAL.BRANCH_NO_REPOSITORY,
     },
   );
   const onTask = await fromNoTask(
@@ -1784,7 +1784,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   // A start that still names a new task, as starts did before create_task, is refused with where to go.
   assert.deepEqual(
     await call(CODER_TOOL.START_AGENT, { newTask: "Old way", prompt: "Sweep." }, "call-old"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NEW_TASK },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.NEW_TASK },
   );
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
@@ -1892,7 +1892,7 @@ test("an agent whose starter no longer sees its task keeps its own tools: it rea
   assert.equal(itself.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(itself));
   assert.deepEqual(await readAs(agents.caller), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+    reason: AGENT_TOOL_REFUSAL.NO_AGENT,
   });
   const sent = await directMessage(host, onBilling, agents.caller, eve.services);
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
@@ -1981,15 +1981,15 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.deepEqual(await archive(agents.caller.id), rejected(UPDATE_AGENT_REFUSAL.SELF));
   assert.deepEqual(
     await archive(agents.otherWorkspaces.id),
-    rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT),
+    rejected(AGENT_TOOL_REFUSAL.NO_AGENT),
   );
   assert.deepEqual(
     await archive(agents.strangers.id),
-    rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT),
+    rejected(AGENT_TOOL_REFUSAL.NO_AGENT),
   );
   assert.deepEqual(
     await call(CODER_TOOL.UPDATE_AGENT, { agentId: agents.strangers.id, archived: false }),
-    rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT),
+    rejected(AGENT_TOOL_REFUSAL.NO_AGENT),
   );
   for (const input of [
     { reason: "r".repeat(AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS + 1) },
@@ -2648,7 +2648,7 @@ test("stop_agent answers an idle agent as idle and changes nothing, refuses one 
   assert.deepEqual(await stop(agents.archived.id), rejected(STOP_AGENT_REFUSAL.ARCHIVED));
   for (const agent of [agents.otherWorkspaces, agents.strangers]) {
     await turnOn(agent, false);
-    assert.deepEqual(await stop(agent.id), rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT), agent.id);
+    assert.deepEqual(await stop(agent.id), rejected(AGENT_TOOL_REFUSAL.NO_AGENT), agent.id);
   }
   assert.deepEqual(
     await call(CODER_TOOL.STOP_AGENT, { agentId: "not-an-id" }),
@@ -3030,7 +3030,7 @@ test("update_agent renames a teammate's agent, moves it to a model the catalog o
     await call(CODER_TOOL.UPDATE_AGENT, { agentId: otherWorkspaces.id, title: "x" }),
     {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+      reason: AGENT_TOOL_REFUSAL.NO_AGENT,
     },
   );
   const theirs = Option.getOrThrow(
@@ -3125,7 +3125,7 @@ test("list_models for a Claude Code agent lists its Claude models alone, their f
   );
   assert.deepEqual(await call(CODER_TOOL.LIST_MODELS, { agentId: agents.otherWorkspaces.id }), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+    reason: AGENT_TOOL_REFUSAL.NO_AGENT,
   });
 });
 
@@ -3393,7 +3393,7 @@ test("create_task, update_task, list_tasks, and read_task carry a task's status,
   });
   assert.deepEqual(await call(CODER_TOOL.LIST_TASKS, { status: "started" }), {
     status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
+    reason: AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
   });
   assert.deepEqual(
     await call(CODER_TOOL.CREATE_TASK, { name: "Odd", priority: "p0" }, "call-odd"),
@@ -3713,7 +3713,7 @@ test("a teammate's agent lists, reads, messages, stops, updates, continues, and 
     return list.agents.map((agent) => (isRecord(agent) ? agent.id : undefined));
   };
   const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
-  const noAgent = rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+  const noAgent = rejected(AGENT_TOOL_REFUSAL.NO_AGENT);
   const [messageId] = tailMessageIds(await member(CODER_TOOL.READ_AGENT, { agentId: operator.id }));
   assert.ok(messageId !== undefined);
 
@@ -3728,7 +3728,7 @@ test("a teammate's agent lists, reads, messages, stops, updates, continues, and 
   for (const from of [{ agentId: operator.id }, { agentId: operator.id, messageId }]) {
     assert.deepEqual(
       await teammate(CODER_TOOL.START_AGENT, { from }, `call-${randomUUID()}`),
-      rejected(START_CODING_AGENT_REFUSAL.NO_SOURCE),
+      rejected(START_AGENT_REFUSAL.NO_SOURCE),
     );
   }
   const refusedDm = await directMessage(host, agents.caller, operator, eve.services);
@@ -3755,7 +3755,7 @@ test("a teammate's agent lists, reads, messages, stops, updates, continues, and 
   for (const from of [{ agentId: operator.id }, { agentId: operator.id, messageId }]) {
     assert.deepEqual(
       await member(CODER_TOOL.START_AGENT, { from }, `call-${randomUUID()}`),
-      rejected(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY),
+      rejected(START_AGENT_REFUSAL.SOURCE_NO_REPOSITORY),
     );
   }
   const sent = await directMessage(host, own, operator, eve.services);

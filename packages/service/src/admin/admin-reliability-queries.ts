@@ -53,7 +53,7 @@ import { alias, type PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
 import { DAY_MS, TURN_FAILURE, TURN_STATUS } from "../core.js";
 import { isAdminRole } from "./admin-access.js";
 import { dayStart, lastNDayKeys } from "./admin-metrics.js";
@@ -445,7 +445,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
 
   const agentFailures = new Map<AgentFailure, number>();
   for (const row of failures) {
-    const failure = codingAgentFailureOf({
+    const failure = agentFailureOf({
       status: TURN_STATUS.FAILED,
       failure: row.failure,
       failureDetail: row.failureDetail,
@@ -459,8 +459,8 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
   // moment the grace ran out, which is the day it counts on and what keeps
   // it inside the window or out.
   for (const agent of turnless) {
-    const status = codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now });
-    const failure = codingAgentFailureOf(undefined);
+    const status = agentStatusOf(undefined, { createdAt: agent.createdAt, now });
+    const failure = agentFailureOf(undefined);
     const failedAt = agent.createdAt.getTime() + STARTING_GRACE_MS;
     if (status !== AGENT_STATUS.FAILED || failure === undefined) continue;
     if (failedAt < request.windowStart.getTime()) continue;

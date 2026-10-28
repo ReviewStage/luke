@@ -49,7 +49,7 @@ import { type AfterResponse, keptAfterResponse } from "../../http/after-response
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER } from "../coder-host/bounds.js";
-import { titleCodingAgent } from "../coder-host/title.js";
+import { titleAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { readNativeTurnHanded, recordNativeTurnHanded } from "../coder-host/turn-message.js";
@@ -2010,7 +2010,7 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
       Effect.gen(function* () {
         const { model, asked } = scriptedTitleModel("Fix the flaky invite test");
         const post = yield* standingWith({
-          title: (target, agent) => Effect.orDie(titleCodingAgent(model, target, agent)),
+          title: (target, agent) => Effect.orDie(titleAgent(model, target, agent)),
         });
         const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the flaky invite test."]);
         yield* updateTask(agent.userId, agent.taskId, { name: UNTITLED_TASK_NAME });
@@ -2039,7 +2039,7 @@ it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", 
       const { model, asked } = scriptedTitleModel("Fix the flaky invite test");
       const after = keptAfterResponse();
       const post = yield* standingWith(
-        { title: (target, agent) => Effect.orDie(titleCodingAgent(model, target, agent)) },
+        { title: (target, agent) => Effect.orDie(titleAgent(model, target, agent)) },
         after.layer,
       );
       const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the flaky invite test."]);

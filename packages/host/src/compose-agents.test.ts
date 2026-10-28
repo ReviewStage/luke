@@ -55,7 +55,7 @@ import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+import { type AgentClient, composeAgents } from "./compose-agents.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
 
@@ -259,12 +259,12 @@ function fakeService() {
   let sentTxid: string | undefined;
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
-    Effect.suspend((): ReturnType<CodingAgentClient["taskInboxLive"]> => {
+    Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
       if (scope === undefined) return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       if (typeof scope === "object") return Effect.succeed(scope);
       return poll === true ? live.scope.poll(after) : Effect.succeed(live.scope.first());
     });
-  const client: CodingAgentClient = {
+  const client: AgentClient = {
     models: () =>
       Effect.sync(() => {
         asked.push("models");
@@ -343,7 +343,7 @@ function fakeService() {
       }),
     // Note that a poll is counted apart from the first ask (`live.transcript.polls`), as each is held until the rows move.
     agentTranscriptLive: (agentId, _userId, callId, poll, after) =>
-      Effect.suspend((): ReturnType<CodingAgentClient["agentTranscriptLive"]> => {
+      Effect.suspend((): ReturnType<AgentClient["agentTranscriptLive"]> => {
         if (poll !== true) {
           asked.push(`transcript-live:${agentId}${callId === undefined ? "" : `:${callId}`}`);
         }
@@ -628,7 +628,7 @@ function fakeService() {
         return { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true };
       }),
     accountInboxLive: (userId, poll, after) =>
-      Effect.suspend((): ReturnType<CodingAgentClient["accountInboxLive"]> => {
+      Effect.suspend((): ReturnType<AgentClient["accountInboxLive"]> => {
         if (poll !== true) asked.push(`account-inbox-live:${userId}`);
         if (accountLive === undefined) {
           return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
@@ -637,7 +637,7 @@ function fakeService() {
         return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
       }),
     accountInboxItemsLive: (userId, since, poll, after) =>
-      Effect.suspend((): ReturnType<CodingAgentClient["accountInboxItemsLive"]> => {
+      Effect.suspend((): ReturnType<AgentClient["accountInboxItemsLive"]> => {
         if (poll !== true) asked.push(`account-items-live:${userId}`);
         if (itemsLive === undefined) {
           return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
@@ -762,7 +762,7 @@ function subject(
     const service = fakeService();
     // Each event with how many reads the service had been asked as it was told.
     const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
-    const composer = yield* composeCodingAgents({
+    const composer = yield* composeAgents({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         emit: (kind, payload) => void events.push({ kind, payload, asked: service.asked.length }),
@@ -841,7 +841,7 @@ it.effect(
       });
 
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, {
+        yield* call(GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, {
           workspaceId: "workspace-1",
           reset: true,
         }),
@@ -859,7 +859,7 @@ it.effect("a delete waits for the task list to carry its transaction before it a
       listed: (txid) => Effect.sync(() => void waited.push(txid)),
     });
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }), {
       deleted: true,
       txid: "9102",
     });
@@ -872,40 +872,40 @@ it.effect("each method asks the service once and answers what it said, whole", (
     const { call, asked, sealTranscript } = yield* subject();
     sealTranscript(LIVE_ANSWERED);
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MODELS), { models: MODELS });
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_MODELS), { models: MODELS });
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DEFAULT_READ), {
       choice: { model: AGENT.model, effort: AGENT.effort },
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, {
+      yield* call(GATEWAY_METHOD.AGENTS_DEFAULT_WRITE, {
         model: "openai/gpt-6.1-sol",
         effort: "xhigh",
       }),
       { choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } },
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID }), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }), {
       agents: [AGENT],
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID, includeArchived: true }),
+      yield* call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID, includeArchived: true }),
       { agents: [AGENT] },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, {
+      yield* call(GATEWAY_METHOD.AGENTS_WORKSPACE_LIST, {
         workspaceId: "workspace-1",
         repository: "acme/relay",
       }),
       { agents: [AGENT] },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+      yield* call(GATEWAY_METHOD.AGENTS_START, {
         taskId: TASK_ID,
         idempotencyKey: "press-1",
       }),
       { agent: { ...AGENT, status: AGENT_STATUS.STARTING } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+      yield* call(GATEWAY_METHOD.AGENTS_MESSAGES, {
         agentId: AGENT_ID,
         after: AGENT_CURSOR_START,
       }),
@@ -917,7 +917,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+      yield* call(GATEWAY_METHOD.AGENTS_MESSAGES, {
         agentId: AGENT_ID,
         after: AGENT_CURSOR_START,
         callId: "call-7",
@@ -930,7 +930,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+      yield* call(GATEWAY_METHOD.AGENTS_MESSAGE, {
         agentId: AGENT_ID,
         text: "Also expire them after a week.",
         clientKey: "send-1",
@@ -938,7 +938,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: AGENT },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHOOSE, {
+      yield* call(GATEWAY_METHOD.AGENTS_CHOOSE, {
         agentId: AGENT_ID,
         model: "openai/gpt-6.1-sol",
         effort: "low",
@@ -946,55 +946,55 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: { ...AGENT, model: "openai/gpt-6.1-sol", effort: "low" } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_RENAME, {
+      yield* call(GATEWAY_METHOD.AGENTS_RENAME, {
         agentId: AGENT_ID,
         title: "Sign-out button",
       }),
       { agent: { ...AGENT, title: "Sign-out button" } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_SERVERS, {
+      yield* call(GATEWAY_METHOD.AGENTS_SERVERS, {
         agentId: AGENT_ID,
         disabledServers: [INTEGRATION_PROVIDER.LINEAR],
       }),
       { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: AGENT_STATUS.CANCELLED },
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
+      yield* call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
       { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
+      yield* call(GATEWAY_METHOD.AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
       { agent: AGENT },
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }), {
       deleted: true,
       txid: "9102",
     });
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: AGENT_ID }), {
       agent: PAGE,
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID }),
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
+      yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS, { agentId: AGENT_ID }),
       CHAPTERS,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE, {
+      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, {
         agentId: AGENT_ID,
         number: 11,
       }),
@@ -1008,30 +1008,30 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { model: CHAPTERS_MODEL.OPUS },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
       OVERVIEW.pullRequest,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: AGENT_ID }),
       REVIEW_OPTIONS,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
       OVERVIEW.checks,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, { agentId: AGENT_ID }),
       OVERVIEW.conversation,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, {
+      yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
         agentId: AGENT_ID,
         src: "https://camo.githubusercontent.com/abc",
       }),
       { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
+      yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION, {
         agentId: AGENT_ID,
         number: 11,
         request: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
@@ -1039,18 +1039,18 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT, {
         itemId: ITEM.id,
         attachmentId: ATTACHMENT_ID,
       }),
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, {
+      yield* call(GATEWAY_METHOD.AGENTS_PICTURE, {
         agentId: AGENT_ID,
         pictureId: PICTURE_ID,
         callId: "call-worker",
@@ -1058,7 +1058,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_PART, {
+      yield* call(GATEWAY_METHOD.AGENTS_PART, {
         agentId: AGENT_ID,
         messageId: "message-1",
         index: 2,
@@ -1066,7 +1066,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { part: { type: "reasoning", text: "Whole." } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
         reply: INBOX_REPLY.ACKNOWLEDGED,
@@ -1075,7 +1075,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
         itemId: ITEM.id,
         revision: 2,
         clientKey: "close-1",
@@ -1086,7 +1086,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
         itemId: ITEM.id,
         text: "Also page on-call.",
         attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
@@ -1106,14 +1106,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
-    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+    yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
       itemId: ITEM.id,
       text: "Ship it.",
       clientKey: "message-2",
       answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_START, {
         agentId: AGENT_ID,
         title: "Annual plan copy",
         text: "Draft the annual plan's line too.",
@@ -1135,18 +1135,18 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       { id: ITEM.id, unread: true },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
         itemId: ITEM.id,
         unread: false,
       }),
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
         workspaceId: WORKSPACE_ID,
         itemIds: [],
       }),
@@ -1208,11 +1208,11 @@ it.effect(
       const signedOut = yield* subject({ signedIn: false });
       const offline = yield* subject({ sendsNetwork: false });
 
-      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_MODELS), {
+      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.AGENTS_MODELS), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
       assert.deepEqual(
-        yield* offline.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID }),
+        yield* offline.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }),
         { failure: AGENT_CALL_FAILURE.UNANSWERED },
       );
       assert.deepEqual(signedOut.asked, []);
@@ -1226,17 +1226,17 @@ it.effect(
     Effect.gen(function* () {
       const { call, asked } = yield* subject();
 
-      const fromTaskless = yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+      const fromTaskless = yield* call(GATEWAY_METHOD.AGENTS_START, {
         idempotencyKey: "press-continue",
         from: { agentId: AGENT_ID },
       });
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
+      yield* call(GATEWAY_METHOD.AGENTS_START, {
         taskId: TASK_ID,
         idempotencyKey: "press-fork",
         from: { agentId: AGENT_ID },
       });
       const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.CODING_AGENTS_START, {
+        call(GATEWAY_METHOD.AGENTS_START, {
           idempotencyKey: "press-nowhere",
           prompt: "Go.",
         }),
@@ -1425,7 +1425,7 @@ it.effect(
         wakeIn: 3_000,
       };
       script(between);
-      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
       yield* settled;
       assert.deepEqual(pages(), [
         { transcript: FOLLOWED, page: { ...newest, newest: true, caughtUp: false } },
@@ -1461,7 +1461,7 @@ it.effect(
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
       assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${AGENT_CURSOR_START}`));
 
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const toldBefore = pages().length;
       transcriptRows(live, 4, 3);
       yield* settled;
@@ -1486,7 +1486,7 @@ it.effect(
       pageNewest(newestPage("1:0", "Reading the invites."));
       const caught = pageNow("1:0", { holds: true });
       script(caught);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(live, 1);
       yield* settled;
@@ -1551,7 +1551,7 @@ function toldBesideRead(pageCursor: string, pageText: string) {
     pageNewest(newestPage("1:0", "Reading the invites."));
     const caught = pageNow("1:0", { holds: true });
     script(caught);
-    yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+    yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
     yield* settled;
     transcriptRows(live, 1);
     yield* settled;
@@ -1633,18 +1633,18 @@ it.effect(
       const newest = newestPage("1:0", "Reading the invites.");
       pageNewest(newest);
       script(pageNow("1:0", { holds: true }));
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(live, 1);
       yield* settled;
       const drawn = windowRow(2, "Writing the expiry.");
       live.transcript.set({ window: [drawn.row], windowParts: [drawn.part] });
       yield* nextPoll;
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
 
       const toldBefore = pages().length;
       const askedBefore = asked.length;
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       const told = pages()[toldBefore];
       assert.ok(isRecord(told) && isRecord(told.page) && Array.isArray(told.page.messages));
@@ -1673,7 +1673,7 @@ it.effect(
       };
       const rest = pageNow("3:0", { holds: true, text: "Done." });
       script(full, rest);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(live, 2);
       yield* settled;
@@ -1691,7 +1691,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { call, asked, pages, sealTranscript } = yield* subject();
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(pages(), [
         {
@@ -1713,7 +1713,7 @@ it.effect(
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals);
 
       sealTranscript(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
       // Note that the newest page told before stands held, so following again opens on it rather than reading it anew.
@@ -1728,7 +1728,7 @@ it.effect(
       const { call, asked, pages, sealTranscript, pageNewest } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       yield* TestClock.adjust("1 minute");
       yield* settled;
@@ -1762,7 +1762,7 @@ it.effect(
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("2:0", "Writing the expiry."));
       script(pageNow("2:0", { holds: true }));
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(live, 2);
       yield* settled;
@@ -1789,16 +1789,16 @@ it.effect("an older page is read below the place the window names, the agent's o
   Effect.gen(function* () {
     const { call, asked } = yield* subject();
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
       { messages: SAID.messages, before: "3" },
     );
-    yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, {
+    yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
       ...FOLLOWED,
       callId: "call-7",
       before: "40",
     });
     const refused = yield* Effect.flip(
-      call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "the start" }),
+      call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "the start" }),
     );
     assert.equal(refused._tag, "InvalidParamsRefusal");
     assert.deepEqual(asked, [
@@ -1815,7 +1815,7 @@ it.effect(
       const worker = { ...FOLLOWED, callId: "call-7" };
       const refused = yield* subject();
       refused.sealTranscript({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
-      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, worker);
+      yield* refused.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, worker);
       yield* settled;
       yield* TestClock.adjust("5 seconds");
       yield* settled;
@@ -1824,7 +1824,7 @@ it.effect(
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
-      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(signedOut.pages(), [
         { transcript: FOLLOWED, page: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
@@ -1834,7 +1834,7 @@ it.effect(
       const followed = yield* subject();
       followed.sealTranscript(LIVE_ANSWERED);
       followed.pageNow(pageNow("1:0", { holds: true }));
-      yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* followed.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(followed.live.transcript.held(), 1, "its poll is held while nothing moves");
       yield* followed.reset;
@@ -1855,11 +1855,11 @@ function followedOnce(
     harness.sealTranscript(LIVE_ANSWERED);
     harness.pageNewest(newest);
     harness.pageNow(past);
-    yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcript);
+    yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcript);
     yield* settled;
     transcriptRows(harness.live, 2);
     yield* settled;
-    yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcript);
+    yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcript);
     const { holds: _holds, ...read } = past;
     return {
       ...read,
@@ -1889,7 +1889,7 @@ it.effect(
 
       const toldBefore = pages().length;
       const askedBefore = asked.length;
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(pages().slice(toldBefore), [
         { transcript: FOLLOWED, page: window },
@@ -1923,16 +1923,16 @@ it.effect(
       yield* settled;
 
       const toldBefore = pages().length;
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(pages().slice(toldBefore), [
         { transcript: FOLLOWED, page: window },
         { transcript: FOLLOWED, page: windowPage(rewrite) },
       ]);
 
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const again = pages().length;
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       const told = pages()[again];
       assert.ok(isRecord(told) && isRecord(told.page));
@@ -1954,7 +1954,7 @@ it.effect(
 
       const toldBefore = pages().length;
       const askedBefore = asked.length;
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(
         pages()
@@ -1983,7 +1983,7 @@ it.effect(
       const { pages } = harness;
       harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       yield* TestClock.adjust("40 seconds");
       yield* settled;
@@ -2013,7 +2013,7 @@ it.effect(
       const signedOut = yield* subject();
       yield* followedOnce(signedOut);
       yield* signedOut.reset;
-      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(newestReads(signedOut.asked), 2);
       assert.equal(heldTold(signedOut.pages()), 0);
@@ -2022,18 +2022,18 @@ it.effect(
       const switched = yield* subject({ accountId: () => account });
       yield* followedOnce(switched);
       account = "user-eli";
-      yield* switched.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* switched.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(newestReads(switched.asked), 2);
       assert.equal(heldTold(switched.pages()), 0);
 
       const archived = yield* subject();
       yield* followedOnce(archived);
-      yield* archived.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
+      yield* archived.call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
         agentId: AGENT_ID,
         archived: true,
       });
-      yield* archived.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* archived.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(newestReads(archived.asked), 2);
       assert.equal(heldTold(archived.pages()), 0);
@@ -2054,11 +2054,11 @@ it.effect(
         harness.asked.filter((ask) => ask === `messages-newest:${agentId}:cut`).length;
 
       const last = transcripts.at(-1) ?? FOLLOWED;
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, last);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, last);
       yield* settled;
       assert.equal(newestReads(last.agentId), 1);
       const first = transcripts[0] ?? FOLLOWED;
-      yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, first);
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, first);
       yield* settled;
       assert.equal(newestReads(first.agentId), 2);
     }),
@@ -2094,7 +2094,7 @@ it.effect(
     Effect.gen(function* () {
       const { call, asked, sealScope, live, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
+      assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
       yield* settled;
       assert.deepEqual(told(), []);
 
@@ -2124,7 +2124,7 @@ it.effect(
       ]);
       assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
 
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
       live.scope.set({ items: [ITEM_ROW] });
       yield* nextPoll;
@@ -2138,7 +2138,7 @@ it.effect(
     Effect.gen(function* () {
       const { call, sealScope, live, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
       live.scope.set({ messages: [], files: [], items: [ITEM_ROW] });
       yield* toldTimes(told, 1);
@@ -2167,21 +2167,21 @@ it.effect(
     Effect.gen(function* () {
       const refused = yield* subject();
       refused.sealScope({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
-      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* refused.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(refused.told(), [
         { scope: AGENT_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.NOT_FOUND } },
       ]);
 
       const unsealed = yield* subject();
-      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* unsealed.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(unsealed.told(), [
         { scope: AGENT_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
-      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* signedOut.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
       assert.deepEqual(signedOut.told(), [
         { scope: PLAN_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
@@ -2194,7 +2194,7 @@ it.effect("a sign-out lets every followed inbox go", () =>
   Effect.gen(function* () {
     const { call, sealScope, live, told, reset } = yield* subject();
     sealScope(LIVE_ANSWERED);
-    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+    yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
     yield* settled;
     assert.equal(live.scope.held(), 1, "its poll is held while nothing moves");
     yield* reset;
@@ -2236,7 +2236,7 @@ it.effect(
       const { call, asked, sealAccount, live, accountInboxes } = yield* subject();
       sealAccount(LIVE_ANSWERED);
 
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
       deliverAccount(live, { items: [WAITING], failedRuns: [FAILED_RUN] });
       yield* settled;
@@ -2274,7 +2274,7 @@ it.effect(
       assert.deepEqual(asked, ["account-inbox-live:user-dana"]);
 
       // Let go, nothing more is told.
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_UNFOLLOW);
       const told = accountInboxes().length;
       deliverAccount(live, { items: [] });
       yield* nextPoll;
@@ -2288,21 +2288,21 @@ it.effect(
     Effect.gen(function* () {
       const nobody = yield* subject({ accountId: () => undefined });
       nobody.sealAccount(LIVE_ANSWERED);
-      yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* nobody.call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
       assert.deepEqual(nobody.accountInboxes(), [{ failure: AGENT_CALL_FAILURE.UNANSWERED }]);
       assert.deepEqual(nobody.asked, []);
 
       const { call, asked, sealAccount, accountInboxes } = yield* subject();
       sealAccount(LIVE_SIGNED_OUT);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
       assert.deepEqual(asked, ["account-inbox-live:user-dana"]);
       yield* TestClock.adjust("5 seconds");
       yield* settled;
       assert.deepEqual(asked, ["account-inbox-live:user-dana", "account-inbox-live:user-dana"]);
       assert.deepEqual(accountInboxes(), []);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_UNFOLLOW);
     }),
 );
 
@@ -2362,7 +2362,7 @@ it.effect(
     Effect.gen(function* () {
       const { call, sealItems, live, accountItems } = yield* subject();
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW);
       yield* settled;
       const both = [stampOf(HELD_ITEM, TASK_ID), stampOf(OTHER_ITEM, OTHER_TASK_ID)];
       deliverItems(live, both, [HELD_ITEM, OTHER_ITEM]);
@@ -2392,7 +2392,7 @@ it.effect(
     Effect.gen(function* () {
       const { call, asked, sealItems, live, accountItems } = yield* subject();
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW);
       yield* settled;
       deliverItems(
         live,
@@ -2436,7 +2436,7 @@ it.effect("an item no stamp names any more is dropped, its plan told holding not
   Effect.gen(function* () {
     const { call, sealItems, live, accountItems } = yield* subject();
     sealItems(LIVE_ANSWERED);
-    yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+    yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW);
     yield* settled;
     deliverItems(
       live,
@@ -2465,7 +2465,7 @@ it.effect(
         accountId: () => signedIn,
       });
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW);
       yield* settled;
       deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
       yield* toldTimes(accountItems, 1);
@@ -2520,8 +2520,8 @@ it.effect(
       const { call, sealScope, sealItems, live, commitIn, changeFirst } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW);
       yield* settled;
       // Each read is woken by a write once, so each hands a wait for the next.
       live.scope.set({ items: [ITEM_ROW], messages: [], files: [] }, ["9100"]);
@@ -2540,7 +2540,7 @@ it.effect(
 
       commitIn("9200");
       const marking = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
+        call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       );
       yield* settled;
       assert.deepEqual(bothHold(harness, unread), [true, true]);
@@ -2563,7 +2563,7 @@ it.effect(
       changeFirst(overtaken);
       commitIn(undefined);
       const closing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
           itemId: ITEM.id,
           revision: ITEM.revision,
           clientKey: "close-1",
@@ -2586,8 +2586,8 @@ it.effect(
       const { call, sealScope, sealItems, live } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW);
       yield* settled;
       live.scope.set({ items: [ITEM_ROW], messages: [], files: [] });
       deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
@@ -2596,7 +2596,7 @@ it.effect(
       const replied = (item: InboxItem) => JSON.stringify(item).includes(MESSAGE_ID);
       assert.deepEqual(bothHold(harness, replied), [false, false]);
 
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
         itemId: ITEM.id,
         text: "Push it after the tests pass.",
         clientKey: "reply-1",
@@ -2612,7 +2612,7 @@ it.effect(
     Effect.gen(function* () {
       const { call, sealAccount, live, commitIn, accountInboxes } = yield* subject();
       sealAccount(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
       const plan = { planId: TASK_ID, items: 1, toDo: 1, updatedAt: ITEM.updatedAt };
       const parts = { planless: [], automations: [], failedRuns: [] };
@@ -2631,7 +2631,7 @@ it.effect(
 
       commitIn("9300");
       const closing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
           itemId: ITEM.id,
           revision: ITEM.revision,
           clientKey: "close-1",
@@ -2654,7 +2654,7 @@ it.effect("a Start answers its agent before the task list carries the Start's tr
     startCommits("9104");
 
     const starting = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.CODING_AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+      call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
     );
     yield* settled;
 

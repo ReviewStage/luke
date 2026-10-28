@@ -29,8 +29,8 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { agentPullRequestReach } from "../agents/coder-host/published.js";
-import { codingAgentStatusOf } from "../agents/coder-host/status.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { agentStatusOf } from "../agents/coder-host/status.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
@@ -753,7 +753,7 @@ export function agentIsWoken(
   now: number,
 ): boolean {
   if (agent.archivedAt !== null) return false;
-  const atWork = AT_WORK.has(codingAgentStatusOf(turn, { createdAt: agent.createdAt, now }));
+  const atWork = AT_WORK.has(agentStatusOf(turn, { createdAt: agent.createdAt, now }));
   if (wake.kind === AGENT_WAKE.CHECKS_COMPLETED) return atWork;
   const byLuke = lukeLogin !== undefined && wake.by.toLowerCase() === lukeLogin.toLowerCase();
   if (wake.kind !== AGENT_WAKE.CHECK_FAILED && !byLuke) return true;
@@ -868,7 +868,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
       Effect.gen(function* () {
         const eve = yield* eveFor(userId);
         const outside = yield* hostedStoreOrUnavailable(outsideWordsFor(wake, inline, userId));
-        yield* steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
+        yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
           text: agentWakeText(wake, agent.branch, inline, failing, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },

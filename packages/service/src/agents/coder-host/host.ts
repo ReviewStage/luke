@@ -97,7 +97,7 @@ import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import type { PullRequestToolResult } from "./pull-request.js";
 import { agentSkills } from "./skills.js";
-import { titleCodingAgent, titleSubagent } from "./title.js";
+import { titleAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import { flushDue, type TurnHanded } from "./turn-context.js";
 import {
@@ -417,7 +417,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /**
    * Runs one of the agent's tools about the workspace's coding agents
-   * (`../coding-agent-tools.ts`), the agent its session was admitted to as
+   * (`../agent-tools.ts`), the agent its session was admitted to as
    * the caller: a list of agents or of tasks, a message sent under the
    * call's own key, or a start on a task of its workspace under the same key, which reach eve as the deployment
    * acting for this agent's starter, and reach nothing where the deployment
@@ -957,7 +957,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // function instance under it, end when the hook returns and take a detached call with them.
         // No model, as for an account that saved no API key, titles the agent from its opening's first words.
         yield* Effect.flatMap(seams.titleModel(admitted.target.userId, agent.model), (titleModel) =>
-          titleCodingAgent(titleModel, admitted.target, agent),
+          titleAgent(titleModel, admitted.target, agent),
         ).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(`The agent's title was not written: ${failure._tag}`),

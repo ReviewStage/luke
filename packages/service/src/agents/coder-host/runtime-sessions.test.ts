@@ -93,8 +93,8 @@ import {
   runnerChoiceApplied,
   sessionsRouter,
 } from "./runtime-sessions.js";
-import { accountModelChoices, startCodingAgent } from "./start.js";
-import { STEER_OUTCOME, steerCodingAgent } from "./steer.js";
+import { accountModelChoices, startAgent } from "./start.js";
+import { STEER_OUTCOME, steerAgent } from "./steer.js";
 import { type EveReach, eveFor, stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -481,11 +481,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           });
 
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, owner, onEve, line("key-eve")),
+            yield* steerAgent(sessions, writer, owner, onEve, line("key-eve")),
             STEER_OUTCOME.SENT,
           );
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, owner, onClaudeCode, line("key-native")),
+            yield* steerAgent(sessions, writer, owner, onClaudeCode, line("key-native")),
             STEER_OUTCOME.SENT,
           );
 
@@ -540,7 +540,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           const send = (starter: string, agent: Agent) =>
             Effect.result(
-              steerCodingAgent(eve.sessions, writer, starter, agent, {
+              steerAgent(eve.sessions, writer, starter, agent, {
                 text: "Expire invitations after a week.",
                 clientKey: randomUUID(),
                 sender: { kind: MESSAGE_SENDER.MEMBER, userId: starter },
@@ -734,7 +734,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           // A teammate's words reach the harness, acting for the starter whose plan pays.
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, teammate, onClaudeCode, line),
+            yield* steerAgent(sessions, writer, teammate, onClaudeCode, line),
             STEER_OUTCOME.SENT,
           );
           assert.deepEqual(heard(claudeCode), ["send"]);
@@ -753,14 +753,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ).pipe(Effect.provide(native));
 
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, teammate, onEve, {
+            yield* steerAgent(sessions, writer, teammate, onEve, {
               ...line,
               clientKey: "key-teammate",
             }),
             STEER_OUTCOME.SENT,
           );
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, owner, onEve, {
+            yield* steerAgent(sessions, writer, owner, onEve, {
               ...line,
               clientKey: randomUUID(),
               sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
@@ -837,7 +837,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           // A message from the composer, under its line's own id.
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, teammate, onCodex, {
+            yield* steerAgent(sessions, writer, teammate, onCodex, {
               text: "Also the emails.",
               clientKey: "key-codex",
               sender: { kind: MESSAGE_SENDER.MEMBER, userId: teammate },
@@ -882,7 +882,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
           const send = Effect.result(
-            steerCodingAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onCodex, {
+            steerAgent(sessions, storeWriter({ tools: CODER_TOOL_SET }), owner, onCodex, {
               text: "Also the emails.",
               clientKey: randomUUID(),
               sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
@@ -923,7 +923,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
           const send = Effect.result(
-            steerCodingAgent(
+            steerAgent(
               sessions,
               storeWriter({ tools: CODER_TOOL_SET }),
               owner,
@@ -970,7 +970,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
           const sessions = yield* routedSessions(eve.sessions, owner).pipe(Effect.provide(native));
           const send = Effect.result(
-            steerCodingAgent(
+            steerAgent(
               sessions,
               storeWriter({ tools: CODER_TOOL_SET }),
               owner,
@@ -1013,7 +1013,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const sessions = yield* routedSessions(eve.sessions, owner);
 
           const sent = yield* Effect.result(
-            steerCodingAgent(
+            steerAgent(
               sessions,
               storeWriter({ tools: CODER_TOOL_SET }),
               owner,
@@ -1264,7 +1264,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             const ask = startIn(workspaceId, each.model);
             const started = yield* Effect.result(
-              startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
                 Effect.provide(layers),
               ),
             );
@@ -1432,7 +1432,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const { eve, native } = runtimes();
             const ask = { ...startOn(task.id, each.model) };
             const started = yield* Effect.result(
-              startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
                 Effect.provide(
                   Layer.mergeAll(
                     githubReaching(INSTALLATIONS).layer,
@@ -1497,9 +1497,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             environment(),
             native,
           );
-          const start = (userId: string, ask: Parameters<typeof startCodingAgent>[2]) =>
+          const start = (userId: string, ask: Parameters<typeof startAgent>[2]) =>
             Effect.result(
-              startCodingAgent(routedSessions(eve.sessions, userId), userId, ask).pipe(
+              startAgent(routedSessions(eve.sessions, userId), userId, ask).pipe(
                 Effect.provide(layers),
               ),
             );
@@ -1721,7 +1721,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           for (const each of cases) {
             const { owner, workspaceId } = yield* openStarter(each.token, each.chatGpt);
             const { eve, claudeCode, codex, native } = runtimes();
-            const started = yield* startCodingAgent(
+            const started = yield* startAgent(
               routedSessions(eve.sessions, owner),
               owner,
               startIn(workspaceId, each.model),
@@ -1738,7 +1738,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           // An automation's run says its prompt as the automation, never as its creator.
           const automated = yield* openStarter(true);
           const byAutomation = runtimes();
-          const run = yield* startCodingAgent(
+          const run = yield* startAgent(
             routedSessions(byAutomation.eve.sessions, automated.owner),
             automated.owner,
             {
@@ -1771,12 +1771,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           // A member's Start sends its prompt as the member; another agent's start_agent, as that agent.
           const byAgent = yield* openStarter(true);
           const agentRuns = runtimes();
-          const starting = yield* startCodingAgent(
+          const starting = yield* startAgent(
             routedSessions(agentRuns.eve.sessions, byAgent.owner),
             byAgent.owner,
             startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
           ).pipe(Effect.provide(layers(agentRuns.native)));
-          yield* startCodingAgent(
+          yield* startAgent(
             routedSessions(agentRuns.eve.sessions, byAgent.owner),
             byAgent.owner,
             {
@@ -1805,7 +1805,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const keyed = yield* openStarter(false);
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
           const onEve = runtimes();
-          yield* startCodingAgent(
+          yield* startAgent(
             routedSessions(onEve.eve.sessions, keyed.owner),
             keyed.owner,
             startIn(keyed.workspaceId, "anthropic/claude-opus-5.5"),
@@ -1827,7 +1827,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           const planned = yield* openStarter(true);
           const onPlan = runtimes();
-          const started = yield* startCodingAgent(
+          const started = yield* startAgent(
             routedSessions(onPlan.eve.sessions, planned.owner),
             planned.owner,
             callIn(planned.workspaceId),
@@ -1845,7 +1845,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const keyed = yield* openStarter(false);
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);
           const onKey = runtimes();
-          const onEve = yield* startCodingAgent(
+          const onEve = yield* startAgent(
             routedSessions(onKey.eve.sessions, keyed.owner),
             keyed.owner,
             callIn(keyed.workspaceId),
@@ -1862,7 +1862,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const none = yield* openStarter(false);
           const refusedOn = runtimes();
           const refused = yield* Effect.result(
-            startCodingAgent(
+            startAgent(
               routedSessions(refusedOn.eve.sessions, none.owner),
               none.owner,
               callIn(none.workspaceId),
@@ -1896,7 +1896,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             environment(),
             native,
           );
-          const started = yield* startCodingAgent(
+          const started = yield* startAgent(
             routedSessions(eve.sessions, planned.owner),
             planned.owner,
             yield* blankIn(planned.owner, planned.workspaceId),
@@ -1912,7 +1912,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           const none = yield* openStarter(false);
           const refused = yield* Effect.result(
-            startCodingAgent(
+            startAgent(
               routedSessions(eve.sessions, none.owner),
               none.owner,
               yield* blankIn(none.owner, none.workspaceId),
@@ -1981,7 +1981,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
             const ask = startIn(workspaceId, each.model);
             const started = yield* Effect.result(
-              startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+              startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
                 Effect.provide(layers),
               ),
             );
@@ -2022,7 +2022,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const ask = startIn(workspaceId, "openai/gpt-5.5");
 
           const refused = yield* Effect.result(
-            startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+            startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
               Effect.provide(
                 Layer.mergeAll(githubReaching(INSTALLATIONS).layer, CATALOG, environment(), native),
               ),
@@ -2125,7 +2125,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               native,
             );
             const result = yield* Effect.result(
-              startCodingAgent(
+              startAgent(
                 routedSessions(eve.sessions, owner),
                 owner,
                 startIn(workspaceId, each.model),
@@ -2206,7 +2206,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               native,
             );
             const result = yield* Effect.result(
-              startCodingAgent(
+              startAgent(
                 routedSessions(eve.sessions, owner),
                 owner,
                 startIn(workspaceId, each.model),
@@ -2257,7 +2257,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const choices = yield* accountModelChoices(owner).pipe(Effect.provide(layers));
             const gpt = choices.offered.filter((model) => model.provider === MODEL_PROVIDER.OPENAI);
             const started = yield* Effect.result(
-              startCodingAgent(
+              startAgent(
                 routedSessions(eve.sessions, owner),
                 owner,
                 startIn(workspaceId, "openai/gpt-5.5-fast"),
@@ -2307,7 +2307,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const ask = startIn(workspaceId, "anthropic/claude-opus-5.5");
 
           const preparing = yield* Effect.result(
-            startCodingAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
+            startAgent(routedSessions(eve.sessions, owner), owner, ask).pipe(
               Effect.provide(layers),
             ),
           );
@@ -2317,7 +2317,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           yield* TestClock.adjust("1 minute");
           claudeCode.answers.open = EVE_SEND_OUTCOME.ACCEPTED;
-          const started = yield* startCodingAgent(
+          const started = yield* startAgent(
             routedSessions(eve.sessions, owner),
             owner,
             ask,

@@ -78,7 +78,7 @@
   "src/agents/coder-host/status.test.ts": 23,
   "src/agents/coder-host/stop.test.ts": 1956,
   "src/agents/coder-host/title.test.ts": 3438,
-  "src/agents/coding-agents-app.test.ts": 65793,
+  "src/agents/agents-app.test.ts": 65793,
   "src/agents/deployment-eve.test.ts": 1428,
   "src/agents/device-agents-procedures.test.ts": 2436,
   "src/agents/eve-deployment-secret.test.ts": 141,

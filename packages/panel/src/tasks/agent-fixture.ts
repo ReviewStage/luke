@@ -954,15 +954,15 @@ type StagedAnswer<Kind extends PortActKind> = (
 
 /** Every read the agent's tabs ask, answered as the service would answer it for this agent. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }, stage) => ({
+  [ACT_KIND.AGENTS_LIST]: ({ taskId }, stage) => ({
     agents: [agentSummary(taskId, longRun(stage))],
   }),
-  [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
-  [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: () => ({
+  [ACT_KIND.AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
+  [ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: () => ({
     failure: AGENT_CALL_FAILURE.NOT_FOUND,
   }),
-  [ACT_KIND.CODING_AGENTS_PICTURE]: () => longRunPicture(),
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => ({
+  [ACT_KIND.AGENTS_PICTURE]: () => longRunPicture(),
+  [ACT_KIND.AGENTS_PULL_REQUEST]: () => ({
     repository: REPOSITORY,
     branch: PULL_REQUEST.head,
     pullRequest: {
@@ -977,16 +977,16 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       queued: true,
     },
   }),
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
-  [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: () => ({
+  [ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
+  [ACT_KIND.AGENTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
+  [ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
+  [ACT_KIND.AGENTS_REVIEW_OPTIONS]: () => ({
     labels: OVERVIEW_PULL_REQUEST.pullRequest.labels,
     users: [ADA, GRACE],
     teams: [],
   }),
-  [ACT_KIND.CODING_AGENTS_CHANGES]: () => CHANGES,
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: () => ({
+  [ACT_KIND.AGENTS_CHANGES]: () => CHANGES,
+  [ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: () => ({
     outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
     files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
   }),

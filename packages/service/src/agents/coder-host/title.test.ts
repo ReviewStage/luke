@@ -16,7 +16,7 @@ import { TURN_TRIGGER, userMetadataOf } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleNativeAgent } from "../native-events/native-title.js";
-import { titleCodingAgent } from "./title.js";
+import { titleAgent } from "./title.js";
 
 /**
  * title.test.ts -- an automation's run is named from the automation's prompt
@@ -107,7 +107,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
 
 /** The agent titled by a model answering `title`. */
 const titledAs = (owner: string, agent: Agent, title: string) =>
-  titleCodingAgent(
+  titleAgent(
     scriptedTitleModel(title).model,
     { userId: owner, conversationId: agent.conversationId },
     agent,
@@ -237,7 +237,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
 
         for (const agent of [prompted, planned, lowered]) {
-          yield* titleCodingAgent(
+          yield* titleAgent(
             undefined,
             { userId: owner, conversationId: agent.conversationId },
             agent,
@@ -318,7 +318,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
         const { model, asked } = scriptedTitleModel("Fix the flakiest CI test");
 
-        yield* titleCodingAgent(
+        yield* titleAgent(
           model,
           { userId: owner, conversationId: started.agent.conversationId },
           started.agent,
@@ -380,7 +380,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
         );
         const { model, asked } = scriptedTitleModel("Expire invitations with a reminder");
 
-        yield* titleCodingAgent(
+        yield* titleAgent(
           model,
           { userId: owner, conversationId: started.agent.conversationId },
           started.agent,

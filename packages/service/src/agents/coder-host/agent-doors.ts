@@ -49,7 +49,7 @@ import {
 import {
   AGENT_CALLER,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
+  AGENT_TOOL_REFUSAL,
   runListAgents,
   runListModels,
   runListTasks,
@@ -59,7 +59,7 @@ import {
   runStopAgent,
   runUpdateAgent,
   runUpdateTask,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
@@ -295,7 +295,7 @@ export function runAgentShowImage(
 
 /**
  * Runs one of the agent's tools about the workspace's coding agents
- * (`../coding-agent-tools.ts`), the agent the conversation is as the
+ * (`../agent-tools.ts`), the agent the conversation is as the
  * caller: a list of agents or of tasks, a message sent under the call's own
  * key, or a start on a task of its workspace under the same key, which reach
  * eve as the deployment acting for this agent's starter, and reach nothing
@@ -348,6 +348,6 @@ export function runAgentTools(
     return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
   }).pipe(
     Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
+    Effect.catch(() => Effect.succeed(agentToolRejected(AGENT_TOOL_REFUSAL.STORE))),
   );
 }

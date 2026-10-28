@@ -127,7 +127,7 @@ async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
-    [ACT_KIND.CODING_AGENTS_PART]: (payload: AgentPartParams) => {
+    [ACT_KIND.AGENTS_PART]: (payload: AgentPartParams) => {
       asked.push(payload);
       return answer(payload.index);
     },

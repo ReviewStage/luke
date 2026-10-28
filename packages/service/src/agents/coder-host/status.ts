@@ -117,7 +117,7 @@ export function lineAwaitsTurn(
  * with no turn yet has done all it was asked, which is nothing, so it reads
  * as completed, however long ago it started: no first turn is on its way.
  */
-export function codingAgentStatusOf(
+export function agentStatusOf(
   turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
 ): AgentStatus {
@@ -212,7 +212,7 @@ export function ranDirectlyFolderOf(
 }
 
 /** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */
-export function codingAgentFailureOf(
+export function agentFailureOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): AgentFailure | undefined {
   if (turn === undefined) return AGENT_FAILURE.NOT_STARTED;
@@ -236,7 +236,7 @@ export interface AgentTurnStanding {
 }
 
 /** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
-export function codingAgentRunStartedAt(
+export function agentRunStartedAt(
   turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
 ): number | undefined {
@@ -257,7 +257,7 @@ export function codingAgentRunStartedAt(
  * it opens is posted inside a turn, so the parent's turn already brackets
  * them, and none is read apart.
  */
-export function codingAgentActivityAt(
+export function agentActivityAt(
   lastSettledAt: Date | undefined,
   standing: Pick<AgentStanding, "createdAt">,
 ): number {
@@ -327,7 +327,7 @@ function summaryFields(
     ...(agent.machine === AGENT_MACHINE.DEVICE ? { machine: agent.machine } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: agent.createdAt.getTime(),
-    status: codingAgentStatusOf(standing.turn, {
+    status: agentStatusOf(standing.turn, {
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: standing.awaitingLineAt,
@@ -357,7 +357,7 @@ function summaryFields(
           })),
         }),
   };
-  const started = codingAgentRunStartedAt(standing.turn, {
+  const started = agentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
     now,
     awaitingLineAt: standing.awaitingLineAt,
@@ -378,7 +378,7 @@ function summaryFields(
  * started from it, none where the read names none, and the Mac a local
  * agent runs on, where `macs` holds it.
  */
-export function codingAgentSummary(
+export function agentSummary(
   agent: Agent | AgentLine,
   standing: AgentTurnStanding,
   now: number,
@@ -441,7 +441,7 @@ export function pageAccounts(agent: Agent): readonly string[] {
 }
 
 /** One agent as its own page reads it, on a task or with none, its status read at `now`, with the agents started from it and the Mac it runs on. */
-export function codingAgentPage(
+export function agentPage(
   agent: Agent,
   standing: AgentTurnStanding,
   now: number,

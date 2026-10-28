@@ -49,7 +49,7 @@ import {
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
-import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
+import { agentToolRejected } from "@luke/service/agents/agent-tools";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,
@@ -419,7 +419,7 @@ function runAgentTool(
 
 /**
  * One of the agent's tools about the workspace's coding agents, the planning
- * model's own too (`packages/service/src/agents/coding-agent-tools.ts`), run
+ * model's own too (`packages/service/src/agents/agent-tools.ts`), run
  * through `runAgentTool` under eve's id for the call, so a call run again
  * does its work once.
  */

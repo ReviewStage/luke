@@ -7,7 +7,7 @@
  * `RUNNER_RELEASE`), which the events route kept
  * (`@luke/database/models/agent-wakeups`). Once a wakeup is due, the
  * sweep hands its prompt to the agent as a message from Luke, the one way a
- * message reaches an agent (`steerCodingAgent`), which relaunches the CLI on
+ * message reaches an agent (`steerAgent`), which relaunches the CLI on
  * the session it resumes, as the wakeup would have started a turn in the
  * CLI that waited. The message goes under a key of the wakeup's own, so a
  * delivery repeated after one that landed is told once.
@@ -31,7 +31,7 @@ import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -70,7 +70,7 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
     if (Option.isNone(agent)) return true;
     if (!(yield* agentWakeupStands(wakeup.id))) return true;
     const eve = yield* eveFor(wakeup.userId);
-    yield* steerCodingAgent(
+    yield* steerAgent(
       eve,
       storeWriter({ tools: CODER_TOOL_SET }),
       wakeup.userId,

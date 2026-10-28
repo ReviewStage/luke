@@ -175,8 +175,8 @@ async function drawnFor(
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.CODING_AGENTS_LIST ||
-              request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+          : request.kind === ACT_KIND.AGENTS_LIST ||
+              request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
             ? { status: FAKE_ANSWER.DONE, value: { agents: [SENDER_NOW] } }
             : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),

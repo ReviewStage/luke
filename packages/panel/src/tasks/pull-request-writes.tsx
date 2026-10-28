@@ -80,7 +80,7 @@ import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 /**
  * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line over the header where GitHub would not take one.
  *
- * Every change is one act (`CODING_AGENTS_PULL_REQUEST_ACTION`), which the
+ * Every change is one act (`AGENTS_PULL_REQUEST_ACTION`), which the
  * service makes on GitHub as the member pressing it, on their own GitHub
  * sign-in and never as the Luke GitHub App (`pull-request-write-wire.ts`).
  * One is out at a time; while it is, the controls that would send another
@@ -291,7 +291,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
       out.current = true;
       setPending(request.action);
       setNote(undefined);
-      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, {
+      return act(ACT_KIND.AGENTS_PULL_REQUEST_ACTION, {
         ...pullRequestAsked(agentId, number),
         request,
       })

@@ -7,7 +7,7 @@
  * on it until a person noticed. So each such ending
  * (`@luke/database/models/starter-notices`) is handed to the starter within
  * the sweep's minute as one line from Luke naming the agent and what
- * happened, the one way a message reaches an agent (`steerCodingAgent`).
+ * happened, the one way a message reaches an agent (`steerAgent`).
  *
  * The line goes under the ending's own key, the turn's id or the archived
  * agent's, so one that landed is never sent again, and one refused or cut
@@ -29,7 +29,7 @@ import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import { Duration, Effect, Option, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { workspaceStepOf, writtenMention } from "../agents/written-mentions.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
@@ -91,7 +91,7 @@ const tell = (eveFor: EveForAccount, due: DueStarterNotice) =>
     if (Option.isNone(starter) || starter.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);
-    yield* steerCodingAgent(
+    yield* steerAgent(
       eve,
       storeWriter({ tools: CODER_TOOL_SET }),
       due.userId,

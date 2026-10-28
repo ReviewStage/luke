@@ -42,7 +42,7 @@ import {
 import type { AutomationRunReason } from "@luke/features/automation-wire";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { EXPERIMENTS, type ExperimentChoices } from "@luke/settings";
-import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
 import { lastSeenInstant } from "./admin-users.js";
 
 /** How many of the account's newest coding agents the page lists. */
@@ -125,13 +125,13 @@ function pullRequestOf(state: PullRequestState | null): AdminPullRequest {
 
 /** One agent with its status read at `now`, and its failure class where it failed. */
 function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgent {
-  const status = codingAgentStatusOf(source.turn, {
+  const status = agentStatusOf(source.turn, {
     createdAt: source.createdAt,
     now,
     awaitingLineAt: source.awaitingLineAt,
   });
   const failure =
-    status === AGENT_STATUS.FAILED ? (codingAgentFailureOf(source.turn) ?? null) : null;
+    status === AGENT_STATUS.FAILED ? (agentFailureOf(source.turn) ?? null) : null;
   return {
     id: source.id,
     createdAt: source.createdAt.getTime(),

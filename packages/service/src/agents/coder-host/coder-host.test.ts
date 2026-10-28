@@ -106,8 +106,8 @@ import type { ProviderKeys } from "./model.js";
 import { cutMessage } from "./part-cut.js";
 import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
-import { codingAgentStatusOf } from "./status.js";
-import { titleCodingAgent } from "./title.js";
+import { agentStatusOf } from "./status.js";
+import { titleAgent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf } from "./tool-set.js";
 import {
   CURSOR_START,
@@ -1368,7 +1368,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
           assert.equal(
-            codingAgentStatusOf(turns.get(target.conversationId), {
+            agentStatusOf(turns.get(target.conversationId), {
               createdAt: agent.createdAt,
               now: yield* Clock.currentTimeMillis,
             }),
@@ -1828,7 +1828,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.deepEqual(said, [{ channel: MESSAGE_CHANNEL.TYPED }, AGENT_MESSAGE_METADATA]);
 
           const model = titleModelAnswering("Teammate invitations by email");
-          yield* titleCodingAgent(model, target, agent);
+          yield* titleAgent(model, target, agent);
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."));
           assert.ok(!asked.includes("the invite table is mine"));
@@ -1876,7 +1876,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           yield* relayed(events.slice(steeredAt));
 
           const model = titleModelAnswering("Teammate invitations by email");
-          yield* titleCodingAgent(model, target, agent);
+          yield* titleAgent(model, target, agent);
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
         }),
@@ -1921,7 +1921,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           yield* relayed(events.slice(steeredAt));
 
           const model = titleModelAnswering("Teammate invitations by email");
-          yield* titleCodingAgent(model, target, agent);
+          yield* titleAgent(model, target, agent);
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("The guide is read; the plan fits the code."), asked);
         }),
@@ -1970,7 +1970,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.equal(page.messages.length, 10, JSON.stringify(page.messages.map((m) => m.role)));
 
           const model = titleModelAnswering("Teammate invitations by email");
-          yield* titleCodingAgent(model, target, agent);
+          yield* titleAgent(model, target, agent);
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."), asked);
           assert.ok(!asked.includes("Understood."), asked);
@@ -2018,7 +2018,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           yield* relayed("turn_1", events.slice(steeredAt));
 
           const model = titleModelAnswering("Teammate invitations by email");
-          yield* titleCodingAgent(model, target, agent);
+          yield* titleAgent(model, target, agent);
           const asked = JSON.stringify(model.doGenerateCalls.map((call) => call.prompt));
           assert.ok(asked.includes("Invite a teammate by email."), asked);
           assert.ok(!asked.includes("Understood."), asked);

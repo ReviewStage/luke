@@ -28,7 +28,7 @@ import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
-const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
+const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
 /**
  * instructions.ts -- what a coding agent's session runs under.
@@ -339,7 +339,7 @@ const PULL_REQUEST_WORDS = {
  */
 function writeUpPlace(brief: AgentBrief, onTask: boolean): string {
   if (brief === AGENT_BRIEF.PLAN && onTask) {
-    return `write it into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
+    return `write it into the plan with \`${AGENT_EDIT_PLAN_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
   }
   return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and post it in a thread for the developer`;
 }
@@ -400,7 +400,7 @@ interface EditPlanTold {
 const NOT_TOLD_EDIT_PLAN: EditPlanTold = { decided: "", updating: "" };
 
 /** How `edit_plan` takes notes and what for, said alike to every agent on a task. */
-const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
+const EDIT_PLAN_WORDS = `\`${AGENT_EDIT_PLAN_TOOL}\` takes notes anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
 
 /**
  * What an agent is told of its plan: one handed the plan always, and one
@@ -417,7 +417,7 @@ function editPlanTold(brief: AgentBrief, onTask: boolean): EditPlanTold {
         ? `Your task has a plan, which you were not handed: it may be empty, or say what the conversation does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
         : "";
   return {
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
+    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
     updating: `
 
 ## Updating the plan

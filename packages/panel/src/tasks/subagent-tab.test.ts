@@ -246,7 +246,7 @@ test("a worker opened by its link whose own first row has no words still draws i
 test("a worker's tab whose earlier messages could not be read says so over its log, and Retry reads them again", async () => {
   const asked: unknown[] = [];
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: (payload: unknown) => {
+    [ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: (payload: unknown) => {
       asked.push(payload);
       return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },

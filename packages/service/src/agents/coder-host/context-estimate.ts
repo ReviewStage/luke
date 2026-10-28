@@ -29,7 +29,7 @@ import {
   STOP_AGENT_TOOL,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";

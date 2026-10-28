@@ -94,14 +94,14 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_MODELS:
+    case ACT_KIND.AGENTS_MODELS:
       if (refuseModels) {
         return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
       return Promise.resolve(done({ models }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
+    case ACT_KIND.AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CHAPTERS_MODEL_READ:
       return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
@@ -118,7 +118,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
       models = [OPUS, OPUS_FAST];
       return Promise.resolve(done({ keys }));
-    case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
+    case ACT_KIND.AGENTS_DEFAULT_WRITE:
       if (refuseWrite) {
         return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
@@ -215,7 +215,7 @@ const errorsIn = (row: HTMLElement) =>
 /** The defaults the page asked the service to keep, in order. */
 const written = () =>
   sent.flatMap((request) =>
-    request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE ? [request.payload] : [],
+    request.kind === ACT_KIND.AGENTS_DEFAULT_WRITE ? [request.payload] : [],
   );
 
 /** The placeholders standing for reads still out, each what it says it reads and how many rows it stands. */
@@ -487,7 +487,7 @@ test("a catalog that could not be read says so in the Default model menu with Re
     "The models could not be read.Retry",
   );
   assert.doesNotMatch(menu.textContent ?? "", /Open Settings again/u);
-  const reads = () => sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_MODELS);
+  const reads = () => sent.filter((request) => request.kind === ACT_KIND.AGENTS_MODELS);
   const before = reads().length;
 
   refuseModels = false;

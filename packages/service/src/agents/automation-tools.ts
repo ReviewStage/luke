@@ -60,14 +60,14 @@ import { calledId } from "./called-id.js";
 import { acceptedAgentChoice } from "./coder-host/start.js";
 import {
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  type CodingAgentCall,
+  AGENT_TOOL_REFUSAL,
+  type AgentCall,
   callerUserId,
   callerWorkspace,
   choiceRefusal,
   orStoreRefusal,
   workedRepository,
-} from "./coding-agent-tools.js";
+} from "./agent-tools.js";
 import { workspaceAgent } from "./workspace-agents.js";
 
 /**
@@ -586,7 +586,7 @@ const workspaceAutomation = (userId: string, workspaceId: string, id: string) =>
 
 /** One call of `list_automations`: the caller's workspace's automations its member may read, or one of them whole. */
 export function runListAutomations(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readListAsked(input);
@@ -598,7 +598,7 @@ export function runListAutomations(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found =
         automationId === undefined
@@ -635,7 +635,7 @@ export function runListAutomations(
 
 /** One call of `create_automation`: an automation made for the caller's member in the caller's workspace, once under the call's key. */
 export function runCreateAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readCreateAsked(input);
@@ -650,7 +650,7 @@ export function runCreateAutomation(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       // A call run again finds the automation it made first, as it was made.
@@ -733,7 +733,7 @@ export function runCreateAutomation(
 
 /** One call of `update_automation`: an automation of the caller's workspace changed as its member may change it. */
 export function runUpdateAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readUpdateAsked(input);
@@ -761,7 +761,7 @@ export function runUpdateAutomation(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -809,7 +809,7 @@ export function runUpdateAutomation(
 
 /** One call of `delete_automation`: an automation of the caller's workspace deleted with its history, as its member may delete it. */
 export function runDeleteAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readDeleteAsked(input);
@@ -821,7 +821,7 @@ export function runDeleteAutomation(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -841,7 +841,7 @@ export function runDeleteAutomation(
 
 /** One call of `run_automation`: an automation of the caller's workspace run now, once under the call's key, as its member may run it. */
 export function runRunAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readRunAsked(input);
@@ -857,7 +857,7 @@ export function runRunAutomation(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);

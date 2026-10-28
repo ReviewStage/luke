@@ -70,7 +70,7 @@ function documentAt(version: number): AppStateSnapshot {
   return {
     ...initialAppState(RUN, true, []),
     version,
-    codingAgents: { unseen: [`agent-${version}`] },
+    agents: { unseen: [`agent-${version}`] },
     window: { fullScreen: false },
   };
 }

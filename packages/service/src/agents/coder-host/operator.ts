@@ -3,7 +3,7 @@
  *
  * The operator is an ordinary coding agent of kind operator, with no task
  * and no repository, started blank on the one Start path
- * (`start.ts`'s `startCodingAgent`), so it runs on the member's default
+ * (`start.ts`'s `startAgent`), so it runs on the member's default
  * model and effort, on their own keys and meter, as any agent they start
  * does. An ensure answers the operator standing in the workspace where
  * there is one, and makes one where there is none: the Start runs under
@@ -77,12 +77,12 @@ import type { AgentSessions, EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT, OPERATOR_OPENING } from "./instructions.js";
 import {
   acceptedAgentChoice,
-  type CodingAgentStart,
+  type AgentStarted,
   type StartServices,
-  startCodingAgent,
+  startAgent,
   startCredentialStands,
 } from "./start.js";
-import { steerCodingAgent } from "./steer.js";
+import { steerAgent } from "./steer.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, or which archived one comes back in its place, and how its turn is stopped before it is. */
@@ -97,7 +97,7 @@ export interface OperatorEnsure<R> {
 }
 
 /** What an ensure came to: the operator, and the one a Reset archived, whose sandbox its caller stops. */
-export interface OperatorEnsured extends CodingAgentStart {
+export interface OperatorEnsured extends AgentStarted {
   readonly retired: Agent | undefined;
 }
 
@@ -186,7 +186,7 @@ const openedOnItsOpening = (
 ) =>
   Effect.gen(function* () {
     const sessions = yield* eve;
-    yield* steerCodingAgent(
+    yield* steerAgent(
       sessions,
       storeWriter({ tools: CODER_TOOL_SET }),
       operator.userId,
@@ -278,7 +278,7 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
     );
     retired = Option.isSome(archived) ? standing.value : undefined;
   }
-  const started = yield* startCodingAgent(eve, userId, {
+  const started = yield* startAgent(eve, userId, {
     taskId: null,
     organizationId: workspaceId,
     repository: null,

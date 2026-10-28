@@ -398,7 +398,7 @@ function CodingAgentsSection({
     setReadFailed(false);
     setModels(undefined);
     setModelsFailed(false);
-    act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).then(
+    act(ACT_KIND.AGENTS_DEFAULT_READ).then(
       (answer) => {
         if (!live) return;
         if ("failure" in answer) setReadFailed(true);
@@ -424,7 +424,7 @@ function CodingAgentsSection({
       setModelsFailed(true);
       setModelsRetrying(false);
     };
-    act(ACT_KIND.CODING_AGENTS_MODELS).then(
+    act(ACT_KIND.AGENTS_MODELS).then(
       (answer) => {
         if (!live) return;
         if ("failure" in answer) failModels();
@@ -446,7 +446,7 @@ function CodingAgentsSection({
   const write = useCallback(
     (next: ModelChoice): Promise<ActionResult> => {
       setBusy(true);
-      return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, next)
+      return act(ACT_KIND.AGENTS_DEFAULT_WRITE, next)
         .catch(() => undefined)
         .then((answer) => {
           setBusy(false);

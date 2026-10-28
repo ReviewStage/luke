@@ -41,52 +41,52 @@ import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
 
 export const agentInboxActsContract = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actProcedure(
     "Could not follow the inbox on this system.",
   )
     .input(exactInput(agentInboxScopeSchema))
     .output(eventIterator(type<AgentInboxChanged["inbox"]>())),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: actProcedure(
     "Could not follow the inbox on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(eventIterator(type<AgentAccountItems>())),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not acknowledge the inbox item on this system.",
   )
     .input(exactInput(agentInboxAnswerParamsSchema))
     .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: actProcedure(
     "Could not close the inbox item on this system.",
   )
     .input(exactInput(agentInboxCloseParamsSchema))
     .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: actProcedure(
     "Could not send the message on this system.",
   )
     .input(exactInput(agentInboxMessageParamsSchema))
     .output(EffectSchema.toType(agentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_START]: actProcedure(
     "Could not start the thread on this system.",
   )
     .input(exactInput(agentInboxStartParamsSchema))
     .output(EffectSchema.toType(agentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: actProcedure(
     "Could not mark the inbox item on this system.",
   )
     .input(exactInput(agentInboxReadStateParamsSchema))
     .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: actProcedure(
     "Could not mark the inbox read on this system.",
   )
     .input(exactInput(agentInboxReadAllParamsSchema))
     .output(EffectSchema.toType(agentInboxReadAllViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]: actProcedure(
     "Could not read the inbox item's image on this system.",
   )
     .input(exactInput(agentInboxAttachmentParamsSchema))
     .output(EffectSchema.toType(agentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: actProcedure(
     "Could not read the agent's picture on this system.",
   )
     .input(exactInput(agentPictureParamsSchema))

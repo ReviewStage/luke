@@ -1527,7 +1527,7 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (reportedAgent.current === shownAgent) return;
     reportedAgent.current = shownAgent;
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
+    tell(ACT_KIND.AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
 
   // The tab showing is what asks the host to read the tasks again; the open
@@ -1796,7 +1796,7 @@ export function useTasksTab(input: {
     const pressedBy = input.account;
     const asked = (flights.get(agentId) ?? Promise.resolve(true)).then(() =>
       accountNow.current === pressedBy
-        ? act(ACT_KIND.CODING_AGENTS_PIN, { agentId, pinned }).then(
+        ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned }).then(
             (answer) => "agent" in answer,
             () => false,
           )
@@ -1829,7 +1829,7 @@ export function useTasksTab(input: {
       const flight: Promise<boolean | undefined> = agent
         ? (flights.get(id) ?? Promise.resolve(true)).then(() =>
             accountNow.current === pressedBy
-              ? act(ACT_KIND.CODING_AGENTS_PIN, { agentId: id, pinned: true, position }).then(
+              ? act(ACT_KIND.AGENTS_PIN, { agentId: id, pinned: true, position }).then(
                   (answer) => "agent" in answer,
                   () => false,
                 )
