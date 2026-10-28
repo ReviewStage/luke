@@ -38,7 +38,7 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "../agents/brain-host/eve-sessions.js";
+} from "../agents/eve-host/eve-sessions.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,

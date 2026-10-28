@@ -11,7 +11,7 @@ import {
   type OfferedModel,
   validateModelChoice,
 } from "../../providers/model-catalog.js";
-import { openChildConversation } from "../brain-host/conversation.js";
+import { openChildConversation } from "../eve-host/conversation.js";
 
 /**
  * delegation.ts -- what a coding agent chooses for a worker: the model and effort, checked as a Start checks its own.

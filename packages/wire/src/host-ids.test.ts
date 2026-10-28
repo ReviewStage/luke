@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { brainHostId, sentLineId } from "./host-ids.js";
+import { hostMintedId, sentLineId } from "./host-ids.js";
 
 /** The digest as `node:crypto` lays it out, which every row written before the pure digest was keyed by. */
 function nodeId(parts: readonly string[]): string {
@@ -24,7 +24,7 @@ describe("host ids", () => {
       ["sent", "naïve — ünïcode 🙂"],
       ["sent", ""],
     ];
-    for (const parts of coordinates) expect(brainHostId(parts)).toBe(nodeId(parts));
+    for (const parts of coordinates) expect(hostMintedId(parts)).toBe(nodeId(parts));
   });
 
   it("names a sent line by its key", () => {

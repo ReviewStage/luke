@@ -69,8 +69,8 @@ import {
 } from "../../integrations/connection-door.js";
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { lukeMcpCallKey } from "./call-key.js";

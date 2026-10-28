@@ -14,10 +14,10 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { agentPublished } from "../agents/coder-host/published.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
+import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";

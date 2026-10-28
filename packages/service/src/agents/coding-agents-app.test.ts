@@ -247,7 +247,13 @@ import {
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
-import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import { CODER } from "./coder-host/bounds.js";
+import { instancePublishedCache } from "./coder-host/published.js";
+import { REPLAY_BOUNDS } from "./coder-host/replay.js";
+import type { SummaryModelOf } from "./coder-host/replay-summary.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { codingAgentsApp } from "./coding-agents-app.js";
+import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -255,13 +261,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   EveUnreachable,
-} from "./brain-host/eve-sessions.js";
-import { CODER } from "./coder-host/bounds.js";
-import { instancePublishedCache } from "./coder-host/published.js";
-import { REPLAY_BOUNDS } from "./coder-host/replay.js";
-import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { codingAgentsApp } from "./coding-agents-app.js";
+} from "./eve-host/eve-sessions.js";
 import { messagesProcedures } from "./messages-procedures.js";
 import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
@@ -1098,7 +1098,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             authorization: `Bearer ${owner}`,
             message: {
               conversationId: stored.value.conversationId,
-              turn: BRAIN_HOST_TURN.TYPED,
+              turn: EVE_HOST_TURN.TYPED,
               message: SNAPSHOT,
             },
             sessionId: eve.opened[0]?.sessionId ?? "",
@@ -5986,7 +5986,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               sessionId,
               {
                 conversationId: eve.opened[0]?.message.conversationId,
-                turn: BRAIN_HOST_TURN.TYPED,
+                turn: EVE_HOST_TURN.TYPED,
                 message: "Use the helper.",
               },
             ],

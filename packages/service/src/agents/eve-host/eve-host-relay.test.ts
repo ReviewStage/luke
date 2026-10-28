@@ -29,7 +29,7 @@ import { stampedEveEvent } from "../../testing/eve-events.js";
 import { spokenTurn } from "../../testing/eve-turns.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
+import { EVE_HOST_TURN, type EveHostTurn } from "./bounds.js";
 import { foldedQuietly, memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
 
 /**
@@ -180,7 +180,7 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
 }
 
 /** One eve session per conversation, as the host opens them; the id is eve's shape, minted afresh. */
-function standingFor(target: ConversationTarget, turn: BrainHostTurn | undefined): RelayStanding {
+function standingFor(target: ConversationTarget, turn: EveHostTurn | undefined): RelayStanding {
   return {
     sessionId: `wrun_${randomUUID()}`,
     target,
@@ -227,7 +227,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await conversation();
-      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const standing = standingFor(target, EVE_HOST_TURN.TYPED);
       await play(typedTurn("turn_0", 0), standing);
 
       const { turnRows, messageRows } = await rows(target);
@@ -278,7 +278,7 @@ it.effect(
     Effect.promise(async () => {
       const spoken = await conversation();
       const typed = await conversation();
-      const spokenStanding = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
+      const spokenStanding = standingFor(spoken, EVE_HOST_TURN.SPOKEN);
       // The service's ask under the delegation's id, dispatched into this eve session, and the
       // transcript row the voice writer cut for it, written before eve's turn started.
       const delegationId = `dl_${randomUUID()}`;
@@ -319,7 +319,7 @@ it.effect(
       );
       const earlyCursor = early.at(-1)?.seq ?? 0;
       await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
-      await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
+      await play(typedTurn("turn_0", 0), standingFor(typed, EVE_HOST_TURN.TYPED));
 
       const spokenRows = await rows(spoken);
       const typedRows = await rows(typed);
@@ -401,7 +401,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await conversation();
-      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const standing = standingFor(target, EVE_HOST_TURN.TYPED);
       const events = typedTurn("turn_0", 0);
       const completed = events.findIndex((event) => event.type === "turn.completed");
       const requested = events.findIndex((event) => event.type === "actions.requested");
@@ -435,7 +435,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await conversation();
-      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const standing = standingFor(target, EVE_HOST_TURN.TYPED);
       const events = typedTurn("turn_0", 0);
       const stepped = events.findIndex((event) => event.type === "step.started");
       const completed = events.findIndex((event) => event.type === "turn.completed");
@@ -549,7 +549,7 @@ it.effect(
     Effect.promise(async () => {
       const events = streamedTurn("turn_0", 0);
       const quiet = await conversation();
-      const standing = standingFor(quiet, BRAIN_HOST_TURN.TYPED);
+      const standing = standingFor(quiet, EVE_HOST_TURN.TYPED);
       const folded: string[] = [];
       const drafts: string[][] = [];
       // As the store hook relays: only what is not folded quietly reaches the relay and the store.
@@ -584,7 +584,7 @@ it.effect(
       ]);
 
       const whole = await conversation();
-      await play(events, standingFor(whole, BRAIN_HOST_TURN.TYPED));
+      await play(events, standingFor(whole, EVE_HOST_TURN.TYPED));
       assert.deepEqual(await transcript(quiet), await transcript(whole));
       assert.deepEqual(standing.state.get(), { turns: {} });
       assert.deepEqual(refusals, []);

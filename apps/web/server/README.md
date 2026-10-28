@@ -169,8 +169,8 @@ in `packages/database/src/models/recorded-session.ts` admits a member of the
 workspace of the coding agent naming the conversation, or naming its standing
 parent one hop up (a subagent's session), and the opener alone for a
 conversation no agent names, so a member who leaves the workspace leaves its
-conversations with it. The eve door (`brain-host/door.ts`), the host's
-admission (`brain-host/conversation.ts`, which answers the caller beside the
+conversations with it. The eve door (`eve-host/door.ts`), the host's
+admission (`eve-host/conversation.ts`, which answers the caller beside the
 conversation's owner), and the ask door all read it, so a member speaks into
 the session a teammate opened. From there the caller and the owner are two
 ids: the task, every tool binding, an integration's grant, and a
@@ -515,11 +515,11 @@ client.
 the caller composes a store read into whatever it already runs. A route
 group's own seams are effects
 over that same ambient client — the account group's reads and writes and the
-meter every brain operation spends — so the group yields the seam on the
+meter every hosted operation spends — so the group yields the seam on the
 request's own fiber and the edge that serves the request is the one place the
 client behind it is provided. What still holds a runner is everything a route
 composes apart from the store and that still hands a promise up — the
-writers, the ask record, and the brain host's two seams
+writers, the ask record, and the eve host's two seams
 the eve project reaches through a promise of its own — each handed its
 edge's own, `runWeb` in a
 function and the store tests'

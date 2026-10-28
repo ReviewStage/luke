@@ -89,7 +89,6 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
-import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { ensureOperator } from "./coder-host/operator.js";
 import {
   agentPullRequestReach,
@@ -126,6 +125,7 @@ import {
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";

@@ -94,16 +94,16 @@ import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { added } from "../../testing/task-contents.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_AUTHENTICATOR,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN,
-} from "../brain-host/bounds.js";
-import { memoryRelayState } from "../brain-host/relay.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
+import {
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_AUTHENTICATOR,
+  EVE_HOST_DEPLOYMENT_PRINCIPAL,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_REFUSAL,
+  EVE_HOST_TURN,
+} from "../eve-host/bounds.js";
+import { memoryRelayState } from "../eve-host/relay.js";
 import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
@@ -211,8 +211,8 @@ function principal(
 /** The developer's own seat in the agent's conversation: the same principal opened the session and speaks now, on a typed turn. */
 function ownSeat(userId: string, conversationId: string): SessionAuth {
   const seat = principal(userId, {
-    [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
-    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+    [EVE_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
+    [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
   });
   return { current: seat, initiator: seat };
 }
@@ -220,13 +220,13 @@ function ownSeat(userId: string, conversationId: string): SessionAuth {
 /** The voice's seat in the agent's conversation: the deployment acting for the agent's starter, on a spoken turn, as the coder door admits a call's ask. */
 function spokenSeat(target: ConversationTarget): SessionAuth {
   const seat: SessionAuthContext = {
-    principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-    principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
-    authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    principalId: EVE_HOST_DEPLOYMENT_PRINCIPAL,
+    principalType: EVE_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    authenticator: EVE_HOST_AUTHENTICATOR.DEPLOYMENT,
     attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.SPOKEN,
-      [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: target.userId,
+      [EVE_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
+      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.SPOKEN,
+      [EVE_HOST_ATTRIBUTE.ACCOUNT]: target.userId,
     },
   };
   return { current: seat, initiator: seat };
@@ -1256,7 +1256,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           assert.deepEqual(
             yield* host.admit(auth, sessionId),
-            Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+            Result.fail(EVE_HOST_REFUSAL.NOT_CURRENT_SESSION),
           );
           assert.ok(Result.isSuccess(yield* host.admit(auth, fresh)));
           assert.ok(seed !== undefined);
@@ -2190,7 +2190,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               handed,
             );
           const desked = (text: string | undefined) => text?.includes(DESK_LEAD) === true;
@@ -2230,7 +2230,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           // A coder's turn carries no desk.
           const coderTurn = yield* host.turnMessage(
             coderAdmitted,
-            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
             {},
           );
           assert.ok(!desked(coderTurn.text), coderTurn.text ?? "");
@@ -2254,7 +2254,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               handed,
             );
           const noticed = (text: string | undefined) =>
@@ -2329,7 +2329,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const desk =
             (yield* host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               {},
             )).text ?? "";
           const named = (agent: { readonly title: string | null }) =>
@@ -2358,7 +2358,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const typed = (handed: TurnHanded) =>
             host.turnMessage(
               operator.admitted,
-              { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+              { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
               handed,
             );
           const told = (message: { readonly text: string | undefined }) =>
@@ -2409,7 +2409,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const coder = yield* openAgent(host);
           const coderTurn = yield* host.turnMessage(
             coder.admitted,
-            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            { kind: EVE_HOST_TURN.TYPED, turnId: undefined },
             { opened: true },
           );
           assert.ok(!told(coderTurn), coderTurn.text ?? "");
@@ -2491,7 +2491,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const host = yield* hostOverStore();
           const { admitted } = yield* openAgent(host);
           const typedOn = (handed: TurnHanded) =>
-            host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
+            host.turnMessage(admitted, { kind: EVE_HOST_TURN.TYPED, turnId: undefined }, handed);
 
           const after = yield* typedOn({ spoken: true, opened: true });
           assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
@@ -2518,7 +2518,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
               Effect.suspend(() =>
                 host.turnMessage(
                   admitted,
-                  { kind: BRAIN_HOST_TURN.TYPED, turnId: hostTurnId(sessionId, eveTurnId) },
+                  { kind: EVE_HOST_TURN.TYPED, turnId: hostTurnId(sessionId, eveTurnId) },
                   handed,
                 ),
               ),

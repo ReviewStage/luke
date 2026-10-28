@@ -5,8 +5,8 @@ import {
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
+import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
 import type { AccountProcedureSeams } from "./account-procedures.js";
 

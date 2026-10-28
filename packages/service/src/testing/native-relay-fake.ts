@@ -18,12 +18,6 @@ import { HttpRouter } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveFailed,
-} from "../agents/brain-host/eve-sessions.js";
 import { nativeRelayLayer } from "../agents/coder-host/native-relay.js";
 import { nativeRelayApp } from "../agents/coder-host/native-relay-app.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
@@ -33,6 +27,12 @@ import {
   type NativeSessions,
   RUNNER_CHOICE,
 } from "../agents/coder-host/runtime-sessions.js";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveFailed,
+} from "../agents/eve-host/eve-sessions.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 
 export const NATIVE_RELAY_FAKE = {

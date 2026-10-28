@@ -14,13 +14,13 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_TURN,
-} from "../agents/brain-host/bounds.js";
 import { type CoderHost, coderHost } from "../agents/coder-host/host.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import {
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_TURN,
+} from "../agents/eve-host/bounds.js";
 import { GitHubApp } from "../github/github-app.js";
 import {
   GITHUB_APP_SETTINGS,
@@ -143,11 +143,11 @@ function seatFor(principal: SessionAuthContext): SessionAuth {
 function typedSeat(userId: string, conversationId: string): SessionAuth {
   return seatFor({
     principalId: userId,
-    principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+    principalType: EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
     authenticator: "test",
     attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+      [EVE_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
+      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
     },
   });
 }

@@ -14,8 +14,8 @@ import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
-import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { openChildConversation } from "../agents/eve-host/conversation.js";
 import {
   AssistantMessageBuilder,
   RUN_EVENT,

@@ -125,8 +125,6 @@ import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-co
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { toolsOf } from "../agent-runtime/tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
-import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
   CODING_AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
@@ -137,6 +135,8 @@ import {
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
+import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/bounds.js";
+import { claimRuntimeSession } from "../eve-host/conversation.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
 import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
@@ -261,8 +261,8 @@ function seat(target: ConversationTarget): SessionAuth {
     principalType: "user",
     authenticator: "test",
     attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+      [EVE_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
+      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
     },
   };
   return { current: own, initiator: own };
@@ -739,7 +739,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;
   assert.equal(opening?.path, "/eve/coder/v1/session");
-  assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), caller.userId);
+  assert.equal(opening?.headers.get(EVE_HOST_HEADER.ACCOUNT), caller.userId);
   const message = sentWords(opening?.body);
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
@@ -2255,8 +2255,8 @@ function openingsOf(
     .map(
       (sent) =>
         [
-          sent.headers.get(BRAIN_HOST_HEADER.CONVERSATION),
-          sent.headers.get(BRAIN_HOST_HEADER.TURN),
+          sent.headers.get(EVE_HOST_HEADER.CONVERSATION),
+          sent.headers.get(EVE_HOST_HEADER.TURN),
           JSON.stringify(JSON.parse(sent.body).message),
         ] as const,
     );
@@ -2317,10 +2317,7 @@ test("a message to an agent whose session eve no longer runs opens a fresh sessi
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
   const opened = openingsOf(eve);
   assert.equal(opened.length, 1);
-  assert.deepEqual(opened[0]?.slice(0, 2), [
-    agents.teammates.conversationId,
-    BRAIN_HOST_TURN.TYPED,
-  ]);
+  assert.deepEqual(opened[0]?.slice(0, 2), [agents.teammates.conversationId, EVE_HOST_TURN.TYPED]);
   assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
   const settled = [turnId, TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
   assert.deepEqual(await newestTurnOf(agents.teammates), settled);
@@ -3984,7 +3981,7 @@ test("list_automations, create_automation, update_automation, and delete_automat
   );
   assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
   // eve is reached as the creator the run starts as, not as the teammate who fired it.
-  assert.equal(eve.sent.at(-1)?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), agents.caller.userId);
+  assert.equal(eve.sent.at(-1)?.headers.get(EVE_HOST_HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),

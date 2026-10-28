@@ -6,7 +6,7 @@ import { RUN_TURN_ORIGIN, type RunTurnOrigin, TURN_TRIGGER, type TurnTrigger } f
  * is seeded with. Every one is a
  * product knob as much as an implementation detail.
  */
-export const BRAIN_HOST = {
+export const EVE_HOST = {
   /** The longest one stored message is rendered in the rotation seed, in characters. */
   RECENT_MESSAGE_CHARS: 600,
   /** How many stored messages a rotated session is seeded with, newest last. */
@@ -26,7 +26,7 @@ export const CONVERSATION_ID_PATTERN =
  * credential admitted, never from an account's bearer, whose account is the
  * bearer's.
  */
-export const BRAIN_HOST_HEADER = {
+export const EVE_HOST_HEADER = {
   CONVERSATION: "x-luke-conversation",
   TURN: "x-luke-turn",
   ACCOUNT: "x-luke-account",
@@ -43,7 +43,7 @@ export const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
  * and the acted-for account, or the carrier, only on a principal the
  * deployment's own credential minted, never laid over from a request.
  */
-export const BRAIN_HOST_ATTRIBUTE = {
+export const EVE_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
   ACCOUNT: "luke:account",
@@ -62,7 +62,7 @@ export const BRAIN_HOST_ATTRIBUTE = {
  * which role is the turn kind on the principal, recorded as such, and never
  * a name the credential cannot support.
  */
-export const BRAIN_HOST_AUTHENTICATOR = {
+export const EVE_HOST_AUTHENTICATOR = {
   ACCOUNT: "luke-account",
   DEPLOYMENT: "luke-deployment",
 } as const;
@@ -74,13 +74,13 @@ export const BRAIN_HOST_AUTHENTICATOR = {
  * of a session's initiator can tell a developer's opening from the
  * deployment's without remembering to check a field.
  */
-export const BRAIN_HOST_PRINCIPAL_TYPE = {
+export const EVE_HOST_PRINCIPAL_TYPE = {
   ACCOUNT: "user",
   DEPLOYMENT: "service",
 } as const;
 
 /** The one principal id the deployment acts under; the account it acts for is its attribute, never its id. */
-export const BRAIN_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
+export const EVE_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
 
 /**
  * What kind of turn a request opens, as the header names it. An unheard turn
@@ -89,28 +89,28 @@ export const BRAIN_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
  * is, so the transcript's row is its line, but the agent is neither told
  * its words are heard nor runs the call's own tools on it.
  */
-export const BRAIN_HOST_TURN = {
+export const EVE_HOST_TURN = {
   TYPED: "typed",
   SPOKEN: "spoken",
   UNHEARD: "unheard",
 } as const;
 
-export type BrainHostTurn = (typeof BRAIN_HOST_TURN)[keyof typeof BRAIN_HOST_TURN];
+export type EveHostTurn = (typeof EVE_HOST_TURN)[keyof typeof EVE_HOST_TURN];
 
-const BRAIN_HOST_TURN_LIST: readonly string[] = Object.values(BRAIN_HOST_TURN);
+const EVE_HOST_TURN_LIST: readonly string[] = Object.values(EVE_HOST_TURN);
 
-export function isBrainHostTurn(value: string): value is BrainHostTurn {
-  return BRAIN_HOST_TURN_LIST.includes(value);
+export function isEveHostTurn(value: string): value is EveHostTurn {
+  return EVE_HOST_TURN_LIST.includes(value);
 }
 
 /**
  * The kinds of turn the relay records: each a request names, and a
  * subagent's task run in its own child session. Note that the child's is
- * kept apart from `BRAIN_HOST_TURN`, because no request names it and the
+ * kept apart from `EVE_HOST_TURN`, because no request names it and the
  * door must never admit it as one.
  */
 export const RELAY_TURN = {
-  ...BRAIN_HOST_TURN,
+  ...EVE_HOST_TURN,
   CHILD: "child",
 } as const;
 
@@ -139,18 +139,18 @@ export const RECEIVED_LINE = {
 export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 
 /** The run stream's origin and trigger for each kind of turn the relay records, and whose row the line that opens it is; a line that joins the turn under way is told apart as it arrives (`relay.ts`'s `#received`). */
-export const BRAIN_HOST_TURN_KIND = {
-  [BRAIN_HOST_TURN.TYPED]: {
+export const EVE_HOST_TURN_KIND = {
+  [EVE_HOST_TURN.TYPED]: {
     origin: RUN_TURN_ORIGIN.TYPED,
     trigger: TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.RELAY,
   },
-  [BRAIN_HOST_TURN.SPOKEN]: {
+  [EVE_HOST_TURN.SPOKEN]: {
     origin: RUN_TURN_ORIGIN.SPOKEN,
     trigger: TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
-  [BRAIN_HOST_TURN.UNHEARD]: {
+  [EVE_HOST_TURN.UNHEARD]: {
     origin: RUN_TURN_ORIGIN.SPOKEN,
     trigger: TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
@@ -171,7 +171,7 @@ export const BRAIN_HOST_TURN_KIND = {
 >;
 
 /** The environment the host reads beside the names every hosted route already honours. */
-export const BRAIN_HOST_ENVIRONMENT = {
+export const EVE_HOST_ENVIRONMENT = {
   /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/coder/v1/*` rewrite. */
   EVE_ORIGIN: "LUKE_EVE_ORIGIN",
   /**
@@ -184,7 +184,7 @@ export const BRAIN_HOST_ENVIRONMENT = {
 } as const;
 
 /** Why the host refused a request's standing, in words the model or a route can read. */
-export const BRAIN_HOST_REFUSAL = {
+export const EVE_HOST_REFUSAL = {
   NO_PRINCIPAL: "Not run: the session has no signed-in account.",
   NO_CONVERSATION: "Not run: the session names no conversation of this account.",
   NOT_OWNER: "Not run: this conversation belongs to another account.",
@@ -196,4 +196,4 @@ export const BRAIN_HOST_REFUSAL = {
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
 } as const;
 
-export type BrainHostRefusal = (typeof BRAIN_HOST_REFUSAL)[keyof typeof BRAIN_HOST_REFUSAL];
+export type EveHostRefusal = (typeof EVE_HOST_REFUSAL)[keyof typeof EVE_HOST_REFUSAL];

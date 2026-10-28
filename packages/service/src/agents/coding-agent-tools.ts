@@ -114,7 +114,6 @@ import {
 import { archiveAskedStatus } from "../tasks/archive-settle.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import {
   forwardedImageRefusalWords,
   forwardedImages,
@@ -139,6 +138,7 @@ import {
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { discardedOrLogged } from "./device-discard.js";
+import type { AgentSessions } from "./eve-host/eve-sessions.js";
 import {
   STEWARD_ACT,
   type StewardAct,

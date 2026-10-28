@@ -22,7 +22,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
-import { BRAIN_HOST_TURN } from "./bounds.js";
+import { EVE_HOST_TURN } from "./bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./relay.js";
 
 /**
@@ -175,7 +175,7 @@ it.effect(
       const standing: RelayStanding = {
         sessionId: `wrun_${randomUUID()}`,
         target,
-        turn: BRAIN_HOST_TURN.TYPED,
+        turn: EVE_HOST_TURN.TYPED,
         state: memoryRelayState(),
       };
       for (const event of integrationTurn(randomUUID()))

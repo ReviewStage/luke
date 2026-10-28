@@ -389,7 +389,7 @@ and is refused where it cannot (`src/agents/retire-sessions.ts`'s
 `retiringReach`), while a bearer's goes on with its retires a courtesy, as
 it always has. The channel's
 door holds the deployment to what its actor admits
-(`src/agents/brain-host/auth.ts`, over the coder channel's table,
+(`src/agents/eve-host/auth.ts`, over the coder channel's table,
 `CODER_DEPLOYMENT_TURNS` in `src/agents/coder-host/channel.ts`): a typed
 opening and line, which are an agent's Start, a message, an inbox answer, a
 manual automation run, a comment's hand-over to an agent it mentions
@@ -1082,7 +1082,7 @@ carries into the service, whose own one `routes` entry turns it back into
 `/eve/v1/*` with a `request.path` transform before eve's router reads it,
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
 URLs eve mints resolve to the public path. The web functions reach it through
-`src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
+`src/agents/eve-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
 The package's name, unscoped, is the agent's name to eve, which names the
 Workflow queue every deployment of the service consumes after it: a session
 stays owned by the deployment it started on until a newer one's message wakes
@@ -1095,8 +1095,8 @@ and those names.
 A coding agent is one eve session over a `coding_agent` conversation
 (`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
 files is `src/agents/coder-host/`: the shared door and conversation
-admission (`src/agents/brain-host/door.ts`,
-`src/agents/brain-host/conversation.ts`), with the developer's own bearer the caller
+admission (`src/agents/eve-host/door.ts`,
+`src/agents/eve-host/conversation.ts`), with the developer's own bearer the caller
 the channel walks in for the desktop's routes (`src/agents/coder-host/channel.ts`): a
 Start and a Stop come from a route holding it, and a follow-up
 steers; the deployment acting for the account is admitted for what it does
@@ -1309,7 +1309,7 @@ not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`apps/dev/hooks/store.ts`) relays every event into the store
-through the shared relay (`src/agents/brain-host/relay.ts`), composed
+through the shared relay (`src/agents/eve-host/relay.ts`), composed
 with no ask record, so an agent's turns land as `turns` rows naming its
 model and effort and its `messages` rows as `UIMessage`s; it also stops the
 sandbox the moment a turn ends, completed, failed, or cancelled, where a
@@ -2213,7 +2213,7 @@ so the deployment can open a turn only on a conversation the named account
 reaches, and cancel one only in a session a conversation that account
 reaches recorded. Where eve answers is an origin of this deployment's own,
 whose rewrites carry `/eve/coder/v1/*` into the eve service
-(`deploymentEveOrigin` in `src/agents/brain-host/eve-origin.ts`):
+(`deploymentEveOrigin` in `src/agents/eve-host/eve-origin.ts`):
 `LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
 in production and the deployment's own host on any other deployment.
 Production names the custom domain rather than the generated `*.vercel.app`

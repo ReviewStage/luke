@@ -2,7 +2,7 @@
  * claude-code-sessions.ts -- a coding agent's sessions on Claude Code: the runner in its Claude Code mode, launched on the account's setup-token.
  *
  * The `claude_code` implementation of `AgentSessions`
- * (`brain-host/eve-sessions.ts`), on the launch machinery every native
+ * (`eve-host/eve-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
  * runner's config names the image's `claude` and appends Luke's coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
@@ -44,8 +44,8 @@ import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
+import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
 import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
@@ -298,7 +298,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
 }
 
 /** The sessions for one account, over the calling fiber's services. */
-export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
+export const claudeCodeSessions = <Turn extends EveHostTurn = EveHostTurn>(
   options: RunnerSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);
