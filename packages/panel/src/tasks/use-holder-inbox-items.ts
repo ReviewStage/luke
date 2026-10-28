@@ -3,7 +3,7 @@ import type { InboxItem } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { useMemo } from "react";
-import { useFedInboxes, useFeedFailed, useUnderWindowRoot } from "./held-inboxes.js";
+import { useFedInboxes, useFeedFailed, useRetryFeed, useUnderWindowRoot } from "./held-inboxes.js";
 import {
   agentGroups,
   type InboxGroup,
@@ -58,6 +58,8 @@ export interface HolderInboxItems {
   readonly pending: boolean;
   /** The holders pushed as main says they now stand, or pushed and handed here no more, which stand for them whole, so an item they do not hold is not theirs. */
   readonly current: ByHolderKind<ReadonlySet<string>>;
+  /** The holders current only because the account's feed holds nothing of them, whose own read may still hold an item a link names. */
+  readonly feedHoldsNothing: ByHolderKind<ReadonlySet<string>>;
   readonly onRetry: () => void;
 }
 
@@ -189,6 +191,7 @@ export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderIn
   const fedTasks = useFedInboxes(INBOX_SCOPE_KIND.PLAN);
   const fedAgents = useFedInboxes(INBOX_SCOPE_KIND.AGENT);
   const feedFailed = useFeedFailed();
+  const retryFeed = useRetryFeed();
   const taskIds = useMemo(
     () => (fromFeed ? NO_IDS : idsOf(holdings, INBOX_SCOPE_KIND.PLAN)),
     [fromFeed, holdings],
@@ -219,6 +222,20 @@ export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderIn
       [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT, fedAgents),
     };
   }, [items, holdings, fromFeed, fedTasks, fedAgents]);
+  const feedHoldsNothing = useMemo(() => {
+    const ofKind = (kind: ScopeKind, fed: ReadonlyMap<string, readonly InboxItem[]> | undefined) =>
+      new Set(
+        fromFeed && fed !== undefined
+          ? holdings.flatMap((holding) =>
+              holding.kind === kind && !fed.has(holding.id) ? [holding.id] : [],
+            )
+          : [],
+      );
+    return {
+      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN, fedTasks),
+      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT, fedAgents),
+    };
+  }, [fromFeed, fedTasks, fedAgents, holdings]);
   const failedOf = (holding: InboxHolding) =>
     fromFeed
       ? feedFailed
@@ -232,7 +249,9 @@ export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderIn
       (holding) => !current[holding.kind].has(holding.id) && !failedOf(holding),
     ),
     current,
+    feedHoldsNothing,
     onRetry: () => {
+      if (fromFeed) retryFeed();
       retryTasks();
       retryAgents();
     },

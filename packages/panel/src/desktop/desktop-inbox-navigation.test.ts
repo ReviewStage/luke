@@ -150,6 +150,50 @@ test("an Inbox under the window's root whose feed holds nothing of its tasks say
   assert.equal(list.querySelector('[aria-busy="true"]'), null, "nothing is still being read");
 });
 
+test("a link to an item the account's feed leaves out waits for its task's own read, saying no Not found, and then shows it", async () => {
+  // The feed leaves the invites task out, as it does one whose items all settled past its bound.
+  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  let land: () => void = () => undefined;
+  world.startRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({ status: FAKE_ANSWER.DONE, value: { items: [EXPIRY], cursor: "1" } });
+        })
+      : undefined;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  act(() => world.chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.match(
+    page.querySelector(".inbox-view-items")?.textContent ?? "",
+    /Expire after 7 days\?/u,
+  );
+});
+
+test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
+  world.feedRefused = true;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const retry = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "the list offers to read again");
+
+  world.feedRefused = false;
+  act(() => retry.click());
+  await settle();
+  assert.ok(
+    listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+    "the feed is read again and its items drawn",
+  );
+});
+
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
   const { page } = mount([], { listUnread: true });
   await settle();

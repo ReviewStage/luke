@@ -26,6 +26,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -86,6 +87,9 @@ const NOTHING_FED: FedKind = new Map();
 function subscribeNothing(): () => void {
   return () => undefined;
 }
+
+/** A retry of nothing, for a surface outside a window's root. */
+function retryNothing(): void {}
 
 /** The account's feed, holding nothing until it first answers. */
 function accountFeed(): AccountFeed {
@@ -194,7 +198,14 @@ export function heldInboxes(options: { readonly forget: boolean }): HeldInboxes 
   };
 }
 
-const AccountFeedContext = createContext<AccountFeed | undefined>(undefined);
+/** The account's feed as the window's root hands it down, and how it is followed again. */
+interface HeldFeed {
+  readonly feed: AccountFeed;
+  /** Follows the feed again at once, as Try again asks. */
+  readonly onRetry: () => void;
+}
+
+const AccountFeedContext = createContext<HeldFeed | undefined>(undefined);
 
 /** Whether the surface stands under a window's root, which holds the account's feed. */
 export function useUnderWindowRoot(): boolean {
@@ -203,16 +214,21 @@ export function useUnderWindowRoot(): boolean {
 
 /** The scopes of `kind` the account's feed holds, none outside a window's root or until it first answers. */
 export function useFedInboxes(kind: ScopeKind): FedKind | undefined {
-  const feed = useContext(AccountFeedContext);
+  const feed = useContext(AccountFeedContext)?.feed;
   const fedNow = () => feed?.fedOf(kind);
   return useSyncExternalStore(feed?.subscribe ?? subscribeNothing, fedNow, fedNow);
 }
 
 /** Whether the account's feed said it is not answering before it ever answered. */
 export function useFeedFailed(): boolean {
-  const feed = useContext(AccountFeedContext);
+  const feed = useContext(AccountFeedContext)?.feed;
   const failedNow = () => feed?.failed() ?? false;
   return useSyncExternalStore(feed?.subscribe ?? subscribeNothing, failedNow, failedNow);
+}
+
+/** Follows the account's feed again, nothing outside a window's root. */
+export function useRetryFeed(): () => void {
+  return useContext(AccountFeedContext)?.onRetry ?? retryNothing;
 }
 
 /** Holds the account's feed for the account signed in, a new one for another account or none. */
@@ -228,13 +244,17 @@ export function HeldInboxesProvider({
   // Note that the feed is the account's, so another account, or none, holds none of the last one's.
   if (standing.account !== account) setStanding({ account, feed: accountFeed() });
   const { feed } = standing;
-  // The account's every item, followed while it is signed in, a new stream for each account.
+  // Each Try again opens the stream anew, rather than waiting on its own reopening.
+  const [attempt, setAttempt] = useState(0);
+  // The account's every item, followed while it is signed in, a new stream for each account and each Try again.
   useEffect(() => {
     if (account === undefined) return undefined;
+    void attempt;
     return streamFrom(
       () => askAct(ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW),
       (pushed) => feed.feed(pushed),
     );
-  }, [feed, account]);
-  return <AccountFeedContext.Provider value={feed}>{children}</AccountFeedContext.Provider>;
+  }, [feed, account, attempt]);
+  const held = useMemo(() => ({ feed, onRetry: () => setAttempt((was) => was + 1) }), [feed]);
+  return <AccountFeedContext.Provider value={held}>{children}</AccountFeedContext.Provider>;
 }
