@@ -131,6 +131,34 @@ test("a plan main says changed later than its last push is pending until a push 
   assert.deepEqual(control()?.current[INBOX_SCOPE_KIND.PLAN], new Set(["acme-plan"]));
 });
 
+test("an agent whose push holds a newer settled thread is still pending until its open question main lists is pushed as new as main says", async () => {
+  // The agent's open question at 50 and a settled thread at 100, as its push first holds them.
+  const settled = {
+    ...ITEM,
+    id: "5e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b",
+    status: INBOX_STATUS.ANSWERED,
+    updatedAt: 100,
+  };
+  const main = followedInboxes(() => ({ items: [{ ...ITEM, updatedAt: 50 }, settled] }));
+  bridge(main);
+  const agent = (updatedAt: number): InboxHolding => ({
+    kind: INBOX_SCOPE_KIND.AGENT,
+    id: ITEM.agentId,
+    updatedAt,
+    listed: [{ id: ITEM.id, updatedAt }],
+  });
+  const { control, list } = mount([agent(50)]);
+  await settle();
+  const pushed = control()?.pending;
+  // Main says the question changed at 80, which the newer settled thread says nothing of.
+  list([agent(80)]);
+  const behind = control()?.pending;
+  main.push({ kind: "agent", id: ITEM.agentId }, { items: [{ ...ITEM, updatedAt: 80 }, settled] });
+  await settle();
+
+  assert.deepEqual([pushed, behind, control()?.pending], [false, true, false]);
+});
+
 test("a plan that could not be read says so only while it is listed, is let go, and is followed again on Try again", async () => {
   // The service refuses Personal's task, until it is asked again, and answers Acme's with nothing waiting.
   let refuse = true;
