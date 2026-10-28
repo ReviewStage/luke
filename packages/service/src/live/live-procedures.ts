@@ -53,6 +53,15 @@
  * links itself. Both are woken by a write to the workspace's topic
  * (`workspaceMembersLive`, `workspaceInvitationsLive`).
  *
+ * `GET /api/live/automations?workspaceId=` answers a workspace's automations
+ * the account reads, each with its newest run, and
+ * `GET /api/live/automation-workspace-runs?workspaceId=` their newest runs,
+ * one statement each (`automation-live.ts`); `GET /api/live/automation-runs?id=`
+ * answers one automation's newest runs, after the automation is read as the
+ * account, so one it does not read is not found. Each is woken by a write
+ * that names the automation's workspace (`automationsLive`,
+ * `automationWorkspaceRunsLive`, `automationRunsLive`).
+ *
  * `GET /api/live/channels?workspaceId=` answers one workspace's channels as
  * two statements, its channels and where each one's threads stand
  * (`inbox-store.ts`'s `channelsLiveStatements`), after the account is read
@@ -101,11 +110,6 @@ import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import {
-  automationRunsLiveStatements,
-  automationsLiveStatements,
-  automationWorkspaceRunsLiveStatements,
-} from "../automations/automation-live.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -120,6 +124,9 @@ import {
   agentInboxLive,
   agentPagesLive,
   agentTranscriptLive,
+  automationRunsLive,
+  automationsLive,
+  automationWorkspaceRunsLive,
   channelsLive,
   inboxLive,
   macCommandsLive,
@@ -413,9 +420,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     automations: signedIn.automations.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const statements = automationsLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        automationsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(function* ({
       input,
@@ -423,9 +432,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }) {
       yield* sameUser(input, context.userId);
       if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const statements = automationWorkspaceRunsLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        automationWorkspaceRunsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -434,9 +445,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         readAutomation(context.userId, automationId),
       );
       if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = automationRunsLiveStatements(context.userId, automationId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        automationRunsLive,
+        {
+          userId: context.userId,
+          automationId,
+          workspaceId: automation.value.organizationId,
+        },
+        input,
+      );
     }),
     taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
