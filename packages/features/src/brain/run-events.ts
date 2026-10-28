@@ -88,12 +88,8 @@ export const BRAIN_TURN_ORIGIN = {
   TYPED: "typed",
   /** A developer's ask spoken, relayed by the voice service. */
   SPOKEN: "spoken",
-  /** A wake for one session, or the roster look on the observation pass. */
-  OBSERVATION: "observation",
   /** A child's own delegated task. */
   CHILD: "child",
-  /** A requester's turn opened by a child's completion. */
-  CHILD_COMPLETION: "child_completion",
 } as const;
 
 export type BrainTurnOrigin = (typeof BRAIN_TURN_ORIGIN)[keyof typeof BRAIN_TURN_ORIGIN];

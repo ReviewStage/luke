@@ -1137,7 +1137,7 @@ export class StreamRelay {
       const message = userMessage(
         receivedMessageId(standing.sessionId, eveTurnId, read.count),
         received.words,
-        userMetadataOf(trigger, undefined),
+        userMetadataOf(trigger),
       );
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,

@@ -17,7 +17,6 @@ import type {
   UIMessage,
   UITools,
 } from "ai";
-import { BRAIN_REQUEST_ORIGIN, type BrainRequestOrigin } from "./requests.js";
 import { TOOL_CALL_SETTLEMENT, type ToolCallSettlement } from "./run-events.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
@@ -68,31 +67,16 @@ export function toolPartType(name: string): ToolPart["type"] {
 
 /**
  * What a user row of a turn's own words says about itself: a developer's ask
- * by the channel it arrived on, and everything the brain wrote down for
- * itself by what opened the turn. The notes the host hands a turn beside its
- * words name their own sources, below. On the desktop every ask is spoken;
- * the typed channel is the hosted brain host's, whose typed turns carry no
- * request origin.
+ * by the channel it arrived on, and a child's delegated task by its source.
+ * The notes the host hands a turn beside its words name their own sources,
+ * below. Every ask this host writes is typed.
  */
-export function userMetadataOf(
-  trigger: BrainTurnTrigger,
-  askOrigin: BrainRequestOrigin | undefined,
-): UserMessageMetadata {
+export function userMetadataOf(trigger: BrainTurnTrigger): UserMessageMetadata {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.ASK:
-      return {
-        author: MESSAGE_AUTHOR.DEVELOPER,
-        channel:
-          askOrigin === BRAIN_REQUEST_ORIGIN.SPOKEN ? MESSAGE_CHANNEL.VOICE : MESSAGE_CHANNEL.TYPED,
-      };
-    case BRAIN_TURN_TRIGGER.WAKE:
-      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOOK };
-    case BRAIN_TURN_TRIGGER.ROSTER:
-      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE };
+      return { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED };
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
       return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD };
-    case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:
-      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD_COMPLETION };
   }
 }
 
