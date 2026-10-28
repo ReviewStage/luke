@@ -401,8 +401,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
       tasks: [],
       onShowMention: ignore,
-      linearIssuesIn: () => undefined,
-      githubIssuesIn: () => undefined,
     },
     onLeaveTask: ignore,
     onRenameTask: () => Promise.resolve(true),

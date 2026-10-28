@@ -621,16 +621,13 @@ export function fixtureSidePanel(run: {
 
 /**
  * What a fixture run reads of its task where no profile stages more: no
- * agents, and no linked issues. Note that main answers a fixture run's
- * service reads with nothing, which the task's column would wait on in its
- * placeholder for good, and which the plan's Linked issues box would say as
- * a read Luke did not answer.
+ * agents. Note that main answers a fixture run's service reads with
+ * nothing, which the task's column would wait on in its placeholder for good.
  */
 function emptyTaskAnswer(
   kind: PortActKind,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   if (kind === ACT_KIND.CODING_AGENTS_LIST) return { answer: { agents: [] } };
-  if (kind === ACT_KIND.TASK_ISSUES_READ) return { answer: { issues: [] } };
   return undefined;
 }
 
@@ -641,7 +638,7 @@ function emptyTaskAnswer(
  * history under every profile, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads, every
  * profile's workspace members, every other profile's task as one with no
- * agents and no linked issues, and nothing else, which goes to main as it
+ * agents, and nothing else, which goes to main as it
  * would.
  */
 export function fixtureActAnswer(
