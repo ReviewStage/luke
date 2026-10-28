@@ -144,6 +144,7 @@ import {
   macOwnerOf,
   messageWords,
   nativeSubagent,
+  offersStop,
   placedMessages,
   planPayerOf,
   providerOf,
@@ -2812,7 +2813,7 @@ function AgentTabView({
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
-            stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+            stop={offersStop(agent) ? onStop : undefined}
             archivedBy={
               agent.archivedAt === undefined || agent.archivedBy === undefined
                 ? undefined
@@ -2825,6 +2826,7 @@ function AgentTabView({
           <AgentComposer
             agentId={agent.id}
             status={agent.status}
+            stoppable={offersStop(agent)}
             composer={composer}
             model={model}
             models={models}
@@ -3205,11 +3207,7 @@ function AgentTabBody({
             <ContinuedComposerNote
               agent={agent}
               doors={continuedDoors}
-              stop={
-                agent.status === CODING_AGENT_STATUS.RUNNING
-                  ? () => control.onStop(agent.id)
-                  : undefined
-              }
+              stop={offersStop(agent) ? () => control.onStop(agent.id) : undefined}
               control={control}
               shown={shown}
             />

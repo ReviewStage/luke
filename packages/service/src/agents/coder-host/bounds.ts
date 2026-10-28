@@ -235,6 +235,17 @@ export const CODER = {
    * to write to the session the rewind cuts.
    */
   RUNNER_HALT: Duration.seconds(15),
+  /**
+   * How long a native agent's turn has to end on its Stop once the stop line
+   * is written (`runner-sessions.ts`'s `forcedStop`) before its runner is
+   * ended and the turn settled cancelled. A turn interrupted mid-step ends in
+   * a second or two, and the runner ends an interrupt its CLI never answers
+   * within `RUNNER_CONTROL.ANSWER_MS`, so one still running past this has a
+   * runner that will not end it: ask, wait briefly, then force, rather than
+   * leaving it running for the sweep's five minutes
+   * (`TURN_ABANDON.CANCEL_AFTER_MS`).
+   */
+  STOP_CONFIRM: Duration.seconds(10),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

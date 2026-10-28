@@ -395,6 +395,7 @@ function ComposerMore({
 export function AgentComposer({
   agentId,
   status,
+  stoppable = status === CODING_AGENT_STATUS.RUNNING,
   composer,
   model,
   models,
@@ -431,6 +432,8 @@ export function AgentComposer({
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
   status: CodingAgentStatus;
+  /** Whether Stop stands in Send's place while the box is empty: while the agent runs where unsaid, and only while a Stop has something to stop where the tab knows (`offersStop`). */
+  stoppable?: boolean;
   composer: AgentComposerControl;
   /** What the agent runs on and its chip's change; nothing while it is not yet known, which draws no chip. */
   model: AgentModelControl | undefined;
@@ -510,9 +513,6 @@ export function AgentComposer({
   // after its press and the box it retries is whichever render is current by then.
   const latest = useRef(composer);
   latest.current = composer;
-  // Note that Stop stands only once a turn runs, because the service cancels
-  // the turn under way and a starting agent has none yet to cancel.
-  const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
   // Note that Send waits while files are read, so no message goes without a file the developer already handed the box.
