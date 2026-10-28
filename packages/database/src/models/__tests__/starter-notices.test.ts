@@ -75,7 +75,7 @@ const settledTurn = (
   agent: CodingAgent,
   status: TurnStatus,
   at: number,
-  patch: { readonly failure?: string; readonly cancelRequestKey?: string } = {},
+  patch: { readonly failure?: string; readonly cancelRequestedBy?: string } = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -109,28 +109,29 @@ const dueOf = (agent: CodingAgent) =>
     due.filter((each) => each.agentId === agent.id).map((each) => [each.ending, each.key]),
   );
 
-/** A line standing in the starter's conversation under the key given, as a sent one stands. */
-const toldUnder = (starter: CodingAgent, key: string) =>
+/** A line in the starter's conversation under the key given at the seq given, standing as a sent one stands or withdrawn as one eve refused stands. */
+const lineUnder = (starter: CodingAgent, key: string, seq: number, withdrawn = false) =>
   Effect.flatMap(Database, (db) =>
     db.insert(messages).values({
       userId: starter.userId,
       conversationId: starter.conversationId,
-      seq: 1,
+      seq,
       clientId: sentLineId(key),
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: "told" }],
       metadata: { channel: MESSAGE_CHANNEL.LUKE },
       placedAt: new Date(T0),
+      ...(withdrawn ? { withdrawnAt: new Date(T0) } : undefined),
     }),
   );
 
 /** The setups in which no ending is due, each over a fresh starter and the agent it started. */
 const UNTOLD = [
   {
-    name: "a Stop an agent made with stop_agent",
+    name: "a Stop the starter made itself",
     kind: CODING_AGENT_KIND.CODER,
-    end: ({ agent }: { agent: CodingAgent }) =>
-      settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestKey: "call_stop" }),
+    end: ({ starter, agent }: { starter: CodingAgent; agent: CodingAgent }) =>
+      settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestedBy: starter.id }),
   },
   {
     name: "an archive by the starter itself",
@@ -185,7 +186,7 @@ const UNTOLD = [
 
 it.layer(getTestDB())("the endings an agent's starter is due to hear of", (it) => {
   it.effect(
-    "a failed turn, one the developer stopped, and an archive by a member are each due the starter until a line stands under its key, and a completed turn is due nothing",
+    "a failed turn, one another agent stopped, and an archive by a member are each due the starter until a line stands under its key, a withdrawn one not standing, and a completed turn is due nothing",
     () =>
       Effect.gen(function* () {
         const { member, starter, agent } = yield* openStarted(CODING_AGENT_KIND.CODER);
@@ -193,7 +194,9 @@ it.layer(getTestDB())("the endings an agent's starter is due to hear of", (it) =
           failure: "abandoned",
         });
         yield* settledTurn(agent, TURN_STATUS.SETTLED, T0 + 2_000);
-        const stopped = yield* settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 3_000);
+        const stopped = yield* settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 3_000, {
+          cancelRequestedBy: randomUUID(),
+        });
         yield* archivedAt(agent, T0 + 4_000, { by: CODING_AGENT_ARCHIVER.MEMBER, userId: member });
 
         assert.deepEqual(yield* dueOf(agent), [
@@ -202,7 +205,8 @@ it.layer(getTestDB())("the endings an agent's starter is due to hear of", (it) =
           [STARTER_NOTICE_ENDING.ARCHIVED, agent.id],
         ]);
 
-        yield* toldUnder(starter, failed);
+        yield* lineUnder(starter, failed, 1);
+        yield* lineUnder(starter, stopped, 2, true);
         assert.deepEqual(yield* dueOf(agent), [
           [STARTER_NOTICE_ENDING.STOPPED, stopped],
           [STARTER_NOTICE_ENDING.ARCHIVED, agent.id],

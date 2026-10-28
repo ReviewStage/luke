@@ -5,13 +5,14 @@
  * reports back to its starter by message on its own; one whose run ends
  * before it can would leave its starter waiting on a message that never
  * comes. So each ending within the window is due a line to the starter: a
- * turn that failed, abandoned among them, a turn stopped by anyone but an
- * agent's `stop_agent`, whose caller knows it stopped it, and the agent
- * archived by anyone but its starter. A completed turn is due nothing.
+ * turn that failed, abandoned among them, a turn stopped by anyone but the
+ * starter itself (`turns.cancel_requested_by`), and the agent archived by
+ * anyone but its starter. A completed turn is due nothing.
  *
  * Each is keyed by the turn it ended, or by the agent for its archive, and
  * a line already standing under that key in the starter's conversation is
- * not due again, so each ending is told once whatever the sweeps between.
+ * not due again, so each ending is told once whatever the sweeps between;
+ * a line eve refused, left withdrawn, does not stand, so it is due again.
  * No ending is due a starter archived, one whose own newest turn failed, or
  * a member's operator, which hears of its member's agents through its own
  * notices (`operator-notices.ts`), so no ending wakes a starter that cannot
@@ -27,21 +28,20 @@ import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { messages, turns } from "../schemas/storage.js";
+import { messages, standingLine, turns } from "../schemas/storage.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 
 /** How a started agent's run ended without its finishing. */
 export const STARTER_NOTICE_ENDING = {
   /** Its turn failed, abandoned or its session lost among the reasons. */
   FAILED: "failed",
-  /** Its turn was stopped by the developer, or ended by Luke after a Stop it never confirmed. */
+  /** Its turn was stopped by anyone but its starter: the developer, another agent, or Luke ending a Stop never confirmed. */
   STOPPED: "stopped",
   /** It was archived by anyone but its starter. */
   ARCHIVED: "archived",
 } as const;
 
-type StarterNoticeEnding =
-  (typeof STARTER_NOTICE_ENDING)[keyof typeof STARTER_NOTICE_ENDING];
+type StarterNoticeEnding = (typeof STARTER_NOTICE_ENDING)[keyof typeof STARTER_NOTICE_ENDING];
 
 const DueNoticeSchema = Schema.Struct({
   /** The key the line goes under: the ended turn's id, or the archived agent's own. */
@@ -124,7 +124,10 @@ const findEndedTurns = SqlSchema.findAll({
             lte(turns.settledAt, until),
             or(
               eq(turns.status, TURN_STATUS.FAILED),
-              and(eq(turns.status, TURN_STATUS.CANCELLED), isNull(turns.cancelRequestKey)),
+              and(
+                eq(turns.status, TURN_STATUS.CANCELLED),
+                sql`${turns.cancelRequestedBy} is distinct from ${starter.id}`,
+              ),
             ),
             answeringStarter(),
           ),
@@ -176,6 +179,7 @@ const findToldLines = SqlSchema.findAll({
           and(
             inArray(messages.conversationId, [...conversationIds]),
             inArray(messages.clientId, [...lineIds]),
+            standingLine(messages),
           ),
         ),
     ),

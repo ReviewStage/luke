@@ -228,7 +228,7 @@ and each message arrives as a new turn; in Luke, a worker's
   retargets the PR above to `main`. Archive the merged PR's worker now, as the
   table says.
 - **Worker ended** (Luke only): a line from Luke, not the worker, naming a
-  worker of yours whose turn failed or was stopped, or that someone else
+  worker of yours whose turn failed, or that someone else stopped or
   archived. No report will come from it on its own, so act now unless its PR
   already merged: read it with `read_agent`, then continue a failed worker
   as the table's "Continue a dead or stalled worker" row says. For one the
