@@ -30,7 +30,7 @@ function card(fastRefused?: boolean): string {
 }
 
 test("a turn Anthropic refused a fast step of says it ran at standard speed, and another turn says nothing of speed", () => {
-  assert.match(card(true), /Fast wasn&#x27;t available, so this ran at standard speed/u);
+  assert.match(card(true), /Fast wasn&#x27;t available, so this ran at standard speed\./u);
   assert.doesNotMatch(card(), /standard speed/u);
   assert.doesNotMatch(card(false), /standard speed/u);
 });

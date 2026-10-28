@@ -59,7 +59,7 @@ const ENDING_NOTE = {
 } as const satisfies Record<TurnEnding, string | undefined>;
 
 /** The line a turn says where a fast step of it ran at standard speed instead. */
-const FAST_REFUSED_NOTE = "Fast wasn't available, so this ran at standard speed";
+const FAST_REFUSED_NOTE = "Fast wasn't available, so this ran at standard speed.";
 
 /** The token rows, in the order the card lists them. */
 const TOKEN_ROW = {
