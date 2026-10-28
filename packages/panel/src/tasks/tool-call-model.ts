@@ -901,14 +901,8 @@ const READ_INBOX_CALL: ToolReader = ({ tool, input, output }) => inboxToolView(t
  * reaches here (`native-tool-calls.ts`).
  */
 const AGENT_TOOL_VIEWS = {
-  [AGENT_TOOL.QUEUE_QUESTION]: ({ input, output }) =>
-    namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question"),
-  [AGENT_TOOL.WITHDRAW_QUESTION]: ({ input, output }) =>
-    namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question"),
   [AGENT_TOOL.LOOK_AT_PICTURE]: ({ input, output }) =>
     namedCall(CALL_KIND.LOOK_AT_PICTURE, input, output, undefined),
-  [AGENT_TOOL.END_CALL]: ({ input, output }) =>
-    namedCall(CALL_KIND.END_CALL, input, output, undefined),
   [AGENT_TOOL.LIST_AGENTS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
   [AGENT_TOOL.READ_AGENT]: ({ input, output }) =>
@@ -1090,10 +1084,10 @@ const AGENT_TOOL_VIEWS = {
 } as const satisfies Record<AgentTool, ToolReader>;
 
 /**
- * The retired tools a row reads by name: every one but Chat's four and the
- * code and whiteboard tools, whose calls, with no Chat, Code tab, or Board
- * left to open, draw as any other call does, by the tool's name and what it
- * was handed and answered.
+ * The retired tools a row reads by name: every one but Chat's four, the
+ * code and whiteboard tools, and a voice call's own three, whose calls, with
+ * no Chat, Code tab, Board, or call left to open, draw as any other call
+ * does, by the tool's name and what it was handed and answered.
  */
 type RetiredTool = Exclude<
   (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
@@ -1104,6 +1098,9 @@ type RetiredTool = Exclude<
   | typeof RETIRED_TOOL.SHOW_CODE
   | typeof RETIRED_TOOL.DRAW_ON_BOARD
   | typeof RETIRED_TOOL.LOOK_AT_BOARD
+  | typeof RETIRED_TOOL.QUEUE_QUESTION
+  | typeof RETIRED_TOOL.WITHDRAW_QUESTION
+  | typeof RETIRED_TOOL.END_CALL
 >;
 
 /** How each tool no agent is offered now reads, as a transcript written while it was offered still names it, under the name it had then. */

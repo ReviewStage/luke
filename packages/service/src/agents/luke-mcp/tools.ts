@@ -18,15 +18,10 @@
  * tool finds it, its tabs kept under the agent's own conversation; its
  * screenshots reach the agent as images, which the transcript leaves out.
  *
- * The call's own tools (`queue_question`, `withdraw_question`, `end_call`)
- * are served on every turn, as eve offers them on every turn of its own, so
- * the list a harness reads at its launch is the same whatever turn it is
- * on; each runs on a spoken turn and is refused on any other
- * (`runCallTool`), the turn's kind read off what the session's last message
- * handed rather than a request's header (`nativeTurnKind`). Left out, beside the harness's own
- * shell, files, todos, waiting, subagents, skills, and web reads: eve's
- * `connection_search` and `connection_execute`, since each integration the
- * agent is handed is an MCP server of its own beside this one (`app.ts`).
+ * Left out, beside the harness's own shell, files, todos, waiting,
+ * subagents, skills, and web reads: eve's `connection_search` and
+ * `connection_execute`, since each integration the agent is handed is an
+ * MCP server of its own beside this one (`app.ts`).
  *
  * Two things eve's tool files keep in the session's own state are kept
  * otherwise here, since the server keeps no session: a call's id, which the
@@ -47,7 +42,6 @@
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import {
   type CodingAgent,
-  readNativeHanded,
   reserveTurnPlanNotes,
   settleTurnPlanNotes,
 } from "@luke/database/models/coding-agent-store";
@@ -55,14 +49,9 @@ import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
-import {
-  ACTION_RESULT_STATUS,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireRecord,
-} from "@luke/wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { Effect, Exit, Option, Result, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -79,19 +68,12 @@ import {
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
-import { END_CALL_TOOL, runEndCall } from "../../tasks/end-call.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
   LOOK_AT_PICTURE_TOOL,
   lookNamedOnly,
   PICTURE_LOOK_STATUS,
 } from "../../tasks/picture-look.js";
-import {
-  QUEUE_QUESTION_TOOL,
-  runQueueQuestion,
-  runWithdrawQuestion,
-  WITHDRAW_QUESTION_TOOL,
-} from "../../tasks/queue-question.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
   CREATE_AUTOMATION_TOOL,
@@ -100,7 +82,6 @@ import {
   RUN_AUTOMATION_TOOL,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import {
@@ -135,15 +116,12 @@ import {
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
-  type CallTool,
   CODER_TOOL,
   kindToolsOf,
   machineToolsOf,
   repositoryToolsOf,
-  runCallTool,
   taskToolsOf,
 } from "../coder-host/tool-set.js";
-import { TurnHandedSchema } from "../coder-host/turn-context.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -260,41 +238,6 @@ function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
 /** A tool of the plan's comment threads, run through the comment door. */
 function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
   return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
-}
-
-/** What the session's messages handed, read back off the conversation's row; a row holding nothing, or a shape this build no longer reads, handed none of it. */
-const readHanded = Schema.decodeUnknownResult(TurnHandedSchema);
-
-/**
- * The kind of turn the agent is on, as eve's `turnKind` answers it for an
- * eve agent: the kind of the newest line handed to the agent, since eve moves
- * a session's current auth to each line's as it arrives, a spoken ask that
- * joins a typed turn under way included (`../coder-host/host.ts`'s `relay`).
- * A native runner takes its lines off its stdin, where no header names a
- * kind, so the kind is read off what the last message written to it handed
- * (`../coder-host/turn-message.ts`, `native_handed`), by the same send that
- * put the turn's words ahead of the developer's line: spoken where that
- * message was a spoken turn's, and typed otherwise, the unheard last line
- * of an ended call included, so the words the agent reads and this gate
- * agree. An agent handed no message yet is on a typed turn.
- */
-function nativeTurnKind(
-  admitted: AdmittedConversation,
-): Effect.Effect<BrainHostTurn, unknown, DatabaseServices> {
-  return Effect.map(readNativeHanded(admitted.target), (kept) => {
-    const handed = kept === null ? undefined : Result.getOrUndefined(readHanded(kept));
-    return handed?.spoken === true ? BRAIN_HOST_TURN.SPOKEN : BRAIN_HOST_TURN.TYPED;
-  });
-}
-
-/** One of the call's own tools, run as its eve tool file runs it (`apps/dev/tools/<name>.ts`): on a spoken turn, and refused on any other (`runCallTool`). */
-function callTool(
-  spec: ToolSpec & { readonly name: CallTool },
-  run: (input: UnparsedWireValue) => WireRecord,
-) {
-  return entry(spec, (admitted, input) =>
-    Effect.map(nativeTurnKind(admitted), (turn) => runCallTool(turn, spec.name, () => run(input))),
-  );
 }
 
 /** A look that answered a picture: its bytes as base64 and an image's type, never a video's, which no model is handed. */
@@ -492,10 +435,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input)),
   // The agent's browser.
   entry(BROWSER_TOOL, runAgentBrowser, browserContent),
-  // The call the agent is spoken into: its question queue and its hang-up, carried to the voice by the journaled call.
-  callTool(QUEUE_QUESTION_TOOL, runQueueQuestion),
-  callTool(WITHDRAW_QUESTION_TOOL, runWithdrawQuestion),
-  callTool(END_CALL_TOOL, runEndCall),
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */

@@ -52,11 +52,9 @@ code, so **no internal route and no shared secret exist between two deployments.
 
 ## A turn's events are a projection
 
-**The five run seams and nothing wider — a slow step began, a brain turn
-queued a question, every action settled, one sentence of the reply, the turn
-ended. No tool part, no reasoning, no message.** A queued question is read off
-its `queue_question` call's input, because that call exists only to hand the
-voice its words; the one other call whose words are told is `show_code`, whose
+**The four run seams and nothing wider — a slow step began, every action
+settled, one sentence of the reply, the turn ended. No tool part, no
+reasoning, no message.** The one call whose words are told is `show_code`, whose
 lines travel on the `plan.code` frame rather than as an event. The kinds are the brain's own run-stream words (`brain/run-events.ts`),
 spelled apart from them because the two were separate packages until the brain
 joined this one; a test in the service holds every event kind a member of the

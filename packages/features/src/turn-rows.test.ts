@@ -136,7 +136,7 @@ test("a finished turn whose lead is one call alone draws that call on its own ro
 
 test("a spoken turn's words run with its calls: inside the open group while it moves, where a run of words alone draws none of them, and once it has finished, all of it folded closed, its words counted as messages", () => {
   const spoken = [
-    call("end_call"),
+    call("start_agent"),
     words("Started a worker."),
     subagent("Compare the queues."),
     words("Seven days."),
@@ -144,14 +144,14 @@ test("a spoken turn's words run with its calls: inside the open group while it m
   assert.deepEqual(rowsOf(spoken, true, true), [
     [
       "1 tool call, 1 subagent",
-      ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
+      ["start_agent", "Started a worker.", "Compare the queues.", "Seven days."],
       { open: true, running: false },
     ],
   ]);
   assert.deepEqual(rowsOf(spoken, false, true), [
     [
       "1 tool call, 1 subagent, 2 messages",
-      ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
+      ["start_agent", "Started a worker.", "Compare the queues.", "Seven days."],
     ],
   ]);
   assert.deepEqual(rowsOf([words("Seven days.")], true, true), []);

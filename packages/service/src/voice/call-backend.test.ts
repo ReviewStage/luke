@@ -33,7 +33,7 @@ test("a call into an agent on no task, in no repository, on the developer's Mac,
     AGENT_TOOL.SHOW_PAGE,
     AGENT_TOOL.DELETE_SECTION,
     AGENT_TOOL.START_AGENT,
-    AGENT_TOOL.END_CALL,
+    AGENT_TOOL.LIST_TASKS,
   ]) {
     assert.equal(told.has(held), true, held);
   }

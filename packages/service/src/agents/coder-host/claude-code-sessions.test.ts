@@ -2371,7 +2371,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The call's words, how to talk the plan through, and the task as it stands, ahead of what was said.
         for (const told of [
           "## This turn is spoken",
-          `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+          `\`${CODER_TOOL.DELEGATE}\``,
           "## Talking the plan through",
           "The task as it stands as this turn opens",
         ]) {

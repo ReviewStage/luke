@@ -16,20 +16,13 @@ import {
   type TurnStatus,
   UI_PART_TYPE,
 } from "../core.js";
-import { END_CALL_TOOL, endsCall } from "../tasks/end-call.js";
-import {
-  QUEUE_QUESTION_TOOL,
-  queuedQuestionOf,
-  WITHDRAW_QUESTION_TOOL,
-  withdrawnQuestionOf,
-} from "../tasks/queue-question.js";
 import { SHOW_CODE_TOOL_NAME, shownCodeOf } from "../tasks/show-code.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * One turn's run seams as the voice session hears them while the turn runs:
- * a slow step began, a brain call queued a question, every action
- * settled, one sentence of the reply, the turn ended. They are not rows of
+ * a slow step began, every action settled, one sentence of the reply, the
+ * turn ended. They are not rows of
  * their own: the store keeps the turn row and the turn's journal, the
  * assistant message the writer opens under the turn's id and amends as each
  * call is written ahead of its run, and the events are a projection over
@@ -97,28 +90,12 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 const SLOW_STEP_TOOLS: ReadonlySet<string> = new Set([AGENT_TOOL.BASH]);
 
 /**
- * What one call tells while the turn runs: a question a brain call queued
- * or withdrew, code it showed, its ask to end the call, or a shell command
- * in a checkout, the one slow step. A queued or withdrawn question or an end is told
- * once its input is whole, never while it streams, and
- * shown code once its call has answered with the lines, so none is told
- * twice.
+ * What one call tells while the turn runs: code a brain call showed, once
+ * its call has answered with the lines, so it is not told twice, or a shell
+ * command in a checkout, the one slow step.
  */
 function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   const name = storedToolName(part);
-  if (name === QUEUE_QUESTION_TOOL.name) {
-    const queued = queuedQuestionOf(part);
-    return queued === undefined ? undefined : { kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued };
-  }
-  if (name === WITHDRAW_QUESTION_TOOL.name) {
-    const question = withdrawnQuestionOf(part);
-    return question === undefined
-      ? undefined
-      : { kind: TURN_EVENT_KIND.QUESTION_WITHDRAWN, question };
-  }
-  if (name === END_CALL_TOOL.name) {
-    return endsCall(part) ? { kind: TURN_EVENT_KIND.CALL_ENDING } : undefined;
-  }
   if (name === SHOW_CODE_TOOL_NAME) {
     const shown = shownCodeOf(part);
     return shown === undefined
@@ -152,10 +129,9 @@ export function journalAfterStep(
 
 /**
  * The turn's events as the record now stands, numbered from one, walked
- * step by step: a step's sentences, then what its calls tell. The slow step
- * and the end of the call, once per run each, every question a brain call
- * queued, and all the code it showed, are told the
- * moment their call is on the journal, the code once its call has answered. A sentence is
+ * step by step: a step's sentences, then what its calls tell. The slow step,
+ * once per run, is told the moment its call is on the journal, and all the
+ * code a brain call showed once its call has answered. A sentence is
  * told while the turn still runs once every call journaled ahead of its step
  * has settled, behind one settled mark, so nothing is said ahead of an action
  * whose result is not on record; the first sentence held back holds back
@@ -183,7 +159,6 @@ export function projectTurnEvents(
   const steps = stepsOf(journalAfterStep(journal, joinedAfterStep)?.parts ?? []);
   const bodies: TurnEventBody[] = [];
   let slowStepTold = false;
-  let endTold = false;
   let settledTold = false;
   let unsettled = false;
   let answered = false;
@@ -205,9 +180,7 @@ export function projectTurnEvents(
       const told = callEventOf(part);
       if (told === undefined) continue;
       if (told.kind === TURN_EVENT_KIND.SLOW_STEP && (slowStepTold || answering)) continue;
-      if (told.kind === TURN_EVENT_KIND.CALL_ENDING && endTold) continue;
       slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;
-      endTold ||= told.kind === TURN_EVENT_KIND.CALL_ENDING;
       bodies.push(told);
     }
     if (answering) {
