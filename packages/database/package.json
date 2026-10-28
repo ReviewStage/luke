@@ -17,7 +17,6 @@
     "./models/account-store": "./src/models/account-store.js",
     "./models/agent-name": "./src/models/agent-name.js",
     "./models/agent-browser-tabs": "./src/models/agent-browser-tabs.js",
-    "./models/asks": "./src/models/asks.js",
     "./models/automation-store": "./src/models/automation-store.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
     "./models/channel-store": "./src/models/channel-store.js",

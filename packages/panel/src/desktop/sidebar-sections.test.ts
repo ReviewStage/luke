@@ -606,7 +606,7 @@ test("a section's Status sets every task in it at the status picked at once, ask
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
-test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Status for both", async () => {
+test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Status for both, which S on the focused one opens", async () => {
   const settled: [string[], string][] = [];
   const opened: string[] = [];
   const sidebar = await mountSidebar([], SECTIONS, {
@@ -629,7 +629,19 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
 
   openRowMenu(sidebar, RETRIES.name);
   assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
-  act(() => item("Status").click());
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+
+  act(() => rowOf(RETRIES.name).focus());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
+  });
+  await act(async () => undefined);
+  assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
+  assert.ok(document.querySelector('[role="menu"][aria-label="Status"]'), "S opens Status");
   act(() => item("Done").click());
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });

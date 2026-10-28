@@ -41,7 +41,6 @@
   "tests/github-installed.test.ts": 2573,
   "tests/handoff-load.test.ts": 26,
   "tests/hosted-account-store.test.ts": 1570,
-  "tests/hosted-asks.test.ts": 1646,
   "tests/hosted-store-writer.test.ts": 2078,
   "tests/inbox-item-channel-migration.test.ts": 7195,
   "tests/inbox-item-pre-v5-threads-migration.test.ts": 8135,

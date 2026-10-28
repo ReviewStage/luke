@@ -14,7 +14,7 @@ import { InstantColumnSchema } from "./columns.js";
  * cleared once what the runtime answered is written, so no transaction, pool
  * connection, or lock is held while the runtime answers. A claim is taken
  * under the conversation's row lock, in the same short transaction that
- * writes what the hand-over hands (a line's row, an ask's mark), so whatever
+ * writes what the hand-over hands (a line's row), so whatever
  * reads that row under the same lock sees the hand-over's line standing
  * before the runtime hears it; and a write that must not cross a hand-over
  * (a rewind's cut) refuses while a claim stands, under that lock, and tries
@@ -25,9 +25,8 @@ import { InstantColumnSchema } from "./columns.js";
  * leaves a claim no one clears, which the next claimant past the expiry
  * takes over. What the dead holder handed over is never handed over again,
  * since neither eve nor a native runner refuses a message it already took:
- * its line stands as written, and its ask stays marked as handed
- * (`asks.ts`). The expiry is twice the longest a hand-over may take, so a
- * live holder always records before it.
+ * its line stands as written. The expiry is twice the longest a hand-over
+ * may take, so a live holder always records before it.
  *
  * Note that the claim goes to waiters in the order they queued, as the
  * advisory lock's waiters were served, so sends reach the runtime in the

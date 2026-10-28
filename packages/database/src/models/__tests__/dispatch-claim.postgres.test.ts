@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { ASK_ORIGIN } from "@luke/features";
 import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
@@ -19,7 +18,6 @@ import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace, STORE_TEST_DATABASE_ENVIRONMENT } from "../../testing/index.js";
 import { deleteAgent, recordAgentPublished } from "../agent-store.js";
-import { askRecord } from "../asks.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { createTask, finishTaskWork } from "../task-store.js";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -173,47 +171,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         assert.ok(sendStillPending);
         assert.ok(Result.isSuccess(sent) && Option.isSome(sent.success));
         assert.equal(sent.success.value.effect, STORE_WRITE_EFFECT.WRITTEN);
-      }),
-  );
-
-  it.effect(
-    "the journal lands while an ask's hand-over to eve is pending, and no transaction or lock is held meanwhile",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* openAgentConversation;
-        const onAnother = yield* anotherConnection;
-        const writer = yield* storeWriter({ tools: {} });
-        const asks = askRecord();
-        const { turn } = yield* startedTurn(target);
-        const ask = yield* asks.record({
-          ...target,
-          clientId: randomUUID(),
-          origin: ASK_ORIGIN.TYPED,
-          createdAt: new Date(0),
-        });
-        const held = yield* heldDispatch({ sessionId: "session-1", deliveryId: "delivery-1" });
-
-        const dispatching = yield* Effect.forkChild(
-          onAnother(asks.dispatchOnce(target, ask.id, () => held.dispatch)),
-        );
-        yield* untilBegan(held.began, dispatching);
-        const meanwhile = yield* heldMeanwhile;
-        const journal = yield* onAnother(
-          writer.consumeAll(target, [
-            { ...turn, kind: RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
-          ]),
-        );
-        const askStillPending = dispatching.pollUnsafe() === undefined;
-        yield* Deferred.succeed(held.release, undefined);
-        const dispatched = yield* Fiber.join(dispatching);
-
-        assert.deepEqual(meanwhile, NOTHING_HELD);
-        assert.ok(journal.every(Result.isSuccess));
-        assert.ok(askStillPending);
-        assert.equal(
-          typeof dispatched === "string" ? undefined : dispatched.sessionId,
-          "session-1",
-        );
       }),
   );
 
