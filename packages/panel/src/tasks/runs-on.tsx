@@ -20,7 +20,7 @@ import {
   POPOVER_ALIGN,
   POPOVER_WIDTH,
   STATUS_TONE,
-  StatusDot,
+  StatusGlyph,
   type StatusTone,
   Tooltip,
   useSecond,
@@ -43,11 +43,12 @@ import { keptKey, useKept } from "../use-kept.js";
  * name under the glyph of its platform, a Mac or a Linux server, each saying
  * whether it is online, held against the window's own clock, or, online,
  * that it is still getting ready for local agents or couldn't set them up.
- * Every device ends in one dot rather than words, whose hint says them:
- * green online, grey away, amber where its standing can't be checked, the
- * working tone while it gets ready and red where it couldn't set up; one
- * that takes no agent is dimmed and unpicked too. A column of dots keeps one
- * edge where words beside them would not. The menu stands at the regular width rather than a settings
+ * Every device's glyph wears one dot at its corner rather than words, whose
+ * hint says them: green online, grey away, amber where its standing can't
+ * be checked, the working tone while it gets ready and red where it
+ * couldn't set up; one that takes no agent is dimmed and unpicked too. The
+ * dot stands on the glyph rather than at the row's end, which the check of
+ * the one picked keeps. The menu stands at the regular width rather than a settings
  * picker's narrow one, so a device's whole name fits. A
  * device offline or not ready is listed but not picked, since the service
  * refuses a task set to one that has not beat lately or is not set up yet.
@@ -147,20 +148,26 @@ function offerUnready(
   }
 }
 
-/** What a device's row ends in: one dot, its words on hover and to a reader, for every device alike, so the column keeps one edge; one that takes no agent is dimmed and unpicked too. */
-function offerEnd(device: MacOffer, book: PresenceBook): Pick<MenuRow, "end" | "disabled" | "why"> {
+/** A device's row past its name: its platform's glyph wearing one dot, its words on hover and to a reader, for every device alike; one that takes no agent is dimmed and unpicked too, its dot saying why. */
+function offerMarks(
+  device: MacOffer,
+  book: PresenceBook,
+): Pick<MenuRow, "icon" | "disabled" | "why"> {
   const unready = offerUnready(device, book);
-  if (unready !== undefined)
-    return {
-      end: <StatusDot tone={unready.tone} label={unready.words} />,
-      disabled: unready.words,
-      why: MENU_ROW_WHY.MARK,
-    };
   const standing = offerStanding(device, book);
-  return { end: <StatusDot tone={STANDING_TONE[standing]} label={STANDING_WORDS[standing]} /> };
+  const tone = unready?.tone ?? STANDING_TONE[standing];
+  const words = unready?.words ?? STANDING_WORDS[standing];
+  const icon = (
+    <StatusGlyph tone={tone} label={words}>
+      <DeviceGlyph device={device} />
+    </StatusGlyph>
+  );
+  return unready === undefined
+    ? { icon }
+    : { icon, disabled: unready.words, why: MENU_ROW_WHY.MARK };
 }
 
-/** Cloud, then each device by name under its platform's glyph, one that takes an agent ending in its standing's dot and any other muted, unpicked, saying why. */
+/** Cloud, then each device by name, its platform's glyph wearing its standing's dot, one that takes no agent muted and unpicked. */
 function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
@@ -168,8 +175,7 @@ function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly 
       (device): MenuRow => ({
         id: device.deviceId,
         label: device.name,
-        icon: <DeviceGlyph device={device} />,
-        ...offerEnd(device, book),
+        ...offerMarks(device, book),
       }),
     ),
   ];

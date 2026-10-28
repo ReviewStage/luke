@@ -13,7 +13,7 @@ import {
   IconButton,
   Inline,
   STATUS_TONE,
-  StatusDot,
+  StatusGlyph,
 } from "@luke/ui";
 import { FlaskConicalIcon, GLYPH } from "@luke/ui/icons";
 import type { Example } from "../examples";
@@ -24,7 +24,8 @@ import { CatalogSection } from "../section";
  * review's pending comments, beside one with nothing waiting, and a count of
  * two figures; a press wearing a dot at its corner, a view filtered,
  * beside one that is not; a chip wearing the experiment's flask on a disc
- * at its corner; and a status dot in each tone a device's standing takes.
+ * at its corner; and a device's glyph wearing a status dot in a few of the
+ * tones its standing takes.
  */
 
 function CornerCounts(): React.JSX.Element {
@@ -75,9 +76,15 @@ function CornerCounts(): React.JSX.Element {
         </CornerBadge>
       </Inline>
       <Inline gap={GAP.CONTROL}>
-        <StatusDot tone={STATUS_TONE.COMPLETE} label="Online" />
-        <StatusDot label="Checking" />
-        <StatusDot tone={STATUS_TONE.ATTENTION} label="Can't check status" />
+        <StatusGlyph tone={STATUS_TONE.COMPLETE} label="Online">
+          <GLYPH.DESKTOP />
+        </StatusGlyph>
+        <StatusGlyph label="Offline">
+          <GLYPH.DESKTOP />
+        </StatusGlyph>
+        <StatusGlyph tone={STATUS_TONE.ATTENTION} label="Can't check status">
+          <GLYPH.HOST />
+        </StatusGlyph>
       </Inline>
     </CatalogSection>
   );
