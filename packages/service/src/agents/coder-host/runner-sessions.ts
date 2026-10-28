@@ -1058,7 +1058,8 @@ export const runnerSessions = <
           .writeLine(live.handle, line({ type: INPUT_LINE.STOP, launch: live.mark.firstSequence }))
           .pipe(
             Effect.catchIf(
-              (failure) => failure.status === NOT_FOUND_STATUS,
+              (failure) =>
+                failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
               () => Effect.void,
             ),
           );
