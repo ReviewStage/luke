@@ -248,15 +248,11 @@ function sessionsFor(userId: string, sequence: { next: number }) {
   return claudeCodeSessions(options);
 }
 
-/** The first launch's runner as a row leaves it before the next message: as launched, exited, or tagged as one launched before lines were read from Luke, whose stdin a send writes. */
+/** The first launch's runner as a row leaves it before the next message: as launched, or exited. */
 const asLaunched = (_api: ReturnType<typeof runnerSandboxApi>) => undefined;
 const runnerExited = (api: ReturnType<typeof runnerSandboxApi>) => {
   const first = api.commands[0];
   if (first !== undefined) first.exitCode = 0;
-};
-const launchedBeforeTheRead = (api: ReturnType<typeof runnerSandboxApi>) => {
-  const sandbox = api.sandboxes[0];
-  if (sandbox !== undefined) sandbox.tags[RUNNER_TAG.LAUNCH] = "0";
 };
 
 const message = (agent: Agent, text: string, lineId?: string) => ({
@@ -1251,11 +1247,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
     ["at its upload of the message's files", (rest: string) => rest === "fs/write", asLaunched],
     ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), asLaunched],
     ["at the relaunch's command", (rest: string) => rest === "cmd", runnerExited],
-    [
-      "at the stdin of a runner launched before lines were read",
-      (rest: string) => rest.endsWith("/stdin"),
-      launchedBeforeTheRead,
-    ],
   ] as const)(
     "a message that meets its sandbox stopping %s resumes the sandbox and runs on a runner launched in its next session",
     ([, call, leave]) =>

@@ -25,6 +25,7 @@ import type {
   AgentInboxCloseParams,
   AgentInboxMessagedView,
   AgentInboxMessageParams,
+  AgentInboxReadAllParams,
   AgentInboxReadAllView,
   AgentInboxReadStateParams,
   AgentInboxReadStateView,
@@ -32,7 +33,6 @@ import type {
   AgentInboxStartParams,
   AgentPictureParams,
 } from "@luke/features/agent-view";
-import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
@@ -56,7 +56,7 @@ export interface AgentInboxProceduresDependencies {
     codingAgentInboxReadState(
       params: AgentInboxReadStateParams,
     ): Effect.Effect<AgentInboxReadStateView>;
-    codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<AgentInboxReadAllView>;
+    codingAgentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
     codingAgentInboxAttachment(
       params: AgentInboxAttachmentParams,
     ): Effect.Effect<AgentInboxAttachmentView>;

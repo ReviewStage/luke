@@ -10,18 +10,20 @@ import {
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
-import { Data, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
-import { Hex } from "effect/encoding";
-import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, LIVE_STATE, restarting } from "./live-follow.js";
+import { Data, Duration, Effect, Equal, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
+import { type InboxReads, itemsRead } from "./inbox-collections.js";
+import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-follow.js";
 
 /**
  * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main over the service's held poll while it is followed, and told whole as it changes.
  *
  * The host follows the scope's live read (`live-follow.ts`) the first time
- * the scope is followed, keeps the items as each change lands, tells each
- * change, and lets the follow go a while after the last reader let go of
- * it. One the account does not reach is not found, as the held read said.
+ * the scope is followed, keeps its items in a collection that stands among
+ * the reads an inbox write reaches (`inbox-collections.ts`), takes each
+ * answer's rows as its poll answers, tells the items as they stand after
+ * each answer and each write drawn over them, and lets the follow go a
+ * while after the last reader let go of it. One the account does not reach
+ * is not found, as the held read said.
  */
 
 /** How long a follow no reader holds is kept, so a window coming back finds it standing. */
@@ -33,10 +35,9 @@ export class InboxScopeKey extends Data.Class<{
   readonly id: string;
 }> {}
 
-/** Where a scope's items stand as the follow last delivered them, and the cursor they digest to. */
+/** Where a scope's items stand as the follow last delivered them, a standing write's among them. */
 interface LiveInbox {
   readonly items: readonly InboxItem[];
-  readonly cursor: string;
 }
 
 /** What a scope's read is answered from. */
@@ -45,36 +46,16 @@ type Standing =
       readonly kind: typeof LIVE_STATE.LIVE;
       readonly inbox: SubscriptionRef.SubscriptionRef<LiveState>;
     }
-  | { readonly kind: typeof LIVE_STATE.REFUSED; readonly failure: CodingAgentCallFailure };
+  | { readonly kind: typeof LIVE_STATE.REFUSED; readonly failure: AgentCallFailure };
 
 /** Why a scope's read is refused: not found, or unanswered. */
-type CodingAgentCallFailure =
-  | typeof AGENT_CALL_FAILURE.NOT_FOUND
-  | typeof AGENT_CALL_FAILURE.UNANSWERED;
+type AgentCallFailure = typeof AGENT_CALL_FAILURE.NOT_FOUND | typeof AGENT_CALL_FAILURE.UNANSWERED;
 
 /** A follow before its first rows, with them, or stopped for good. */
 type LiveState =
   | { readonly kind: typeof LIVE_STATE.WAITING }
   | { readonly kind: typeof LIVE_STATE.STANDING; readonly inbox: LiveInbox }
   | { readonly kind: typeof LIVE_STATE.BROKEN };
-
-/**
- * A digest of every item whole, its thread's messages and its files among
- * it, and whether it is unread for the reader: any change to any of them,
- * from any of the read's parts, or the reader marking one read or unread,
- * moves it, so a message landing after its item still wakes a held read.
- * Note that it is Web Crypto's SHA-256, since the host loads where no
- * `node:` module does.
- */
-function cursorOf(items: readonly InboxItem[]): Effect.Effect<string> {
-  const standing = items.toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return Effect.map(
-    Effect.promise(() =>
-      crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(standing))),
-    ),
-    (digest) => `live-${Hex.encode(new Uint8Array(digest)).slice(0, 32)}`,
-  );
-}
 
 export interface ScopeInboxDependencies {
   /** The scope's read for the account named, its rows inline, held past `after` where it names one; not found, signed out, or a failure where the service answered none. */
@@ -86,8 +67,8 @@ export interface ScopeInboxDependencies {
   ) => Effect.Effect<ScopeInboxLiveAnswer | { readonly failure: string }>;
   /** The account signed in now, which a follow is read for from its first read on; none where nobody is. */
   readonly accountId: () => string | undefined;
-  /** Where each scope's wait for a write's transaction stands while it is followed, which the inbox's writes wait on. */
-  readonly txWaits: InboxTxWaits;
+  /** The reads an inbox write reaches, among which each scope's stands while it is followed. */
+  readonly reads: InboxReads;
 }
 
 /** The follows the windows' reads share, each held while read and a while after. */
@@ -116,21 +97,43 @@ export function scopeInboxes(
           return { kind: LIVE_STATE.REFUSED, failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        const rows = decodedLiveRows(
+        const read = yield* itemsRead();
+        let wait: TxWait | undefined;
+        let answered = false;
+        // Note that nothing is told before the read first answers, since a write drawn on no items shows nothing of the scope.
+        const drawn = Effect.suspend(() =>
+          answered
+            ? SubscriptionRef.set(inbox, {
+                kind: LIVE_STATE.STANDING,
+                inbox: { items: read.shown() },
+              })
+            : Effect.void,
+        );
+        yield* dependencies.reads.stand({
+          draw: read.draw,
+          take: read.take,
+          txWait: () => wait,
+          drawn,
+          accountWide: false,
+        });
+        const taken = followTakingRows(
           {
             poll: (after) => seal(true, after),
-            onTxWait: dependencies.txWaits.hook(),
+            onTxWait: (handed) => {
+              wait = handed;
+            },
           },
           first,
           scopeInboxLiveRowsSchema,
+          (rows) =>
+            Effect.suspend(() => {
+              read.items.answer(inboxOfLiveRows(rows));
+              answered = true;
+              return drawn;
+            }),
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(rows, (decoded) => {
-            const items = inboxOfLiveRows(decoded);
-            return Effect.flatMap(cursorOf(items), (cursor) =>
-              SubscriptionRef.set(inbox, { kind: LIVE_STATE.STANDING, inbox: { items, cursor } }),
-            );
-          }).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: LIVE_STATE.BROKEN }))),
+          taken.pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: LIVE_STATE.BROKEN }))),
         );
         return { kind: LIVE_STATE.LIVE, inbox } as const;
       }),
@@ -159,12 +162,12 @@ export function followInbox(
         yield* tell({ failure: standing.failure });
         return standing.failure === AGENT_CALL_FAILURE.NOT_FOUND;
       }
-      // Note that a delivery that moved nothing is told nobody, since the digest is where every item stands.
+      // Note that a delivery that moved nothing is told nobody, every item compared whole, its thread's messages and files among it.
       yield* SubscriptionRef.changes(standing.inbox).pipe(
         Stream.takeWhile((state) => state.kind !== LIVE_STATE.BROKEN),
         Stream.filter((state) => state.kind === LIVE_STATE.STANDING),
         Stream.map((state) => state.inbox),
-        Stream.changesWith((one, other) => one.cursor === other.cursor),
+        Stream.changesWith((one, other) => Equal.equals(one.items, other.items)),
         Stream.runForEach((inbox) => tell({ items: inbox.items })),
       );
       return false;

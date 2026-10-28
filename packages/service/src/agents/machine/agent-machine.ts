@@ -309,6 +309,8 @@ export interface AgentMachineService {
    * takes them, so no line may carry a secret: Codex asks Luke for each
    * access token over HTTPS through the runner's token command
    * (`@luke/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
+   * A machine whose runner reads its lines (`MachineLayout`'s `linesRead`),
+   * as a sandbox's does, is never written to here.
    */
   readonly writeLine: (
     handle: RunnerHandle,

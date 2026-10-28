@@ -1963,17 +1963,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { quiet, ...request } = read;
-        // A quiet start, a group's quick add, opens nothing, and answers once the list carries the task.
+        // A quiet start, a group's quick add or New task set to stay, opens nothing, and answers
+        // once the list carries the task, with its agent's start where it asked for one.
         if (quiet === true) {
           return yield* writtenThenListed(
-            Effect.map(served(client.create(request)), (started) =>
-              started.ok
-                ? ([
-                    carried<TasksStartAnswer>({ planId: started.answer.task.id }),
-                    started.answer.txid,
-                  ] as const)
-                : ([carried<TasksStartAnswer>({ failure: started.failure }), undefined] as const),
-            ),
+            Effect.map(served(client.create(request)), (started) => {
+              if (!started.ok) {
+                const { failure, localAgentRefusal } = started;
+                return [
+                  carried<TasksStartAnswer>(
+                    localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
+                  ),
+                  undefined,
+                ] as const;
+              }
+              const { task, agent, txid } = started.answer;
+              return [
+                carried<TasksStartAnswer>({
+                  planId: task.id,
+                  ...(agent === undefined ? undefined : { agentStart: agent }),
+                }),
+                txid,
+              ] as const;
+            }),
           );
         }
         // Note that a start answers once the task is drawn open rather than once the list carries

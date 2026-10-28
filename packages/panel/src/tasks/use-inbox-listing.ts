@@ -203,7 +203,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
           }),
         ]
       : [];
-  // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
+  // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@luke/host`'s `inbox-collections.ts`).
   const everyChannel: readonly InboxGroup[] = inboxGroups(held, {
     tasks: holdings,
     listed: tasks.tasks,

@@ -27,6 +27,7 @@ import {
   type AgentInboxCloseParams,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
+  type AgentInboxReadAllParams,
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
@@ -171,7 +172,6 @@ import {
   channelsViewSchema,
   channelThreadsViewSchema,
 } from "@luke/features/channel-view";
-import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
@@ -855,7 +855,7 @@ export interface HostOperator {
     params: AgentInboxReadStateParams,
   ): Effect.Effect<AgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<AgentInboxReadAllView>;
+  codingAgentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   codingAgentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
@@ -2199,10 +2199,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentInboxReadAll: (params) =>
       Effect.map(
-        client.call(
-          GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
-          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
-        ),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, {
+          ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
+          itemIds: params.itemIds,
+        }),
         answerOf(agentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentAccountInboxFollow: () =>

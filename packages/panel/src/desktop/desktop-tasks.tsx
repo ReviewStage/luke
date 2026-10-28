@@ -428,7 +428,7 @@ function TaskInboxTab({
   const show = useTaskInboxShow();
   const { act } = useAct();
   const closeItem = useInboxCloser({ act, onHeard: tasks.agents.onRetryList });
-  // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
+  // Note that the task's read draws the window's own marks, answers, and messages already, as the host draws them into it (`@luke/host`'s `inbox-collections.ts`).
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
   ];

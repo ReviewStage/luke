@@ -15,7 +15,6 @@ import {
   type TasklessInboxAgent,
   taskHolder,
 } from "./inbox-model.js";
-import { useSettledReads } from "./inbox-settling.js";
 import { useAgentTaskRead, useMentionedPlace } from "./mentioned-agent-card.js";
 import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
 
@@ -74,7 +73,7 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
     followed === undefined ? [] : [followed],
     windowInboxFollower,
   );
-  const items = useSettledReads(read.items);
+  const { items } = read;
   const tasks = useAppSlice(APP_SLICE.TASKS);
   const inbox = useAppSlice(APP_SLICE.INBOX);
   const held = followed === undefined ? undefined : items.get(followed);

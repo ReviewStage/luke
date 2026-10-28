@@ -27,6 +27,7 @@ import {
   agentInboxCloseParamsSchema,
   agentInboxMessagedViewSchema,
   agentInboxMessageParamsSchema,
+  agentInboxReadAllParamsSchema,
   agentInboxReadAllViewSchema,
   agentInboxReadStateParamsSchema,
   agentInboxReadStateViewSchema,
@@ -34,7 +35,6 @@ import {
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
 } from "@luke/features/agent-view";
-import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -79,7 +79,7 @@ export const agentInboxActsContract = {
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: actProcedure(
     "Could not mark the inbox read on this system.",
   )
-    .input(exactInput(inboxReadAllRequestSchema))
+    .input(exactInput(agentInboxReadAllParamsSchema))
     .output(EffectSchema.toType(agentInboxReadAllViewSchema)),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: actProcedure(
     "Could not read the inbox item's image on this system.",

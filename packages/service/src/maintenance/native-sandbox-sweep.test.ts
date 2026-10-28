@@ -6,6 +6,7 @@ import { Database } from "@luke/database/core/query";
 import { createAgent } from "@luke/database/models/agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
+import { runnerLine } from "@luke/database/schemas/runner-line";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
@@ -70,8 +71,6 @@ function vercel(
   const commands = new Map<string, ReadCommand>();
   const stopped: string[] = [];
   const policies: string[] = [];
-  /** What was written to each command's stdin, by its id. */
-  const stdin = new Map<string, string>();
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
@@ -119,16 +118,6 @@ function vercel(
       }
       return Response.json({ session: { id: sessionId } });
     }
-    const written = /^cmd\/([^/]+)\/stdin$/u.exec(rest);
-    if (written !== null) {
-      const { data } = JSON.parse(String(init.body));
-      const id = written[1] ?? "";
-      // A write with no data is the one that says how far the data went, which adds nothing.
-      if (typeof data === "string") {
-        stdin.set(id, `${stdin.get(id) ?? ""}${Buffer.from(data, "base64").toString()}`);
-      }
-      return Response.json({});
-    }
     const command = /^cmd\/([^/]+)$/u.exec(rest);
     if (command !== null) {
       const found = commands.get(command[1] ?? "");
@@ -146,7 +135,6 @@ function vercel(
     commands,
     stopped,
     policies,
-    stdin,
     pagesListed,
   };
 }
@@ -588,14 +576,19 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           deferred: 0,
           lost: 0,
         });
-        assert.deepEqual(
-          (api.stdin.get("cmd_idle") ?? "")
-            .split("\n")
-            .filter((each) => each !== "")
-            .map((each) => JSON.parse(each)),
-          [{ type: INPUT_LINE.RETIRE }],
-        );
-        assert.equal(api.stdin.get("cmd_recent"), undefined);
+        // The retire is queued for the runner to read, as every line of a sandbox's runner is.
+        const queuedFor = (agentId: string) =>
+          Effect.map(
+            Effect.flatMap(Database, (db) =>
+              db
+                .select({ text: runnerLine.text })
+                .from(runnerLine)
+                .where(eq(runnerLine.agentId, agentId)),
+            ),
+            (rows) => rows.map((row): unknown => JSON.parse(row.text)),
+          );
+        assert.deepEqual(yield* queuedFor(idle.id), [{ type: INPUT_LINE.RETIRE }]);
+        assert.deepEqual(yield* queuedFor(recent.id), []);
         assert.deepEqual([retiring.status, warm.status], ["running", "running"]);
         // The retired runner is no longer told of, so a message sent while it ends relaunches it.
         assert.equal(retiring.tags[RUNNER_TAG.COMMAND], undefined);

@@ -14,6 +14,7 @@ import {
   type AgentInboxAnswerView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
+  type AgentInboxScope,
   type AgentListAnswer,
   INBOX_SCOPE_KIND,
 } from "@luke/features/agent-view";
@@ -33,6 +34,7 @@ import {
   type InboxMessage,
   type InboxReadAsk,
 } from "@luke/features/inbox-wire";
+import { answeredNow, closedNow } from "@luke/features/inbox-writes";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
@@ -367,6 +369,31 @@ function answerAgent(agentId: string) {
   return undefined;
 }
 
+/**
+ * Every held item `drawn` changes, and every followed inbox holding one
+ * pushed so, as the host draws a write into every inbox it follows the
+ * moment it is asked, reading none of them again; none where it leaves an
+ * item alone.
+ */
+function drawnByHost(drawn: (item: InboxItem) => InboxItem | undefined): void {
+  const draw = (kind: AgentInboxScope["kind"], held: Map<string, readonly InboxItem[]>) => {
+    for (const [id, items] of held) {
+      if (!items.some((item) => drawn(item) !== undefined)) continue;
+      const next = items.map((item) => drawn(item) ?? item);
+      held.set(id, next);
+      const scope = { kind, id };
+      if (world.main.isFollowed(scope)) world.main.push(scope, { items: next });
+    }
+  };
+  draw(INBOX_SCOPE_KIND.PLAN, world.inboxes);
+  draw(INBOX_SCOPE_KIND.AGENT, world.agentInboxes);
+}
+
+/** Each held item named marked read or unread, as the host draws a mark. */
+function marked(itemIds: ReadonlySet<string>, unread: boolean): void {
+  drawnByHost((item) => (itemIds.has(item.id) ? { ...item, unread } : undefined));
+}
+
 /** Every followed inbox pushed again as it now stands, as main pushes a change. */
 export function pushAgain(): void {
   for (const taskId of [...world.inboxes.keys(), BILLING.id, INVITES.id]) {
@@ -512,6 +539,8 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;
         world.readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
+        // Note that the host draws a mark into every inbox it follows as it is asked, and takes it back where the service refused it.
+        if (!world.readMarkRefused) marked(new Set([itemId]), unread);
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
           value: world.readMarkRefused
@@ -521,6 +550,7 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_ALL) {
         world.readMarks.push(`all:${request.payload.workspaceId ?? "every workspace"}`);
+        marked(new Set(request.payload.itemIds), false);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { marked: 2 } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
@@ -878,21 +908,10 @@ export function takenCloses(): { itemId: string; revision: number }[] {
       const asked = [...world.inboxes.values()]
         .flat()
         .find((each) => each.id === request.payload.itemId);
-      const shown = asked ?? THRESHOLD;
-      // The close withdraws the ask it leaves open, with no reason, as the service closes it.
-      const thread = (shown.thread ?? []).map((message) =>
-        message.ask?.status === INBOX_ASK_STATUS.OPEN
-          ? { ...message, ask: { ...message.ask, status: INBOX_ASK_STATUS.WITHDRAWN } }
-          : message,
-      );
-      const closed: InboxItem = {
-        ...shown,
-        status: INBOX_STATUS.CLOSED,
-        closedBy: READER,
-        thread,
-        settledAt: 6_000,
-        updatedAt: 6_000,
-      };
+      // The close withdraws the ask it leaves open, with no reason, and reads the item, as the service closes it.
+      const closed = closedNow(asked ?? THRESHOLD, READER, 6_000);
+      // Note that the host lands the item as the service answered it in every inbox it follows before the close answers.
+      drawnByHost((each) => (each.id === closed.id ? closed : undefined));
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: { item: closed, taken: true },
@@ -1238,7 +1257,11 @@ export function heldMessages(
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
-      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: answer(request.payload) });
+      const value = answer(request.payload);
+      // Note that the host lands the item as the service answered it in every inbox it follows before the message answers.
+      if (!("failure" in value))
+        drawnByHost((each) => (each.id === value.item.id ? value.item : undefined));
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
     },
   });
   return sent;
@@ -1332,8 +1355,25 @@ export function gatedAnswers(): GatedAnswers {
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
+      const { itemId, clientKey: key, text, answers } = request.payload;
+      const before = [...world.inboxes.values(), ...world.agentInboxes.values()]
+        .flat()
+        .find((each) => each.id === itemId);
+      // Note that the host draws a reply carrying an answer settled the moment it is sent, and a plain one read.
+      drawnByHost((each) =>
+        each.id !== itemId
+          ? undefined
+          : answers === undefined
+            ? { ...each, unread: false }
+            : answeredNow(each, { key, text, answers }, READER, Date.now()),
+      );
       const reply = Promise.withResolvers<FakeActAnswer>();
-      waiting.push((value) => reply.resolve({ status: FAKE_ANSWER.DONE, value }));
+      waiting.push((value) => {
+        // Note that the host takes back what it drew where the service refused it, and lands the item as the service answered it where it took it.
+        const landed = "failure" in value ? before : value.item;
+        drawnByHost((each) => (each.id === itemId ? landed : undefined));
+        reply.resolve({ status: FAKE_ANSWER.DONE, value });
+      });
       return reply.promise;
     },
   });

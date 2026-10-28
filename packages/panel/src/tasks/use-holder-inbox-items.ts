@@ -10,7 +10,6 @@ import {
   type TasklessInboxAgent,
   taskHolder,
 } from "./inbox-model.js";
-import { useSettledReads } from "./inbox-settling.js";
 import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
 
 /**
@@ -24,10 +23,9 @@ import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.
  * (`use-followed-inboxes.ts`), its items pushed to the window as they
  * change rather than read again. The holder whose item
  * is chosen is followed by its own control besides (`use-task-inbox.ts`),
- * which answers and is drawn in this one's place, and the window's own
- * answers stand over every holder's push until it holds them
- * (`inbox-settling.ts`), so a stale push never brings an answered item
- * back. A holder that could not be read leaves its items as they were last
+ * which answers and is drawn in this one's place; the host draws the
+ * window's own answers and marks into every push the moment they are
+ * asked (`@luke/host`'s `inbox-collections.ts`). A holder that could not be read leaves its items as they were last
  * pushed, or none, and says so, with Try again; one no longer handed here
  * keeps its items as last pushed.
  */
@@ -197,12 +195,9 @@ export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderIn
     }),
     [tasks.items, agents.items, holdings],
   );
-  // Note that the window's own answers and messages stand over a push until it holds them, so a stale push never brings an answered item back.
-  const taskItems = useSettledReads(tasks.items);
-  const agentItems = useSettledReads(agents.items);
   const items = useMemo(
-    () => ({ [INBOX_SCOPE_KIND.PLAN]: taskItems, [INBOX_SCOPE_KIND.AGENT]: agentItems }),
-    [taskItems, agentItems],
+    () => ({ [INBOX_SCOPE_KIND.PLAN]: tasks.items, [INBOX_SCOPE_KIND.AGENT]: agents.items }),
+    [tasks.items, agents.items],
   );
   const failedOf = (holding: InboxHolding) =>
     (holding.kind === INBOX_SCOPE_KIND.PLAN ? tasks : agents).failed.has(holding.id);

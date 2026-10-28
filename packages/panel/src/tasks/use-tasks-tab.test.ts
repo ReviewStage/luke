@@ -32,7 +32,7 @@ import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -496,6 +496,65 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   tab.stand({ shown: false });
   tab.stand({ shown: true });
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
+});
+
+/** A start's payload, read back for whether it asked to open nothing. */
+const readQuiet = Schema.decodeUnknownOption(
+  Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),
+);
+
+test("with Open a task once it starts off, New task starts the task and its agent without opening them, and its toast's Open opens the agent's tab, asking first while a page stands unsaved work", async () => {
+  handState({}, { settings: appSettingsWire(settingsView({ openNewTask: false })) });
+  const agent = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+
+  act(() => tab.control().onNewTask());
+  await act(async () => {
+    await tab.control().newTask.start("", null, tab.control().newTask.workspaceId, {
+      handed: {
+        idempotencyKey: "start-1",
+        prompt: "Dark mode",
+        attachments: [],
+        choice: undefined,
+      },
+    });
+  });
+  const started = {
+    quiet: tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
+      .map((asked) => Option.getOrUndefined(readQuiet(asked.payload))?.quiet),
+    dialog: tab.control().newTask.open,
+    says: newestToastSays(),
+  };
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
+  act(() => (newestToastAction() ?? assert.fail("the toast offers Open")).click());
+  await settle();
+  const whileAsked = opensAsked(tab.payloads);
+  act(() => asked[0]?.());
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+
+  assert.deepEqual(started, { quiet: [true], dialog: false, says: "Task startedOpen" });
+  assert.deepEqual(whileAsked, [], "Open asks first while a page stands unsaved work");
+  assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID]);
+  assert.deepEqual(
+    { tab: tab.control().mainTabs.tab, panel: panelOf(tab).open },
+    { tab: { agent: AGENT_ID }, panel: false },
+    "the task opens on its agent alone, no plan laid over it in a narrow room",
+  );
+  handState({});
 });
 
 /** A line of a file of the task's repository, as a place names it to open. */

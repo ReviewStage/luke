@@ -177,9 +177,10 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
       { answer: { id: itemId, unread: false } },
     );
     // Two of the staged items are unread.
-    assert.deepEqual(fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
-      answer: { marked: 2 },
-    });
+    assert.deepEqual(
+      fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { itemIds: [] }),
+      { answer: { marked: 2 } },
+    );
   }),
 );
 
