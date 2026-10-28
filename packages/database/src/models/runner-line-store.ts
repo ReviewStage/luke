@@ -13,10 +13,11 @@
  * A launch reads its own lines past its cursor, and beside them the
  * agent's message lines an earlier launch was written but never said it
  * took, so a launch that ended before it took a message hands it to the
- * next. A line acknowledged is never handed again, nor is a message line
- * queued longer ago than the window the read names; what an earlier launch
- * was written of any other kind (a stop, a model change, a retire) was that
- * launch's alone, and the next launch drops it as it starts. A queue drops
+ * next, within the window the read names. A line acknowledged is never
+ * handed again; what an earlier launch was written of any other kind (a
+ * stop, a model change, a retire) was that launch's alone, and the next
+ * launch drops it as it starts, with the messages none took and none will
+ * be handed. A launch's own lines stand whatever their age. A queue drops
  * the agent's lines past their expiry, which no launch would be handed any
  * more.
  */
@@ -120,16 +121,15 @@ const findLinesPast = SqlSchema.findAll({
             eq(runnerLine.userId, userId),
             eq(runnerLine.agentId, agentId),
             gt(runnerLine.seq, after),
-            // Note that a message line a launch took is never handed again, and one queued before the
-            // window never at all, whichever launch it was written for, since a launch that applied no
-            // event leaves the next its number.
-            or(
-              isNull(runnerLine.lineId),
-              and(isNull(runnerLine.acceptedAt), gte(runnerLine.createdAt, since)),
-            ),
+            // Note that a message line a launch took is never handed again, whichever launch it was written for.
+            or(isNull(runnerLine.lineId), isNull(runnerLine.acceptedAt)),
             or(
               eq(runnerLine.launch, launch),
-              and(lt(runnerLine.launch, launch), isNotNull(runnerLine.lineId)),
+              and(
+                lt(runnerLine.launch, launch),
+                isNotNull(runnerLine.lineId),
+                gte(runnerLine.createdAt, since),
+              ),
             ),
           ),
         )
@@ -160,8 +160,8 @@ const findWaiting = SqlSchema.findAll({
 });
 
 const deleteHandedOn = SqlSchema.void({
-  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  execute: ({ userId, agentId }) =>
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, since: Schema.Date }),
+  execute: ({ userId, agentId, since }) =>
     Database.use((db) =>
       db
         .delete(runnerLine)
@@ -169,7 +169,27 @@ const deleteHandedOn = SqlSchema.void({
           and(
             eq(runnerLine.userId, userId),
             eq(runnerLine.agentId, agentId),
-            isNull(runnerLine.lineId),
+            or(
+              isNull(runnerLine.lineId),
+              and(isNull(runnerLine.acceptedAt), lt(runnerLine.createdAt, since)),
+            ),
+          ),
+        ),
+    ),
+});
+
+const deleteLine = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, lineId: Schema.String }),
+  execute: ({ userId, agentId, lineId }) =>
+    Database.use((db) =>
+      db
+        .delete(runnerLine)
+        .where(
+          and(
+            eq(runnerLine.userId, userId),
+            eq(runnerLine.agentId, agentId),
+            eq(runnerLine.lineId, lineId),
+            isNull(runnerLine.acceptedAt),
           ),
         ),
     ),
@@ -234,8 +254,8 @@ export function queueRunnerLine(
 /**
  * The account's agent's lines the launch named is handed past its cursor,
  * in order, at most `limit`: those written for the launch, and the message
- * lines an earlier launch was written and never acknowledged; of either, no
- * message line queued before `since`.
+ * lines an earlier launch was written, never acknowledged, and queued since
+ * `since`.
  */
 export function runnerLinesPast(
   userId: string,
@@ -263,12 +283,27 @@ export function runnerLinesWaiting(
  * The account's agent's lines dropped as a new launch starts, its caller
  * holding the agent's runner lease: every line an earlier launch was
  * written that is no message (a stop, a model change, a retire), which was
- * that launch's alone. Note that a launch that applied no event before it
- * ended leaves the next its first event number, so such a line would
- * otherwise read as the new launch's own.
+ * that launch's alone, and every message no launch took that was queued
+ * before `since`, which none will be handed. Note that a launch that
+ * applied no event before it ended leaves the next its first event number,
+ * so such a line would otherwise read as the new launch's own, which a
+ * launch reads whatever its age.
  */
-export function clearRunnerLines(userId: string, agentId: string): RunnerLineEffect<void> {
-  return deleteHandedOn({ userId, agentId });
+export function clearRunnerLines(
+  userId: string,
+  agentId: string,
+  since: Date,
+): RunnerLineEffect<void> {
+  return deleteHandedOn({ userId, agentId, since });
+}
+
+/** The account's agent's message line under its id withdrawn, where no launch took it, as for a launch that failed before its runner could read it, whose send answered failed. */
+export function withdrawRunnerLine(
+  userId: string,
+  agentId: string,
+  lineId: string,
+): RunnerLineEffect<void> {
+  return deleteLine({ userId, agentId, lineId });
 }
 
 /**

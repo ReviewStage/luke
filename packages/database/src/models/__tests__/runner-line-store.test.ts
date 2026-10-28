@@ -16,8 +16,8 @@ import {
 
 /**
  * The lines queued for a cloud agent's runner, over a real dialect: a launch
- * reads its own lines past its cursor in the order they were queued, and a
- * message queued again under its id is queued once; a later launch is handed
+ * reads its own lines past its cursor in the order they were queued, however
+ * old, and a message queued again under its id is queued once; a later launch is handed
  * the message lines an earlier one never acknowledged, within the window it
  * names, and nothing else of that launch's, even under the same first event
  * number once the new launch dropped them; and no account queues for,
@@ -78,6 +78,8 @@ it.layer(getTestDB())("the runner line store", (it) => {
         launch: LAUNCH.FIRST,
         text: '{"type":"model"}',
       });
+      // Note that a launch's own lines stand past the window an earlier launch's are handed in.
+      yield* TestClock.adjust(Duration.hours(2));
       assert.deepEqual(yield* textsPast(userId, agentId, LAUNCH.FIRST), [
         '{"type":"message","n":1}',
         '{"type":"model"}',
@@ -131,7 +133,12 @@ it.layer(getTestDB())("the runner line store", (it) => {
         yield* queue("stop");
         yield* queue("untaken", randomUUID());
         yield* acceptRunnerLine(userId, agentId, taken);
-        yield* clearRunnerLines(userId, agentId);
+        const now = yield* Clock.currentTimeMillis;
+        yield* clearRunnerLines(
+          userId,
+          agentId,
+          new Date(now - Duration.toMillis(Duration.hours(1))),
+        );
         yield* queue("first of the next");
         assert.deepEqual(yield* textsPast(userId, agentId, LAUNCH.FIRST), [
           "untaken",
