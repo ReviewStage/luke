@@ -204,7 +204,7 @@ export const expectTopicsFire = <A, E, R>(
       const listener = yield* SyncListener;
       const sql = yield* SqlClient.SqlClient;
       const fence = randomUUID();
-      const heard = yield* Effect.forkScoped(heardUntil(yield* listener.listen, fence));
+      const heard = yield* Effect.forkScoped(heardUntil((yield* listener.listen).payloads, fence));
       const value = yield* write;
       yield* sql`select pg_notify(${SYNC_CHANNEL}, ${yield* encodeNotification({ h: fence })})`;
       const changes = (yield* Fiber.join(heard)).flatMap((notification) =>

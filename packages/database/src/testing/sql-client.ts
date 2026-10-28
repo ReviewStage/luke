@@ -8,7 +8,7 @@ import type { SqlError } from "effect/sql/SqlError";
 import { runWebMigrations } from "../core/migrator.js";
 import { Database, type DatabaseServices } from "../core/query.js";
 import { sqlClientOverUrl } from "../core/sql-client.js";
-import { SyncListener, syncListenerOverUrl } from "../sync/listener.js";
+import { SyncListener, syncListenerOverUrl, syncNotifyOver } from "../sync/listener.js";
 import { SYNC_CHANNEL } from "../sync/notification.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
@@ -121,12 +121,19 @@ export async function openMigratedPglite(): Promise<PGlite> {
   return first;
 }
 
-/** A listener on the test's own PGlite, which `@effect/sql-pglite` listens on in process. */
+/**
+ * A listener on the test's own PGlite, which `@effect/sql-pglite` listens on
+ * in process. PGlite is one connection, so a notification through its client
+ * is one on the listening connection.
+ */
 export const syncListenerOverPglite: Layer.Layer<SyncListener, never, PgliteClient.PgliteClient> =
   Layer.effect(
     SyncListener,
     Effect.map(PgliteClient.PgliteClient, (client) => ({
-      listen: Effect.map(client.listen(SYNC_CHANNEL), (payloads) => Stream.fromQueue(payloads)),
+      listen: Effect.map(client.listen(SYNC_CHANNEL), (payloads) => ({
+        payloads: Stream.fromQueue(payloads),
+        notify: syncNotifyOver((statement, params) => client.unsafe(statement, params)),
+      })),
     })),
   );
 
