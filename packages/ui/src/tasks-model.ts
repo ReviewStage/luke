@@ -194,12 +194,8 @@ export function repositoryChangeFailureNote(failure: RepositoryCallFailure): str
   return REPOSITORY_CHANGE_FAILURE_NOTES[failure];
 }
 
-/** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
-const LINEAR_START_FAILED_NOTE =
-  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it.";
-
-/** What a start from one of the workspace's issues says when the issue is gone, or is another workspace's. */
-const ISSUE_START_FAILED_NOTE = "That issue is gone, or it belongs to another workspace.";
+/** What a start says when the workspace it named is gone, or no longer the account's. */
+const WORKSPACE_START_FAILED_NOTE = "That workspace is gone, or you're no longer a member of it.";
 
 /** What a start says when the device it named for the task's agents would not take them, where the page knows no more of why. */
 const DEVICE_START_FAILED_NOTE =
@@ -207,8 +203,7 @@ const DEVICE_START_FAILED_NOTE =
 
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
-  if (failure === TASK_CALL_FAILURE.LINEAR_UNAVAILABLE) return LINEAR_START_FAILED_NOTE;
-  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return ISSUE_START_FAILED_NOTE;
+  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return WORKSPACE_START_FAILED_NOTE;
   if (failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED) return DEVICE_START_FAILED_NOTE;
   return repositoryFailureNote(failure);
 }

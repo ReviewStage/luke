@@ -1,3 +1,4 @@
+import { WireValueSchema } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   CHECK_SUMMARY,
@@ -13,16 +14,9 @@ import {
 } from "./coding-agent-wire.js";
 import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { linearIssueIdSchema } from "./linear-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
-import {
-  sameIssueChoice,
-  type TaskIssueChoice,
-  taskIssueChoiceSchema,
-  taskIssueTagSchema,
-} from "./task-issue-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
@@ -75,8 +69,6 @@ export const TASK_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
   /** The most characters a task's brief may spell: as many as a coding agent's prompt (`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
-  /** The most external issues one task may link (`task-issue-wire.ts`); a link past it is refused, and nothing is written. */
-  MAX_ISSUES: 10,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */
@@ -223,28 +215,10 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
   return request.agent === undefined || request.planning !== true;
 }
 
-/** Whether a start names its issues one way and each once: never `linearIssueId` beside `issues`, and no issue twice among them. */
-function issuesNamedOnce(request: {
-  linearIssueId?: string;
-  issues?: readonly TaskIssueChoice[];
-}): boolean {
-  const issues = request.issues ?? [];
-  if (request.linearIssueId !== undefined && issues.length > 0) return false;
-  return issues.every((issue, index) =>
-    issues.slice(index + 1).every((later) => !sameIssueChoice(issue, later)),
-  );
-}
-
 /**
  * Starting a plan (POST): its name where one is given, the repository it is
  * about where one is chosen, the workspace it starts in where one is named,
- * the account's first workspace where none is, and the Linear issue it
- * starts from where one was picked, which the service reads through the
- * workspace's own Linear connection (`linear-wire.ts`), or the issues it
- * links from the start, Linear's and GitHub's, up to `TASK_BOUNDS.MAX_ISSUES`,
- * each named once and each with its relation (`task-issue-wire.ts`), a
- * GitHub issue only of the repository the task is about, which the service
- * reads itself, refusing the start where it reads none; the document starts
+ * and the account's first workspace where none is; the document starts
  * empty, and `planning` false is a task started without its planning phase,
  * whose window opens no call on it. A name left out, or nothing but whitespace, starts the plan as
  * `UNTITLED_PLAN_NAME` until it is renamed. An `agent` starts a coding
@@ -261,6 +235,8 @@ function issuesNamedOnce(request: {
  * unless `assigneeId` names a member of its workspace. Its agents run in the
  * cloud unless `runsOn` names one of the starter's devices, kept on the task
  * before the agent the start asks for starts, so that agent runs there too.
+ * A released desktop may still send `linearIssueId` or `issues`, from when a
+ * task could link issues, which are accepted and ignored.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -268,12 +244,8 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   ),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
-  linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
-  issues: EffectSchema.optionalKey(
-    EffectSchema.Array(taskIssueChoiceSchema).check(
-      EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES),
-    ),
-  ),
+  linearIssueId: EffectSchema.optionalKey(WireValueSchema),
+  issues: EffectSchema.optionalKey(WireValueSchema),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
   runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
@@ -283,7 +255,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(issuesNamedOnce));
+}).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
@@ -622,18 +594,13 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
 
 /**
- * One row of the task list: everything but the document, what its coding
- * agents are doing, which only the list answers, and only for a task with
- * an agent, and the issues it links, oldest linked first, which only the
- * list answers too, and only for a task that links one.
+ * One row of the task list: everything but the document, and what its
+ * coding agents are doing, which only the list answers, and only for a task
+ * with an agent.
  */
 export const taskSummarySchema = EffectSchema.Struct({
   ...taskSummaryFields,
   agents: EffectSchema.optionalKey(taskAgentsSummarySchema),
-  /** Absent for a task that links no issue, and from a service before the list named them. */
-  issues: EffectSchema.optionalKey(
-    EffectSchema.Array(taskIssueTagSchema).check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES)),
-  ),
 });
 
 export type TaskSummary = typeof taskSummarySchema.Type;

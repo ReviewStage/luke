@@ -1069,7 +1069,7 @@ service recorded it. Settings › Account › "Share usage data" turns these
 counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
-a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
+a task or a workspace made (with where it was started from), a coding agent started (with the model and effort
 it runs on, and whether an automation started it), a pull request an agent
 opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
 answered, an issue filed, an automation made (with
