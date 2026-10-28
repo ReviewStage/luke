@@ -325,7 +325,7 @@
   "src/tasks/use-agent-transcript.test.ts": 74,
   "src/tasks/use-channels.test.ts": 58,
   "src/tasks/use-coding-agents.test.ts": 591,
-  "src/tasks/use-inbox-items.test.ts": 22,
+  "src/tasks/use-holder-inbox-items.test.ts": 22,
   "src/tasks/use-inbox-read-marks.test.ts": 224,
   "src/tasks/use-known-names.test.ts": 49,
   "src/tasks/use-open-link.test.ts": 95,

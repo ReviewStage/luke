@@ -25,6 +25,7 @@ import { INBOX_MISSING } from "./inbox-ask-words.js";
 import {
   ANSWER_TONE,
   acknowledgedOnOpen,
+  agentGroups,
   asksNod,
   awaitsNod,
   CODE_READ,
@@ -37,6 +38,7 @@ import {
   holderName,
   INBOX_DIRECTION,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   INBOX_LINE,
   INBOX_MEDIA,
   INBOX_SHOW,
@@ -71,7 +73,6 @@ import {
   sentStamp,
   shownTicks,
   taskHolder,
-  tasklessGroups,
   waitsOnReader,
   withChoice,
   withDoPress,
@@ -436,7 +437,7 @@ const TASKS = [
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   if (view.grouping === INBOX_GROUPING.TASK) {
     return view.groups.map(
-      ({ holder, items }) => [holderName(holder), items.map((each) => each.id)] as const,
+      ({ holder, items }) => [holderName(holder), items.map(({ item }) => item.id)] as const,
     );
   }
   if (view.grouping === INBOX_GROUPING.PERSON) {
@@ -1086,6 +1087,7 @@ function waitingTaskless(
     agentId,
     title: "Quarantine the flaky test?",
     postedAt: 1,
+    updatedAt: 1,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "automation-sweep",
@@ -1096,7 +1098,7 @@ function waitingTaskless(
   };
 }
 
-test("the items of agents with no plan stand under the automation that started them, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
+test("each item of an agent with no plan is held by its agent, and a list grouped by task stands each agent under the automation that started it, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
   // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
@@ -1105,6 +1107,7 @@ test("the items of agents with no plan stand under the automation that started t
   const waiting = [
     waitingTaskless("agent-1"),
     waitingTaskless("agent-2"),
+    // Started by hand, by no automation.
     waitingTaskless("agent-3", { automationId: null, automationName: null }),
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
@@ -1116,29 +1119,44 @@ test("the items of agents with no plan stand under the automation that started t
     }),
   ];
   const read = new Map([
-    ["agent-1", [item({ id: "one", agentId: "agent-1" })]],
+    ["agent-1", [item({ id: "one", agentId: "agent-1", updatedAt: 60 })]],
     [
       "agent-2",
       [
-        item({ id: "two", agentId: "agent-2" }),
-        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED }),
+        item({ id: "two", agentId: "agent-2", updatedAt: 50 }),
+        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED, updatedAt: 10 }),
       ],
     ],
-    ["agent-3", [item({ id: "three", agentId: "agent-3" })]],
-    ["agent-4", [item({ id: "four", agentId: "agent-4" })]],
-    ["agent-6", [item({ id: "six", agentId: "agent-6" })]],
+    ["agent-3", [item({ id: "three", agentId: "agent-3", updatedAt: 40 })]],
+    ["agent-4", [item({ id: "four", agentId: "agent-4", updatedAt: 30 })]],
+    ["agent-5", [item({ id: "five", agentId: "agent-5", updatedAt: 25 })]],
+    ["agent-6", [item({ id: "six", agentId: "agent-6", updatedAt: 20 })]],
   ]);
+  const view = inboxList(agentGroups(waiting, read, "workspace-acme"), {
+    grouping: INBOX_GROUPING.TASK,
+    show: INBOX_SHOW.ALL,
+    chosen: undefined,
+    readerId: undefined,
+  });
 
+  assert.deepEqual(drawn(view), [
+    ["Nightly flake sweep", ["one", "two", "settled"]],
+    ["Other agents", ["three"]],
+    ["Old", ["five"]],
+    ["Luke", ["six"]],
+  ]);
   assert.deepEqual(
-    tasklessGroups(waiting, read, "workspace-acme").map(({ holder, items }) => [
-      holderName(holder),
-      items.map((each) => each.id),
+    listedItems(view).map(({ holder, item }) => [
+      item.id,
+      holder.kind === INBOX_HOLDER.AGENT ? holder.agent.agentId : undefined,
     ]),
     [
-      ["Nightly flake sweep", ["one", "two", "settled"]],
-      ["Other agents", ["three"]],
-      ["Old", []],
-      ["Luke", ["six"]],
+      ["one", "agent-1"],
+      ["two", "agent-2"],
+      ["settled", "agent-2"],
+      ["three", "agent-3"],
+      ["five", "agent-5"],
+      ["six", "agent-6"],
     ],
   );
 });

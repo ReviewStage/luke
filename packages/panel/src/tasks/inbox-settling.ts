@@ -20,7 +20,7 @@ import { holdsAsk } from "./inbox-model.js";
  * The window draws an item from several reads at once: the chosen task's
  * own held read (`use-task-inbox.ts`), every listed task's and every agent
  * with no task's read of the window's Inbox and of Home
- * (`use-inbox-items.ts`, `use-taskless-inbox-items.ts`), and main's read of
+ * (`use-holder-inbox-items.ts`), and main's read of
  * what waits across the account, which the sidebar counts. Each catches up
  * with an answer in its own time, so an answer the window held in one read
  * alone came back from another, stale, read the moment the window drew from

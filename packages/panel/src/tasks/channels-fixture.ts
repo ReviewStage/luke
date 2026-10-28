@@ -1018,12 +1018,13 @@ function waiting(): readonly AppInboxTask[] {
 function taskless(): readonly AppInboxTasklessItem[] {
   return strayItems()
     .filter((each) => each.status === INBOX_STATUS.OPEN)
-    .map(({ id, agentId, title, postedAt }) => ({
+    .map(({ id, agentId, title, postedAt, updatedAt }) => ({
       id,
       agentId,
       agentKind: CODING_AGENT_KIND.OPERATOR,
       title,
       postedAt,
+      updatedAt,
       ...channelOf(id),
       agentTitle: STRAY.agentTitle,
       agentModel: MODEL,

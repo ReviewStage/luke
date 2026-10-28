@@ -146,7 +146,7 @@ import {
 } from "./inbox-item-parts.js";
 import {
   EVERYONES,
-  holderKey,
+  holderAutomationId,
   holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
@@ -623,10 +623,11 @@ function groupHead(folded: boolean, count: number, onToggle: () => void) {
 }
 
 /**
- * A holder's group header: a task's status's mark and name; an
- * automation's clock tile, wearing how its last run went and hanging its
- * card where the window reads the automation; and the automation glyph for
- * the agents no automation names, since that group names no one actor.
+ * A holder's group header: a task's status's mark and name; for the agents
+ * with no task, their automation's clock tile, wearing how its last run
+ * went and hanging its card where the window reads the automation, Luke's
+ * face for the member's operator, and the automation glyph for the agents
+ * no automation names, since that group names no one actor.
  * A press folds the group, which then fades its rows out, as every group
  * header's does.
  */
@@ -643,10 +644,10 @@ function HolderHeader({
   onToggle: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
+  const automationId = holderAutomationId(holder);
+  const known = useAutomation(automationId ?? undefined);
   const shared = { ...groupHead(folded, count, onToggle), children };
+  const name = holderName(holder);
   if (holder.kind === INBOX_HOLDER.TASK) {
     const glyph = <PlanGlyph status={holder.task.status} />;
     const fallback = (
@@ -663,17 +664,17 @@ function HolderHeader({
       />
     );
   }
-  if (holder.automationId === null) {
-    return <GroupHeader glyph={<HolderGlyph holder={holder} />} label={holder.name} {...shared} />;
+  if (automationId === null) {
+    return <GroupHeader glyph={<HolderGlyph holder={holder} />} label={name} {...shared} />;
   }
   const actor =
     known === undefined
-      ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
+      ? { kind: ACTOR_KIND.AUTOMATION, name, state: ACTOR_STATE.REST }
       : automationActor(known.automation);
   return (
     <GroupHeader
       glyph={<ActorMark actor={actor} />}
-      label={holder.name}
+      label={name}
       card={known === undefined ? undefined : <AutomationCard {...known} />}
       {...shared}
     />
@@ -1502,15 +1503,9 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
 /** The items whose rows the list draws, in their order: every item listed but those of a group folded. */
 function drawnItems(view: InboxListView, folded: (key: string) => boolean): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  if (view.grouping === INBOX_GROUPING.PERSON) {
-    return view.groups.flatMap(({ key, items }) => (folded(key) ? [] : items));
-  }
-  if (view.grouping === INBOX_GROUPING.STATUS) {
-    return view.groups.flatMap(({ key, items }) => (folded(key) ? [] : items));
-  }
-  return view.groups.flatMap(({ holder, items }) =>
-    folded(holderKey(holder)) ? [] : items.map((item) => ({ holder, item })),
-  );
+  const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
+    view.groups;
+  return keyed.flatMap(({ key, items }) => (folded(key) ? [] : items));
 }
 
 /** A group's key, by which it leaves the list (`ListMotion`). */
@@ -1708,19 +1703,18 @@ export function InboxList({
         <InboxGroups
           key={view.grouping}
           groups={view.groups}
-          keyOf={({ holder }) => holderKey(holder)}
-          group={({ holder, items }) => {
-            const key = holderKey(holder);
+          keyOf={groupKey}
+          group={({ key, holder, items }) => {
             const folded = head.view?.folds.folded(key) ?? false;
             return (
               <div key={key} className="sidebar-repository" {...motionKey(key)}>
                 <HolderHeader
                   holder={holder}
                   folded={folded}
-                  count={needingYou(items.map((item) => ({ holder, item })))}
+                  count={needingYou(items)}
                   onToggle={() => head.view?.folds.toggle(key)}
                 >
-                  <InboxRows items={items.map((item) => ({ holder, item }))} row={row} />
+                  <InboxRows items={items} row={row} />
                 </HolderHeader>
               </div>
             );
