@@ -57,7 +57,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -547,7 +547,9 @@ export interface StoreWriter {
    * dispatch claim (`dispatch-claim.ts`) with no transaction open, after
    * the row is written with the claim, so the take of the line into the
    * turn eve opens on it finds the row standing; and a dispatch that
-   * answers nothing withdraws the row. No lock is held while eve answers,
+   * answers nothing withdraws the row, which every read then leaves out
+   * unless a turn eve hands the line to after all takes it, and which a
+   * send repeated under its key writes afresh. No lock is held while eve answers,
    * so the journal of a turn under way, and every other write of the
    * conversation, lands meanwhile. The row stands under the client's key
    * for the send (`sentLineId`), and a line already standing under that key
@@ -577,7 +579,9 @@ export interface StoreWriter {
    * arrived rather than ahead of the turn. Where the receipt also carried a
    * spoken ask (`beside`), the run is the one whose words stand whole among
    * those received. A take by client id takes the one awaiting row written
-   * under it. Answers the rows taken, or none where no such run awaits, which
+   * under it. A withdrawn line is taken as any other, standing again with
+   * what carried it and who sent it, where the lines eve did take match
+   * nothing. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -2280,11 +2284,17 @@ const findAwaitingLines = SqlSchema.findAll({
     id: Schema.String,
     clientId: Schema.String,
     parts: StoredPartsColumnSchema,
+    withdrawn: Schema.Boolean,
   }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id, clientId: messages.clientId, parts: messages.parts })
+        .select({
+          id: messages.id,
+          clientId: messages.clientId,
+          parts: messages.parts,
+          withdrawn: sql<boolean>`${messages.withdrawnAt} is not null`,
+        })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
         .where(
@@ -2302,7 +2312,7 @@ const findAwaitingLines = SqlSchema.findAll({
     ),
 });
 
-/** A line taken by the turn that received it: the turn on the row in place, with the steps it had begun before it, its revision moved. */
+/** A line taken by the turn that received it: the turn on the row in place, with the steps it had begun before it, its revision moved, and a withdrawn line standing again. */
 const giveLineToTurn = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
@@ -2320,6 +2330,7 @@ const giveLineToTurn = SqlSchema.void({
           turnId: row.turnId,
           takenAfterStep: row.takenAfterStep,
           revision: landedRevision(bumped),
+          withdrawnAt: null,
         })
         .where(eq(messages.id, row.id)),
     );
@@ -2444,6 +2455,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* new DispatchClaimHeld();
   }
   const clientId = sentLineId(line.clientKey);
+  yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
   // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
   if (Option.isSome(standing)) {
@@ -2467,14 +2479,23 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed({ id, txid, claim });
 });
 
-/** Deletes the line its runtime never took, unless a turn took it all the same, answering whether it went. */
-const deleteUntakenLine = SqlSchema.findAll({
-  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
+/**
+ * Stamps the line its runtime never took withdrawn, unless a turn took it
+ * all the same, answering whether it was. Note that the row is kept rather
+ * than deleted, because a runtime that took the line past the hand-over's
+ * deadline, or before a record that failed, still hands it to a turn, which
+ * takes this row with what carried it and who sent it (`takeAwaitingLine`);
+ * the maintenance sweep deletes it once no turn can (`abandoned-turns.ts`'s
+ * `purgeWithdrawnLines`).
+ */
+const withdrawUntakenLine = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String, now: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ conversationId, id }) =>
+  execute: ({ conversationId, id, now }) =>
     Database.use((db) =>
       db
-        .delete(messages)
+        .update(messages)
+        .set({ withdrawnAt: now })
         .where(
           and(
             eq(messages.conversationId, conversationId),
@@ -2487,9 +2508,31 @@ const deleteUntakenLine = SqlSchema.findAll({
 });
 
 /**
+ * Deletes the withdrawn line under a send's key, which a retry of that send
+ * writes afresh at the end of the conversation, as the send it now is,
+ * rather than handing over a row standing among lines sent since.
+ */
+const deleteWithdrawnLine = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
+  execute: ({ conversationId, clientId }) =>
+    Database.use((db) =>
+      db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.clientId, clientId),
+            isNull(messages.turnId),
+            isNotNull(messages.withdrawnAt),
+          ),
+        ),
+    ),
+});
+
+/**
  * Counts the conversation's journal revision up and stamps it as the one a
  * reader holding an older cursor reads the transcript afresh from, as a
- * rewind does, since a row it may already have drawn is gone.
+ * rewind does, since a row it may already have drawn now reads nowhere.
  */
 const markLineWithdrawn = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -2523,9 +2566,10 @@ function recordedLine(
         Effect.gen(function* () {
           yield* releaseDispatchClaim(target.conversationId, claimed.claim);
           if (taken) return;
-          const removed = yield* deleteUntakenLine({
+          const removed = yield* withdrawUntakenLine({
             conversationId: target.conversationId,
             id: claimed.id,
+            now: yield* DateTime.nowAsDate,
           });
           if (removed.length > 0)
             yield* markLineWithdrawn({ conversationId: target.conversationId });
@@ -2566,12 +2610,17 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, StoreFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  const run =
+  const runAmong = (lines: typeof awaiting) =>
     "clientId" in take
-      ? awaiting.filter((line) => line.clientId === take.clientId)
+      ? lines.filter((line) => line.clientId === take.clientId)
       : take.beside
-        ? coalescedRunWithin(awaiting, take.text)
-        : coalescedRun(awaiting, take.text);
+        ? coalescedRunWithin(lines, take.text)
+        : coalescedRun(lines, take.text);
+  // Note that the lines whose hand-over answered nothing are matched only where those it took match
+  // nothing, because eve heard each of them only where its answer was lost, and one standing among
+  // the others would part a run of lines eve did coalesce.
+  const standing = runAmong(awaiting.filter((line) => !line.withdrawn));
+  const run = standing.length > 0 ? standing : runAmong(awaiting);
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({

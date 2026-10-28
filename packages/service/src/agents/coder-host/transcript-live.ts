@@ -146,6 +146,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
       and(
         eq(windowMessage.conversationId, target.conversationId),
         eq(windowMessage.userId, target.userId),
+        isNull(windowMessage.withdrawnAt),
       ),
     )
     .orderBy(desc(windowMessage.seq))
@@ -265,6 +266,8 @@ export function transcriptWindowLiveStatements(
       and(
         eq(messages.conversationId, target.conversationId),
         eq(messages.userId, target.userId),
+        // A line its hand-over withdrew reads nowhere until a turn takes it (`message-reads.ts`).
+        isNull(messages.withdrawnAt),
         reached,
       ),
     )
@@ -321,7 +324,14 @@ export function transcriptLiveStatements(
       seq: asNumber(sql`coalesce(max(${messages.seq}), 0)`).as("seq"),
     })
     .from(messages)
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.userId, userId), reached));
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        isNull(messages.withdrawnAt),
+        reached,
+      ),
+    );
   const run = queryBuilder
     .select({
       ...liveSelection({ status: turns.status }),

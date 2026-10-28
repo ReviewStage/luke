@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
+import { purgeWithdrawnLines, sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
 import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
@@ -133,6 +133,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepOperatorWakes: (now) =>
       sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>

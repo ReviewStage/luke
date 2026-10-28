@@ -234,6 +234,17 @@ export const messages = pgTable(
      * kept.
      */
     takenAfterStep: integer("taken_after_step"),
+    /**
+     * When the hand-over of a developer's line to a coding agent answered
+     * that the runtime did not take it; null on every other row, and on a
+     * withdrawn line a turn took all the same. Note that the row is kept
+     * rather than deleted, because a hand-over past its deadline, or whose
+     * record failed after the runtime took it, may still reach a turn, and
+     * the row is the one record of what the line says carried it and who
+     * sent it. Every read leaves such a row out until a turn takes it, and
+     * the maintenance sweep deletes it once no turn can.
+     */
+    withdrawnAt: timestamptz("withdrawn_at"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),
@@ -250,6 +261,8 @@ export const messages = pgTable(
     // The foreign key's check on every turn deleted, by the purge, an agent's delete, or a rewind,
     // finds the messages that turn wrote, which a scan of the table would read through to the last.
     index("messages_turn").on(table.turnId).where(sql`${table.turnId} is not null`),
+    // The sweep finds the withdrawn lines no turn took in time, a handful among every row.
+    index("messages_withdrawn").on(table.withdrawnAt).where(sql`${table.withdrawnAt} is not null`),
   ],
 );
 
