@@ -1,8 +1,8 @@
 /**
- * call-controls.tsx -- a call's controls: its two mutes, Video on or off, the one red End call, the bar that lays them out beside the call's status, and the status a message box's foot shows while a call stands.
+ * call-controls.tsx -- a call's controls: its two mutes, the one red End call, the bar that lays them out beside the call's status, and the status a message box's foot shows while a call stands.
  *
- * Every place a call is steered from draws these, so a mute, the video's
- * toggle, and the way to hang up wear the same words, glyphs, and colours
+ * Every place a call is steered from draws these, so a mute and the way to
+ * hang up wear the same words, glyphs, and colours
  * wherever they stand. Each takes what it shows and the press it hands back,
  * and decides nothing: whether a call stands, what its status says, and
  * what a press asks of the voice are the owner's. End call is the one red
@@ -18,8 +18,6 @@ import {
   MicrophoneOffIcon,
   SpeakerIcon,
   SpeakerOffIcon,
-  VideoIcon,
-  VideoOffIcon,
 } from "../../face/glyphs.js";
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { STATUS_TONE } from "../../status-tone.js";
@@ -48,8 +46,6 @@ export const CALL_CONTROL_LABEL = {
   UNMUTE_MICROPHONE: UNMUTE_MICROPHONE_LABEL,
   MUTE_SPEAKER: "Mute speaker",
   UNMUTE_SPEAKER: "Unmute speaker",
-  VIDEO_OFF: "Turn video off",
-  VIDEO_ON: "Turn video on",
   END_CALL: "End call",
 } as const;
 
@@ -220,7 +216,7 @@ const BACKEND_ACTION = "luke-call-backend-action font-mono";
 /**
  * End call stands apart from the two mutes, so muting never hangs up; at a
  * call card's narrowest the controls close up to a card head's own step, so
- * its mutes and End call stand under its Video on and its way back.
+ * its mutes and End call stand under its way back.
  */
 const CONTROLS =
   "luke-call-controls ml-auto flex flex-none items-center gap-control-gap @max-[280px]/luke-call-bar:gap-tight-gap";
@@ -284,73 +280,6 @@ export function CallLive(props: CallLiveProps): React.JSX.Element {
           className="luke-call-live-time"
         />
       ) : null}
-    </span>
-  );
-}
-
-/**
- * Where Video on or off stands, which sets its shape and how it is named on
- * hover. Over a call's video it is round, its disc the round ground itself,
- * and named by the system's own hint, since the floating window is too small
- * to hold a tooltip. In an agent's composer row it is square beside the
- * row's square mutes, and named by the app's tooltip as they are.
- */
-export const VIDEO_TOGGLE_LOOK = {
-  CALL: "call",
-  COMPOSER_ROW: "composer-row",
-} as const;
-
-export type VideoToggleLook = (typeof VIDEO_TOGGLE_LOOK)[keyof typeof VIDEO_TOGGLE_LOOK];
-
-/** How each look names the toggle on hover: the system's own hint, or the app's tooltip. */
-const VIDEO_TOGGLE_HINT = {
-  SYSTEM: "system",
-  TOOLTIP: "tooltip",
-} as const;
-
-/** Each look's shape and hint. */
-const VIDEO_TOGGLE_LOOKS = {
-  [VIDEO_TOGGLE_LOOK.CALL]: { shape: BUTTON_SHAPE.ROUND, hint: VIDEO_TOGGLE_HINT.SYSTEM },
-  [VIDEO_TOGGLE_LOOK.COMPOSER_ROW]: {
-    shape: BUTTON_SHAPE.SQUARE,
-    hint: VIDEO_TOGGLE_HINT.TOOLTIP,
-  },
-} as const satisfies Record<
-  VideoToggleLook,
-  { shape: ButtonShape; hint: (typeof VIDEO_TOGGLE_HINT)[keyof typeof VIDEO_TOGGLE_HINT] }
->;
-
-/**
- * Video off or Video on: one button whose glyph says whether the video is
- * up, as a mute's says whether it is on, and whose name says what the press
- * will do. Its `look` says where it stands (`VIDEO_TOGGLE_LOOK`): round and
- * named by the system's hint on a call, or square and named by a tooltip in
- * an agent's composer row.
- */
-export function VideoToggle({
-  on,
-  onSetVideo,
-  look = VIDEO_TOGGLE_LOOK.CALL,
-}: {
-  on: boolean;
-  onSetVideo: (on: boolean) => void;
-  look?: VideoToggleLook | undefined;
-}): React.JSX.Element {
-  const label = on ? CALL_CONTROL_LABEL.VIDEO_OFF : CALL_CONTROL_LABEL.VIDEO_ON;
-  const { shape, hint } = VIDEO_TOGGLE_LOOKS[look];
-  const toggle = (
-    <IconButton
-      icon={on ? <VideoIcon /> : <VideoOffIcon />}
-      label={label}
-      shape={shape}
-      onClick={() => onSetVideo(!on)}
-    />
-  );
-  return hint === VIDEO_TOGGLE_HINT.TOOLTIP ? (
-    <Tooltip label={label}>{toggle}</Tooltip>
-  ) : (
-    <span className="luke-call-video-toggle flex" title={label}>
-      {toggle}
     </span>
   );
 }

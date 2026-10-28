@@ -120,18 +120,8 @@ html.call-window #root {
   -webkit-app-region: drag;
 }
 
-/* The avatar's tile in the floating window, picture-in-picture over the
-   card, at a height of its own rather than its aspect's: main grows the
-   window by exactly this and the card's gap under it (`CALL_WINDOW_BOUNDS`
-   in `call-window-presence.ts`), so the two must move together. 125px is
-   16:9 at the card's 222px inside. The tile is held by too, as the rest of
-   the card is, and its Video off answers its own press. */
-.call-card[data-surface="window"] {
-  --luke-call-video-height: 125px;
-}
-
-/* Moved under a still pointer, the buttons, and the system's hints the
-   video toggle and the way back carry around their buttons, take no hover
+/* Moved under a still pointer, the buttons, and the system's hint the way
+   back carries around its button, take no hover
    until the pointer itself moves (`window-pointer.ts`). */
 html.call-window[data-pointer-stale="true"] .call-card :is(button, [title]) {
   pointer-events: none;

@@ -181,8 +181,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       config.report(`Voice window replaced: ${reason}`);
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
-      // view at all, and keeps the avatar, which the host and the panel say.
-      state.update({ voice: voiceWindowGone(state.snapshot().voice), callTranscript: undefined });
+      // view at all.
+      state.update({ voice: voiceWindowGone(), callTranscript: undefined });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {
@@ -190,7 +190,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // Nothing stands the window back up this run, so every panel says voice
       // is unavailable where it offers a call, rather than a press reaching
       // a window that is not there.
-      state.update({ voice: voiceWindowGaveUp(state.snapshot().voice), callTranscript: undefined });
+      state.update({ voice: voiceWindowGaveUp(), callTranscript: undefined });
       panels.setVoiceExchange(false);
     },
   });
@@ -260,8 +260,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice && !voice.isDestroyed()) send(voice.webContents);
     const call = callWindow.current();
     if (call) send(call.webContents);
-    // The call window follows the document it draws, so it stands, goes, and
-    // grows for the avatar on the same version every window is told.
+    // The call window follows the document it draws, so it stands and goes on
+    // the same version every window is told.
     callPresence.voiceChanged(state.snapshot().voice);
   }
 

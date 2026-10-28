@@ -231,8 +231,8 @@ interface PlatformHost {
  * picture, a download, focus, the contact mail, feedback, and an agent's Terminal tab, its shells' ports posted to the
  * page. Every other platform kind is refused in its own words, since a page
  * cannot carry it yet: the updater, the microphone, the system's
- * notification settings, the Mac's own terminal, the voice, the call
- * window, and the avatar.
+ * notification settings, the Mac's own terminal, the voice, and the call
+ * window.
  */
 function platformProcedures(
   http: HttpClient.HttpClient,

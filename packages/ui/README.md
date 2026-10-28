@@ -142,9 +142,6 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   unset), and a component's own glyph slot sets it for the glyph an app
   hands it, a tab's or a tab card's, so a container whose glyphs stand
   larger or smaller, a review card's face, says so once.
-  `--luke-call-video-height` sets the height a `CallVideoTile` drawn at
-  `CALL_VIDEO_FIT.CARD` stands at (the card's width at 16:9 where unset),
-  for a window whose own height is fixed around it.
 
 ## Built on shadcn/ui
 
@@ -210,7 +207,7 @@ say: keyframes, `:has()`, container queries, and rules other sheets read.
 
 The rows and navigation are drawn in the theme's utilities with no shadcn
 base: `ListRow` and `List`, `NavItem`, `Disclosure`, `BarItem`, `PaneBar`,
-`Toolbar`, `OverPane`, `ResizeCorner`, and `SearchableMenu`.
+`Toolbar`, `OverPane`, and `SearchableMenu`.
 None has a shadcn component that fits without changing what it does. Base
 UI's collapsible owns the open state, unmounts its panel and hides it, where
 a `Disclosure` is a real `<details>` that keeps a closed body out of the
@@ -247,11 +244,11 @@ The chips, media, and call components are drawn the same way: `PageThumb`
 stands on shadcn's aspect ratio, and `PictureSet`'s tiles and
 `VideoPlayer`'s inline frame on its card (`Card`), while `AttachmentChip`,
 `PictureTile`, `ProviderButton`'s gate, `CardPress`, `ComposerFrame` and its
-foot, and the call's `CallBar`, `CallLive`, and `CallVideoTile` are drawn in
+foot, and the call's `CallBar` and `CallLive` are drawn in
 the theme's utilities with no shadcn base, since shadcn/ui has no player,
 composer, or call, and its badge and button are a control's box where these
 are frames holding presses of their own. What answers a container's width,
-the call bar's, the tile's, a message box's foot's, is a container query
+the call bar's, a message box's foot's, is a container query
 variant (`@max-[280px]/luke-call-bar:`) beside the rule it changes. Their
 sheets keep only keyframes and the rules that play them, and the foot's one
 `:has()` container.
@@ -375,7 +372,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `FileText`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `MoreButton` (a header's ⋯; a row's is `ListRow`'s `menu`), `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
-| Calls | `CallBar`, `CallLive` (a call's status in a message box's foot), `CallMute`, `VideoToggle`, `EndCallButton` (the one red End call), `CallVideoTile` (with `AvatarVoice`) |
+| Calls | `CallBar`, `CallLive` (a call's status in a message box's foot), `CallMute`, `EndCallButton` (the one red End call) |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |

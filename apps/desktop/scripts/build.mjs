@@ -209,8 +209,7 @@ const WINDOW_ENTRIES = {
 // window parses one before it is needed: the editors (TipTap), the whiteboard
 // (Excalidraw), a File tab's tree (Pierre's tree), a Terminal tab's screen
 // (xterm.js), a plan's diagrams (Mermaid), a Files changed diff (Pierre's
-// diffs and Shiki), a call's avatar
-// (Keyframe's SDK over LiveKit), and session replay's recorder (rrweb). Each is an entry rather than a chunk, so
+// diffs and Shiki), and session replay's recorder (rrweb). Each is an entry rather than a chunk, so
 // it keeps a name of its own; what each reaches
 // through dynamic imports of its own, a diagram type's layout or a language's
 // grammar, is a chunk of its own, loaded when it is drawn.
@@ -221,7 +220,6 @@ const SIDE_BUNDLE_ENTRIES = {
   terminal: "../../packages/panel/src/terminal/index.ts",
   diagram: "../../packages/panel/src/diagram/index.ts",
   "diff-view": "../../packages/panel/src/diff-view/index.ts",
-  "avatar-session": "src/renderer/avatar-session/index.ts",
   "session-recorder": "src/renderer/session-recorder/index.ts",
 };
 
@@ -363,21 +361,6 @@ await Promise.all([
     bundle: true,
     target: "chrome140",
     minify: true,
-    logLevel: "info",
-  }),
-  // The avatar feed's AudioWorklet, its own bundle because a worklet loads a
-  // module by URL into a scope of its own on the audio thread; the voice
-  // window adds it from beside `voice.html`, whose `script-src 'self'` is the
-  // policy a worklet module answers to (`@luke/voice/avatar-pcm`).
-  build({
-    entryPoints: [path.join(appRoot, "src/renderer/avatar-feed/pcm-tee-worklet.ts")],
-    outfile: path.join(outputRoot, "renderer/pcm-tee-worklet.js"),
-    bundle: true,
-    platform: "browser",
-    format: "esm",
-    target: "chrome140",
-    minify: true,
-    sourcemap: "external",
     logLevel: "info",
   }),
 ]);

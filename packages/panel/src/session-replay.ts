@@ -73,9 +73,8 @@ const POSTHOG_HOST = "https://us.i.posthog.com";
  * that the canvas option is set here rather than left to the library's
  * default, because the library reads it before the remote configuration and a
  * project that switched canvas recording on would otherwise turn it on here.
- * The console and the network are kept out on the same terms, because the
- * desktop's panel runs Luke's avatar, whose LiveKit room names its session
- * token in a refused join's address and in the console line that reports it.
+ * The console and the network are kept out on the same terms, because a
+ * request's address or a console line can carry a token as freely as a link.
  */
 const WORDS = new Set([
   "title",

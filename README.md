@@ -73,8 +73,8 @@ Claude Code, Codex, or any other agent.
   or on your Anthropic or OpenAI API key, added in Settings › Agents. Luke
   pays for no model calls.
 
-Automations (agents started on a schedule, a GitHub event, or a webhook),
-issue tracking, and video calls are behind Settings › Experimental.
+Automations (agents started on a schedule, a GitHub event, or a webhook) and
+issue tracking are behind Settings › Experimental.
 
 ![The Inbox: a coding agent asks whether invite links should expire after 7 or 14 days, over the two lines of code that decide it, with your pick and your reply.](apps/web/public/changelog/0.13.0/the-inbox-one-item-at-a-time.png)
 

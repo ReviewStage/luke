@@ -9,7 +9,6 @@ import { accountAskActsContract } from "./account-asks.js";
 import { agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
-import { avatarActsContract } from "./avatar.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { channelActsContract } from "./channels.js";
 import { chaptersActsContract } from "./chapters.js";
@@ -51,7 +50,6 @@ export {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
-  AVATAR_ACT_KIND,
   BROWSER_LIVE_ACT_KIND,
   CHANNEL_ACT_KIND,
   CHAPTERS_ACT_KIND,
@@ -98,7 +96,6 @@ export const actContract = {
   ...agentActsContract,
   ...agentInboxActsContract,
   ...automationActsContract,
-  ...avatarActsContract,
   ...browserLiveActsContract,
   ...channelActsContract,
   ...chaptersActsContract,

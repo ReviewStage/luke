@@ -1,10 +1,5 @@
-import { appBridge } from "@luke/panel/app-bridge";
 import { useRef } from "react";
-import type { AvatarFeedActs } from "./live-call";
 import { useVoiceSession } from "./use-voice-session";
-
-/** Luke's voice for his avatar, sent to main, which relays it to the panel while the avatar stands. */
-const AVATAR_FEED: AvatarFeedActs = { feed: (feed) => appBridge().feedAvatar(feed) };
 
 /**
  * What the hidden voice window mounts: the live conversation, and the one
@@ -15,7 +10,7 @@ const AVATAR_FEED: AvatarFeedActs = { feed: (feed) => appBridge().feedAvatar(fee
  */
 export function VoiceHost(): React.JSX.Element {
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
-  useVoiceSession(remoteAudio, AVATAR_FEED);
+  useVoiceSession(remoteAudio);
   return (
     // Luke's own voice. Muted playback would defeat the point, so this is the
     // one element allowed to make sound.

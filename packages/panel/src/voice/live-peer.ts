@@ -125,10 +125,9 @@ const failed = (): LivePeerFailed => LIVE_PEER_OUTCOME.FAILED;
 /**
  * Gathering, under its bound: a wait the deadline reaches first is
  * interrupted, and the handler is cleared either way, since the connection
- * outlives this wait. Every peer here sends its description whole, so the
- * call window's view of the avatar (`call/avatar-view.ts`) gathers this way too.
+ * outlives this wait. Every peer here sends its description whole.
  */
-export const gatherIce = (
+const gatherIce = (
   connection: Pick<LivePeerConnection, "iceGatheringState" | "onicegatheringstatechange">,
 ): Effect.Effect<void> =>
   connection.iceGatheringState === ICE_GATHERING_COMPLETE
