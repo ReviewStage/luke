@@ -24,7 +24,7 @@ import {
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, MAC_COMMAND_MODE } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
@@ -262,15 +262,23 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           kernel,
           account,
           accountId,
-          // Note that a settings file that cannot be read runs nothing here, since both switches are off by default.
+          // Note that a settings file that cannot be read runs nothing here, since the experiment reads off without it.
           switchedOn: settings.store.snapshot().pipe(
-            Effect.map(
-              ({ stored, experiments }) =>
-                (stored.localAgents ?? APP_SETTING_SCHEMA.localAgents.default) &&
-                experimentOn(experiments, EXPERIMENT.LOCAL_AGENTS),
-            ),
+            Effect.map(({ experiments }) => experimentOn(experiments, EXPERIMENT.LOCAL_AGENTS)),
             Effect.orElseSucceed(() => false),
           ),
+          // Note that the account's devices are read where a Start reads them, so this Mac's setup is the one Runs on shows.
+          deviceSetup: (deviceId) =>
+            Effect.map(codingAgentClient.models(), (answer) =>
+              "failure" in answer
+                ? Option.none()
+                : Option.map(
+                    Option.fromUndefinedOr(
+                      answer.macs?.find((device) => device.deviceId === deviceId),
+                    ),
+                    ({ setup, setupFailure }) => ({ setup, setupFailure }),
+                  ),
+            ),
           client: new HostedDeviceAgentClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
