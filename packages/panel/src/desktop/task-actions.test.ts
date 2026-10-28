@@ -816,15 +816,7 @@ function chooseIn(submenu: string, label: string): void {
   act(() => item.click());
 }
 
-/** The items of the open submenu `submenu` that stand checked. */
-function checkedIn(submenu: string): (string | null)[] {
-  choose(submenu);
-  return [...document.querySelectorAll<HTMLElement>('[role="menu"] [aria-checked="true"]')].map(
-    itemLabel,
-  );
-}
-
-test("a row's Status sets the task at the status picked, Done as the row's Mark done check does, asking nothing even where agents work on it, and checks the status it stands at", async () => {
+test("a row's Status, opened by a right-click or by S on the focused row, sets the task at the status picked, Done as the row's Mark done check does, asking nothing even where agents work on it, and checks the status it stands at", async () => {
   const working: TaskSummary = {
     ...OTHER,
     ...STANDING,
@@ -855,9 +847,22 @@ test("a row's Status sets the task at the status picked, Done as the row's Mark 
   assert.equal(asking(), false, "Mark done asks nothing, since it stops no agent");
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
-  rightClick(rowButton, 40, 60);
-  assert.deepEqual(checkedIn("Status"), ["In progress"]);
-  chooseIn("Status", "Done");
+  // S on the focused row opens its menu on Status, the status it stands at checked.
+  act(() => rowButton.focus());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
+  });
+  await act(async () => undefined);
+  assert.deepEqual(
+    [...document.querySelectorAll<HTMLElement>('[role="menu"] [aria-checked="true"]')].map(
+      itemLabel,
+    ),
+    ["In progress"],
+  );
+  const doneItem = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]'),
+  ].find((item) => itemLabel(item) === "Done");
+  act(() => (doneItem ?? assert.fail("Status offers Done")).click());
   rightClick(rowButton, 40, 60);
   chooseIn("Status", "Canceled");
   assert.equal(asking(), false, "no status asks anything");
@@ -875,7 +880,7 @@ test("a row's Status sets the task at the status picked, Done as the row's Mark 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
 const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
 
-test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
+test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
@@ -914,6 +919,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves
     itemChords(),
     [
       ["Mark as unread", "U"],
+      ["Status", "S"],
       ["Pin", "P"],
       ["Show details", "⌥↓"],
     ],

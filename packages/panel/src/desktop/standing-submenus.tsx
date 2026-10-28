@@ -1,4 +1,5 @@
 import { TASK_STATUS, TASK_STATUS_ORDER, type TaskStatus } from "@luke/features/task-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { type MenuRow, TaskStatusMark } from "@luke/ui";
 import { STATUS_ROWS } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -75,6 +76,17 @@ export function statusSubmenu(
     },
     <TaskStatusMark status={TASK_STATUS.TODO} />,
   );
+}
+
+/** Status for one task's row, printing S where the key opens it there (`useFocusedRowKeys`). */
+export function keyedStatusSubmenu(
+  tasks: Pick<TasksControl, "onSettleTasks">,
+  taskId: string,
+  current: TaskStatus,
+  keyed: boolean,
+): MenuSubmenu {
+  const submenu = statusSubmenu(tasks, [taskId], current);
+  return keyed ? { ...submenu, command: APP_COMMAND.SET_STATUS } : submenu;
 }
 
 /** The status every task given stands at, Todo for one from a service before statuses; none where they stand apart or none is given. */

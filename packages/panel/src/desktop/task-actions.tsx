@@ -94,7 +94,7 @@ import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./ac
 import { useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
-import { chipSubmenu, STANDING_WORDS, statusSubmenu } from "./standing-submenus.js";
+import { chipSubmenu, keyedStatusSubmenu, STANDING_WORDS } from "./standing-submenus.js";
 import {
   SIDEBAR_ROW_REPOSITORY,
   SIDEBAR_ROW_TIME,
@@ -284,19 +284,22 @@ function useFocusWithin(element: RefObject<HTMLElement | null>): boolean {
 }
 
 /**
- * U and P on a sidebar row: offered while the keyboard is on the row, each
- * answering over what the open thing offers (`useAppCommand`'s `over`), so
- * the letter marks or pins the row focused rather than the task or agent
- * open; Pin none where the row offers none, as an archived agent's.
+ * U, P, and S on a sidebar row: offered while the keyboard is on the row,
+ * each answering over what the open thing offers (`useAppCommand`'s `over`),
+ * so the letter marks, pins, or opens the Status of the row focused rather
+ * than the task or agent open; Pin none where the row offers none, as an
+ * archived agent's, and S none where it has no Status, as an agent's.
  */
 export function useFocusedRowKeys(
   item: RefObject<HTMLElement | null>,
   onToggleRead: () => void,
   onTogglePin: (() => void) | undefined,
+  onOpenStatus?: (() => void) | undefined,
 ): void {
   const focused = useFocusWithin(item);
   useAppCommand(APP_COMMAND.TOGGLE_READ, focused ? onToggleRead : undefined, FOCUSED_OFFER);
   useAppCommand(APP_COMMAND.PIN, focused ? onTogglePin : undefined, FOCUSED_OFFER);
+  useAppCommand(APP_COMMAND.SET_STATUS, focused ? onOpenStatus : undefined, FOCUSED_OFFER);
 }
 
 /**
@@ -342,6 +345,7 @@ function standingSubmenus(
   task: TaskSummary,
   assignees: readonly MenuRow[],
   setStanding: ReturnType<typeof useStandingDoor>,
+  keyed: boolean,
 ): MenuSubmenu[] {
   const { status, priority } = task;
   if (status === undefined || priority === undefined) return [];
@@ -352,7 +356,7 @@ function standingSubmenus(
   const pickAssignee = (id: string) =>
     setStanding(task, { assigneeId: id === NO_ASSIGNEE ? null : id });
   return [
-    statusSubmenu(tasks, [task.id], status),
+    keyedStatusSubmenu(tasks, task.id, status, keyed),
     chipSubmenu(STANDING_WORDS.PRIORITY, PRIORITY_ROWS, priority, pickPriority),
     chipSubmenu(
       STANDING_WORDS.ASSIGNEE,
@@ -591,7 +595,7 @@ export function useTaskMenuItems(
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
-      ? standingSubmenus(tasks, task, assignees, setStanding)
+      ? standingSubmenus(tasks, task, assignees, setStanding, doors.rowKeys === true)
       : [];
   const groups = (): readonly (readonly MenuEntry[])[] => [
     ...withRowMoves(
@@ -813,10 +817,14 @@ export function SidebarTask({
     item.current = press?.parentElement ?? null;
   }, []);
   const endedByKey = useRefocusAfterEdit(rename.editing, row);
+  // S opens the row's menu on its Status, each press counted so it opens it again.
+  const [statusAsks, setStatusAsks] = useState(0);
+  const statusDrawn = task.status !== undefined && task.priority !== undefined;
   useFocusedRowKeys(
     item,
     () => reads.mark(task, !unread),
     () => tasks.onMarkTask(task.id, task.pinnedAt === undefined ? TASK_MARK.PIN : TASK_MARK.UNPIN),
+    statusDrawn ? () => setStatusAsks((asks) => asks + 1) : undefined,
   );
   const card = useMemo(
     () => <SidebarTaskCard tasks={tasks} task={task} now={now} />,
@@ -880,7 +888,11 @@ export function SidebarTask({
             rename.editing
               ? undefined
               : chosen === undefined
-                ? { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer }
+                ? {
+                    ...rowMenu("Task", actions.groups(), tasks.shown),
+                    footer: actions.footer,
+                    openRequest: { count: statusAsks, submenu: STANDING_WORDS.STATUS },
+                  }
                 : chosenRowMenu("Task", chosen, tasks.shown)
           }
           actionsAt={LIST_ROW_ACTIONS.HOVER}
