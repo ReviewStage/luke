@@ -20,6 +20,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import {
   awaitingLineAtIn,
+  lastSettledAtIn,
   latestTurnOf,
   quietTurnOf,
   sessionEndedOf,
@@ -34,8 +35,8 @@ import {
  * and agent among them, as the desktop asks for them: the plans with the
  * reader's own pin and the owner's name, and the agents with their newest
  * turn, when the newest line of the developer's awaiting its turn was
- * written and whether that turn's session ended, what each last
- * published, and the names of the members each names. A third, the issues
+ * written and whether that turn's session ended, when the newest turn to end
+ * ended, what each last published, and the names of the members each names. A third, the issues
  * the plans linked, answers no rows now that a plan links none, and stands
  * because a released desktop follows it. Every column stands
  * under the key `@luke/features/task-list-live` reads it by and every
@@ -157,6 +158,7 @@ function agentsStatement(userId: string) {
           startedAt: latest.startedAt,
           settledAt: latest.settledAt,
           awaitingLineAt: awaitingLineAtIn(codingAgent.conversationId),
+          lastSettledAt: lastSettledAtIn(codingAgent.conversationId),
         },
       ),
     )
