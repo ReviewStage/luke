@@ -2329,7 +2329,7 @@ with.
 
 One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
 function hands the service. Both sockets are the platform's:
-`src/voice/socket.ts` reads a `ws` socket through
+`src/http/socket.ts` reads a `ws` socket through
 `effect/socket`'s `Socket`, a fiber of that scope filling a mailbox with
 every frame in arrival order, so the opening frame is taken from the same
 reader the relay then streams the rest from and nothing between the two lands

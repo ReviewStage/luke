@@ -48,7 +48,7 @@ import { LOG_EVENT, type LogEntry } from "./log.js";
 import { createLiveUpstream } from "./openai.js";
 import { sweepVoiceOrphans, VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 import { listening, VoiceService, voiceServer } from "./service.js";
-import { SOCKET_CLOSE_CODE } from "./socket.js";
+import { SOCKET_CLOSE_CODE } from "../http/socket.js";
 
 /**
  * The call's Keyframe avatar on the sessions route, over the real store on

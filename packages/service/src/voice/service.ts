@@ -40,7 +40,7 @@ import {
   sessionOpener,
 } from "./opening.js";
 import { RELAY_DEFAULTS, relaySession } from "./relay.js";
-import { SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
+import { SOCKET_CLOSE_CODE, voiceSocket } from "../http/socket.js";
 
 /**
  * The hosted voice service: the part of Luke's own deployment that holds the

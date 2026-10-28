@@ -21,7 +21,7 @@ import {
   HTTP_STATUS,
   withoutTrailingSlash,
 } from "../core.js";
-import { SOCKET_CLOSE_CODE } from "./socket.js";
+import { SOCKET_CLOSE_CODE } from "../http/socket.js";
 
 /**
  * How the service reaches OpenAI on Luke's project key: the one POST that

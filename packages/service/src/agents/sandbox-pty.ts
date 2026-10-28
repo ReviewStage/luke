@@ -11,7 +11,7 @@ import { Context, Duration, Effect, Layer, Redacted, Schedule, type Scope } from
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
 import type { RelaySocket } from "../terminal/relay.js";
-import { voiceSocket } from "../voice/socket.js";
+import { voiceSocket } from "../http/socket.js";
 import { type InteractiveShell, SandboxUnavailable } from "./vercel-sandbox-api.js";
 
 const PTY_CONNECT = {

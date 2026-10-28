@@ -81,7 +81,7 @@ import { deploymentExchange } from "./deployment-exchange.js";
 import type { AttachedSession } from "./live-exchange.js";
 import { LOG_EVENT, type LogEntry } from "./log.js";
 import { listening, VoiceService, type VoiceServiceOptions, voiceServer } from "./service.js";
-import { SOCKET_CLOSE_CODE } from "./socket.js";
+import { SOCKET_CLOSE_CODE } from "../http/socket.js";
 
 /**
  * The hosted exchange attached to the sessions route, over the real store on

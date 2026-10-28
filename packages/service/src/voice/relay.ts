@@ -22,7 +22,7 @@ import {
   SOCKET_CLOSE_CODE,
   type VoiceFrame,
   type VoiceSocket,
-} from "./socket.js";
+} from "../http/socket.js";
 
 /**
  * The pipe between one device socket and the sideband the service attached

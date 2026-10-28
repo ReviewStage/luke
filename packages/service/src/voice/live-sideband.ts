@@ -3,7 +3,7 @@ import { holdSocket } from "@luke/voice/live-session";
 import { type LiveSideband, sidebandOverSocket } from "@luke/voice/live-socket";
 import { Effect, type Scope, Stream } from "effect";
 import type { RawData, WebSocket } from "ws";
-import { SOCKET_CLOSE_CODE } from "./socket.js";
+import { SOCKET_CLOSE_CODE } from "../http/socket.js";
 
 /**
  * The service's half of the trusted sideband: the socket the upstream

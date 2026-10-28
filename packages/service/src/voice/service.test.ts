@@ -57,7 +57,7 @@ import {
   type VoiceServiceOptions,
   voiceServer,
 } from "./service.js";
-import { SOCKET_CLOSE_CODE } from "./socket.js";
+import { SOCKET_CLOSE_CODE } from "../http/socket.js";
 
 const API_KEY = "sk-test-project-key";
 const BEARER = FAKE_BEARER;

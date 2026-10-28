@@ -50,7 +50,7 @@ import { type AgentCallHistory, agentCallHistory } from "./agent-history.js";
 import { backendToolsOf } from "./call-backend.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
-import { frameText, type VoiceSocket } from "./socket.js";
+import { frameText, type VoiceSocket } from "../http/socket.js";
 
 /**
  * What a socket's first frame opens: a WebRTC session created at OpenAI from

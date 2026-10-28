@@ -171,6 +171,7 @@
     "./http/origin-guard": "./src/http/origin-guard.js",
     "./http/rate-brake": "./src/http/rate-brake.js",
     "./http/relay-upgrade": "./src/http/relay-upgrade.js",
+    "./http/socket": "./src/http/socket.js",
     "./http/store-failure": "./src/http/store-failure.js",
     "./inbox/inbox-store": "./src/inbox/inbox-store.js",
     "./integrations/connection-tools": "./src/integrations/connection-tools.js",
@@ -250,8 +251,7 @@
     "./voice/opening": "./src/voice/opening.js",
     "./voice/orphan-sweep": "./src/voice/orphan-sweep.js",
     "./voice/relay": "./src/voice/relay.js",
-    "./voice/service": "./src/voice/service.js",
-    "./voice/socket": "./src/voice/socket.js"
+    "./voice/service": "./src/voice/service.js"
   },
   "scripts": {
     "test:vitest": "vitest run",
