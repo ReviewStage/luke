@@ -134,9 +134,10 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
  * and opened again, or the welcome's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
- * does. The card holds its own issues, repository, and model, so the owner
- * mounts it afresh to start those over; the workspace it starts in is the
- * owner's.
+ * does, an agent's start as it is pressed, so a New task opened while it is
+ * out opens empty, and a refusal puts them back. The card holds its own
+ * issues, repository, and model, so the owner mounts it afresh to start those
+ * over; the workspace it starts in is the owner's.
  *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
@@ -456,6 +457,11 @@ export function NewTaskComposer({
     setStarting(true);
     onStarting?.(true);
     setNote(undefined);
+    // Note that an agent's start lets its words go as it is pressed, because the card closes at
+    // once and a New task opened before the service answers must open empty; a refusal puts
+    // them back where the box was left empty since.
+    const taken = draft.draft;
+    if (handing.handed !== undefined) draft.update(() => EMPTY_DRAFT);
     newTask
       .start(name, repository, workspaceId, {
         ...(issues.length === 0 ? undefined : { issues }),
@@ -467,7 +473,9 @@ export function NewTaskComposer({
         if (refused === undefined) {
           // A task started lets its words go, so the next New task opens empty.
           pressed.current = undefined;
-          draft.update(() => EMPTY_DRAFT);
+          if (handing.handed === undefined) draft.update(() => EMPTY_DRAFT);
+        } else if (handing.handed !== undefined) {
+          draft.update((now) => (hasWordsOrFiles(now.text, now.attachments) ? now : taken));
         }
         setNote(refused);
       })
@@ -577,7 +585,9 @@ export function NewTaskComposer({
 
   const composer: AgentComposerControl = {
     draft: words,
+    // Note that the words handed back as they stand, as the field echoes words a refusal put back, take no note down.
     setDraft: (text) => {
+      if (text === words) return;
       draft.update((was) => ({ ...was, text }));
       setNote(undefined);
     },

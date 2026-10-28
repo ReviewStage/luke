@@ -2589,6 +2589,10 @@ export function useTasksTab(input: {
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
+  // An agent's start answered after the developer opened another task, or
+  // left the task, opens nothing (the host's `TASKS_START`), so the window
+  // stays where they went, and the agent's tab is the one the task opens on
+  // when they come to it.
   // Note that a start whose task was refused, or never answered, is never
   // sent again by itself, because the service keeps no key for a task, so a
   // second start could make a second task; the card says why with Retry.
@@ -2604,24 +2608,31 @@ export function useTasksTab(input: {
     const { handed, card } = from;
     const standingBefore = standIn;
     const historyBefore = historyFor;
-    if (handed !== undefined) {
-      setStartingTask({
-        line: openingLineOf({
-          key: handed.idempotencyKey,
-          prompt: handed.prompt,
-          attachments: handed.attachments,
-        }),
-        navigation: navigations.current,
-      });
+    const pressedAt = navigations.current;
+    const line =
+      handed === undefined
+        ? undefined
+        : openingLineOf({
+            key: handed.idempotencyKey,
+            prompt: handed.prompt,
+            attachments: handed.attachments,
+          });
+    // Note that a start's page is let go only while it is still this start's, because another start may have replaced it.
+    const letGoOfPage = () => setStartingTask((now) => (now?.line === line ? undefined : now));
+    if (line !== undefined) {
+      setStartingTask({ line, navigation: pressedAt });
       setNewTaskAsk(undefined);
       setStandIn(undefined);
       setHistoryFor(undefined);
     }
     const refusedWith = (note: Failure): Failure => {
       if (handed !== undefined) {
-        setStartingTask(undefined);
-        setStandIn((now) => now ?? standingBefore);
-        setHistoryFor((now) => now ?? historyBefore);
+        letGoOfPage();
+        // Note that what stood before the press comes back only where the developer went nowhere since.
+        if (navigations.current === pressedAt) {
+          setStandIn((now) => now ?? standingBefore);
+          setHistoryFor((now) => now ?? historyBefore);
+        }
         setNewTaskAsk({
           preset:
             card === undefined
@@ -2655,11 +2666,17 @@ export function useTasksTab(input: {
                 : startFailureNote(answer.failure),
           });
         }
-        setNewTaskAsk(undefined);
-        setStartingTask(undefined);
-        setStandIn(undefined);
-        setHistoryFor(undefined);
-        if (handed !== undefined) openAgent(answer.planId, handed, answer.agentStart, from.device);
+        if (handed === undefined) {
+          setNewTaskAsk(undefined);
+          setStartingTask(undefined);
+          setStandIn(undefined);
+          setHistoryFor(undefined);
+          return undefined;
+        }
+        // Note that an agent's start put the card and whatever stood away as it was pressed, so
+        // what stands now is the developer's since, a New task opened again among it, and stays.
+        letGoOfPage();
+        openAgent(answer.planId, handed, answer.agentStart, from.device);
         return undefined;
       },
       (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),

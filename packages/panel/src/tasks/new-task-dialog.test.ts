@@ -131,10 +131,11 @@ async function settle(): Promise<void> {
  * has Linear connected, `finds` what its Linear answers a search or an
  * identifier with, and `github` what a repository's GitHub issues read
  * answers, where the workspace has GitHub connected; a read handed as a
- * promise stays out until the test settles it.
+ * promise stays out until the test settles it, and so does a start, whose
+ * card is put away as it is pressed, as the tab puts it away for an agent's.
  */
 async function mount(
-  answer: string | Failure | undefined = undefined,
+  answer: string | Failure | undefined | Promise<Failure | undefined> = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[] | Error | Promise<readonly LinearIssueSummary[]>,
@@ -184,6 +185,10 @@ async function mount(
           fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
           choices.push(from?.issues);
           startedIn.push(workspaceId);
+          if (answer instanceof Promise) {
+            setOpen(false);
+            return answer;
+          }
           return Promise.resolve(
             typeof answer === "string" ? { reason: FAILURE_REASON.OTHER, text: answer } : answer,
           );
@@ -616,6 +621,26 @@ test("words left in a card put away come back as New task opens again and after 
   assert.equal(card.field().textContent, "");
   await card.relaunch();
   assert.equal(card.field().textContent, "");
+});
+
+test("an agent's start still out lets its words go, so New task opened before it answers opens empty, and a refusal puts them back", async () => {
+  let answer: (refused: Failure | undefined) => void = () => undefined;
+  const card = await mount(
+    new Promise<Failure | undefined>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  card.type("Dark mode");
+  await card.key("Enter");
+
+  await card.reopen();
+  assert.equal(card.field().textContent, "", "the card opened again is empty");
+  await card.key("Escape");
+  await act(async () =>
+    answer({ reason: FAILURE_REASON.OTHER, text: "Luke cannot reach acme/web." }),
+  );
+  await card.reopen();
+  assert.equal(card.field().textContent, "Dark mode");
 });
 
 test("words typed before the workspaces are read stay in the box as the workspace lands, over its older draft, and are its draft", async () => {

@@ -1441,6 +1441,33 @@ it.effect("a quiet start opens nothing and answers its task", () =>
   }),
 );
 
+it.effect("a start answered after another task was opened answers its task and opens nothing", () =>
+  Effect.gen(function* () {
+    const billing = task(BILLING, "Billing export", "# Billing", 20);
+    const service = fakeService([billing]);
+    const { call, last, settled } = yield* subject(service);
+    // The service makes the task only once let go, as a start still out when the next press lands.
+    const answered = yield* Deferred.make<void>();
+    const { create } = service;
+    service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
+    service.createAnswer = {
+      ok: true,
+      answer: { task: task(INVITES, "Invitation expiry", "", 10) },
+    };
+
+    const starting = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry" }),
+    );
+    yield* settled;
+    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+    yield* Deferred.succeed(answered, undefined);
+    yield* settled;
+
+    assert.deepEqual(starting.pollUnsafe(), Exit.succeed({ planId: INVITES }));
+    assert.equal(last()?.activeTaskId, BILLING, "the task opened since stays open");
+  }),
+);
+
 it.effect(
   "opening a task tells the window it is reading, then its document, board, code, and pages in one view",
   () =>
