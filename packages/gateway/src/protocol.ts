@@ -224,8 +224,6 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DELETE: "codingAgents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */

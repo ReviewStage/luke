@@ -494,7 +494,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return rest;
   }
 
-  /** The one live follow of the open task's pages and calls; running another interrupts it. */
+  /** The one live follow of the open task's plan and pages; running another interrupts it. */
   const recordFollow = yield* FiberHandle.make<void>();
 
   /** The tasks whose pages' mark moved, read one at a time by the loop below. */
@@ -1295,7 +1295,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** Follows `taskId`'s plan, pages, and calls live, in place of any follow standing; with `standing`, only where none stands. */
+  /** Follows `taskId`'s plan and pages live, in place of any follow standing; with `standing`, only where none stands. */
   function openRecord(taskId: string, standing?: { readonly onlyIfMissing: true }) {
     return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
   }

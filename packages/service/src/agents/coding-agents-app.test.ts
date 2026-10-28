@@ -164,7 +164,6 @@ import {
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
-import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -289,7 +288,6 @@ const AGENT_STARTS = "/api/agents/agents";
 /** A Start in a workspace with no task, by the workspace's id. */
 const WORKSPACE_STARTS = "/api/workspaces/agents";
 const AGENT = "/api/agents/agent";
-const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
@@ -2539,35 +2537,6 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           { startedAt: spoken.startedAt, model: spoken.model, sentAt: spoken.sentAt },
           { startedAt: undefined, model: undefined, sentAt: call.startedAt + 1_500 },
         );
-      }),
-  );
-
-  it.effect(
-    "an agent's calls read as none by a member of its workspace, since Luke takes no calls, and as not found by anyone outside it or for an agent that is none",
-    () =>
-      Effect.gen(function* () {
-        const { owner, task, ask } = yield* openTask({ repository: null });
-        const outsider = yield* openTask();
-        const agent = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
-        ).agent;
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-
-        assert.deepEqual(
-          readAnswer(
-            taskTranscriptAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(AGENT_CALLS, owner, { id: agent.id })),
-          ),
-          { transcript: { calls: [], earlierOmitted: false } },
-        );
-        assert.deepEqual(
-          yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
-          notFound,
-        );
-        assert.deepEqual(yield* ask(request(AGENT_CALLS, owner, { id: randomUUID() })), notFound);
       }),
   );
 });

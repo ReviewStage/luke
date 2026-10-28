@@ -14,8 +14,8 @@ import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
  * follows them (`live-follow.ts`) for as long as the task stands open, and
  * answers each delivery with the parts it moved, which the caller reads
  * again from the service. The calls and code parts the service still
- * answers are read by no one: every call speaks into an agent, whose own
- * transcript says what was said, and no window draws the code agents
+ * answers for a released desktop are read by no one: Luke takes no calls,
+ * and no window draws the code agents
  * showed. Only which parts moved leaves.
  */
 

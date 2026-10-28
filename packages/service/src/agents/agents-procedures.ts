@@ -486,15 +486,6 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       };
     }),
     /**
-     * The calls into the agent: none, since Luke takes no calls. A released
-     * desktop still asks on every agent tab, so the read still answers, for
-     * an agent the caller reaches and as not found for any other.
-     */
-    calls: signedIn.calls.effect(function* ({ input, context }) {
-      yield* reachedAgentById(context.userId, input.id);
-      return { transcript: { calls: [], earlierOmitted: false } };
-    }),
-    /**
      * The agent changed for what follows, answered as it then stands. A
      * title renames it, written whole, or cleared where it is empty, so the
      * tab falls back to the model's name. `archived` archives the agent,

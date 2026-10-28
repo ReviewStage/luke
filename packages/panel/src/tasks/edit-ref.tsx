@@ -1,7 +1,7 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
 import { agoText } from "@luke/features/time-format";
-import { useMinute, VisuallyHidden } from "@luke/ui";
+import { useMinute } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -13,11 +13,10 @@ import {
   type EditAgent,
   type EditReader,
   editActor,
-  editCallOwner,
   LUKE_ACTOR,
   latestActivity,
 } from "@luke/ui/actor-model";
-import { type ReactNode, useMemo } from "react";
+import { useMemo } from "react";
 import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
@@ -31,13 +30,11 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * The writer is read through `@luke/ui/actor-model`'s `editActor`, against
  * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
- * they last did in the plan, and Luke's whose call he wrote on, when, and
- * what he wrote, both read off who last changed each section, which the
- * window already holds. A coding agent found among the task's agents wears
- * its harness and where its work stands, hangs its tab's card, and opens
- * its tab on a press where the place offers that; one the task's list does
- * not hold is named alone. Luke's edit on a call names whose call it was
- * too: "your call" for the reader's own, and the teammate on their face.
+ * they last did in the plan, and Luke's when and what he wrote, both read
+ * off who last changed each section, which the window already holds. A
+ * coding agent found among the task's agents wears its harness and where
+ * its work stands, hangs its tab's card, and opens its tab on a press where
+ * the place offers that; one the task's list does not hold is named alone.
  * A conflict over the developer's own edit names its writer the same way,
  * in its note and the button that takes their words.
  */
@@ -136,19 +133,6 @@ export function conflictWords(edit: PlanLastEdit | undefined, place: EditPlace):
   };
 }
 
-/** The words for whose call a card's line says Luke wrote on: "your call", "Charles Pan’s call", or "a call". */
-function callWords(owner: Actor | undefined): string {
-  if (owner === undefined) return "a call";
-  return `${actorName(owner, { sentence: true, possessive: true })} call`;
-}
-
-/** Luke's card's line: whose call he wrote on, where he did, and how long ago. */
-function lukeSub(edit: PlanLastEdit, place: EditPlace, now: number): string {
-  const ago = agoText(edit.at, now);
-  if (!edit.duringCall) return ago;
-  return `During ${callWords(editCallOwner(edit, place.reader))} · ${ago}`;
-}
-
 /** What an actor last did in the plan, in a card's line; none where no section's last change is theirs. */
 function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): string | undefined {
   const activity = latestActivity(place.sections, actor);
@@ -162,13 +146,11 @@ function PersonRef({
   actor,
   place,
   sentence = false,
-  possessive = false,
   faceOnly = false,
 }: {
   actor: Actor;
   place: EditPlace;
   sentence?: boolean;
-  possessive?: boolean;
   faceOnly?: boolean;
 }): React.JSX.Element {
   const now = useMinute();
@@ -176,15 +158,7 @@ function PersonRef({
     actor.kind === ACTOR_KIND.PERSON ? (
       <PersonCard actor={actor} latest={latestLine(actor, place, now, true)} />
     ) : undefined;
-  return (
-    <ActorRef
-      actor={actor}
-      card={card}
-      sentence={sentence}
-      possessive={possessive}
-      faceOnly={faceOnly}
-    />
-  );
+  return <ActorRef actor={actor} card={card} sentence={sentence} faceOnly={faceOnly} />;
 }
 
 /** The writer of an edit as one target in a line, or their face alone; nothing for the plan before history, which nobody wrote. */
@@ -205,10 +179,7 @@ function WriterRef({
   if (actor === undefined) return null;
   if (actor.kind === ACTOR_KIND.LUKE) {
     const card = (
-      <LukeCard
-        sub={lukeSub(edit, place, now)}
-        latest={latestLine(LUKE_ACTOR, place, now, false)}
-      />
+      <LukeCard sub={agoText(edit.at, now)} latest={latestLine(LUKE_ACTOR, place, now, false)} />
     );
     return <ActorRef actor={actor} card={card} faceOnly={faceOnly} />;
   }
@@ -232,25 +203,6 @@ function WriterRef({
 }
 
 /**
- * Whose call Luke wrote an edit on, after his name. Note that the reader's
- * own call and one nobody can be named for are words, since a face there
- * would add no name.
- */
-function CallOwner({ edit, place }: { edit: PlanLastEdit; place: EditPlace }): ReactNode {
-  const owner = editCallOwner(edit, place.reader);
-  if (owner === undefined || (owner.kind === ACTOR_KIND.PERSON && owner.you)) {
-    return ` during ${callWords(owner)}`;
-  }
-  return (
-    <>
-      {" during "}
-      <PersonRef actor={owner} place={place} sentence possessive />
-      {" call"}
-    </>
-  );
-}
-
-/**
  * The reader with the members of the directory standing around the caller,
  * the same while neither changes, so a reader handed over afresh on each draw
  * leaves what is drawn from it as it was.
@@ -267,15 +219,12 @@ export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): rea
 }
 
 /**
- * Who wrote an edit, and on whose call where Luke wrote it on one: "[Luke]
- * Luke during [Charles] Charles Pan’s call", "[Luke] Luke during your call",
- * "[Charles] Charles Pan". `sentence` names the reader "you" inside a line
- * that leads with other words. With `faceOnly` it is the writer's face
- * alone, their name and whose call it was said in the card it hangs and to
- * a screen reader, as words, for a section's byline, which keeps to a
- * heading's end. Drawn inside an
- * `.actor-line`, whose words carry their own spaces. Nothing for the plan
- * before history.
+ * Who wrote an edit: "[Luke] Luke", "[Charles] Charles Pan". `sentence`
+ * names the reader "you" inside a line that leads with other words. With
+ * `faceOnly` it is the writer's face alone, their name said in the card it
+ * hangs, for a section's byline, which keeps to a heading's end. Drawn
+ * inside an `.actor-line`, whose words carry their own spaces. Nothing for
+ * the plan before history.
  */
 export function EditedBy({
   edit,
@@ -289,14 +238,5 @@ export function EditedBy({
   faceOnly?: boolean;
 }): React.JSX.Element | null {
   if (edit.actor === PLAN_ACTOR.EARLIER) return null;
-  return (
-    <>
-      <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />
-      {!edit.duringCall ? null : faceOnly ? (
-        <VisuallyHidden>{` during ${callWords(editCallOwner(edit, place.reader))}`}</VisuallyHidden>
-      ) : (
-        <CallOwner edit={edit} place={place} />
-      )}
-    </>
-  );
+  return <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />;
 }

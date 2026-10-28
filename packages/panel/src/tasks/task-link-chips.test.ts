@@ -175,7 +175,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

@@ -238,7 +238,6 @@ export const APP_SLICE = {
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
   VOICE: sliceAtom("voice"),
-  CALL_TRANSCRIPT: sliceAtom("callTranscript"),
   TASKS: sliceAtom("tasks"),
   CODING_AGENTS: sliceAtom("codingAgents"),
   INBOX: sliceAtom("inbox"),

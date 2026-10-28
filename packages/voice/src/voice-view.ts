@@ -45,9 +45,8 @@ type VoiceCallLine = typeof voiceCallLineSchema.Type;
  * {@link VoiceCallTranscriptChange} with each view, main splices it in with
  * {@link withCallTranscriptChange}, a panel is handed only what moved in it
  * since the last it was handed ({@link callTranscriptChangeBetween}), and a
- * panel opened mid-call reads the whole of it from the document. Its one reader is the agent tab's live
- * transcript (`transcript-model.ts`'s `heardCalls`), which matches it to
- * `view.call`'s agent; it is none while no call stands or before its first line.
+ * panel opened mid-call reads the whole of it from the document. It is none
+ * while no call stands or before its first line.
  */
 export interface VoiceCallTranscript {
   readonly voiceSessionId: string | undefined;
