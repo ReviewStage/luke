@@ -358,7 +358,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
     it.effect(
-      "a launch or a message to an agent whose Mac is away is refused as a Start on it is, while a stop still goes",
+      "a launch, a message, or its files to an agent whose Mac is away are refused as a Start on it is, and by name on a host its account removed, while a stop still goes",
       () =>
         Effect.gen(function* () {
           const opened = yield* openLocalAgent;
@@ -370,13 +370,30 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           const message = yield* Effect.flip(
             machine.writeLine(handle, '{"type":"message","content":[]}\n'),
           );
+          const files = yield* Effect.flip(
+            machine.writeFiles(handle, [
+              { path: "/tmp/note.txt", mode: 0o644, contents: new Uint8Array([104, 105]) },
+            ]),
+          );
           const launch = yield* Effect.flip(launched(opened));
           yield* machine.writeLine(handle, '{"type":"stop","launch":4}\n');
+          // The Mac is enrolled and removed, as Settings › Machines removes one.
+          yield* enrollOwnDevice(opened.userId, {
+            id: opened.deviceId,
+            version: "0.1.0",
+            secretHash: `secret-${randomUUID()}`,
+          });
+          assert.equal(yield* removeHost(opened.userId, opened.deviceId), true);
+          const removed = yield* Effect.flip(
+            machine.writeLine(handle, '{"type":"message","content":[]}\n'),
+          );
 
-          for (const refused of [message, launch]) {
+          for (const refused of [message, files, launch]) {
             assert.ok(refused instanceof LaunchRefused);
             assert.equal(refused.deviceAway, true);
           }
+          assert.ok(removed instanceof LaunchRefused);
+          assert.equal(removed.deviceRemoved, true);
           assert.deepEqual(
             (yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId)).map(
               (line) => line.payload,
@@ -456,6 +473,51 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
               (standing) => standing.settled,
             ),
             Option.some(false),
+          );
+        }),
+    );
+
+    it.effect(
+      "an older launch a newer one replaced is settled alone, so no stop lands after the newer launch once its Mac is back",
+      () =>
+        Effect.gen(function* () {
+          const writer = yield* storeWriter({ tools: {} });
+          const sweepAt = (limit?: number) =>
+            Effect.flatMap(Clock.currentTimeMillis, (now) =>
+              sweepDeviceLeases(writer, { now, limit }),
+            );
+          const opened = yield* openLocalAgent;
+          const older = yield* launched(opened);
+          const newer = yield* launched(opened);
+          yield* claimedDeviceAgentLine(opened.userId, opened.deviceId, older.handle.command);
+          yield* claimedDeviceAgentLine(opened.userId, opened.deviceId, newer.handle.command);
+          const settledNow = (handle: { readonly command: string }) =>
+            Effect.map(deviceAgentLineStanding(opened.userId, handle.command), (standing) =>
+              Option.exists(standing, (each) => each.settled),
+            );
+          yield* TestClock.adjust("6 minutes");
+
+          // The sweep takes the oldest lapsed launch first, so one at a time reaches the older
+          // launch before the newer, whatever other tests left lapsed ahead of it.
+          for (let swept = 0; !(yield* settledNow(older.handle)); swept += 1) {
+            assert.ok(swept < 50, "the older launch is taken within a few sweeps");
+            yield* sweepAt(1);
+          }
+          yield* beatDevice(opened.userId, opened.deviceId);
+          yield* sweepAt();
+
+          assert.deepEqual(
+            yield* Effect.forEach([older, newer], ({ handle }) =>
+              Effect.map(deviceAgentLineStanding(opened.userId, handle.command), (standing) =>
+                Option.map(standing, (each) => each.settled),
+              ),
+            ),
+            [Option.some(true), Option.some(false)],
+          );
+          assert.deepEqual(
+            yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId),
+            [],
+            "nothing would end the newer runner",
           );
         }),
     );

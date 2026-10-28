@@ -43,11 +43,12 @@
  * mint, wait for its answer at most `MAC_MACHINE.ANSWER_WAIT`, and withdraw
  * it however the wait ends; a Mac that has not beaten within
  * `MAC_PRESENCE.FRESH_MS` is away, and the call is unavailable at once, as a
- * stopped sandbox's is. `launchRunner` and `writeLine` refuse an away Mac at
- * once too, as a Start on it is refused (`LOCAL_AGENT_REFUSAL.MAC_AWAY`),
+ * stopped sandbox's is. `launchRunner`, `writeFiles`, and `writeLine` refuse
+ * an away Mac at once too, as a Start on it is refused
+ * (`LOCAL_AGENT_REFUSAL.MAC_AWAY`), and a host its account removed by name,
  * rather than queue a line no one may take for hours: a message to it fails
  * in words, and its open run is taken from it once its lease lapses
- * (`../device-lease.ts`).
+ * (`../../maintenance/device-lease-sweep.ts`).
  */
 
 import { randomUUID } from "node:crypto";
@@ -274,11 +275,19 @@ function deviceMachineOver(
       return seen.some((device) => device.id === pin.deviceId);
     });
 
-  /** Refused as a Start on an away Mac is, where the agent's Mac has not beaten lately. */
+  /**
+   * Refused as a Start on an away Mac is, where the agent's Mac has not
+   * beaten lately; refused by name where it is a host its account removed,
+   * which no presence read lists and no message brings back.
+   */
   const refuseAway = (pin: DeviceAgentPin) =>
-    Effect.flatMap(present(pin), (here) =>
-      here ? Effect.void : Effect.fail(new LaunchRefused({ reason: "mac away", deviceAway: true })),
-    );
+    Effect.gen(function* () {
+      if (yield* present(pin)) return;
+      if (pin.deviceId !== null && (yield* stored(hostRemoved(pin.userId, pin.deviceId)))) {
+        return yield* new LaunchRefused({ reason: "host removed", deviceRemoved: true });
+      }
+      return yield* new LaunchRefused({ reason: "mac away", deviceAway: true });
+    });
 
   /**
    * One request asked of the agent's Mac and its answer waited for, the row
@@ -413,20 +422,25 @@ function deviceMachineOver(
     // The worktree is the developer's own, so nothing is thrown away; a retired bearer shuts its runner out.
     discard: () => Effect.void,
 
+    // Note that files go to an away Mac no more than the message naming them does, so a message
+    // refused while it is away leaves nothing behind for it to write when it is back.
     writeFiles: (place, files: readonly SandboxFile[]) =>
       Effect.flatMap(pinOfPlace(place), (pin) =>
-        queued(pin, {
-          kind: DEVICE_AGENT_LINE_KIND.FILES,
-          payload: objectOf(
-            encodeFilesPayload({
-              files: files.map((file) => ({
-                path: file.path,
-                mode: file.mode,
-                contents: file.contents,
-              })),
-            }),
-          ),
-        }),
+        Effect.andThen(
+          refuseAway(pin),
+          queued(pin, {
+            kind: DEVICE_AGENT_LINE_KIND.FILES,
+            payload: objectOf(
+              encodeFilesPayload({
+                files: files.map((file) => ({
+                  path: file.path,
+                  mode: file.mode,
+                  contents: file.contents,
+                })),
+              }),
+            ),
+          }),
+        ),
       ),
 
     // The secrets and the first lines are sealed together, bound to the agent, before the line is

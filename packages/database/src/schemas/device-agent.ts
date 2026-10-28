@@ -76,6 +76,10 @@ export const deviceAgentLine = pgTable(
       .where(sql`${table.claimedAt} is null`),
     // The expiry withdraws an account's lines by age.
     index("device_agent_line_user_created").on(table.userId, table.createdAt),
+    // The lease sweep reads the open launches of the devices that went away, and a beat its own.
+    index("device_agent_line_open_launch")
+      .on(table.deviceId, table.seq)
+      .where(sql`${table.kind} = 'launch' and ${table.settledAt} is null`),
   ],
 );
 
