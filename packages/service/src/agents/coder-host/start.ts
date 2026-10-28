@@ -1219,6 +1219,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           : SERVER_AGENT_START_KIND.FORK,
     is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
     has_task: ask.taskId !== null,
+    agent_kind: agent.kind,
   });
   return committed === undefined ? { agent, created } : { agent, created, txid: committed };
 });
