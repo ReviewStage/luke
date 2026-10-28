@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 # phone.sh <out.png> <profile> -- serves the staged web app from the shots
 # worktree, opens /app.html?fixture=<profile> in Safari on an iPhone
