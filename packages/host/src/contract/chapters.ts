@@ -3,6 +3,7 @@ import {
   chaptersModelWriteParamsSchema,
   pullRequestChaptersAnswerViewSchema,
   pullRequestChaptersParamsSchema,
+  pullRequestChaptersReadParamsSchema,
 } from "@luke/features/pull-request-chapters-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -19,7 +20,7 @@ export const chaptersActsContract = {
   [CHAPTERS_ACT_KIND.CHAPTERS_READ]: actProcedure(
     "Could not read the pull request's chapters on this system.",
   )
-    .input(exactInput(pullRequestChaptersParamsSchema))
+    .input(exactInput(pullRequestChaptersReadParamsSchema))
     .output(EffectSchema.flip(pullRequestChaptersAnswerViewSchema)),
   [CHAPTERS_ACT_KIND.CHAPTERS_GENERATE]: actProcedure(
     "Could not generate the pull request's chapters on this system.",

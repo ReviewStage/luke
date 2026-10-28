@@ -423,7 +423,7 @@ function fakeService() {
       }),
     chapters: (agentId, number) =>
       Effect.sync(() => {
-        asked.push(`chapters:${agentId}${number === undefined ? "" : `#${number}`}`);
+        asked.push(`chapters:${agentId}#${number}`);
         return CHAPTERS;
       }),
     generateChapters: (agentId, number) =>
@@ -982,7 +982,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, { agentId: AGENT_ID }),
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, { agentId: AGENT_ID, number: 11 }),
       CHAPTERS,
     );
     assert.deepEqual(
@@ -1164,7 +1164,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
-      `chapters:${AGENT_ID}`,
+      `chapters:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
       "chapters-model",
       `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,

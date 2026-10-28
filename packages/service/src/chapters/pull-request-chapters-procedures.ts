@@ -397,7 +397,8 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
   return {
     read: signedIn.read.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.id);
-      const number = yield* pullRequestNumberOf(input.number === undefined ? [] : [input.number]);
+      const number = yield* pullRequestNumberOf([input.number]);
+      // One number named always reads as one or is refused.
       if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       // Whether the reader can generate at all, on a key of their own, which their choice of model never changes.
       const [kept, model] = yield* Effect.all(

@@ -756,11 +756,10 @@ test("a pull request's chapters are read and generated for the agent's own pull 
       },
     },
   };
-  tab.answer(ACT_KIND.CHAPTERS_READ, none, none);
+  tab.answer(ACT_KIND.CHAPTERS_READ, none);
   tab.answer(ACT_KIND.CHAPTERS_GENERATE, generating);
   await tab.mount();
 
-  assert.deepEqual(await tab.control().readChapters(AGENT), none);
   assert.deepEqual(await tab.control().readChapters(AGENT, 41), none);
   assert.deepEqual(await tab.control().generateChapters(AGENT, 41), generating);
   // Nothing more is queued, so the port refuses this one.
@@ -772,7 +771,6 @@ test("a pull request's chapters are read and generated for the agent's own pull 
       ({ kind }) => kind === ACT_KIND.CHAPTERS_READ || kind === ACT_KIND.CHAPTERS_GENERATE,
     ),
     [
-      { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT } },
       { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT, number: 41 } },
       { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT, number: 41 } },
       { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT } },

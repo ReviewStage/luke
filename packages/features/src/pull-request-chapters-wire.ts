@@ -74,10 +74,16 @@ const pullRequestChaptersStateSchema = EffectSchema.Union([
 
 export type PullRequestChaptersState = typeof pullRequestChaptersStateSchema.Type;
 
-/** A read or a Generate of a pull request's chapters: the agent in the path, and the number in the query, which a read always names and a Generate names where the tab names one. */
+/** A Generate of a pull request's chapters: the agent in the path, and the number in the query where the tab names one. */
 export const pullRequestChaptersRequestSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   number: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/** A read of a pull request's chapters: the agent in the path, and the number the tab's own read of it found in the query. */
+export const pullRequestChaptersReadRequestSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  number: EffectSchema.String,
 });
 
 /**

@@ -384,13 +384,13 @@ export interface CodingAgentsControl {
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<CodingAgentChangesAnswerView>;
   /**
-   * One read of a pull request's chapters, as its Chapters tab asks it: the
-   * agent's own pull request, or the one of its repository by the number
-   * given (`pull-request-number.ts`). Answers its head now, whether chapters
-   * can be generated, and the workspace's newest chapters, whatever head they
-   * were made for; or why there are none, a port that refused included.
+   * One read of a pull request's chapters, as its Chapters tab asks it, by
+   * the number its own read of the pull request found. Answers whether
+   * chapters can be generated, and the workspace's newest chapters, whatever
+   * head they were made for; or why there are none, a port that refused
+   * included.
    */
-  readChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
+  readChapters: (agentId: string, number: number) => Promise<PullRequestChaptersAnswerView>;
   /**
    * The same pull request's chapters generated for its head now, or the
    * generation already under way; answers once the generation lands, which
@@ -1767,7 +1767,7 @@ export function useCodingAgents(input: {
 
   const readChapters = useCallback<CodingAgentsControl["readChapters"]>(
     (agentId, number) =>
-      act(ACT_KIND.CHAPTERS_READ, pullRequestAsked(agentId, number)).catch(
+      act(ACT_KIND.CHAPTERS_READ, { agentId, number }).catch(
         (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
       ),
     [act],
