@@ -36,7 +36,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  */
 
 const MIGRATION = "20261028004039_messages_metadata_vocabulary";
-const STRAGGLERS = "20261028170638_messages_metadata_vocabulary_stragglers";
+const STRAGGLERS = "20261028182547_messages_metadata_vocabulary_stragglers";
 
 /** A migrations folder holding every migration named before `MIGRATION`'s, and none after. */
 const foldersBefore = foldersUpTo(MIGRATION);

@@ -1,8 +1,7 @@
 {
-  "id": "aa99e082-831c-4967-88c1-864abd6ffb27",
+  "id": "f4d305e5-6b36-4de6-8d78-f866c9900039",
   "prevIds": [
-    "bca716d8-c859-4039-aea0-7022758b6569",
-    "c2d6d490-35d7-488f-afe7-c62fbbff79f7"
+    "d9094e5f-2fd4-4614-bde0-6606869895b3"
   ],
   "version": "8",
   "dialect": "postgres",
@@ -353,12 +352,6 @@
       "schema": "public",
       "isRlsEnabled": false,
       "name": "plan_revision",
-      "entityType": "tables"
-    },
-    {
-      "schema": "public",
-      "isRlsEnabled": false,
-      "name": "account_plan_template_revision",
       "entityType": "tables"
     },
     {
@@ -4988,6 +4981,19 @@
     {
       "schema": "public",
       "table": "device_agent_line",
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claim_token",
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "device_agent_line",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
@@ -6231,6 +6237,19 @@
       "generated": null,
       "identity": null,
       "name": "answers",
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "inbox_message",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "addressee_id",
       "entityType": "columns"
     },
     {
@@ -7912,110 +7931,6 @@
     },
     {
       "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "seq",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "document",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "changes",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "started_at",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "at",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "restored_from",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
       "table": "account_preference",
       "type": "text",
       "typeSchema": null,
@@ -8108,19 +8023,6 @@
     {
       "schema": "public",
       "table": "account_preference",
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "plan_template",
-      "entityType": "columns"
-    },
-    {
-      "schema": "public",
-      "table": "account_preference",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -8129,6 +8031,32 @@
       "generated": null,
       "identity": null,
       "name": "experiments",
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account_preference",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runs_on_machine",
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account_preference",
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runs_on_device_id",
       "entityType": "columns"
     },
     {
@@ -15947,6 +15875,23 @@
     },
     {
       "schema": "public",
+      "table": "inbox_message",
+      "nameExplicit": false,
+      "columns": [
+        "addressee_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "inbox_message_addressee_id_user_id_fkey",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
       "table": "installed_skill",
       "nameExplicit": false,
       "columns": [
@@ -16521,23 +16466,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "plan_revision_agent_id_coding_agent_id_fk",
-      "entityType": "fks"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "account_plan_template_revision_user_id_user_id_fk",
       "entityType": "fks"
     },
     {
@@ -17427,17 +17355,6 @@
       ],
       "nameExplicit": false,
       "name": "plan_revision_plan_id_seq_pk",
-      "entityType": "pks"
-    },
-    {
-      "schema": "public",
-      "table": "account_plan_template_revision",
-      "columns": [
-        "user_id",
-        "seq"
-      ],
-      "nameExplicit": false,
-      "name": "account_plan_template_revision_user_id_seq_pk",
       "entityType": "pks"
     },
     {
@@ -18445,60 +18362,32 @@
       "entityType": "checks"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "runs_on_machine",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account_preference"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "runs_on_device_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account_preference"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "addressee_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "inbox_message"
-    },
-    {
-      "nameExplicit": false,
+      "nameExplicit": true,
       "columns": [
-        "addressee_id"
+        {
+          "value": "device_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "seq",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
       ],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "inbox_message_addressee_id_user_id_fkey",
-      "entityType": "fks",
+      "isUnique": false,
+      "where": "\"kind\" = 'launch' and \"settled_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "device_agent_line_open_launch",
+      "entityType": "indexes",
       "schema": "public",
-      "table": "inbox_message"
+      "table": "device_agent_line"
     }
   ],
   "renames": []
