@@ -103,6 +103,21 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
+test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
+  const { page } = mount([], { windowRoot: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the rows are pushed and drawn",
+  );
+
+  act(() => world.setInboxOpen(false));
+  await settle();
+  act(() => world.setInboxOpen(true));
+  assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
+});
+
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
   const { page } = mount([], { listUnread: true });
   await settle();
