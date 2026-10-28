@@ -30,7 +30,12 @@ import { ListSelectionContext } from "./list-selection.js";
 export const SELECT_BOX_PLACE = {
   /** In the gutter a list row keeps at its start, centred on the row (`ps-select-gutter`). */
   GUTTER: "gutter",
-  /** At the start of a card's first line, a control's height tall, inside the card's row and list insets, as a board's card draws its key there. */
+  /**
+   * At the start of a card's first line, inside the card's row inset,
+   * centred on the column of the compact chip its next line starts with,
+   * which the card draws a step out past its list inset, as a board's card
+   * draws its status mark under its key (`desktop.css`).
+   */
   CARD_HEAD: "card-head",
 } as const;
 
@@ -52,7 +57,7 @@ const BOX =
 const PLACED: Record<SelectBoxPlace, string> = {
   [SELECT_BOX_PLACE.GUTTER]: "top-1/2 left-row-inset -translate-y-1/2",
   [SELECT_BOX_PLACE.CARD_HEAD]:
-    "top-[calc(var(--spacing-row-inset)+(var(--spacing-luke-20)-var(--spacing-select-box))/2)] left-list-inset",
+    "top-[calc(var(--spacing-row-inset)+(var(--spacing-luke-20)-var(--spacing-select-box))/2)] left-[calc(var(--spacing-list-inset)-var(--luke-space-4)+var(--spacing-select-box-inset))]",
 };
 
 /** The box of the row keyed `selectKey`, in the selection it stands in; nothing outside one. */
