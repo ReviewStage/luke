@@ -27,7 +27,12 @@
  * non-modal popover with focus inside it, so Tab walks its buttons and
  * links; Escape takes it down and hands focus back to the control, one card
  * at a time where a card hangs from a control on another, and focus leaving
- * it for anywhere else takes it down. One tooltip
+ * it for anywhere else takes it down. A pill hung from words or a mark
+ * inside a control that hangs a card, as a row's name cut short is, never
+ * shows: the pointer on them rests on the card's control, whose card shows
+ * as it would anywhere else in it. A control of its own inside, as a chip's
+ * Remove is, still raises its own pill, as a button in a GitHub row does.
+ * One tooltip
  * stands in the window at a time: the next to show takes a lingering card
  * down at once, unless its control stands on that card, as a person named
  * on an agent's card is, when its card hangs over the one beneath, which
@@ -392,6 +397,16 @@ export function showDetailsFrom(from: HTMLElement | null | undefined): (() => vo
 }
 
 /**
+ * Whether `anchor` stands inside another control that hangs a card. Note
+ * that the pointer entering a control enters every control around it first,
+ * so the card's control has learned its element by the time a pill inside
+ * asks.
+ */
+function insideCardedControl(anchor: HTMLElement): boolean {
+  return showDetailsFrom(anchor.parentElement) !== undefined;
+}
+
+/**
  * How a reader hears `label` over `element`: never twice, so not at all where
  * its `aria-label`, or else its words, already say it, and spoken at its end
  * where it takes no focus and holds words.
@@ -644,8 +659,8 @@ export function Tooltip({
     // A control in the standing card's row is part of that row, and leaves the card standing.
     const top = standing.at(-1);
     if (top !== undefined && top.id !== id && top.region?.contains(anchor) === true) return;
-    // Words cut short inside a control hanging a card, as a menu item's label is, never replace that card with a pill.
-    if (!carded && top?.carded === true && top.anchor.contains(anchor)) return;
+    // Words or a mark inside a control hanging a card, as a row's name cut short is, yield their pill to that card, waiting or standing; a control of their own, as a chip's Remove is, keeps its pill.
+    if (!carded && !anchor.matches(OWN_CONTROL) && insideCardedControl(anchor)) return;
     // Note that the warm spell is read before anything is taken down, so a
     // hint this one takes down never warms the window for it.
     if (touched || performance.now() < warmUntil) {

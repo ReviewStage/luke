@@ -27,6 +27,8 @@ import { Tooltip } from "./hint.js";
  * only crossing a control mounts nothing for it, a card's row moved on from
  * lets the next row wait its own wait, so a pointer sweeping down a list
  * hangs no card, and a pill seen still lets the next control's show at once.
+ * Words cut short inside a control hanging a card raise its card, not their
+ * pill, while a button inside it raises its own.
  *
  * The keyboard enters a card: ⌥↓ on its control, on a Mac or where Command
  * is Ctrl, opens it with focus on its first button, Tab walks its buttons
@@ -864,7 +866,7 @@ test("words that take no focus own their hint as hidden text, read at their end,
   assert.equal(radio.hasAttribute("aria-owns"), false);
 });
 
-test("words cut short inside a control hanging a card raise no pill over its card", () => {
+test("words cut short inside a control hanging a card raise its card, not their pill", () => {
   const page = mount(
     createElement(Tooltip, {
       label: "Fix the refresh",
@@ -883,12 +885,35 @@ test("words cut short inside a control hanging a card raise no pill over its car
       ),
     }),
   );
-  restOn(page.querySelector("[data-row]") ?? assert.fail("the row"));
-  assert.equal(card()?.textContent, "Opened by Sam");
-
   restOn(page.querySelector("[data-label]") ?? assert.fail("the label"));
 
-  assert.equal(cardStands(), true, "the card still stands");
+  assert.equal(cardStands(), true, "the card stands");
   assert.equal(card()?.textContent, "Opened by Sam");
   assert.equal(document.querySelectorAll("[role='tooltip']").length, 1, "no pill beside it");
+});
+
+test("a button inside a control hanging a card raises its own pill", () => {
+  const page = mount(
+    createElement(Tooltip, {
+      label: "Fix the refresh",
+      card: createElement("p", null, "Opened by Sam"),
+      children: createElement(
+        "span",
+        { "data-chip": "", "aria-describedby": undefined },
+        "Fix the refresh",
+        createElement(Tooltip, {
+          label: "Remove",
+          children: createElement(
+            "button",
+            { type: "button", "data-remove": "", "aria-describedby": undefined },
+            "×",
+          ),
+        }),
+      ),
+    }),
+  );
+  restOn(page.querySelector("[data-remove]") ?? assert.fail("the button"));
+
+  assert.equal(cardStands(), false, "no card");
+  assert.equal(document.querySelector("[role='tooltip']")?.textContent, "Remove");
 });
