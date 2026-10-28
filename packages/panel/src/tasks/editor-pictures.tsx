@@ -220,7 +220,8 @@ function DescribeField({
   };
   return (
     <span className="mx-0 mt-item-gap mb-block-gap grid w-picture-describe">
-      <FormField label={describing.label}>
+      {/* Note that a picture's words may be cleared, so the field says it may be left empty. */}
+      <FormField label={describing.label} optional>
         {(field) => (
           <TextField
             field={field}

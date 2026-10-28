@@ -337,8 +337,8 @@ export function inboxReply(
  * a box refuses only past its bound, as its counter says: a `decide` with
  * no pick lacks an option, and a `do` with nothing ticked or pressed its
  * decision, an option of its two; an `answer`'s fields their first required
- * field, or their first where none is, since a form filled in part sends
- * what was filled; and an `answer` of words alone its words.
+ * field left empty, or their first empty where none is, since a form filled
+ * in part sends what was filled; and an `answer` of words alone its words.
  */
 export function inboxMissing(
   thread: readonly InboxMessage[],
@@ -355,7 +355,10 @@ export function inboxMissing(
       return { kind: INBOX_MISSING.OPTION };
     case INBOX_ASK.ANSWER: {
       if (ask.fields === undefined) return { kind: INBOX_MISSING.WORDS };
-      const first = ask.fields.find((field) => field.required === true) ?? ask.fields[0];
+      // Note that a yes-or-no left alone sends no, so it is never what a form lacks.
+      const sent = new Set(sentValues({ fields: ask.fields }, draft).map((value) => value.label));
+      const empty = ask.fields.filter((field) => !sent.has(field.label));
+      const first = empty.find((field) => field.required === true) ?? empty[0];
       return first === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: first.label };
     }
   }

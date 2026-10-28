@@ -355,7 +355,7 @@ test("an approval and a task are answered by the decision the card holds, or a p
   });
 });
 
-test("what an empty box's answer lacks follows the open ask: a decide or a to-do an option, a form its first required field in the form's order, and words their words; nothing once anything is filled, written, or attached, or where no ask waits", () => {
+test("what an empty box's answer lacks follows the open ask: a decide or a to-do an option, a form its first required field left empty in the form's order, and words their words; nothing once anything is filled, written, or attached, or where no ask waits", () => {
   const decide = [asking({ type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] })];
   assert.deepEqual(inboxMissing(decide, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
   assert.equal(inboxMissing(decide, { ...EMPTY_INBOX_DRAFT, choices: ["B"] }), undefined);
@@ -372,6 +372,7 @@ test("what an empty box's answer lacks follows the open ask: a decide or a to-do
       type: INBOX_ASK.ANSWER,
       fields: [
         { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
+        { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
         { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
         { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
       ],
@@ -380,7 +381,7 @@ test("what an empty box's answer lacks follows the open ask: a decide or a to-do
   assert.deepEqual(
     inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
     { kind: INBOX_MISSING.FIELD, label: "Effort" },
-    "blank words fill nothing",
+    "blank words fill nothing, and a yes-or-no left alone is a no",
   );
   assert.equal(
     inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Branch prefix", "luke/")),
