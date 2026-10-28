@@ -508,7 +508,7 @@ test("a skill's row leads with the book in the settings mark slot, and hangs the
 
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release-notes");
-  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Workspace");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "Workspace skill");
   assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
 });
 
