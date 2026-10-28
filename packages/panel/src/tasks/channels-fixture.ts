@@ -15,6 +15,7 @@ import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/autom
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountItems,
   type CodingAgentInboxChanged,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
@@ -1233,6 +1234,23 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
     const pushed: CodingAgentInboxChanged["inbox"] = {
       items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
+    };
+    return pushedOnce(pushed);
+  },
+  // The account's feed of every item, which the window's Inbox draws from: each task's threads, and the stray agent's.
+  [ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+    const taskIds = new Set(
+      THREADS.flatMap((each) => (each.taskId === undefined ? [] : [each.taskId])),
+    );
+    const pushed: CodingAgentAccountItems = {
+      whole: true,
+      scopes: [
+        ...[...taskIds].map((id) => ({
+          scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+          items: itemsOf(id),
+        })),
+        { scope: { kind: INBOX_SCOPE_KIND.AGENT, id: STRAY.agentId }, items: strayItems() },
+      ],
     };
     return pushedOnce(pushed);
   },

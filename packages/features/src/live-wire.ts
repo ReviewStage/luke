@@ -709,7 +709,7 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
 export const ACCOUNT_INBOX_ITEMS = {
   SINCE: "since",
   HELD_ON: ["stamps"],
-  SETTLED_WINDOW_MILLIS: 7 * 24 * 60 * 60 * 1000,
+  SETTLED_WINDOW_MILLIS: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
 /**
