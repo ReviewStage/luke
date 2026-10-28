@@ -503,12 +503,14 @@ const readQuiet = Schema.decodeUnknownOption(
   Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),
 );
 
-test("with Open a task once it starts off, New task starts the task without opening it, and its toast's Open opens it, asking first while a page stands unsaved work", async () => {
+test("with Open a task once it starts off, New task starts the task and its agent without opening them, and its toast's Open opens the agent's tab, asking first while a page stands unsaved work", async () => {
   handState({}, { settings: appSettingsWire(settingsView({ openNewTask: false })) });
+  const agent = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW },
     {
-      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
     AtomRegistryModule.make(),
@@ -517,7 +519,14 @@ test("with Open a task once it starts off, New task starts the task without open
 
   act(() => tab.control().onNewTask());
   await act(async () => {
-    await tab.control().newTask.start("Dark mode", null, tab.control().newTask.workspaceId);
+    await tab.control().newTask.start("", null, tab.control().newTask.workspaceId, {
+      handed: {
+        idempotencyKey: "start-1",
+        prompt: "Dark mode",
+        attachments: [],
+        choice: undefined,
+      },
+    });
   });
   const started = {
     quiet: tab.payloads
@@ -534,11 +543,17 @@ test("with Open a task once it starts off, New task starts the task without open
   await settle();
   const whileAsked = opensAsked(tab.payloads);
   act(() => asked[0]?.());
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   await settle();
 
   assert.deepEqual(started, { quiet: [true], dialog: false, says: "Task startedOpen" });
   assert.deepEqual(whileAsked, [], "Open asks first while a page stands unsaved work");
   assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID]);
+  assert.deepEqual(
+    { tab: tab.control().mainTabs.tab, panel: panelOf(tab).open },
+    { tab: { agent: AGENT_ID }, panel: false },
+    "the task opens on its agent alone, no plan laid over it in a narrow room",
+  );
   handState({});
 });
 

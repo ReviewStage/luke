@@ -2225,10 +2225,14 @@ export function useTasksTab(input: {
   });
 
   const opensNewTask = useAppSlice(OPENS_NEW_TASK);
-  // A task opened from a list, its pin no longer chosen, and on its plan in a narrow room.
-  const selectListed = (taskId: string) => {
+  // A task opened from a list or a started task's toast, its pin no longer chosen.
+  const openUnpinned = (taskId: string) => {
     setChosen((held) => (held?.pin.task === taskId ? undefined : held));
     select(taskId);
+  };
+  // One opened from a list lands on its plan in a narrow room.
+  const selectListed = (taskId: string) => {
+    openUnpinned(taskId);
     if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
   };
   // A started task becomes the host's open one, which turns the page to it,
@@ -2333,12 +2337,13 @@ export function useTasksTab(input: {
   };
 
   // A task started without opening says so in a toast whose Open opens it
-  // as the sidebar would, on the agent's tab where its agent started, or on
-  // the draft saying why where it did not, which the toast says too. Note
-  // that Open asks first while a page stands unsaved work, as the sidebar's
-  // press does, and reads the opener of the render it is pressed in.
-  const selectNow = useRef(guard(selectListed));
-  selectNow.current = guard(selectListed);
+  // as an opening start would, on the agent's tab where its agent started,
+  // or on the draft saying why where it did not, which the toast says too,
+  // so a narrow room does not lay the plan over it as a list's press does.
+  // Note that Open asks first while a page stands unsaved work, as the
+  // sidebar's press does, and reads the opener of the render it is pressed in.
+  const selectNow = useRef(guard(openUnpinned));
+  selectNow.current = guard(openUnpinned);
   const sayStarted = (planId: string, agentRan: boolean) =>
     toast({
       words: agentRan ? TASK_STARTED_NOTE : TASK_STARTED_AGENT_REFUSED_NOTE,

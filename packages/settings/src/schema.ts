@@ -206,7 +206,6 @@ export const APP_SETTING_SCHEMA = {
     field: "openNewTask",
     id: APP_SETTING_ID.OPEN_NEW_TASK,
     label: "Open a task once it starts",
-    detail: "Off, New task keeps you on the page you were on and says the task started.",
     default: true,
     page: SETTINGS_PAGE.ACCOUNT,
     section: SETTING_SECTION.TASKS,
