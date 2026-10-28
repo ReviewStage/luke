@@ -65,6 +65,7 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
+import { forgetStandings } from "./tasks/use-link-standing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
@@ -226,11 +227,12 @@ function AppWindow(): React.JSX.Element {
   const settingsHeld = useAppSlice(SETTINGS_HELD);
   const voiceAvailable = useAppSlice(VOICE_AVAILABLE);
   const microphoneStatus = useAppSlice(MICROPHONE_GRANT);
-  // A picture is read as the account signed in, so the window lets go of every one it read once that account changes.
+  // A picture, and a link's answer, is read as the account signed in, so the window lets go of every one it read once that account changes.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   useEffect(() => {
     forgetPictures();
+    forgetStandings();
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
