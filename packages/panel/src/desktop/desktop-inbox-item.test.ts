@@ -706,8 +706,11 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     "the row wears no agent's tile, its card naming the agent",
   );
   const words = hoveredCard(row, "[data-inbox-row-card]") ?? "";
-  assert.match(words, /^Billing usage alerts/u, "the card leads with its task");
-  assert.match(words, /How is a failed email retried\?/u);
+  assert.match(
+    words,
+    /^How is a failed email retried\?.*Billing usage alerts/u,
+    "the card leads with its title, its task under it",
+  );
   assert.match(words, /Answered/u);
   assert.match(words, /Alerts$/u, "the agent that asked stands at its foot");
   const card =
@@ -765,7 +768,7 @@ test("an item's card names its task as the window names a task everywhere: the k
   const card =
     document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
     assert.fail("the row's card is hung");
-  const head = card.querySelector('.task-card-standing[data-line="one"]');
+  const head = card.querySelector("[data-holder-detail]");
   assert.deepEqual(
     [...(head?.children ?? [])].map((each) => [each.classList[0], each.textContent]),
     [
@@ -931,7 +934,7 @@ test("a settled item offers, over its box, the next item that needs you as the I
   assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.match(
     hoveredCard(next, "[data-inbox-row-card]") ?? "",
-    /^Billing usage alerts.*Alert at 80%\?.*Needs you/u,
+    /^Alert at 80%\?Needs you.*Billing usage alerts/u,
     "the card is the item's own",
   );
   act(() => next.click());

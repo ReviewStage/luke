@@ -259,12 +259,15 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
   );
   restOn(pile.querySelector(".actor-stack-more") ?? assert.fail("the count stands"));
   const row =
-    document.querySelector('.luke-tooltip-card [data-actor-card="more"] .actor-more-row') ??
+    document.querySelector('.luke-tooltip-card [data-actor-card="more"] [data-actor-more]') ??
     assert.fail("the count's card names the rest");
-  assert.equal(
-    row.textContent,
-    "dependabot\u00a0bot · Commented",
-    "the badge keeps to its name's line",
+  assert.deepEqual(
+    [
+      row.querySelector(".luke-hover-card-row-label")?.textContent,
+      row.querySelector(".luke-hover-card-row-end")?.textContent,
+    ],
+    ["dependabot\u00a0bot", "Commented"],
+    "the badge keeps to its name's line, what the face says at the row's end",
   );
 });
 

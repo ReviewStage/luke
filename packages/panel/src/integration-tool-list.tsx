@@ -52,8 +52,7 @@ import { Highlighted } from "./search-field.js";
  * keys in a field of its own, as the MCP popover's filter does, a press
  * keeps the focus there (`keepFocus`), and otherwise the list is one stop
  * for Tab that ↑↓ walk (`List`), the owner following the focus. Where the owner opens
- * nothing, as a server's hover card does (`tasks/server-card.tsx`), each
- * row is its words alone, with no press and no chevron.
+ * nothing, each row is its words alone, with no press and no chevron.
  *
  * A tool's page is its head, the title and the name in the code face after
  * a back where its owner offers one, then every hint its server sent,

@@ -566,8 +566,8 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(card?.querySelector(".agent-servers-name")?.textContent, "Vercel");
-  assert.equal(card?.querySelector(".agent-servers-count")?.textContent, "4 tools");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Vercel");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "4 tools");
 
   type("get_deployment");
   restOn(
@@ -579,7 +579,7 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const toolCard = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(toolCard?.querySelector(".agent-servers-name")?.textContent, "Vercel");
+  assert.equal(toolCard?.querySelector(".luke-hover-card-name")?.textContent, "Vercel");
   assert.equal(toolCard?.querySelectorAll('ul[aria-label$=" tools"] > li').length, 1);
 });
 
@@ -593,7 +593,7 @@ test("a server that is not connected hangs its card too, though its press is no 
   });
 
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(card?.querySelector(".agent-servers-name")?.textContent, "Mercury");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Mercury");
   assert.equal(
     container.querySelectorAll(".agent-servers-list .luke-list-row-chevron").length,
     2,
