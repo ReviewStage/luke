@@ -54,7 +54,8 @@ function revisionsStatement(userId: string, taskId: string) {
             actor: planRevision.actor,
             editorId: user.id,
             editorName: user.name,
-            liveSessionId: planRevision.liveSessionId,
+            // No revision is written on a call any more; a released desktop still decodes the key.
+            liveSessionId: sql<string | null>`null::text`,
             agentId: planRevision.agentId,
             agentModel: codingAgent.model,
             // The name the agent goes by: Luke for an operator, else its title.

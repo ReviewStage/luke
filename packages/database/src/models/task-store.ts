@@ -469,7 +469,7 @@ function sectionEditOf(
     ...(writer.agentId === undefined ? undefined : { agentId: writer.agentId }),
     ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
-    duringCall: writer.duringCall === true,
+    duringCall: false,
   };
 }
 

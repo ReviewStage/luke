@@ -223,7 +223,7 @@ const FIXTURE_HISTORY: readonly {
         actor: PLAN_ACTOR.NOTETAKER,
         by: FIXTURE_PERSON.ADA,
         at: CALL_AT - 5 * HOUR,
-        duringCall: true,
+        duringCall: false,
       },
       startedAt: CALL_AT - 5 * HOUR - 25 * 60_000,
       changes: 9,

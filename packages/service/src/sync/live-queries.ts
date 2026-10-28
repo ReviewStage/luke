@@ -16,7 +16,6 @@ import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   agentBrowserTabSync,
   agentSectionEntrySync,
-  asksSync,
   attachmentSync,
   automationRunSync,
   automationSync,
@@ -365,7 +364,7 @@ export const taskBrowserTabsLive = defineLiveQuery({
  * under the agent's own `parentConversationId`), started by `ownerId` and
  * read by `readerId` while it is a member of the agent's workspace
  * (`transcript-live.ts`). It is woken by a write to the transcript's
- * messages, turns, asks, or conversation, to a worker's conversation or
+ * messages, turns, or conversation, to a worker's conversation or
  * delegation under the agent's, to the agent itself, and to what admits the
  * reader to its workspace or repository.
  *
@@ -393,7 +392,6 @@ export const agentTranscriptLive = defineLiveQuery({
     messagesSync,
     conversationsSync,
     turnsSync,
-    asksSync,
     codingAgentDelegationSync,
     userSync,
     codingAgentSync,

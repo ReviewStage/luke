@@ -160,8 +160,6 @@ export const AGENT_ACT_KIND = {
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   CODING_AGENTS_SEEN: "codingAgents.seen",
   CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */

@@ -1,7 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
-  type AskTurn,
-  askTurnsOf,
   awaitingLinesOf,
   type CodingAgent,
   type CodingAgentDelegation,
@@ -148,8 +146,6 @@ type TranscriptMessage = StoredUIMessage &
     readonly sentBy?: CodingAgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
-    readonly turnId?: string;
-    readonly readFrom?: AskTurn;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -325,30 +321,10 @@ function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[
     .map((record) => record.id);
 }
 
-/** The asks the voice's lines among the rows followed, by their delegation, each the ask's client id. */
-function delegationsAmong(records: readonly StoredMessageRecord[]): readonly string[] {
-  return [
-    ...new Set(
-      records.flatMap((record) => {
-        const delegation = spokenDelegationOf(record.message);
-        return delegation === undefined ? [] : [delegation];
-      }),
-    ),
-  ];
-}
-
-/** The ask a line the agent said on a call followed, where the voice handed one on before it; none for any other row. */
-function spokenDelegationOf(message: StoredUIMessage): string | undefined {
-  if (message.role !== MESSAGE_ROLE.ASSISTANT || !spokenOnCall(message)) return undefined;
-  const { metadata } = message;
-  return "delegation_id" in metadata ? metadata.delegation_id : undefined;
-}
-
-/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in; and of the agent's own lines on a call, the turn each one's ask ran in, by the ask. */
+/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in. */
 interface LinesRead {
   readonly senders: ReadonlyMap<string, LineSent>;
   readonly places: ReadonlyMap<string, LinePlace>;
-  readonly asked: ReadonlyMap<string, AskTurn>;
 }
 
 /** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
@@ -360,22 +336,16 @@ function spokenOnCall(message: StoredUIMessage): boolean {
 
 /**
  * A row as the page carries it: its message, for a developer's line when
- * and what sent it and where in a turn under way it arrived, for a line the
- * agent said on a call when its words began, and for a turn's journal when
- * the turn began and what it ran on and, once the journal closed, when it
- * did and what it spent, and the turn it is the journal of. Note that a
- * spoken line of the agent's carries no turn's record, because the line is
- * what was said and the turn's journal is its own row; it names instead the
- * turn whose work it answers (`readFrom`), the one the ask it followed ran
- * in, read from the ask's binding at every page rather than stamped on the
- * row as it was said, so a line said while that turn ran, or long after it
- * settled, or before the ask learned its turn, names it all the same, and
- * where the ask joined a typed turn under way, the steps begun before it.
+ * and what sent it and where in a turn under way it arrived, for a line
+ * said on a call when its words began, and for a turn's journal when the
+ * turn began and what it ran on and, once the journal closed, when it did
+ * and what it spent. Note that a spoken line carries no turn's record,
+ * because the line is what was said and the turn's journal is its own row.
  */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
-  { senders, places, asked }: LinesRead,
+  { senders, places }: LinesRead,
 ): TranscriptMessage {
   if (record.message.role === MESSAGE_ROLE.USER) {
     const sent = senders.get(record.id);
@@ -389,20 +359,12 @@ function transcriptMessageOf(
     };
   }
   if (spokenOnCall(record.message)) {
-    const delegation = spokenDelegationOf(record.message);
-    const readFrom = delegation === undefined ? undefined : asked.get(delegation);
-    return {
-      ...record.message,
-      sentAt: record.placedAt.getTime(),
-      ...(readFrom === undefined ? undefined : { readFrom }),
-    };
+    return { ...record.message, sentAt: record.placedAt.getTime() };
   }
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
     ...record.message,
-    // Note that a turn's journal shares the turn's id as its client id, which no other row of the turn does.
-    ...(record.clientId === record.turnId ? { turnId: record.turnId } : undefined),
     startedAt: turn.startedAt,
     ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
     ...turn.record,
@@ -544,7 +506,7 @@ const withUsage = (
     };
   });
 
-/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines, where it arrived, and the turn each of the agent's spoken lines answers. */
+/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines and where it arrived. */
 const transcriptMessagesOf = (
   target: ConversationTarget,
   records: readonly StoredMessageRecord[],
@@ -556,7 +518,6 @@ const transcriptMessagesOf = (
         journalTurns: journalTurnsOf(target.userId, records),
         senders: lineSendersOf(target, lines),
         places: linePlacesOf(target, lines),
-        asked: askTurnsOf(target, delegationsAmong(records)),
       },
       { concurrency: CODER.READ_CONCURRENCY },
     );

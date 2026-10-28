@@ -64,7 +64,6 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
@@ -121,7 +120,6 @@ import {
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
-  codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDeleteAnswerViewSchema,
@@ -728,8 +726,6 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
-  /** The calls into one agent, each with its lines and its record; or why there is no answer. */
-  codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
@@ -1916,11 +1912,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
         answerOf(codingAgentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
-      ),
-    codingAgentCalls: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CALLS, { agentId: params.agentId }),
-        answerOf(codingAgentCallsAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     channelsList: (params) =>
       Effect.map(

@@ -130,7 +130,7 @@ function Version(): ReactNode {
     viewing: {
       line: {
         seq: 2,
-        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: true },
+        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: false },
         startedAt: 1,
         changes: 1,
       },

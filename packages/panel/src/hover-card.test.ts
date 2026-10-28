@@ -5,11 +5,9 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
-  TURN_ENDING,
 } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TASK_SKILL_SOURCE } from "@luke/features/task-wire";
-import { LIVE_CLOSE_REASON } from "@luke/live";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,27 +16,24 @@ import { TaskCard } from "./desktop/task-card.js";
 import { GLYPH_STATE } from "./state-glyph.js";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref.js";
 import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card.js";
-import { CallEndMarker } from "./tasks/call-card.js";
 import { ChangesCard } from "./tasks/changes-card.js";
 import { subagentActor } from "./tasks/coding-agent-model.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
-import { TurnCard } from "./tasks/turn-card.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
  * hover-card.test.ts -- every hover card heads itself alike: a task's, a
- * skill's, an agent tab's, a Changes tab's, a turn's, and a call's each
- * name their subject in the one head, with the line under the name and the
- * corner in the same places, and a call's card is a turn's card.
+ * skill's, an agent tab's, and a Changes tab's each name their subject in
+ * the one head, with the line under the name and the corner in the same
+ * places.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const STARTED_AT = Date.UTC(2026, 9, 14, 12, 0, 0);
-const ENDED_AT = STARTED_AT + 90_000;
 const ignore = () => undefined;
 
 const roots: Root[] = [];
@@ -268,42 +263,6 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
     skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,
     "Cut a release.",
   );
-});
-
-test("a call's card is a turn's card: the model at the head over when it ran, how it ended at the corner, and its figures under a rule", () => {
-  const turn = drawn(
-    createElement(TurnCard, {
-      startedAt: STARTED_AT,
-      endedAt: ENDED_AT,
-      record: {
-        model: "openai/gpt-5.5",
-        effort: "high",
-        ending: TURN_ENDING.STOPPED,
-        tokens: { inputTokens: 10, outputTokens: 4, cachedInputTokens: 2 },
-      },
-      models: [],
-    }),
-  );
-  const call = drawn(
-    createElement(CallEndMarker, {
-      line: "Call ended",
-      startedAt: STARTED_AT,
-      record: {
-        endedAt: ENDED_AT,
-        ending: LIVE_CLOSE_REASON.CONNECTION_LOST,
-        model: "openai/gpt-realtime-2",
-        usage: { seconds: 120, confirmed: true },
-      },
-    }),
-  );
-  const callCard = hung(call, "[data-call-ended]");
-  const turnHead = headOf(turn);
-  const callHead = headOf(callCard);
-  assert.equal(turnHead.corner, "Stopped");
-  assert.equal(callHead.corner, "Dropped");
-  for (const head of [turnHead, callHead]) {
-    assert.match(head.sub ?? "", /Oct 14, 2026/u, "when it ran stands under the model");
-  }
 });
 
 test("a plan's card says in its corner when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
