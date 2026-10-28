@@ -29,7 +29,6 @@ import {
   ACME,
   ASKING_ID,
   answeredBy,
-  answerWithNote,
   arrowNamed,
   asking,
   askingMessage,
@@ -44,7 +43,6 @@ import {
   FUNNEL,
   foldedCounts,
   GROUPING_KEY,
-  gatedAnswers,
   headerNamed,
   headTitle,
   heardName,
@@ -576,7 +574,7 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).filter((row) => !row.startsWith("# ")).length;
 }
 
-test("the sidebar's Inbox counts what For you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question, and drops a question the moment it is answered", async () => {
+test("the sidebar's Inbox counts what For you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const NOTE: InboxItem = {
     ...noticeOf(item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500)),
@@ -612,15 +610,6 @@ test("the sidebar's Inbox counts what For you lists, the questions and the updat
   await settle();
   assert.equal(toDoRows(page), 3, "the two questions and the update");
   assert.equal(sidebarInboxCount(page), 3, "the sidebar counts the rows For you lists");
-
-  // Answering the open ask drops it from both the moment it is sent.
-  const { sent } = gatedAnswers();
-  act(() => rowNamed(page, "Alert at 80%?").click());
-  await settle();
-  answerWithNote(page, "Use 90%");
-  await settle();
-  assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.equal(sidebarInboxCount(page), 2);
 });
 
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {

@@ -2584,6 +2584,76 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a plain reply the service answers with no transaction lands as the service answered its item in every inbox holding it",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, sealScope, sealItems, live } = harness;
+      sealScope(LIVE_ANSWERED);
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* settled;
+      live.scope.set({ items: [ITEM_ROW], messages: [], files: [] });
+      deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
+      yield* toldTimes(harness.told, 1);
+      yield* toldTimes(harness.accountItems, 1);
+      const replied = (item: InboxItem) => JSON.stringify(item).includes(MESSAGE_ID);
+      assert.deepEqual(bothHold(harness, replied), [false, false]);
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+        itemId: ITEM.id,
+        text: "Push it after the tests pass.",
+        clientKey: "reply-1",
+      });
+      yield* settled;
+      assert.deepEqual(bothHold(harness, replied), [true, true]);
+    }),
+);
+
+it.effect(
+  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked and before the account's read carries it",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealAccount, live, commitIn, accountInboxes } = yield* subject();
+      sealAccount(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      const plan = { planId: TASK_ID, items: 1, toDo: 1, updatedAt: ITEM.updatedAt };
+      const parts = { planless: [], automations: [], failedRuns: [] };
+      live.account.set({ ...parts, items: [WAITING], plans: [plan] }, ["9100"]);
+      yield* toldTimes(accountInboxes, 1);
+      /** What waits, and each task's count, as the account inbox was last told. */
+      const waiting = () => {
+        const told = accountInboxes().at(-1);
+        assert.ok(isRecord(told) && Array.isArray(told.items) && Array.isArray(told.plans));
+        return {
+          items: told.items.length,
+          toDo: told.plans.map((each) => (isRecord(each) ? each.toDo : undefined)),
+        };
+      };
+      assert.deepEqual(waiting(), { items: 1, toDo: [1] });
+
+      commitIn("9300");
+      const closing = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+        }),
+      );
+      yield* settled;
+      assert.deepEqual(waiting(), { items: 0, toDo: [0] });
+      assert.equal(closing.pollUnsafe(), undefined);
+
+      live.account.set({ ...parts, items: [], plans: [{ ...plan, toDo: 0 }] }, ["9300"]);
+      yield* nextPoll;
+      yield* Fiber.join(closing);
+      assert.deepEqual(waiting(), { items: 0, toDo: [0] });
+    }),
+);
+
 it.effect("a Start answers its agent before the task list carries the Start's transaction", () =>
   Effect.gen(function* () {
     const { call, startCommits } = yield* subject({ listed: () => Effect.never });

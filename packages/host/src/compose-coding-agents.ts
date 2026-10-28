@@ -82,6 +82,12 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
+  acknowledgedNow,
+  answeredNow,
+  closedNow,
+  type InboxReader,
+} from "@luke/features/inbox-writes";
+import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
@@ -103,11 +109,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
-  acknowledgedNow,
-  answeredNow,
-  closedNow,
   INBOX_CHANGE,
-  type InboxReader,
   type InboxReads,
   type InboxWritten,
   inboxReads,
