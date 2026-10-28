@@ -6,9 +6,10 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { Announcer } from "../announcer/announcer.js";
 import { CardPress } from "../card-press/card-press.js";
 import { List, ListRow } from "../list-row/list-row.js";
+import { SELECT_BOX_PLACE } from "./select-box.js";
 import { type SelectionAct, SelectionBar } from "./selection-bar.js";
 import { selectionMenu } from "./selection-menu.js";
-import { SelectionRegion } from "./selection-region.js";
+import { SelectionRegion, selectionRun } from "./selection-region.js";
 
 /**
  * selection.test.ts -- a List asked to choose rows does so as a Mac's list
@@ -23,7 +24,9 @@ import { SelectionRegion } from "./selection-region.js";
  * menu, and clears on Clear and on Esc; with none chosen it draws nothing.
  * A chosen row's menu offers the bar's acts, an act's choices as a submenu.
  * A region of the app's own lists chooses its card presses the same way,
- * across every list it holds. Synthetic places.
+ * across every list it holds, a ⇧-click reaching only across its own run
+ * where the lists are runs; a card's box and X put it in or take it out
+ * without opening it. Synthetic places.
  */
 
 declare global {
@@ -406,20 +409,25 @@ test("the bar's buttons are one Tab stop, ←→ walking them", () => {
   expect(document.activeElement).toBe(button(container, "Clear selection"));
 });
 
-/** Places split over two lists of card presses, chosen together in one region; each place opened is listed after it. */
-function ChoosingCards(): React.JSX.Element {
+/**
+ * Places split over two lists of card presses, each drawing its box, chosen
+ * together in one region, the lists runs of their own where `runs`; each
+ * place opened is listed after it.
+ */
+function ChoosingCards({ runs = false }: { runs?: boolean }): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<string[]>([]);
   const list = (names: readonly string[]) =>
     createElement(
       "ul",
-      null,
+      runs ? selectionRun() : null,
       names.map((name) =>
         createElement(
           "li",
           { key: name },
           createElement(CardPress, {
             selectKey: name,
+            selectBox: SELECT_BOX_PLACE.GUTTER,
             onPress: () => setOpened((held) => [...held, name]),
             children: name,
           }),
@@ -477,6 +485,48 @@ test("a region chooses its card presses across its lists: ⌘-click one, ⇧-cli
   expect(chosen()).toBe("");
   click("Inbox");
   expect(page.querySelector("[data-opened]")?.textContent).toBe("Inbox");
+});
+
+test("a card's box and X on the card in hand each put it in and take it out, opening nothing", () => {
+  const page = draw(createElement(ChoosingCards));
+  const box = (name: string) => {
+    const found = page
+      .querySelector(`[data-select-key="${name}"]`)
+      ?.parentElement?.querySelector<HTMLElement>('[role="checkbox"]');
+    if (found === null || found === undefined) throw new Error(`no box for ${name}`);
+    return found;
+  };
+  const press = (name: string) =>
+    page.querySelector<HTMLButtonElement>(`[data-select-key="${name}"]`) ?? document.body;
+  const chosen = () => page.querySelector("[data-chosen]")?.textContent;
+
+  act(() => box("Tasks").click());
+  act(() => box("Automations").click());
+  expect(chosen()).toBe("Tasks,Automations");
+  act(() => box("Tasks").click());
+  expect(chosen()).toBe("Automations");
+
+  act(() => press("Board").focus());
+  expect(key("x")).toBe(true);
+  expect(chosen()).toBe("Automations,Board");
+  key("x");
+  expect(chosen()).toBe("Automations");
+  expect(page.querySelector("[data-opened]")?.textContent).toBe("");
+});
+
+test("where the lists are runs, a ⇧-click reaches only across the run its card stands in", () => {
+  const page = draw(createElement(ChoosingCards, { runs: true }));
+  const press = (name: string, keys: MouseEventInit) =>
+    act(() => {
+      page
+        .querySelector(`[data-select-key="${name}"]`)
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, ...keys }));
+    });
+  press("Board", { metaKey: true });
+  press("Settings", { shiftKey: true });
+  expect(page.querySelector("[data-chosen]")?.textContent).toBe("Board,Automations,Settings");
+  press("Inbox", { shiftKey: true });
+  expect(page.querySelector("[data-chosen]")?.textContent).toBe("Board,Inbox");
 });
 
 test("Clear in the bar over a region hands the focus to the region's first card rather than the page", () => {

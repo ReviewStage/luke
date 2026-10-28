@@ -14,6 +14,7 @@ import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
 import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-selection.js";
+import { SelectBox, type SelectBoxPlace } from "../selection/select-box.js";
 
 /**
  * card-press.tsx -- the one press a whole card is: a real button that reaches every edge of the card it stands in.
@@ -57,7 +58,10 @@ import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-
  * In a `SelectionRegion`, a press with a key (`selectKey`) is a row that can
  * be chosen: ⌘- and ⇧-clicks on the button choose rows rather than press it
  * (`list-selection.ts`), and one chosen takes the selected fill on its
- * reach and is described as selected.
+ * reach and is described as selected. Where the card says where
+ * (`selectBox`), the press draws the row's box beside itself (`SelectBox`),
+ * the pointer's way to choose it: in the card, after the button, since a
+ * button holds no control.
  *
  * A press that is an item of a roving set (`roving`), a list's or a board
  * column's whose box `useRovingKeys` keeps, is one of the set's items: the
@@ -70,7 +74,7 @@ import { holdRun, ListSelectionContext, selectableRow } from "../selection/list-
 
 /** The press: a bare button holding the words that name its card. */
 const PRESS =
-  "luke-card-press group/card-press flex min-w-0 flex-col items-stretch border-0 bg-transparent p-0 text-start text-inherit [font:inherit] disabled:cursor-default";
+  "luke-card-press group/card-press peer/card-press flex min-w-0 flex-col items-stretch border-0 bg-transparent p-0 text-start text-inherit [font:inherit] disabled:cursor-default";
 
 /**
  * The reach, covering every edge of the card, the nearest positioned box,
@@ -143,7 +147,8 @@ function pulseCard(press: HTMLElement): void {
 }
 
 /** What is a control of its own inside a card, whose press is its own rather than the card's. */
-const CONTROL = "a, button, input, select, textarea, summary, [role='button'], [role='menuitem']";
+const CONTROL =
+  "a, button, input, select, textarea, summary, [role='button'], [role='menuitem'], [role='checkbox']";
 
 /** One whole-card press: `children` named on the button, reaching the card it stands in. */
 export function CardPress({
@@ -154,6 +159,7 @@ export function CardPress({
   label,
   disabled = false,
   selectKey,
+  selectBox,
   roving = false,
   ref,
   onKeyDown,
@@ -178,6 +184,8 @@ export function CardPress({
   disabled?: boolean | undefined;
   /** What the card is chosen by in a `SelectionRegion`; a press with none is never chosen. */
   selectKey?: string | undefined;
+  /** Where the card draws the box the pointer chooses it by, where it can be chosen; none draws no box. */
+  selectBox?: SelectBoxPlace | undefined;
   /** Whether it is an item of a roving set, whose box keeps one Tab stop that the arrows walk (`useRovingKeys`). */
   roving?: boolean | undefined;
   /** The button, for what focuses it or measures against it. */
@@ -221,32 +229,37 @@ export function CardPress({
     return () => card.removeEventListener("click", heard, true);
   }, [reach]);
   return (
-    <button
-      ref={held}
-      type="button"
-      className={PRESS}
-      data-reach={reach}
-      data-corner={corner}
-      {...{ [CARD_PRESS_ATTRIBUTE]: "" }}
-      aria-label={label}
-      aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
-      data-selected={chosen ? "true" : undefined}
-      {...(choosable ? selectableRow(selectKey) : {})}
-      {...(roving ? rovingItem() : {})}
-      disabled={disabled}
-      onMouseDown={choosable ? holdRun : undefined}
-      onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-        pulseCard(event.currentTarget);
-        // Note that a ⌘- or ⇧-click that chose rows is no press of the card.
-        if (!(choosable && selecting.press(selectKey, event))) onPress(event);
-        onClick?.(event);
-      }}
-      onKeyDown={onKeyDown}
-      {...hint}
-      {...withContextMenu(contextMenu, { onPointerDown, onTouchEnd })}
-    >
-      {children}
-      <span className={REACH} data-focus-ring="" aria-hidden="true" />
-    </button>
+    <>
+      <button
+        ref={held}
+        type="button"
+        className={PRESS}
+        data-reach={reach}
+        data-corner={corner}
+        {...{ [CARD_PRESS_ATTRIBUTE]: "" }}
+        aria-label={label}
+        aria-description={chosen ? SELECTION_WORDS.SELECTED : undefined}
+        data-selected={chosen ? "true" : undefined}
+        {...(choosable ? selectableRow(selectKey) : {})}
+        {...(roving ? rovingItem() : {})}
+        disabled={disabled}
+        onMouseDown={choosable ? holdRun : undefined}
+        onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+          pulseCard(event.currentTarget);
+          // Note that a ⌘- or ⇧-click that chose rows is no press of the card.
+          if (!(choosable && selecting.press(selectKey, event))) onPress(event);
+          onClick?.(event);
+        }}
+        onKeyDown={onKeyDown}
+        {...hint}
+        {...withContextMenu(contextMenu, { onPointerDown, onTouchEnd })}
+      >
+        {children}
+        <span className={REACH} data-focus-ring="" aria-hidden="true" />
+      </button>
+      {choosable && selectBox !== undefined ? (
+        <SelectBox selectKey={selectKey} place={selectBox} />
+      ) : null}
+    </>
   );
 }
