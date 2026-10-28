@@ -77,6 +77,7 @@ import {
   awaitingLinesOf,
   awaitingLinesOfReached,
   type LatestTurn,
+  lastSettledTurnsOfReached,
   latestTurnsOf,
   latestTurnsOfReached,
   type TurnUsageRow,
@@ -253,6 +254,7 @@ export type CodingAgentLatestTurn = LatestTurn;
 export {
   awaitingLinesOf,
   awaitingLinesOfReached,
+  lastSettledTurnsOfReached,
   latestTurnsOf,
   latestTurnsOfReached,
   type TurnUsageRow,

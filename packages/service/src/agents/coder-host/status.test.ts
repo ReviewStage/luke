@@ -16,19 +16,13 @@ import { Duration } from "effect";
 import { expect, test } from "vitest";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
-import {
-  codingAgentActivityAt,
-  codingAgentFailureOf,
-  codingAgentStatusOf,
-  codingAgentSummary,
-} from "./status.js";
+import { codingAgentFailureOf, codingAgentStatusOf, codingAgentSummary } from "./status.js";
 
 /**
- * status.test.ts -- when a coding agent last did something settled: started,
- * handed a message, or its turn ended, and never a moment a turn streams;
- * how long a line of the developer's awaiting its turn reads it running; and
- * why a failed turn failed, a prompt past the model's window told apart;
- * and the Mac a local agent's summary names, and when it last beat.
+ * status.test.ts -- how long a line of the developer's awaiting its turn
+ * reads it running; why a failed turn failed, a prompt past the model's
+ * window told apart; and the Mac a local agent's summary names, and when it
+ * last beat.
  */
 
 const LINE_GRACE_MS = Duration.toMillis(CODER.LINE_GRACE);
@@ -57,20 +51,6 @@ function turn(times: {
     fastRefused: false,
   };
 }
-
-test("an agent with no turn yet last did something when it was started", () => {
-  expect(codingAgentActivityAt(undefined, { createdAt: STARTED })).toBe(1_000);
-});
-
-test("an agent at work last did something when its turn was handed the message, however long it streams", () => {
-  const running = turn({ queuedAt: 4_000, startedAt: 4_500 });
-  expect(codingAgentActivityAt(running, { createdAt: STARTED })).toBe(4_500);
-});
-
-test("an agent whose turn ended last did something when it ended", () => {
-  const settled = turn({ queuedAt: 4_000, startedAt: 4_500, settledAt: 9_000 });
-  expect(codingAgentActivityAt(settled, { createdAt: STARTED })).toBe(9_000);
-});
 
 test("a line sent to an idle agent reads it running for the grace its turn opens in, and failed past it, unanswered", () => {
   const settled = turn({ queuedAt: 2_000, startedAt: 2_500, settledAt: 3_000 });

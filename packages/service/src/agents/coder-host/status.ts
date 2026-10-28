@@ -246,24 +246,22 @@ export function codingAgentRunStartedAt(
 
 /**
  * When the agent last did something settled, in epoch milliseconds: the
- * latest of when it was started, when its newest turn was handed a message
- * (queued, then begun), and when that turn settled. None of them moves while
- * a turn streams, so a list ordered by it holds still while the agent works,
- * and moves once, when the turn ends. Note that a subagent's turns run inside
- * its parent's, and that an item the agent posts to the Inbox or a pull
- * request it opens is posted inside a turn, so the parent's turn already
- * brackets them, and none is read apart.
+ * later of when it was started and when its newest turn to end ended
+ * (`lastSettledTurnsOfReached`). Note that a turn's start is no activity,
+ * because a turn starts on whatever wakes the agent, a check finishing or a
+ * wakeup it set as often as a line of the developer's, and the row would
+ * read "now" with nothing new on it; what the turn did shows once it ends.
+ * So a list ordered by it holds still while the agent works, and moves once,
+ * when the turn ends. Note too that a subagent's turns run inside its
+ * parent's, and that an item the agent posts to the Inbox or a pull request
+ * it opens is posted inside a turn, so the parent's turn already brackets
+ * them, and none is read apart.
  */
 export function codingAgentActivityAt(
-  turn: CodingAgentLatestTurn | undefined,
+  lastSettledAt: Date | undefined,
   standing: Pick<AgentStanding, "createdAt">,
 ): number {
-  const begun = turn === undefined ? undefined : (turn.startedAt ?? turn.queuedAt);
-  return Math.max(
-    standing.createdAt.getTime(),
-    begun?.getTime() ?? 0,
-    turn?.settledAt?.getTime() ?? 0,
-  );
+  return Math.max(standing.createdAt.getTime(), lastSettledAt?.getTime() ?? 0);
 }
 
 /** Who archived an agent as its banner says it: the member, where their account stands, the agent acting for them, and why. */
