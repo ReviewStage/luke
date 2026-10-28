@@ -21,8 +21,8 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 /**
  * tasks-app.ts -- a plan's attachment served as its bytes, a picture its text names or a file one of its comments carries: the one plan read the hosted oRPC router does not answer, since it answers bytes rather than JSON.
  *
- * The plans themselves, and each one's board, edit, history, transcript,
- * work, and Stop, are the router's (`tasks-procedures.ts`), and so are its
+ * The plans themselves, and each one's edit, history, transcript, work,
+ * and Stop, are the router's (`tasks-procedures.ts`), and so are its
  * code, its repository's files, its pages, and a picture kept on it
  * (`task-files-procedures.ts`). The read here resolves the bearer before it
  * touches a row, and every row it touches is one the bearer's account

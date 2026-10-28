@@ -277,45 +277,14 @@ export function nextFailedRunExpiry(
 }
 
 /**
- * One task's whiteboard sealed for following: the address, and one statement
- * that marks where the board stands. The desktop reads the board again once
- * the mark moves, rather than when a call's activity suggests it might have.
- * The service answers `not-found` for a task the account does not reach, and
- * `unavailable` where its deployment's Realtime is misconfigured, which the
- * desktop answers by asking again.
- */
-export const taskBoardLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ board: sealedLiveQuerySchema }),
-});
-
-export type TaskBoardLiveAnswer = typeof taskBoardLiveAnswerSchema.Type;
-
-/** The board as its row delivers it: Luke's latest drawing's number, the one the scene holds, and whether the scene holds its image. */
-const taskBoardLiveRowSchema = EffectSchema.Struct({
-  taskId: EffectSchema.String,
-  drawingNumber: EffectSchema.Finite,
-  appliedDrawing: EffectSchema.Finite,
-  imaged: EffectSchema.Boolean,
-});
-
-/** The board's rows as Realtime delivers them: one, or none before the board was first written or for a task the account no longer reaches. */
-export const taskBoardLiveRowsSchema = EffectSchema.Struct({
-  board: EffectSchema.Array(taskBoardLiveRowSchema),
-});
-
-export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
-
-/**
  * An open task's plan, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
  * and carries none of their words: the plan's last save (`plan`), the pages agents showed (`pages`), the
  * calls about the task (`calls`), and the code its agents showed (`code`),
  * which answers no rows now that no agent shows code but stands because a
  * released desktop requires it. The desktop reads a part again once its mark moves,
- * rather than when a call's activity or end suggests it might have; the
- * board is followed on its own (`taskBoardLiveAnswerSchema`). The service
- * answers `not-found` for a task the account does not reach, and
+ * rather than when a call's activity or end suggests it might have. The
+ * service answers `not-found` for a task the account does not reach, and
  * `unavailable` where its deployment's Realtime is misconfigured, which the
  * desktop answers by asking again.
  */

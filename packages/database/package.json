@@ -20,7 +20,6 @@
     "./models/asks": "./src/models/asks.js",
     "./models/automation-store": "./src/models/automation-store.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
-    "./models/board-store": "./src/models/board-store.js",
     "./models/channel-store": "./src/models/channel-store.js",
     "./models/child-titles": "./src/models/child-titles.js",
     "./models/coding-agent-store": "./src/models/coding-agent-store.js",

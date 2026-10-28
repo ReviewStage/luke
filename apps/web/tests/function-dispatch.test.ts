@@ -55,9 +55,9 @@ test("a request with no route key, the oRPC key, or a key the function does not 
     ]),
   );
   for (const query of [
-    `${DISPATCH_QUERY.ROUTE}=${ORPC_ROUTE_KEY}&${DISPATCH_QUERY.PATH}=plans/p1/board&wait=1`,
-    `${DISPATCH_QUERY.ROUTE}=plans/board&${DISPATCH_QUERY.PATH}=plans/p1/board&wait=1`,
-    `${DISPATCH_QUERY.PATH}=plans/p1/board&wait=1`,
+    `${DISPATCH_QUERY.ROUTE}=${ORPC_ROUTE_KEY}&${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
+    `${DISPATCH_QUERY.ROUTE}=plans/revisions&${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
+    `${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
   ]) {
     await dispatcher.fetch(new Request(`https://luke.test/api/default.js?${query}`));
   }
@@ -65,9 +65,9 @@ test("a request with no route key, the oRPC key, or a key the function does not 
   assert.deepEqual(
     orpc.requests.map((request) => request.url),
     [
-      "https://luke.test/api/plans/p1/board?wait=1",
-      "https://luke.test/api/plans/p1/board?wait=1",
-      "https://luke.test/api/plans/p1/board?wait=1",
+      "https://luke.test/api/plans/p1/revisions?wait=1",
+      "https://luke.test/api/plans/p1/revisions?wait=1",
+      "https://luke.test/api/plans/p1/revisions?wait=1",
       "https://luke.test/api/default.js?wait=1",
     ],
   );

@@ -9,7 +9,6 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
-import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import type { LocalAgentRefusal } from "./coding-agent-wire.js";
@@ -32,7 +31,6 @@ import { imageBodyOf } from "./image-body.js";
 import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
-  type TaskBoardLiveAnswer,
   type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
@@ -440,37 +438,6 @@ export class HostedTaskClient {
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
   }
 
-  /** One task's whiteboard as it stands; nothing where the service did not answer one. */
-  readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
-    );
-  }
-
-  /**
-   * Where one task's whiteboard stands, sealed for following over Neon
-   * Realtime, or with `poll` its rows inline at the poll address, for a
-   * reader polling while Realtime fails it, for the account `userId`
-   * names: not found where the account reaches no such task, signed out
-   * where the session is no longer that account's, unanswered for anything
-   * else, which the caller answers by sealing it again.
-   */
-  boardLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
   /**
    * Where one task's pages and calls stand, sealed for following over Neon
    * Realtime, or with `poll` their rows inline, for a reader polling while
@@ -830,21 +797,6 @@ export class HostedTaskClient {
         askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
         (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
-    );
-  }
-
-  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written and, where the write moved the board's live row, the id of its transaction, or nothing where the service did not answer. */
-  saveBoard(
-    taskId: string,
-    elements: readonly BoardElement[],
-    appliedDrawing: number,
-    image?: string,
-  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.plans.saveBoard, {
-        params: { id: taskId },
-        body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
-      }),
     );
   }
 
