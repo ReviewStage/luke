@@ -222,7 +222,7 @@ export function StandingCallCardDock({
 /**
  * The foot of the column standing at a Luke window's left, wherever the
  * window stands: the tasks' sidebar, Settings' page list, or a version
- * history's versions, a plan's or the plan template's. Every one of them
+ * history's versions. Every one of them
  * docks the card here, above whatever the column keeps at its foot, so the
  * card is in the same place on every page and never stands over the
  * column's own rows. Only the tasks' sidebar folds, so only it hands the

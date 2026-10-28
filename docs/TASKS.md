@@ -12,8 +12,8 @@ tests.
 The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
-- **One saved plan per named task**, one free Markdown text started as a
-  copy of the account's template ("The template" below), written by the
+- **One saved plan per named task**, one free Markdown text that starts
+  empty ("The plan's text" below), written by the
   task's coding agents, which take notes into it with `edit_plan` on a call
   or off one, and by the developer, whose editor is the document itself
   ("Editing" below).
@@ -79,8 +79,8 @@ sidebar, one page at a time:
  │  ## Context                                                  │
  │  Only an admin can add someone to a workspace...             │
  │  ## Goal                                                     │
- │  What is true once the work ships, as outcomes a user...     │
- │  ...  (every section of the template, in order)              │
+ │  - A member invites a teammate by email.                     │
+ │  ...  (every section written so far, in order)               │
  │  ## Open questions                                           │
  │  - Who can withdraw an invite...                             │
  │  ## Assumptions                                              │
@@ -762,51 +762,22 @@ line selected and erased. A unit of the document is a section as the
 service cuts one ("Document" above), known by its heading, so a section
 joining or leaving moves no other words.
 
-### The template
+### The plan's text
 
 A plan is one free Markdown document (`packages/features/src/plan-document.ts`,
 the row's `plan.document`), with no title line, since the task's name is its
 own, and its assumptions an ordinary section of the text. Every plan starts
-as a copy of its account's own template, copied as the plan starts so a
-later edit of the template leaves every plan as it stands. The service keeps
-the template in `account_preference.plan_template` and serves it at
-`GET`/`PUT /api/account/plan-template` (null goes back to the default); an
-account that never wrote one gets `DEFAULT_PLAN_TEMPLATE`
-(`packages/features/src/plan-document-template.ts`): the sections below as `##`
-headings, each with one plain guidance sentence. The template is plain
-Markdown with no convention of its own: whatever guidance it holds is
-ordinary text the developer and the agents both see and write over. The first
-point an agent's notes add to a section that still holds exactly what the
-plan's template put under its heading, where that is one paragraph of prose,
-takes the place of those words (`packages/features/src/plan-template.ts`'s
-`applyNotesToText`), so a filled section never keeps its prompt above its
-answer. A template's list, code, quote, or table is its own starting content
-and is kept; once anything else stands in a section, a point is added after
-it, and the developer's own edits are never rewritten.
-
-Settings › Plan template is where the developer edits it
-(`packages/panel/src/settings/plan-template-page.tsx`), signed in
-only. The page reads the template as it opens and saves the words a second
-after the typing pauses and again as focus leaves the box, one write at a
-time, through the `planTemplate.read`/`planTemplate.write` acts and the
-coding-agent chain beside the account's default model. A template past
-20,000 characters is said and never sent, and words left unsaved as the
-page goes that fail to save are said in a toast with a Retry. Reset to
-default asks first, waits for any save already out, and writes null, and
-stands only while the account holds its own. The template is written in
-the plan's own document editor (`settings/plan-template-page.tsx`), under
-`ph-no-capture`, with no title and no merged answer to take; Esc leaves it
-as focus leaving does. It is built once on the text it opens with and again
-only for words it did not write, as a reset's, and should its bundle fail to
-load, the template is a plain Markdown textarea instead.
+empty, and its sections are whatever headings the developer and the agents
+write into it.
 
 A section is a `#` or `##` heading and what stands under it up to the next,
 a deeper heading inside it and a heading in a code fence no heading at all,
 known by its heading's words (`planSections`). Who last changed each section
 is read off the plan's revisions by heading (`sectionWritersOf`,
-`sectionEdits` on the wire), each against the one before it, so a heading
-renamed with nothing beneath it changed is the same section under its new
-words. An agent's notes may land
+`sectionEdits` on the wire), each against the one before it, the first
+against the template plans started as before they started empty, which a
+plan started empty reads the same against, so a heading renamed with nothing
+beneath it changed is the same section under its new words. An agent's notes may land
 anywhere in the text (`applyNotesToText` in `plan-template.ts`): an addition
 at the end of the one section under its heading, or as a new section at the
 end of the text where the text has none; a replacement names text standing
@@ -820,64 +791,6 @@ agent's `edit_plan` answers the text as it stands, to retry from. Every plan
 the fixed template once kept as fields was carried
 over to its text by a one-time backfill (34 plans and 32 revisions in
 production), each field's words under its heading.
-
-The agent the developer talks a task through with on a call is their
-teammate: someone to bounce ideas off who is also responsible for turning
-them into a concrete plan. So the default template is the design doc two
-engineering teammates would write after talking a task through in a
-meeting, and each section is a question a good teammate asks. The sections
-are what the agent asks about, so getting them right is what shapes its
-questions. The same document is the whole spec a coding agent builds from,
-so the agent talks like a teammate and holds the document to a spec's bar.
-
-Each default section is described once, in `plan-template.ts`: its heading
-(`PLAN_FIELD_HEADING`), what it holds and the form it is written in
-(`PLAN_FIELD_PURPOSE`), and when it is good enough for an agent to build
-from (`PLAN_FIELD_BAR`). An agent on a call is handed all three
-(`DOCUMENT_TALK_WORDS` in
-`packages/service/src/agents/coder-host/turn-context.ts`).
-
-| Section | The question the agent asks |
-| --- | --- |
-| Context | What is going on today, and why now? The problem, who it affects, and what prompted the work. |
-| Goal | What is true once we are done, as outcomes someone could observe? |
-| Approach | How would we build it? The main pieces and how they fit, where each lives by path, the code each follows, and each design decision with its reason. |
-| Interfaces | What boundaries change? Every type, schema, table, route, event, tool, or signature added or changed, as code under its file, never function bodies; "None" with the reason. |
-| Alternatives | What else could we do, and why not that? |
-| Hard parts | What is tricky? Each case as the situation and exactly what the change does: edge cases, failure, cancellation, retry, concurrency, permission, privacy, and performance, and risks. |
-| Not doing | What are we leaving out on purpose, and why? |
-| Plan of attack | How does the work split, and in what order does it land? Migration and rollout where they apply. |
-| Testing | How do we know it works? Each case as "When <situation>, then <exact result>", covering every goal and hard part, then the end-to-end check. |
-| Open questions | What do we still need to find out, including a question a coding agent met while implementing, with the assumption it went on under? |
-| Assumptions | What the agent proposed and the developer had no preference on. |
-
-- **Decisions live where they answer.** There is no Decisions section. A
-  choice of how to build is written under Approach, the option it beat under
-  Alternatives, and an edge case's behavior under Hard parts. A proposal of
-  the agent's the developer had no view on is an assumption.
-- **Agreement is the model's.** Nothing in the text says a section is
-  understood, true, or agreed. Resolving each section, or agreeing that one
-  does not apply, is the agent's work, and every proposal it takes without
-  the developer's view is recorded as an assumption. A filled-in template is not
-  evidence that the developer agreed.
-
-The template replaced one built for the coding agent alone (requirements as
-rules with Given/When/Then examples, a change map, contracts, a decision log,
-and "left to the agent"), drawn from GitHub's
-[Spec Kit](https://github.com/github/spec-kit/blob/main/templates/spec-template.md),
-OpenAI's
-[ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans),
-and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/).
-That template cut alternatives, risks, and steps because no agent-facing
-source asked for them, and those are exactly what two teammates argue about.
-It also made Luke work through fields rather than think with the developer.
-The agent still gets a spec: Interfaces carries the exact shapes, Hard parts
-says what the change does in every case a capable agent could guess wrong,
-and Testing carries a When/then case with an exact result for every goal and
-hard part, which is where the old examples' precision went. The agent
-proposes the interfaces and the cases itself for the developer to confirm,
-so the call never turns into dictating code or test cases. None of this is validated against a
-comparative evaluation.
 
 ### Call bar and the panel's voice
 
@@ -996,7 +909,7 @@ the exact shape.
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`tasks/agent-tab.tsx`), their control (`tasks/use-coding-agents.ts`) and the held transcript read (`tasks/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| The plan | Hosted storage; the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and a coding agent's `edit_plan` (`packages/service/src/agents/coder-host/plan-edit.ts`). |
+| The plan | Hosted storage; the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), research (LUKE-339), the notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and a coding agent's `edit_plan` (`packages/service/src/agents/coder-host/plan-edit.ts`). |
 
 Two existing rules carry over unchanged:
 
@@ -1043,7 +956,7 @@ changes when a check is run, not when one is planned.
   again each time the tab shows, and the host keeping the open task through
   the tab going away, with nothing read on a clock.
   Its regions render as static markup: no composer and no approve controls,
-  a new task's untouched template, and the failed, missing, and
+  a new task's empty plan, and the failed, missing, and
   not-connected states.
 
 ### Not validated

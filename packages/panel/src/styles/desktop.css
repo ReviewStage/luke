@@ -690,13 +690,6 @@ body,
   --luke-button-ground: var(--luke-color-ground);
 }
 
-/* The "Edited by" line over the document wraps between its words and names
-   rather than cutting a name short, so no name is ever cut to nothing beside
-   the words around it. */
-.plan-edit-note {
-  flex-wrap: wrap;
-}
-
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .plan-unit.version-added {
@@ -751,7 +744,6 @@ body,
 }
 
 .desktop-document .plan-body,
-.desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
   max-width: var(--luke-page-measure);
@@ -1117,21 +1109,6 @@ body,
 ::highlight(find-current) {
   background-color: var(--luke-color-find-current);
   color: var(--luke-color-on-find-current);
-}
-
-/* The plan template laid out as every Settings page is (`PlanBody`'s
-   `page`): at their measure, its name at a page title's place and size, the
-   Edited line and the note under it. */
-.template-document .plan-document-body {
-  padding-top: 0;
-}
-
-.template-document :is(.plan-body, .plan-edit-note) {
-  max-width: var(--luke-settings-measure);
-}
-
-.task-page-head .plan-edit-note {
-  margin: var(--luke-tight-gap) 0 0;
 }
 
 /* Version history ------------------------------------------------------------ */

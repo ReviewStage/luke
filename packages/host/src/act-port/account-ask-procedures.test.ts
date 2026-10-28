@@ -51,12 +51,6 @@ const REFUSAL = {
     "Could not cancel the ChatGPT sign-in on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: "Could not read Luke's memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: "Could not read your plan template on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE]: "Could not save your plan template on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS]:
-    "Could not read your plan template's history on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISION]: "Could not read that version on this system.",
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE]: "Could not restore that version on this system.",
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",
 } as const;
 
@@ -97,27 +91,6 @@ const ACTS = [
     kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET,
     payload: { workspaceId: "workspace-1", id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },
     ask: "memoryForget",
-  },
-  { kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ, payload: undefined, ask: "planTemplateRead" },
-  {
-    kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE,
-    payload: { template: "## Why\n" },
-    ask: "planTemplateWrite",
-  },
-  {
-    kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS,
-    payload: { before: 4 },
-    ask: "planTemplateRevisions",
-  },
-  {
-    kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISION,
-    payload: { seq: 3 },
-    ask: "planTemplateRevision",
-  },
-  {
-    kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE,
-    payload: { seq: 3 },
-    ask: "planTemplateRestore",
   },
   {
     kind: ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE,
@@ -245,9 +218,9 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
   // SAFETY: the stray key is the point; a window's payload crosses as a structured-clone value.
-  const strayed = { seq: 3, stray: true } as PortActPayload<PortActKind>;
-  assert.deepEqual(await settled(client, ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE, strayed), {
-    refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE],
+  const strayed = { workspaceId: "workspace-1", stray: true } as PortActPayload<PortActKind>;
+  assert.deepEqual(await settled(client, ACCOUNT_ASK_ACT_KIND.MEMORIES_READ, strayed), {
+    refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.MEMORIES_READ],
   });
   assert.deepEqual(asked, []);
 });
@@ -262,8 +235,10 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
     { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE] },
   );
   assert.deepEqual(
-    await settled(client, ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ, { template: "## Why\n" }),
-    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ] },
+    await settled(client, ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ, {
+      provider: PROVIDER_KEY_PROVIDER.OPENAI,
+    }),
+    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ] },
   );
   assert.deepEqual(asked, []);
 });

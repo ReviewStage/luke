@@ -120,7 +120,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId, planning: false });
+      const task = yield* createTask(owner, { organizationId });
       const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
 
@@ -137,7 +137,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId, planning: false });
+      const task = yield* createTask(owner, { organizationId });
       const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
 
@@ -166,7 +166,7 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const organizationId = yield* openWorkspace(owner);
-      const task = yield* createTask(owner, { organizationId, planning: false });
+      const task = yield* createTask(owner, { organizationId });
       const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
       yield* renameCodingAgent(owner, agent.id, "My invitations agent");
 
@@ -185,7 +185,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const organizationId = yield* openWorkspace(owner);
-        const task = yield* createTask(owner, { organizationId, planning: false });
+        const task = yield* createTask(owner, { organizationId });
         const prompted = yield* startOnTask(
           owner,
           task.id,
@@ -225,7 +225,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const organizationId = yield* openWorkspace(owner);
-        const task = yield* createTask(owner, { organizationId, planning: false });
+        const task = yield* createTask(owner, { organizationId });
         const agent = yield* startOnTask(
           owner,
           task.id,

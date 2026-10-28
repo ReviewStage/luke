@@ -7,15 +7,8 @@ import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
-  readPlanTemplate,
-  restorePlanTemplate,
   writeAccountPreferences,
-  writePlanTemplate,
 } from "@luke/database/models/account-store";
-import {
-  listTemplateRevisions,
-  readTemplateRevision,
-} from "@luke/database/models/plan-template-revisions";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
@@ -153,11 +146,6 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
       readRole: readAccountRole,
       accountFastOffer,
       writePreferences: writeAccountPreferences,
-      readPlanTemplate,
-      writePlanTemplate,
-      listPlanTemplateRevisions: listTemplateRevisions,
-      readPlanTemplateRevision: readTemplateRevision,
-      restorePlanTemplate,
     });
     const stands = (userId: string) =>
       Effect.map(

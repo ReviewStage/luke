@@ -1,7 +1,6 @@
 {
   "src/accounts/account-access.test.ts": 2118,
   "src/accounts/account-delete.test.ts": 2144,
-  "src/accounts/account-plan-template.test.ts": 1650,
   "src/accounts/account-preference-parts.test.ts": 4114,
   "src/accounts/chatgpt-credentials.test.ts": 1753,
   "src/accounts/member-seams.test.ts": 4639,

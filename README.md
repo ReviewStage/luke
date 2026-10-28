@@ -52,10 +52,7 @@ Claude Code, Codex, or any other agent.
 
 ## Features
 
-- **Plans** start from a template you set in Settings › Plan template. The
-  default reads like a design doc: Context, Goal, Approach, Interfaces,
-  Alternatives, Hard parts, Not doing, Plan of attack, Testing, Open
-  questions, and Assumptions. Plans hold pictures and Mermaid diagrams.
+- **Plans** start empty, and hold pictures and Mermaid diagrams.
 - **Coding agents** hand scoped work to read-only subagents on a model and
   effort they choose, message and start other agents in the workspace, and
   show you screenshots or an interactive HTML page of what they built.

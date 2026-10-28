@@ -21,7 +21,6 @@ import {
   MoreButton,
   moreLabel,
   motionHeld,
-  PageHeader,
   SavedTick,
   STATUS_TONE,
   TEXT_BUTTON_LINES,
@@ -246,9 +245,8 @@ export function lastEditOf(task: Task): PlanLastEdit | undefined {
 /** Nobody, as a capture or a test draws the plan, who reads no edit as theirs. */
 const NO_READER: TaskReader = { readerId: undefined };
 
-/** Whether the reader wrote an edit: theirs where every edit is, as the template's are, or where it names their account. */
+/** Whether the reader wrote an edit: where it names their account. */
 function isReader(edit: PlanLastEdit, reader: TaskReader): boolean {
-  if (reader.owner !== undefined) return true;
   return reader.readerId !== undefined && edit.by?.userId === reader.readerId;
 }
 
@@ -329,34 +327,6 @@ const editedLabel = (ago: string): string => `Edited ${ago}. Show version histor
 /** How long ago a moment was, in words, drawn again as the minute turns. */
 function Ago({ at }: { at: number }): React.JSX.Element {
   return <span>{agoText(at, useMinute())}</span>;
-}
-
-/**
- * The plan template's line under its title: "Edited by [Charles] Charles Pan · 2h ago".
- * The writer hangs their card, and the time opens the plan's history where
- * the window offers it.
- */
-function EditedLine({
-  edit,
-  place,
-  onShowHistory,
-}: {
-  edit: PlanLastEdit;
-  place: EditPlace;
-  onShowHistory: ShowHistory | undefined;
-}): React.JSX.Element {
-  return (
-    <p className="plan-edit-note actor-line mx-0 mt-0 mb-block-gap text-caption text-muted-foreground">
-      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
-      <EditedBy edit={edit} place={place} sentence />
-      {" · "}
-      <EditTime
-        at={edit.at}
-        label={editedLabel}
-        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
-      />
-    </p>
-  );
 }
 
 /**
@@ -1068,7 +1038,7 @@ function SectionDates({
 }
 
 /** A plan's body, in the plan's type at its page's measure: the column its head and its blocks stand in. */
-export function PlanBodyColumn({
+function PlanBodyColumn({
   ref,
   children,
 }: {
@@ -1078,31 +1048,6 @@ export function PlanBodyColumn({
   return (
     <div ref={ref} className={BODY_CLASS}>
       {children}
-    </div>
-  );
-}
-
-/**
- * The head of a page drawn as a plan, Settings › Plan template: a document's
- * header (`PageHeader`) naming the page once, as its `h1`, with the line
- * saying what the page is under it and the page's actions on its line, then
- * its last edit, which the page and its placeholder both draw.
- */
-export function PlanPageHead({
-  name,
-  description,
-  actions,
-  edited,
-}: {
-  name: string;
-  description: React.ReactNode;
-  actions: React.ReactNode;
-  edited?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="task-page-head pt-luke-32">
-      <PageHeader title={name} description={description} actions={actions} />
-      {edited}
     </div>
   );
 }
@@ -1134,10 +1079,7 @@ export interface TitleRename {
  * item's box ticks it. An editable plan opens its text from a press on the
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
- * the nearest line beside it. With `page` the document is drawn as a Settings page,
- * as the plan template is: the page's line saying what it is stands in the
- * title's header, its actions end the title's line, and the "Edited by" line
- * stands under the title. `looks` are the sections changed since the developer last
+ * the nearest line beside it. `looks` are the sections changed since the developer last
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
  * none are. `readMark` is whether the plan is marked unread, which the
  * title's ⋯ offers to flip.
@@ -1156,7 +1098,6 @@ export const PlanBody = memo(function PlanBody({
   rename,
   looks = NO_LOOKS,
   readMark,
-  page,
   sectionLinks,
   reader = NO_READER,
   agents,
@@ -1178,8 +1119,6 @@ export const PlanBody = memo(function PlanBody({
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
-  /** The Settings page the document is drawn as: its actions and the line saying what it is. */
-  page?: { actions: React.ReactNode; description: React.ReactNode };
   /** What the task's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
@@ -1347,7 +1286,7 @@ export const PlanBody = memo(function PlanBody({
   });
 
   // The sections as the plan's text holds them, where the chase draws them so, which is where comments are marked and measured.
-  // Note that comments are the plan's own page's alone, never a version of it or a Settings page.
+  // Note that comments are the plan's own page's alone, never a version of it.
   const comments = usePlanCommentsControl();
   const commentsHere =
     comments !== undefined && comments.planId === task.id && sectionLinks !== undefined;
@@ -1378,10 +1317,9 @@ export const PlanBody = memo(function PlanBody({
   const latestPlan = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
   latestPlan.current = { cut, views, id: task.id, body: task.document.body, onEdit };
   // Note that ticks are sent one at a time, in the order pressed, each over
-  // the text the one before it saved, since that plan may not be drawn yet;
-  // so a door that keeps one text (the plan template's) is never asked from
-  // another. A tick is placed by its item's offset and line as drawn at the
-  // press, and writes nothing where the text no longer holds that line.
+  // the text the one before it saved, since that plan may not be drawn yet.
+  // A tick is placed by its item's offset and line as drawn at the press, and
+  // writes nothing where the text no longer holds that line.
   const tick = (section: number, at: number, ticked: boolean): Promise<boolean> => {
     const unit = tickable(section) ? cut[section] : undefined;
     const item = unit === undefined ? undefined : taskItemAt(unit.text, at);
@@ -1508,13 +1446,9 @@ export const PlanBody = memo(function PlanBody({
       />
     ),
   );
-  const editedNote =
-    edited === undefined ? null : (
-      <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
-    );
   const titled = editable && onRename !== undefined;
   const titleMenu =
-    !titleActions || linked === undefined || page !== undefined ? null : (
+    !titleActions || linked === undefined ? null : (
       <TitleMenu
         linked={linked}
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
@@ -1531,10 +1465,9 @@ export const PlanBody = memo(function PlanBody({
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >
       <DocumentScroll ref={scroller}>
-        {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
         <PlanBodyColumn ref={bodyHost}>
           <WordsDatePickerRoom>
-            {taskStanding === undefined || page !== undefined ? null : (
+            {taskStanding === undefined ? null : (
               <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
             )}
             {titled ? (
@@ -1550,37 +1483,26 @@ export const PlanBody = memo(function PlanBody({
                 onRename={onRename}
                 onDraft={onDraftName}
               />
-            ) : page === undefined ? (
-              <TaskTitle name={task.name} actions={titleMenu} />
             ) : (
-              <PlanPageHead
-                name={task.name}
-                description={page.description}
-                actions={page.actions}
-                edited={editedNote}
+              <TaskTitle name={task.name} actions={titleMenu} />
+            )}
+            {taskStanding === undefined ? null : (
+              <TaskStandingChips
+                task={task}
+                onSet={taskStanding.onSet}
+                devices={taskStanding.devices}
               />
             )}
-            {page === undefined ? (
-              <>
-                {taskStanding === undefined ? null : (
-                  <TaskStandingChips
-                    task={task}
-                    onSet={taskStanding.onSet}
-                    devices={taskStanding.devices}
-                  />
-                )}
-                {underTitle}
-                <PlanByline
-                  task={task}
-                  edit={edited}
-                  place={place}
-                  saves={editing.saves}
-                  onShowHistory={onShowHistory}
-                />
-                <ChangedLine looks={looks} marks={marks} />
-                {head}
-              </>
-            ) : null}
+            {underTitle}
+            <PlanByline
+              task={task}
+              edit={edited}
+              place={place}
+              saves={editing.saves}
+              onShowHistory={onShowHistory}
+            />
+            <ChangedLine looks={looks} marks={marks} />
+            {head}
             {editing.editor === undefined ? (
               editable && views.length === 0 ? (
                 <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />

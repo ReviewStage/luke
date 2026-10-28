@@ -166,27 +166,6 @@ const planAssumptionSchema = EffectSchema.Struct({
   text: trimmedText(TASK_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
-/**
- * The default template's sections, in its order, by the names the fixed
- * template once kept them under: what its guidance and the prompts are keyed
- * by (`plan-template.ts`).
- */
-export const PLAN_FIELD = {
-  CONTEXT: "context",
-  GOAL: "goal",
-  APPROACH: "approach",
-  INTERFACES: "interfaces",
-  ALTERNATIVES: "alternatives",
-  HARD_PARTS: "hardParts",
-  NOT_DOING: "notDoing",
-  PLAN_OF_ATTACK: "planOfAttack",
-  TESTING: "testing",
-  OPEN_QUESTIONS: "openQuestions",
-  ASSUMPTIONS: "assumptions",
-} as const;
-
-export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
-
 /** The one saved document of a task, replaced whole by every save. */
 const planDocumentSchema = EffectSchema.Struct({
   /** The plan's whole text, as written. */
@@ -266,9 +245,8 @@ function issuesNamedOnce(request: {
  * each named once and each with its relation (`task-issue-wire.ts`), a
  * GitHub issue only of the repository the task is about, which the service
  * reads itself, refusing the start where it reads none; the document starts
- * as the untouched template, or empty where `planning` is false: a task
- * started without its planning phase, whose window opens no call on it
- * either. A name left out, or nothing but whitespace, starts the plan as
+ * empty, and `planning` false is a task started without its planning phase,
+ * whose window opens no call on it. A name left out, or nothing but whitespace, starts the plan as
  * `UNTITLED_PLAN_NAME` until it is renamed. An `agent` starts a coding
  * agent on the task in the same request, as the agent's own Start would
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
@@ -839,7 +817,7 @@ export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreat
  * of an earlier revision, which one it brought back and that revision's
  * latest save.
  */
-export const planRevisionLineSchema = EffectSchema.Struct({
+const planRevisionLineSchema = EffectSchema.Struct({
   seq: planRevisionSeqSchema,
   lastEdit: planLastEditSchema,
   /** The coding agent that wrote it; absent for any other writer, once the agent's row is gone, and from a service before it. */

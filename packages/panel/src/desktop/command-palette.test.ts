@@ -310,7 +310,6 @@ const SETTINGS_PAGES = [
   "Agents",
   "Integrations",
   "Skills",
-  "Plan template",
   "Voice",
   "Appearance",
   "This Mac",

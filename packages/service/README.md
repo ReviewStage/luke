@@ -1418,18 +1418,6 @@ is passed over rather than refused, because it is an older or newer build's
 experiment, and only a value that is not a record at all is
 `invalid-request`.
 
-The plan template is the group's third path, `/api/account/plan-template`:
-`GET` answers `{ template, custom }`, the account's own Markdown or
-`DEFAULT_PLAN_TEMPLATE` with `custom: false`, and `PUT { template }` keeps a
-string verbatim (untrimmed, empty allowed, at most 20,000 characters) or goes
-back to the default on null (`@luke/features/plan-document-template`). It is
-a path of its own rather than a third part of the snapshot, because the
-desktop syncs the snapshot over its own settings and a long text does not
-belong in that loop. It lives in `account_preference.plan_template`
-(migration 0087), and a write sets that column alone: `updated_at` stays
-the preferences part's own, so a row a template opened answers no snapshot.
-`src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
-
 ### Workspace memory
 
 Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), read for

@@ -34,10 +34,6 @@ import {
 import type { MemorySummary } from "@luke/features/memory-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
-  DEFAULT_PLAN_TEMPLATE,
-  type PlanTemplateRevisionLine,
-} from "@luke/features/plan-document-template";
-import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
@@ -47,7 +43,6 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -62,14 +57,6 @@ import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
-
-/** One revision of the template as the service lists it. */
-const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
-  seq: 2,
-  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 1_000, duringCall: false },
-  startedAt: 1_000,
-  changes: 1,
-};
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -539,40 +526,6 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`forget:${forget.workspaceId}:${forget.id}`);
         return { memories: [] };
-      }),
-    readPlanTemplate: () =>
-      Effect.sync(() => {
-        asked.push("template");
-        return { template: DEFAULT_PLAN_TEMPLATE, custom: false };
-      }),
-    writePlanTemplate: (write) =>
-      Effect.sync(() => {
-        asked.push(`template:${write.template ?? "the default"}`);
-        return {
-          template: write.template ?? DEFAULT_PLAN_TEMPLATE,
-          custom: write.template !== null,
-        };
-      }),
-    readPlanTemplateRevisions: (page) =>
-      Effect.sync(() => {
-        asked.push(`revisions:${page.before ?? "newest"}`);
-        return { revisions: [TEMPLATE_REVISION] };
-      }),
-    readPlanTemplateRevision: (revision) =>
-      Effect.sync(() => {
-        asked.push(`revision:${revision.seq}`);
-        return {
-          revision: {
-            seq: revision.seq,
-            document: { body: "## Why\n", assumptions: [] },
-            previous: null,
-          },
-        };
-      }),
-    restorePlanTemplate: (revision) =>
-      Effect.sync(() => {
-        asked.push(`restore:${revision.seq}`);
-        return { template: "## Why\n", custom: true };
       }),
     transcribeDictation: (clip) =>
       Effect.sync(() => {

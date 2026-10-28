@@ -6,7 +6,7 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * A notice comes in three looks: a slim strip across a column, its words held
  * to one line and fading out at its end where it cuts them short (a stranded
  * repository's); a card over a document, its glyph
- * in a disc (an archived plan's, the plan template's); and a quiet row in the
+ * in a disc (an archived plan's); and a quiet row in the
  * frame its place draws around it (an archived agent's, in its composer's
  * place). Each is in one of a few tones, which tint the strip and the card.
  *

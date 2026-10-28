@@ -7,12 +7,6 @@ import {
   memoriesAnswerViewSchema,
   memoriesReadParamsSchema,
   memoryForgetParamsSchema,
-  planTemplateAnswerViewSchema,
-  planTemplateRevisionAnswerViewSchema,
-  planTemplateRevisionParamsSchema,
-  planTemplateRevisionsAnswerViewSchema,
-  planTemplateRevisionsParamsSchema,
-  planTemplateWriteParamsSchema,
   providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -84,31 +78,6 @@ export const accountAskActsContract = {
   )
     .input(exactInput(memoryForgetParamsSchema))
     .output(EffectSchema.flip(memoriesAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actProcedure(
-    "Could not read your plan template on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(planTemplateAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE]: actProcedure(
-    "Could not save your plan template on this system.",
-  )
-    .input(exactInput(planTemplateWriteParamsSchema))
-    .output(EffectSchema.flip(planTemplateAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS]: actProcedure(
-    "Could not read your plan template's history on this system.",
-  )
-    .input(exactInput(planTemplateRevisionsParamsSchema))
-    .output(EffectSchema.flip(planTemplateRevisionsAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISION]: actProcedure(
-    "Could not read that version on this system.",
-  )
-    .input(exactInput(planTemplateRevisionParamsSchema))
-    .output(EffectSchema.flip(planTemplateRevisionAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_RESTORE]: actProcedure(
-    "Could not restore that version on this system.",
-  )
-    .input(exactInput(planTemplateRevisionParamsSchema))
-    .output(EffectSchema.flip(planTemplateAnswerViewSchema)),
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: actProcedure(
     "Could not transcribe the recording on this system.",
   )
