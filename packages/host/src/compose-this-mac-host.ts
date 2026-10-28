@@ -75,6 +75,7 @@ const FAILED_WORDS = {
   NOT_SAVED: "Luke couldn't save this Mac's sign-in in its state folder. Retry.",
   LOGIN_ITEM: "macOS refused Luke's login item",
   NO_LOGIN_ITEM: "This build of Luke carries no login item to run agents with.",
+  NOT_STOPPED: "macOS didn't turn off Luke's login item, so agents may still be running here",
 } as const;
 
 export interface ThisMacHostDependencies {
@@ -89,7 +90,7 @@ export interface ThisMacHostDependencies {
   /** The app's own follower, stopped before `luke-host` is registered, which keeps the account's device ids. */
   follower: Pick<
     LocalAgentsComposer,
-    "idle" | "handedToDevice" | "ownerOf" | "registeredPreparing"
+    "idle" | "deviceIdOf" | "handedToDevice" | "ownerOf" | "registeredPreparing"
   >;
   client: Pick<HostedDeviceAgentClient, "enrollOwn">;
 }
@@ -175,7 +176,7 @@ export function composeThisMacHost(
       Effect.gen(function* () {
         yield* set(standingOf(THIS_MAC_HOST_STANDING.TURNING_ON));
         yield* follower.idle;
-        const deviceId = yield* follower.handedToDevice(userId);
+        const deviceId = yield* follower.deviceIdOf(userId);
         const version = yield* host.version;
         if (Result.isFailure(version)) return failed(`${FAILED_WORDS.VERSION}: ${version.failure}`);
         let outcome = yield* enrolled(deviceId, version.success);
@@ -195,6 +196,8 @@ export function composeThisMacHost(
           }),
         );
         if (Result.isFailure(saved)) return failed(FAILED_WORDS.NOT_SAVED);
+        // Note that the launches the app kept are the device's only once it holds its secret, so a failed enroll strands none of them.
+        yield* follower.handedToDevice(userId, deviceId);
         const registered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.REGISTER);
         if (Result.isFailure(registered)) {
           return failed(`${FAILED_WORDS.LOGIN_ITEM}: ${registered.failure}`);
@@ -246,17 +249,22 @@ export function composeThisMacHost(
               standingOf(on ? THIS_MAC_HOST_STANDING.OTHER_ACCOUNT : THIS_MAC_HOST_STANDING.OFF),
             );
           }
-          const wasOn = yield* Ref.getAndSet(lastOn, on);
+          const wasOn = yield* Ref.get(lastOn);
           if (!on) {
             yield* Ref.set(turnOnFailed, false);
             if (Option.isSome(record) && wasOn !== false) {
               const unregistered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.UNREGISTER);
+              // Note that the switch is not taken as off until the login item is, so the next read, or Retry, unregisters it again.
               if (Result.isFailure(unregistered)) {
-                report("this Mac's luke-host login item could not be unregistered");
+                return yield* set(
+                  failed(`${FAILED_WORDS.NOT_STOPPED} (${unregistered.failure}). Retry.`),
+                );
               }
             }
+            yield* Ref.set(lastOn, false);
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.OFF));
           }
+          yield* Ref.set(lastOn, true);
           const asked = explicit || wasOn === false;
           if ((yield* Ref.get(turnOnFailed)) && !asked) return yield* Ref.get(standing);
           if (Option.isSome(record) && record.value.refused === true && !asked) {

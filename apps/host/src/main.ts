@@ -158,6 +158,7 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
       arch: boxArch,
       stateRoot,
       smolvm,
+      runnerFolder: process.env.LUKE_HOST_RUNNER_FOLDER,
       // Note that every command in an agent's VM runs as the daemon's user, luke-host or the member, which owns the agent's folder it mounts.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
     });

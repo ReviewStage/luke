@@ -49,11 +49,15 @@ const until = (holds: () => boolean) =>
 
 /**
  * This Mac's `luke-host` composed over a state folder of its own, with the
- * switch on, the app's follower taking a second to stop, and a service that
- * enrolls the Mac; what each fake was asked, in the order it was asked.
+ * switch on until the test turns it off, the app's follower taking a second
+ * to stop, a service that enrolls the Mac, and a login item that refuses as
+ * many unregisters as `refusedUnregisters` says; what each fake was asked,
+ * in the order it was asked.
  */
-const thisMac = (stateRoot: string) =>
+const thisMac = (stateRoot: string, options: { refusedUnregisters?: number } = {}) =>
   Effect.gen(function* () {
+    let on = true;
+    let refusals = options.refusedUnregisters ?? 0;
     const asked: string[] = [];
     const enrolled: string[] = [];
     const client = {
@@ -69,13 +73,18 @@ const thisMac = (stateRoot: string) =>
         Effect.sleep(Duration.seconds(1)),
         Effect.sync(() => asked.push("follower stopped")),
       ),
-      handedToDevice: () => Effect.succeed(DEVICE_ID),
+      deviceIdOf: () => Effect.succeed(DEVICE_ID),
+      handedToDevice: () => Effect.void,
       ownerOf: (deviceId: string) => Effect.succeed(deviceId === DEVICE_ID ? USER_ID : undefined),
       registeredPreparing: () => Effect.succeed(true),
     };
     const loginItem = (act: HostLoginItemAct) =>
       Effect.sync(() => {
         asked.push(`login item ${act}`);
+        if (act === HOST_LOGIN_ITEM_ACT.UNREGISTER && refusals > 0) {
+          refusals -= 1;
+          return Result.fail("Operation not permitted");
+        }
         return Result.succeed(
           act === HOST_LOGIN_ITEM_ACT.UNREGISTER
             ? HOST_LOGIN_ITEM_STATUS.NOT_REGISTERED
@@ -86,7 +95,7 @@ const thisMac = (stateRoot: string) =>
       kernel: { stateRoot, hostedServiceBaseUrl: SERVICE, runMode: { sendsNetwork: true } },
       account: { capabilitiesActive: () => true },
       accountId: () => USER_ID,
-      switchedOn: Effect.succeed(true),
+      switchedOn: Effect.sync(() => on),
       follower,
       client,
     }).pipe(
@@ -114,7 +123,10 @@ const thisMac = (stateRoot: string) =>
       assert.ok(handler !== undefined);
       return Effect.map(Effect.orDie(handler({}, CONTEXT)), decodeStanding);
     };
-    return { asked, enrolled, call };
+    const switchOff = () => {
+      on = false;
+    };
+    return { asked, enrolled, call, switchOff };
   });
 
 it.effect(
@@ -179,6 +191,41 @@ it.effect(
         yield* Effect.forkScoped(call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON));
         yield* until(() => enrolled.length > 0);
         assert.deepEqual(enrolled, [DEVICE_ID]);
+      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+    ),
+);
+
+it.effect(
+  "a switch-off macOS refuses says agents may still run and unregisters again until the login item is off",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
+        const { asked, call, switchOff } = yield* thisMac(stateRoot, { refusedUnregisters: 1 });
+        yield* until(() => asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.REGISTER}`));
+        switchOff();
+        const unregisters = () =>
+          asked.filter((each) => each === `login item ${HOST_LOGIN_ITEM_ACT.UNREGISTER}`).length;
+        yield* until(() => unregisters() === 1);
+        let standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
+        for (let round = 0; round < 20_000 && unregisters() === 1; round += 1) {
+          if (standing.standing === THIS_MAC_HOST_STANDING.FAILED) break;
+          yield* Effect.yieldNow;
+          standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
+        }
+
+        assert.equal(standing.standing, THIS_MAC_HOST_STANDING.FAILED);
+        yield* until(() => unregisters() === 2);
+        let after = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
+        for (
+          let round = 0;
+          round < 20_000 && after.standing !== THIS_MAC_HOST_STANDING.OFF;
+          round += 1
+        ) {
+          yield* Effect.yieldNow;
+          after = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
+        }
+        assert.deepEqual(after, { standing: THIS_MAC_HOST_STANDING.OFF });
       }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
     ),
 );

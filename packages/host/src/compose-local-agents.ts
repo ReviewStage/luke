@@ -29,6 +29,7 @@ import {
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import {
   Config,
+  Deferred,
   Duration,
   Effect,
   Exit,
@@ -254,13 +255,14 @@ export interface LocalAgentsDependencies {
 export interface LocalAgentsComposer extends Composer {
   /** Waits until no follow of this follower's stands, its runners stopped and the machine's lease given back; a gate shut before it is asked ends the follow within `IDLE`. */
   readonly idle: Effect.Effect<void>;
+  /** The account's device id on this machine, minted the first time as a follow would. */
+  readonly deviceIdOf: (userId: string) => Effect.Effect<string>;
   /**
-   * The account's device id on this machine, minted the first time as a
-   * follow would, with every launch it kept under the account handed to the
-   * device itself, so the follower that runs on the device's own secret
+   * Every launch the follower kept under the account handed to the device
+   * given, so the follower that runs on the device's own secret
    * (`@luke/host/daemon`), whose account is its device, settles them.
    */
-  readonly handedToDevice: (userId: string) => Effect.Effect<string>;
+  readonly handedToDevice: (userId: string, deviceId: string) => Effect.Effect<void>;
   /** The account the device id given was minted for on this machine, as its state keeps it; none where it names none. */
   readonly ownerOf: (deviceId: string) => Effect.Effect<string | undefined>;
   /** The device registered under the id given as preparing (`DEVICE_SETUP.PREPARING`), which takes no agent; whether the service took it. */
@@ -1113,25 +1115,31 @@ export function composeLocalAgents(
 
     /**
      * The machine's lease, taken for as long as the scope stands and renewed
-     * every `IDLE` while it does; whether it was taken. A lease another
-     * follower holds is said once, and the turn rests as a shut gate does.
+     * every `IDLE` while it does; none where another follower holds it,
+     * which is said once, and otherwise what waits until the lease is lost
+     * to another follower, which is said too.
      */
     const leased = Effect.gen(function* () {
       if (!(yield* takeFollowerLock(kernel.stateRoot, holder))) {
         if (!(yield* Ref.getAndSet(refusedLock, true))) {
           report("another follower runs this machine's local agents, so this one follows none");
         }
-        return false;
+        return Option.none<Effect.Effect<void>>();
       }
       yield* Ref.set(refusedLock, false);
       yield* Effect.addFinalizer(() => releaseFollowerLock(kernel.stateRoot, holder));
+      const lost = yield* Deferred.make<void>();
       yield* Effect.forkScoped(
-        Effect.forever(
-          Effect.andThen(Effect.sleep(IDLE), renewFollowerLock(kernel.stateRoot, holder)),
+        Effect.andThen(Effect.sleep(IDLE), renewFollowerLock(kernel.stateRoot, holder)).pipe(
+          Effect.repeat({ until: (held) => !held }),
+          Effect.andThen(
+            Effect.sync(() => report("this follower lost the machine's lease, so it stops")),
+          ),
+          Effect.andThen(Deferred.succeed(lost, undefined)),
         ),
       );
       yield* reread;
-      return true;
+      return Option.some(Deferred.await(lost));
     });
 
     /**
@@ -1157,7 +1165,8 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         // Note that the gate is read again under the permit, since `idle` may have waited on a turn that shut it.
         if (!(yield* gateOpen) || dependencies.accountId() !== userId) return;
-        if (!(yield* leased)) return yield* Effect.sleep(IDLE);
+        const lost = yield* leased;
+        if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
         const deviceId = yield* deviceOf(userId);
         const { tools } = platform.sandbox;
         const registered = (setup: DeviceSetupRegister) =>
@@ -1183,7 +1192,11 @@ export function composeLocalAgents(
         for (const launch of left) {
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
-        yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
+        // Note that a lease lost to another follower ends the follow, every runner it started with it.
+        yield* Effect.race(
+          Effect.scoped(follow(userId, deviceId, folder, shellVariables)),
+          lost.value,
+        );
       });
 
     const lifetime = Effect.gen(function* () {
@@ -1225,18 +1238,18 @@ export function composeLocalAgents(
           ),
       });
 
-    const handedToDevice = (userId: string) =>
-      Effect.gen(function* () {
-        yield* reread;
-        const deviceId = yield* deviceOf(userId);
-        yield* updateState((current) => ({
+    const deviceIdOf = (userId: string) => Effect.andThen(reread, deviceOf(userId));
+
+    const handedToDevice = (userId: string, deviceId: string) =>
+      Effect.andThen(
+        reread,
+        updateState((current) => ({
           ...current,
           launches: current.launches.map((launch) =>
             launch.userId === userId ? { ...launch, userId: deviceId } : launch,
           ),
-        }));
-        return deviceId;
-      });
+        })),
+      );
 
     // Note that the follower answers nothing itself: the panel asks This Mac's luke-host (`compose-this-mac-host.ts`).
     const methods: Composer["methods"] = {};
@@ -1244,6 +1257,7 @@ export function composeLocalAgents(
       methods,
       lifetime,
       idle,
+      deviceIdOf,
       handedToDevice,
       ownerOf,
       registeredPreparing,

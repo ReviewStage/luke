@@ -32,8 +32,11 @@ const COMMAND = "luke-host";
 /** How long the command may take; `SMAppService` answers at once. */
 const ACT_WITHIN = Duration.seconds(30);
 
-/** The variable a development run's daemon reads its state folder from, since it ships in no app to name it. */
-const STATE_ROOT_VARIABLE = "LUKE_HOST_STATE_ROOT";
+/** The variables a development run's daemon reads its state folder and runner's folder from, since it ships in no app to name them. */
+const DEVELOPMENT_VARIABLE = {
+  STATE_ROOT: "LUKE_HOST_STATE_ROOT",
+  RUNNER_FOLDER: "LUKE_HOST_RUNNER_FOLDER",
+} as const;
 
 /** The command given run once: what it printed, or the words it failed with. */
 const printedBy = (command: string, args: readonly string[]) =>
@@ -94,7 +97,18 @@ const developmentHost = (stateRoot: string) =>
     const daemon = Effect.scoped(
       Effect.flatMap(
         ChildProcess.make(node, [bundle, "run"], {
-          env: { [STATE_ROOT_VARIABLE]: stateRoot },
+          // Note that the runner is the one the development build's own VMs mount, as a packaged app's is its own.
+          env: {
+            [DEVELOPMENT_VARIABLE.STATE_ROOT]: stateRoot,
+            [DEVELOPMENT_VARIABLE.RUNNER_FOLDER]: path.resolve(
+              app.getAppPath(),
+              "..",
+              "..",
+              "packages",
+              "agent-runner",
+              "dist",
+            ),
+          },
           extendEnv: true,
           stdin: "ignore",
           stdout: "inherit",

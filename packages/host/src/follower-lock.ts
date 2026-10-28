@@ -11,10 +11,15 @@ import * as FileSystem from "effect/FileSystem";
  * open, and gives it back as its follow ends. The lease names its holder,
  * an id each follower mints once, and when it was last renewed, on the
  * follower's own clock; a lease not renewed for `LEASE` was left by a
- * follower that died with its process, and is taken over. A lease is
- * written beside its file and moved over it, then read back, so of two
- * followers that both found it free only the one whose write stands takes
- * it.
+ * follower that died with its process, and is taken over.
+ *
+ * Taking the lease is one exclusive step the file system decides: the lease
+ * is written whole beside its file and hard-linked into place, which fails
+ * where a lease already stands, so of two followers that both found it free
+ * only one takes it. A stale lease is moved aside first, which likewise only
+ * one follower can do. Renewing rewrites the holder's own lease, and a
+ * holder that finds the lease no longer its own has lost it (`renew`
+ * answers false), which its follow stops on.
  */
 
 /** The lease's file, in the state root. */
@@ -50,36 +55,59 @@ export const followerLockHeld = Effect.fnUntraced(function* (stateRoot: string, 
   return Option.isSome(lease) && lease.value.holder !== holder && standing(lease.value, now);
 });
 
-/** The lease written for `holder`, renewed now, beside its file and moved over it. */
-const writeLease = Effect.fnUntraced(function* (stateRoot: string, holder: string) {
+/** The lease for `holder`, renewed now, written whole in a file of its own beside the lease's; that file's path. */
+const writtenLease = Effect.fnUntraced(function* (stateRoot: string, holder: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const file = path.join(stateRoot, LOCK_FILE);
-  const written = `${file}.${holder}`;
+  const written = path.join(stateRoot, `${LOCK_FILE}.${holder}`);
   const renewedAt = yield* Clock.currentTimeMillis;
   yield* fileSystem.makeDirectory(stateRoot, { recursive: true });
   yield* fileSystem.writeFileString(written, encodeLease({ holder, renewedAt }));
-  yield* fileSystem.rename(written, file);
+  return written;
+});
+
+/** The lease written for `holder` linked into place, which fails where any lease already stands. */
+const linkedLease = Effect.fnUntraced(function* (stateRoot: string, holder: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const written = yield* writtenLease(stateRoot, holder);
+  const linked = yield* Effect.result(fileSystem.link(written, path.join(stateRoot, LOCK_FILE)));
+  yield* Effect.ignore(fileSystem.remove(written, { force: true }));
+  return Result.isSuccess(linked);
 });
 
 /**
  * The machine's lease taken for `holder`, where no other follower holds it:
- * whether `holder` holds it now. One that cannot be written or read back is
- * not held, so a state root that cannot be written follows nothing.
+ * whether `holder` holds it now. A stale or unreadable lease is moved aside
+ * first, and one that cannot be written is not held, so a state root that
+ * cannot be written follows nothing.
  */
 export const takeFollowerLock = Effect.fnUntraced(function* (stateRoot: string, holder: string) {
-  if (yield* followerLockHeld(stateRoot, holder)) return false;
-  if (Result.isFailure(yield* Effect.result(writeLease(stateRoot, holder)))) return false;
-  // Note that the lease is read back, since another follower that found it free at the same moment may have moved its own over it.
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const file = path.join(stateRoot, LOCK_FILE);
   const lease = yield* readLease(stateRoot);
-  return Option.isSome(lease) && lease.value.holder === holder;
+  const now = yield* Clock.currentTimeMillis;
+  if (Option.isSome(lease) && standing(lease.value, now)) return lease.value.holder === holder;
+  if (yield* Effect.orElseSucceed(fileSystem.exists(file), () => false)) {
+    // Note that only one follower can move the stale lease aside, and the other finds it gone and takes nothing this turn.
+    const aside = `${file}.stale.${holder}`;
+    if (Result.isFailure(yield* Effect.result(fileSystem.rename(file, aside)))) return false;
+    yield* Effect.ignore(fileSystem.remove(aside, { force: true }));
+  }
+  return yield* Effect.orElseSucceed(linkedLease(stateRoot, holder), () => false);
 });
 
-/** The lease renewed for `holder` while it still holds it; whether it does. */
+/** The lease renewed for `holder` while it still holds it; whether it does, false once another follower took it. */
 export const renewFollowerLock = Effect.fnUntraced(function* (stateRoot: string, holder: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const lease = yield* readLease(stateRoot);
   if (Option.isNone(lease) || lease.value.holder !== holder) return false;
-  return Result.isSuccess(yield* Effect.result(writeLease(stateRoot, holder)));
+  const renewed = Effect.flatMap(writtenLease(stateRoot, holder), (written) =>
+    fileSystem.rename(written, path.join(stateRoot, LOCK_FILE)),
+  );
+  return Result.isSuccess(yield* Effect.result(renewed));
 });
 
 /** The lease given back where `holder` still holds it, so the next follower takes it at once. */

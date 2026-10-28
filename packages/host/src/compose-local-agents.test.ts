@@ -178,6 +178,19 @@ const followingDevice = (
             if (held !== undefined) files.set(to, held);
           }),
         remove: (path) => Effect.sync(() => void files.delete(path)),
+        link: (from, to) => {
+          const held = files.get(from);
+          return held === undefined || files.has(to)
+            ? Effect.fail(
+                systemError({
+                  _tag: "AlreadyExists",
+                  module: "FileSystem",
+                  method: "link",
+                  pathOrDescriptor: to,
+                }),
+              )
+            : Effect.sync(() => void files.set(to, held));
+        },
       }),
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
