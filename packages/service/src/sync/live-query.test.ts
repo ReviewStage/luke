@@ -13,6 +13,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { liveQueryParts } from "../live/live-procedures.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
+import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { syncHub } from "./hub.js";
 import { LIVE_QUERIES } from "./live-queries.js";
 import { defineLiveQuery, LIVE_MODE, type LiveQuery } from "./live-query.js";
@@ -313,6 +314,25 @@ it.layer(probeDB)("live reads Luke Sync wakes", (it) => {
     Effect.gen(function* () {
       assert.deepEqual(yield* faultsOf(query), faults);
     }),
+  );
+
+  it.effect(
+    "a live read's statements reach Sentry under the read's own span, not as traces of their own",
+    () =>
+      Effect.gen(function* () {
+        const sentry = recordingSentry();
+        yield* liveQueryParts(PROBE_READ, { taskId: randomUUID() }, {}).pipe(
+          Effect.provide(sentry.layer),
+        );
+        const spans = sentOfType(sentry.sent, "span").flatMap(
+          (item): readonly { name: string; span_id: string; parent_span_id?: string }[] =>
+            JSON.parse(item.text).items,
+        );
+        const read = spans.find((span) => span.name === "web/live/taskHistory");
+        const statement = spans.find((span) => span.name.includes("from live_query_probe p"));
+        assert.ok(read !== undefined && statement !== undefined);
+        assert.equal(statement.parent_span_id, read.span_id);
+      }),
   );
 
   it.effect(

@@ -136,6 +136,20 @@ const MODEL_CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
   "gen_ai.tool.output",
 ]);
 
+/** The attribute Effect's SQL client writes a statement's text in (`effect/sql/Statement`). */
+const DB_QUERY_TEXT = "db.query.text";
+
+/**
+ * A span named for what it ran: a database statement's by its text. Note
+ * that Effect's SQL client names every statement's span for its database
+ * (`postgres`), so without this Sentry's queries view, its N+1 detector, and
+ * every search see one query; the text is already among the attributes sent.
+ */
+function namedForStatement<Span extends { name: string; attributes?: object }>(span: Span): Span {
+  const text: unknown = span.attributes && Reflect.get(span.attributes, DB_QUERY_TEXT);
+  return typeof text === "string" && text.length > 0 ? { ...span, name: text } : span;
+}
+
 /** Attributes without any a model was handed or answered, and with their addresses scrubbed. */
 function scrubbedSpanAttributes<Attributes extends object>(attributes: Attributes): Attributes {
   const kept = Object.entries(attributes).filter(([name]) => !MODEL_CONTENT_ATTRIBUTES.has(name));
@@ -274,10 +288,9 @@ export function sentryOptions(): SentryOptions {
     // Note that a span is scrubbed as it streams, because Sentry streams spans by default
     // and runs no `beforeSendTransaction` then, and its own credential filter runs only in
     // its HTTP integrations, never over the spans Effect's HTTP client and server open.
-    beforeSendSpan: Sentry.withStreamedSpan((span) => ({
-      ...span,
-      attributes: scrubbedSpanAttributes(span.attributes),
-    })),
+    beforeSendSpan: Sentry.withStreamedSpan((span) =>
+      namedForStatement({ ...span, attributes: scrubbedSpanAttributes(span.attributes) }),
+    ),
     beforeSendLog: (log) =>
       log.attributes ? { ...log, attributes: scrubbedAttributes(log.attributes) } : log,
   };

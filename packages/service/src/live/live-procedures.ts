@@ -322,7 +322,7 @@ function topicsOf<Param extends string, Part extends string>(
  * procedure answers a read Luke Sync wakes; unavailable where its
  * statements can't be built or its topics looked up.
  */
-export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
   Part extends string,
 >(
@@ -366,7 +366,7 @@ function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string |
  * Unavailable where its statements can't be built or read. `onWoken` is
  * handed to the hold (`heldParts`), which a snapshot's answer does not take.
  */
-export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
   Part extends string,
 >(
@@ -379,7 +379,7 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const following = query.cursor;
   const cursor = asked[LIVE_POLL.CURSOR];
   if (following === undefined || cursor === undefined) {
-    return yield* liveQueryParts(query, params, asked, look);
+    return yield* queryParts(query, params, asked, look);
   }
   const followed: ReadonlySet<string> = new Set(following.parts);
   const polled = (how: PartRead) =>
@@ -417,6 +417,38 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
     onWoken,
   );
 });
+
+/**
+ * A defined live read's parts, as `queryParts` and `cursorParts` read them,
+ * under a span named for the read (`web/live/<name>`). Note that every
+ * statement of the read, each look of its hold among them, runs under it,
+ * because a look resumes after a wait on no request's span, and each
+ * statement Sentry saw then was a trace of its own named for the database.
+ */
+export function liveQueryParts<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+  look?: Duration.Duration,
+  heldOn?: readonly NoInfer<Part>[],
+) {
+  return queryParts(query, params, asked, look, heldOn).pipe(
+    Effect.withSpan(`web/live/${query.name}`),
+  );
+}
+
+/** A defined live read's parts in cursor mode, under the read's span as `liveQueryParts` runs one. */
+export function liveCursorParts<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
+  look?: Duration.Duration,
+  onWoken?: (heardAt: number) => Effect.Effect<void>,
+) {
+  return cursorParts(query, params, asked, look, onWoken).pipe(
+    Effect.withSpan(`web/live/${query.name}`),
+  );
+}
 
 /** The instant a reader holds every item changed since, as its query spells it in epoch milliseconds; none for every item, and one of any other shape refused. */
 const sinceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
