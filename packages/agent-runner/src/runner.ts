@@ -333,7 +333,8 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
       const uuid = (value.uuid as UUID | undefined) ?? randomUUID();
       return yield* launch.admission.withPermit(
         Effect.gen(function* () {
-          // A launch a released wait ended takes nothing more: the line stays unaccepted, for Luke's next send to relaunch on.
+          // A launch a released wait ended takes nothing more: the line stays unaccepted, for the
+          // launch Luke starts on its END, or on its next send, to be handed.
           if ((yield* Ref.get(launch.released)) !== undefined) {
             return yield* Effect.logWarning(
               "agent-runner: skipped a message for a released launch",

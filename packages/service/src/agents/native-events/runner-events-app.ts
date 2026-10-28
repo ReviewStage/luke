@@ -1,4 +1,4 @@
-import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
+import { RUNNER_END, RUNNER_EVENT, type RunnerEnd } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
@@ -21,7 +21,7 @@ import {
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -55,7 +55,9 @@ import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { CODER } from "../coder-host/bounds.js";
-import { runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
+import { isNativeRuntime } from "../coder-host/native-runtime.js";
+import { RUNNER_ENDED, runnerEnded, runnerIdled } from "../coder-host/runner-sessions.js";
+import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { compactNativeTurnHanded } from "../coder-host/turn-message.js";
@@ -184,11 +186,13 @@ export interface RunnerAlive {
   readonly sessionId: string | undefined;
 }
 
-/** A launch's end the batch applied: the conversation, the session it ran under, and the number of its END event. */
+/** A launch's end the batch applied: the conversation, the session it ran under, the number of its END event, why it ended where the END said, and the harness the conversation runs on. */
 export interface RunnerEnded {
   readonly target: ConversationTarget;
   readonly sessionId: string | undefined;
   readonly sequence: number;
+  readonly reason?: RunnerEnd | undefined;
+  readonly runtime?: ConversationRuntime | undefined;
 }
 
 /** What the route reads a batch with and tells of a launch's end. */
@@ -237,18 +241,30 @@ export function sandboxKeptAlive(alive: RunnerAlive): Effect.Effect<void> {
 /**
  * A launch's end as the sandbox hears it (`../coder-host/claude-code-sessions.ts`'s
  * `runnerEnded`): stopped, unless a developer's Terminal holds it or a newer
- * launch replaced this one. A stop that fails is said in the log and passed
- * over, because the sandbox then stops at its own timeout or when the
- * Terminal lease's sweep finds it, and the events it ended are already kept.
+ * launch replaced this one, or a message the launch never took waits, which
+ * the harness's sessions hand to a launch of their own once the answer has
+ * left (`deliverWaiting`), so the ended runner's last post never waits on
+ * it. A stop that fails is said in the log and passed over, because the
+ * sandbox then stops at its own timeout or when the Terminal lease's sweep
+ * finds it, and the events it ended are already kept.
  */
 export function sandboxAtRunnerEnd(
   ended: RunnerEnded,
 ): Effect.Effect<void, never, DatabaseServices> {
   const { sessionId } = ended;
   if (sessionId === undefined) return Effect.void;
-  return runnerEnded({ target: ended.target, sessionId, sequence: ended.sequence }).pipe(
+  return runnerEnded({
+    target: ended.target,
+    sessionId,
+    sequence: ended.sequence,
+    reason: ended.reason,
+  }).pipe(
     Effect.provide(FetchHttpClient.layer),
-    Effect.asVoid,
+    Effect.flatMap((left) =>
+      left === RUNNER_ENDED.LINES_WAITING
+        ? afterResponse("a launch's waiting lines", waitingHandedOn(ended, sessionId))
+        : Effect.void,
+    ),
     Effect.catch((failure) =>
       Effect.logWarning(
         `runner-events: the sandbox was not stopped at its launch's end: ${failure._tag}`,
@@ -256,6 +272,24 @@ export function sandboxAtRunnerEnd(
     ),
   );
 }
+
+/** The waiting lines of an ended launch handed to a launch of their own, by the harness the conversation runs on, where this function holds it. */
+const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
+  Effect.gen(function* () {
+    const native = yield* Effect.serviceOption(NativeAgentSessions);
+    const { runtime } = ended;
+    const reached =
+      runtime !== undefined && isNativeRuntime(runtime)
+        ? Option.flatMap(native, (service) => service.sessions(runtime, ended.target.userId))
+        : Option.none();
+    if (Option.isNone(reached)) {
+      return yield* Effect.logWarning(
+        "runner-events: a launch's waiting lines could not be handed on here",
+      );
+    }
+    const sessions = yield* reached.value;
+    yield* sessions.deliverWaiting(sessionId, ended.target.conversationId);
+  });
 
 /**
  * A launch's IDLE as the sandbox hears it, where the warm window is zero
@@ -304,6 +338,27 @@ function runnerEventsOf(
 ): readonly number[] {
   return unapplied(batch, after).flatMap(({ sequence, message }) =>
     Predicate.isObject(message) && "type" in message && message.type === type ? [sequence] : [],
+  );
+}
+
+const decodeEndReason = Schema.decodeUnknownOption(Schema.Literals(Object.values(RUNNER_END)));
+
+/** The END events of the batch not yet applied, in order, each with why its launch ended, where it said a reason this build reads. */
+function runnerEndsOf(
+  batch: RunnerEventBatch,
+  after: number | null,
+): readonly { readonly sequence: number; readonly reason: RunnerEnd | undefined }[] {
+  return unapplied(batch, after).flatMap(({ sequence, message }) =>
+    Predicate.isObject(message) && "type" in message && message.type === RUNNER_EVENT.END
+      ? [
+          {
+            sequence,
+            reason: Option.getOrUndefined(
+              decodeEndReason("reason" in message ? message.reason : undefined),
+            ),
+          },
+        ]
+      : [],
   );
 }
 
@@ -484,7 +539,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
     yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
-    const ends = runnerEventsOf(batch, held.sequence, RUNNER_EVENT.END);
+    const ends = runnerEndsOf(batch, held.sequence);
     // Only the batch's last IDLE is told, and none where the launch ended in the same batch.
     const idle =
       ends.length === 0
@@ -578,8 +633,14 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
   }
   if (ended !== undefined) {
-    for (const sequence of applied.value.ends) {
-      yield* ended({ target, sessionId: admitted.value.runtimeSessionId, sequence });
+    for (const { sequence, reason } of applied.value.ends) {
+      yield* ended({
+        target,
+        sessionId: admitted.value.runtimeSessionId,
+        sequence,
+        reason,
+        runtime: Option.getOrUndefined(runtime),
+      });
     }
   }
   if (idled !== undefined && applied.value.idle !== undefined) {

@@ -4,13 +4,21 @@
  * It keeps every sandbox, command, stdin, upload, network policy, and run it
  * was asked for, opens and resumes sandboxes as Vercel does, and answers a
  * list and a stop only where Vercel would (`vercel-sandbox-fake.ts`).
- * Synthetic team, project, and tokens throughout.
+ * Beside it, the lines a launch reads from Luke's store (`runner_line`),
+ * read back the way a test reads a command's stdin, and stamped taken as a
+ * runner's ACCEPTED would, which no fake runner posts. Synthetic team,
+ * project, and tokens throughout.
  */
 
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
+import type { RunnerConfig } from "@luke/agent-runner/protocol";
+import { Database } from "@luke/database/core/query";
+import { runnerLine } from "@luke/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { Effect } from "effect";
 import {
   sandboxListRefusal,
   sandboxStopRefusal,
@@ -52,6 +60,8 @@ export interface FakeSandbox {
 export interface FakeCommand {
   readonly id: string;
   readonly sandboxSessionId: string;
+  /** The agent the command's sandbox was tagged for as it started, whose queued lines a launch reads. */
+  readonly agentId: string | undefined;
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd: string | undefined;
@@ -320,6 +330,8 @@ export function runnerSandboxApi() {
       const command: FakeCommand = {
         id: id("cmd"),
         sandboxSessionId: sessionId,
+        agentId: sandboxes.find((sandbox) => sandbox.currentSessionId === sessionId)?.tags
+          .lukeAgent,
         command: asked.command,
         args: asked.args,
         cwd: asked.cwd,
@@ -408,3 +420,31 @@ export function linesOf(command: FakeCommand | undefined): unknown[] {
     .filter((text) => text !== "")
     .map((text) => JSON.parse(text));
 }
+
+/**
+ * The lines a launch was handed: its config on its stdin, then each line
+ * queued for it to read, in the order they were queued (`runner_line`).
+ */
+export const launchLines = (command: FakeCommand | undefined) =>
+  Effect.gen(function* () {
+    assert.ok(command?.agentId !== undefined);
+    const [config, ...stdin] = linesOf(command) as [RunnerConfig, ...unknown[]];
+    const db = yield* Database;
+    const queued = yield* db
+      .select({ text: runnerLine.text })
+      .from(runnerLine)
+      .where(
+        and(eq(runnerLine.agentId, command.agentId), eq(runnerLine.launch, config.firstSequence)),
+      )
+      .orderBy(asc(runnerLine.seq));
+    return [config, ...stdin, ...queued.map((row): unknown => JSON.parse(row.text))];
+  });
+
+/** Every message queued for the agent's runner stamped taken, as each one's ACCEPTED would, which the fake runner never posts. */
+export const runnerTook = (agentId: string) =>
+  Effect.flatMap(Database, (db) =>
+    db
+      .update(runnerLine)
+      .set({ acceptedAt: new Date(0) })
+      .where(and(eq(runnerLine.agentId, agentId), isNull(runnerLine.acceptedAt))),
+  );

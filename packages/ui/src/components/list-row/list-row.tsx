@@ -62,6 +62,9 @@ export type { ListSelection } from "../selection/list-selection.js";
  * focus, so its `ref` reaches its item, to scroll or measure, and it hears
  * no keys, which would only be its acts'.
  *
+ * A row's own acts (`actions`) stand together as a group named by the
+ * row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
+ *
  * A row whose thing has acts of its own offers them as one menu (`menu`),
  * which every door to it opens alike: its ⋯ (`MoreButton`), the last of the
  * row's acts, drops it from the ⋯; a right-click or a touch's long press
@@ -588,7 +591,7 @@ export function ListRow({
   const heading = (
     <span
       ref={titleMeasured}
-      id={offered ? titleId : undefined}
+      id={offered || said(actions) ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
     >
@@ -707,7 +710,15 @@ export function ListRow({
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? (
-        <div className="luke-list-row-actions row-1 flex items-center gap-luke-4">{actions}</div>
+        // Note that the acts are a group named by the row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
+        // biome-ignore lint/a11y/useSemanticElements: a row's acts are presses on its thing, not a form's fields, so they are no `<fieldset>`.
+        <div
+          role="group"
+          aria-labelledby={titleId}
+          className="luke-list-row-actions row-1 flex items-center gap-luke-4"
+        >
+          {actions}
+        </div>
       ) : null}
       {offered ? (
         <div className="luke-list-row-more row-1 flex items-center">

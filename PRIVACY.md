@@ -521,7 +521,12 @@ on that disk between turns and in the snapshot Vercel keeps when the sandbox
 stops, and are deleted with the sandbox when the task is deleted, as above.
 Your plan's token, or your API key, is handed to Claude Code alone, in its
 process's environment: it is never written to that disk, a command Claude Code runs,
-or the conversation's record.
+or the conversation's record. What you send such an agent in its sandbox, a
+message with the files it carries as Claude Code takes them, a Stop, or a change
+of model, waits in our database as a line for the agent's runner, which reads it
+from there; a message the runner never took is handed to the agent's next launch
+within five minutes of your sending it, or not at all. A line is deleted once
+it is a day old and a later one is sent to that agent, and with the agent.
 
 **An agent that runs on Codex.** On the same terms, for the accounts in
 the early test of ChatGPT plans, an agent your ChatGPT plan pays for

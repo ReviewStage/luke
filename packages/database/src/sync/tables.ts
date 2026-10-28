@@ -23,6 +23,7 @@ import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
 import { codingAgent, codingAgentDelegation } from "../schemas/coding-agent.js";
+import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
@@ -187,6 +188,31 @@ export const macCommandSync = defineSyncTable(macCommand, {
 const runnerLineSync = defineSyncTable(runnerLine, {
   topics: [{ kind: TOPIC.AGENT, column: runnerLine.agentId }],
   ignore: [runnerLine.acceptedAt],
+});
+
+/**
+ * A line queued for a local agent's runner, on its account's topic, which
+ * the account's Macs' held read of their lines and a wait for a runner's
+ * exit are woken on. Note that what the line says is ignored, because it is
+ * written once as the line is queued and never changed, and an update
+ * comparing it would weigh a files line's every file at its claim and its
+ * settle.
+ */
+const deviceAgentLineSync = defineSyncTable(deviceAgentLine, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: deviceAgentLine.userId }],
+  ignore: [deviceAgentLine.payload],
+});
+
+/**
+ * A request of a local agent's tool to its Mac, on its account's topic,
+ * which the Macs' held read of their requests and the tool's wait for the
+ * answer are woken on. Note that the file an answer carries is ignored,
+ * because an update comparing it would weigh the file, and the answer moves
+ * `settled_at` beside it, so it still notifies.
+ */
+const deviceAgentRequestSync = defineSyncTable(deviceAgentRequest, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: deviceAgentRequest.userId }],
+  ignore: [deviceAgentRequest.bytes],
 });
 
 /** A comment thread on a task's plan, on the task's topic. */
@@ -449,6 +475,8 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentPinSync,
   macCommandSync,
   runnerLineSync,
+  deviceAgentLineSync,
+  deviceAgentRequestSync,
   planCommentThreadSync,
   planCommentSync,
   inboxItemSync,

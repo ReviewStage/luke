@@ -328,7 +328,15 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
             )
           : {
               page: yield* hostedStoreOrUnavailable(
-                transcriptPast(target, CODER_TOOL_SET, cursor, standing, agent, titleAwaited),
+                transcriptPast(
+                  target,
+                  CODER_TOOL_SET,
+                  cursor,
+                  standing,
+                  agent,
+                  titleAwaited,
+                  titleEdgeOf(target),
+                ),
               ),
               holds: undefined,
               wakeIn: undefined,
@@ -401,7 +409,15 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           )
         : {
             page: yield* hostedStoreOrUnavailable(
-              transcriptPast(worker, CODER_TOOL_SET, cursor, started, undefined, titleAwaited),
+              transcriptPast(
+                worker,
+                CODER_TOOL_SET,
+                cursor,
+                started,
+                undefined,
+                titleAwaited,
+                titleEdgeOf(target, conversationId),
+              ),
             ),
             holds: undefined,
             wakeIn: undefined,

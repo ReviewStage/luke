@@ -269,6 +269,8 @@ function relayOver(
         }),
         Effect.orElseSucceed(() => RUNNER_CHOICE.FAILED),
       ),
+    // Note that only the runner's events route hands waiting lines on, in a web function holding the harnesses itself, so nothing relays it.
+    deliverWaiting: () => Effect.succeed(false),
     // A halt the route did not answer as done is said as failed, so the rewind waiting on it cuts nothing.
     halt: (sessionId, conversationId) =>
       post({ call: NATIVE_RELAY_CALL.HALT, ...named, sessionId, conversationId }).pipe(
