@@ -2362,6 +2362,7 @@ function SidebarColumn({
         onSignOut={onSignOut}
       />
       {sectionDialogs.dialog}
+      {selection.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
     </PanePin>

@@ -606,7 +606,7 @@ test("a section's Status sets every task in it at the status picked at once, ask
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
-test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Mark done for both", async () => {
+test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Status for both", async () => {
   const settled: [string[], string][] = [];
   const opened: string[] = [];
   const sidebar = await mountSidebar([], SECTIONS, {
@@ -629,7 +629,8 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
 
   openRowMenu(sidebar, RETRIES.name);
   assert.equal(document.querySelector(".luke-menu-heading")?.textContent, "2 tasks");
-  act(() => item("Mark done").click());
+  act(() => item("Status").click());
+  act(() => item("Done").click());
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 

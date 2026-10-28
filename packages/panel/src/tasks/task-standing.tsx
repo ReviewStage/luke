@@ -234,6 +234,8 @@ export interface TaskStandingDoor {
   readonly onSet?: ((standing: TaskStanding) => void) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
   readonly devices?: readonly MacOffer[] | undefined;
+  /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
+  readonly inSight?: boolean | undefined;
 }
 
 /**
@@ -346,20 +348,25 @@ export function TaskStandingChips({
   onSet,
   repository,
   devices,
+  inSight = true,
 }: {
   task: Task;
   onSet: ((standing: TaskStanding) => void) | undefined;
   repository?: TaskRepositoryDoor | undefined;
   devices?: readonly MacOffer[] | undefined;
+  /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
+  inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const standing = status !== undefined && priority !== undefined;
-  // S opens the status chip's menu while the chip takes a pick, each press counted so it opens it again.
+  // S opens the status chip's menu while the chip is in sight and takes a pick, each press counted so it opens it again.
   const [statusAsks, setStatusAsks] = useState(0);
   useAppCommand(
     APP_COMMAND.SET_STATUS,
-    onSet !== undefined && standing ? () => setStatusAsks((asks) => asks + 1) : undefined,
+    onSet !== undefined && standing && inSight
+      ? () => setStatusAsks((asks) => asks + 1)
+      : undefined,
   );
   if (!standing && repository === undefined) return null;
   const runsOnDrawn =
