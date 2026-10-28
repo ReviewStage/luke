@@ -93,13 +93,16 @@ import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
+  type GitHubLineMetadata,
   isRecord,
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  type ThreadLineMetadata,
   type UnparsedWireValue,
   USER_MESSAGE_METADATA,
+  type UserMessageMetadata,
   type WireValue,
 } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -1643,10 +1646,29 @@ const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
  * cannot read.
  */
 export function agentMessageOf(message: CodingAgentMessage): AgentMessageMetadata | undefined {
+  const read = userMetadataOf(message);
+  return read?.channel === MESSAGE_CHANNEL.AGENT_MESSAGE ? read : undefined;
+}
+
+/** What a member did on a thread that a line steered into the agent carries, and the item it is on; nothing for any other line. */
+export function threadLineOf(message: CodingAgentMessage): ThreadLineMetadata | undefined {
+  const read = userMetadataOf(message);
+  return read?.channel === MESSAGE_CHANNEL.THREAD ? read : undefined;
+}
+
+/** What GitHub said on the agent's pull request that a line steered into the agent carries; nothing for any other line. */
+export function githubLineOf(message: CodingAgentMessage): GitHubLineMetadata | undefined {
+  const read = userMetadataOf(message);
+  return read?.channel === MESSAGE_CHANNEL.GITHUB ? read : undefined;
+}
+
+/** A user row's metadata where it names the channel that carried it; nothing for an assistant's row, an observation, or a row this build cannot read. */
+function userMetadataOf(
+  message: CodingAgentMessage,
+): Extract<UserMessageMetadata, { readonly channel: unknown }> | undefined {
   if (message.role !== MESSAGE_ROLE.USER || message.metadata === undefined) return undefined;
   const read = Option.getOrUndefined(readUserMetadata(message.metadata));
-  if (read === undefined || !("channel" in read)) return undefined;
-  return read.channel === MESSAGE_CHANNEL.AGENT_MESSAGE ? read : undefined;
+  return read === undefined || !("channel" in read) ? undefined : read;
 }
 
 /**

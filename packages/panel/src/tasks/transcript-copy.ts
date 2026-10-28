@@ -9,7 +9,7 @@ import {
   type CodingAgentBrief,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
-import { inboxLineWords } from "@luke/features/inbox-wire";
+import { THREAD_LINE_LEAD, threadLineWords } from "@luke/features/inbox-wire";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -30,6 +30,7 @@ import {
   isDelegation,
   messageWords,
   placedMessages,
+  threadLineOf,
   turnStretches,
   workerLines,
 } from "./coding-agent-model.js";
@@ -272,7 +273,8 @@ export function drawnRowsWords(rows: readonly TurnRow<AgentPart>[]): string {
 
 /**
  * One of the developer's messages as a copy reads it: their words, as the
- * tab draws them, an inbox line without its item's key; and another agent's
+ * tab draws them, a thread's line led by what the member did on it and
+ * without the header naming the item to the agent; and another agent's
  * message, which the tab draws as its sender's (`agentMessageOf`), under
  * who sent it, without the lines that are the agent's alone.
  */
@@ -283,7 +285,14 @@ function developerTurn(message: CodingAgentMessage): CopiedTurn {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: agentMessageWords(words) ?? words }] as const;
     return { speaker: SPEAKER.MESSAGE, from: sent.from, blocks };
   }
-  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: inboxLineWords(words) }] as const;
+  const thread = threadLineOf(message);
+  const shown =
+    thread === undefined
+      ? words
+      : [THREAD_LINE_LEAD[thread.event], threadLineWords(words, thread.event)]
+          .filter((part) => part !== "")
+          .join("\n\n");
+  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: shown }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };
 }
 

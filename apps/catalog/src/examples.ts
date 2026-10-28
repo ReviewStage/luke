@@ -45,6 +45,7 @@ import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_LINES_EXAMPLE } from "./examples/error-lines";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
+import { EVENT_CARDS_EXAMPLE } from "./examples/event-cards";
 import { FACTS_EXAMPLE } from "./examples/facts";
 import { FAILURE_NOTES_EXAMPLE } from "./examples/failure-notes";
 import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
@@ -227,6 +228,7 @@ export const EXAMPLES: readonly Example[] = [
   TAB_NOTICES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   SHOW_MORE_ROWS_EXAMPLE,
+  EVENT_CARDS_EXAMPLE,
   SIDEBAR_PARTS_EXAMPLE,
   ROW_MARKS_EXAMPLE,
   SELECTION_EXAMPLE,

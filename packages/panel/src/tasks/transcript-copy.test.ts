@@ -159,12 +159,20 @@ test("another agent's message in its whole shape is copied as its words alone, w
   );
 });
 
-test("a thread's answer is copied without its item's key, as the tab draws it", () => {
-  const answer = said(
-    "answer",
-    MESSAGE_ROLE.USER,
-    inboxAnswerMessage({ key: "ship-it", title: "Ship it?" }, { reply: INBOX_REPLY.APPROVED }),
-  );
+test("a thread's answer is copied led by what the member did, without the header naming its item, as the tab draws it", () => {
+  const answer: CodingAgentMessage = {
+    ...said(
+      "answer",
+      MESSAGE_ROLE.USER,
+      inboxAnswerMessage({ key: "ship-it", title: "Ship it?" }, { reply: INBOX_REPLY.APPROVED }),
+    ),
+    metadata: {
+      author: "developer",
+      channel: "thread",
+      event: "answer",
+      item_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    },
+  };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
     brief: undefined,
@@ -177,7 +185,8 @@ test("a thread's answer is copied without its item's key, as the tab draws it", 
       "## Plan",
       "Build invitations.",
       "## Developer",
-      'Thread answer on "Ship it?": Approved.',
+      "Thread answer",
+      "Approved.",
     ].join("\n\n") + "\n",
   );
 });
