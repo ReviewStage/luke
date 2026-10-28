@@ -580,8 +580,8 @@ export interface StoreWriter {
    * spoken ask (`beside`), the run is the one whose words stand whole among
    * those received. A take by client id takes the one awaiting row written
    * under it. A withdrawn line is taken as any other, standing again with
-   * what carried it and who sent it, where the lines eve did take match
-   * nothing. Answers the rows taken, or none where no such run awaits, which
+   * what carried it and who sent it, where it lengthens the run the lines
+   * eve did take make. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -2616,11 +2616,12 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
       : take.beside
         ? coalescedRunWithin(lines, take.text)
         : coalescedRun(lines, take.text);
-  // Note that the lines whose hand-over answered nothing are matched only where those it took match
-  // nothing, because eve heard each of them only where its answer was lost, and one standing among
-  // the others would part a run of lines eve did coalesce.
+  // Note that a line whose hand-over answered nothing is taken only where it lengthens the run,
+  // because eve heard one only where its answer was lost, and one it never heard standing among the
+  // lines it took would part a run eve did coalesce; the lines it took win where the two runs tie.
   const standing = runAmong(awaiting.filter((line) => !line.withdrawn));
-  const run = standing.length > 0 ? standing : runAmong(awaiting);
+  const widened = runAmong(awaiting);
+  const run = widened.length > standing.length ? widened : standing;
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({
