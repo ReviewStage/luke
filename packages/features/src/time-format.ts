@@ -212,7 +212,9 @@ export function workingTime(elapsedMs: number): string {
  * When a run went and for how long, in the fewest words a card's line has
  * room for: its day as a call's header names it, the clock from its start to
  * its end sharing what they share, and how long it ran, "Today, 2:32 – 3:42
- * PM · 1h 10m". A run that crossed midnight names both days.
+ * PM · 1h 10m". A run inside one minute names that minute once ("Today,
+ * 9:34 PM · 42s"), since a range from a time to itself says nothing its
+ * length does not. A run that crossed midnight names both days.
  */
 export function runSpanText(startedAt: number, endedAt: number, now: number): string {
   const sameDay = midnightOf(startedAt) === midnightOf(endedAt);
