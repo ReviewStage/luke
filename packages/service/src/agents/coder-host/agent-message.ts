@@ -1,7 +1,5 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
-import type { LineSender } from "@luke/database/models/writer";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   AGENT_MESSAGE_LEAD,
@@ -35,7 +33,7 @@ import {
 } from "../coding-agent-tools.js";
 import { workspaceAgent } from "../workspace-agents.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
-import { steerCodingAgent } from "./steer.js";
+import { agentLineSender, steerCodingAgent } from "./steer.js";
 
 /**
  * agent-message.ts -- `message_agent`: one coding agent's message to another of its workspace, shown in the two agents' transcripts alone.
@@ -166,16 +164,6 @@ function senderName(sender: CodingAgent): string {
   return kept.trim();
 }
 
-/** Who sent the line, as its row keeps it: the sending agent, by its name, id, and model. */
-function senderOf(sender: CodingAgent): LineSender {
-  return {
-    kind: MESSAGE_SENDER.AGENT,
-    agentId: sender.id,
-    name: agentName(sender),
-    model: sender.model,
-  };
-}
-
 /** One call of `message_agent`: the words handed to another agent of the caller's workspace, or why nothing was sent. */
 export function runMessageAgent(
   call: CodingAgentCall,
@@ -218,7 +206,7 @@ export function runMessageAgent(
       const sent = yield* steerCodingAgent(eve, call.writer, userId, target, {
         text: messageLine(sender, mention, text),
         clientKey: call.clientKey,
-        sender: senderOf(sender),
+        sender: agentLineSender(sender),
         metadata: {
           author: MESSAGE_AUTHOR.AGENT,
           channel: MESSAGE_CHANNEL.AGENT_MESSAGE,

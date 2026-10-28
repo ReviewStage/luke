@@ -306,6 +306,7 @@ const pollCheckRuns = /* @__PURE__ */ Effect.fnUntraced(function* (
       url: checksUrl(poll, sha),
       by: `${failed.app?.slug ?? "github"}[bot]`,
       at: instantOf(poll, failed.completed_at),
+      sha,
     },
     wakeKey(WAKE_KEY.CHECK, sha, failed.conclusion ?? ""),
   );
@@ -334,6 +335,7 @@ const pollStatuses = /* @__PURE__ */ Effect.fnUntraced(function* (
         url: checksUrl(poll, sha),
         by: status.creator?.login ?? GHOST,
         at: instantOf(poll, status.updated_at),
+        sha,
       },
       wakeKey(WAKE_KEY.STATUS, sha, status.context, status.state),
     ),

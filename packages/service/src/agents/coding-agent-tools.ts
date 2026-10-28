@@ -1788,7 +1788,7 @@ export function runStartAgent(
         from,
         summaryModel: call.summaryModel,
         ...(caller.kind === AGENT_CALLER.AGENT
-          ? { noteHeading: START_NOTE_HEADING.AGENT }
+          ? { noteHeading: START_NOTE_HEADING.AGENT, startedBy: caller.agent }
           : undefined),
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {

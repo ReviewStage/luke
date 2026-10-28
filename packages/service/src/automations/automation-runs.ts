@@ -26,7 +26,7 @@ import {
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
-import { storeWriter } from "@luke/database/models/writer";
+import { AUTOMATION_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { readCodeReviewSettings } from "@luke/features/automation-code-review";
@@ -444,6 +444,7 @@ const steerClaimed = Effect.fnUntraced(function* (
         serverWords: automation.action.prompt,
         clientKey: run.id,
         sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+        metadata: AUTOMATION_LINE_METADATA,
       },
     ),
   );

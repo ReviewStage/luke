@@ -1712,7 +1712,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike; eve writes its own",
+      "a Start's first message stands in a native agent's transcript as the line awaiting its turn, its id handed to the runner, which names it back as it takes it, on Claude Code and Codex alike, kept as the Start's prompt and sent by the agent whose start_agent asked where one did; eve writes its own",
       () =>
         Effect.gen(function* () {
           const layers = (native: ReturnType<typeof runtimes>["native"]) =>
@@ -1761,14 +1761,53 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const lineId = byAutomation.claudeCode.messages[0]?.lineId ?? "";
           const db = yield* Database;
           const [said] = yield* db
-            .select({ sender: messages.sender, senderName: messages.senderName })
+            .select({
+              sender: messages.sender,
+              senderName: messages.senderName,
+              metadata: messages.metadata,
+            })
             .from(messages)
             .where(eq(messages.clientId, lineId));
           assert.deepEqual(said, {
             sender: MESSAGE_SENDER.AUTOMATION,
             senderName: "Nightly checks",
+            metadata: { author: "developer", channel: "automation" },
           });
           assert.ok(run.agent.conversationId !== "");
+
+          // A member's Start sends its prompt as the member; another agent's start_agent, as that agent.
+          const byAgent = yield* openStarter(true);
+          const agentRuns = runtimes();
+          const starting = yield* startCodingAgent(
+            routedSessions(agentRuns.eve.sessions, byAgent.owner),
+            byAgent.owner,
+            startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
+          ).pipe(Effect.provide(layers(agentRuns.native)));
+          yield* startCodingAgent(
+            routedSessions(agentRuns.eve.sessions, byAgent.owner),
+            byAgent.owner,
+            {
+              ...startIn(byAgent.workspaceId, "anthropic/claude-opus-5.5"),
+              startedBy: starting.agent,
+            },
+          ).pipe(Effect.provide(layers(agentRuns.native)));
+          const opened = [];
+          for (const handed of agentRuns.claudeCode.messages) {
+            const [row] = yield* db
+              .select({
+                sender: messages.sender,
+                senderAgentId: messages.senderAgentId,
+                metadata: messages.metadata,
+              })
+              .from(messages)
+              .where(eq(messages.clientId, handed.lineId ?? ""));
+            opened.push(row);
+          }
+          const prompt = { author: "developer", channel: "start", brief: "prompt" };
+          assert.deepEqual(opened, [
+            { sender: MESSAGE_SENDER.MEMBER, senderAgentId: null, metadata: prompt },
+            { sender: MESSAGE_SENDER.AGENT, senderAgentId: starting.agent.id, metadata: prompt },
+          ]);
 
           const keyed = yield* openStarter(false);
           yield* saveApiKey(keyed.owner, PROVIDER_KEY_PROVIDER.ANTHROPIC);

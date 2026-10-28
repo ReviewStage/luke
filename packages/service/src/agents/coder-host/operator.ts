@@ -51,7 +51,7 @@ import {
   readStandingOperator,
   restoreOperatorAgent,
 } from "@luke/database/models/coding-agent-store";
-import { storeWriter } from "@luke/database/models/writer";
+import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { nextScheduledRun } from "@luke/features/automation-schedule";
 import {
@@ -191,7 +191,12 @@ const openedOnItsOpening = (
       storeWriter({ tools: CODER_TOOL_SET }),
       operator.userId,
       operator,
-      { text: OPERATOR_OPENING, clientKey: randomUUID(), sender: { kind: MESSAGE_SENDER.LUKE } },
+      {
+        text: OPERATOR_OPENING,
+        clientKey: randomUUID(),
+        sender: { kind: MESSAGE_SENDER.LUKE },
+        metadata: LUKE_LINE_METADATA,
+      },
     );
   }).pipe(
     Effect.catch((refusal) =>

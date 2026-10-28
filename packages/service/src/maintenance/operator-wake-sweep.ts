@@ -27,7 +27,7 @@ import {
   dueOperatorWakes,
   recordOperatorWake,
 } from "@luke/database/models/operator-notices";
-import { storeWriter } from "@luke/database/models/writer";
+import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -95,6 +95,7 @@ const wake = (eveFor: EveForAccount, due: DueOperatorWake, now: Date) =>
         text: wakeLine(due, step),
         clientKey: wakeKey(due),
         sender: { kind: MESSAGE_SENDER.LUKE },
+        metadata: LUKE_LINE_METADATA,
       },
     );
     yield* recordOperatorWake(due.operatorId, due.agentId, now);

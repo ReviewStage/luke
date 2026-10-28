@@ -6,6 +6,7 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { messages } from "@luke/database/schemas/storage";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -52,6 +53,7 @@ import {
 import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -411,7 +413,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
 it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   it.effect(
-    "a thread started with an agent mentioned hands it the thread as the member's message, and the thread says who asked it",
+    "a thread started with an agent mentioned hands it the thread as the member's message, kept as the comment thread's line, and the thread says who asked it",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -436,6 +438,16 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         const words = JSON.stringify(message.message);
         assert.ok(words.includes("Charles Pan sent you a comment thread"));
         assert.ok(words.includes(thread.id));
+        const lines = yield* Database.use((db) =>
+          db
+            .select({ metadata: messages.metadata })
+            .from(messages)
+            .where(sql`${messages.metadata} ->> 'thread_id' = ${thread.id}`),
+        );
+        assert.deepEqual(
+          lines.map((line) => line.metadata),
+          [{ author: "developer", channel: "comment", thread_id: thread.id }],
+        );
         const [after] = threadsIn(
           yield* answer("comments", request(commentsPath(taskId), teammate, {})),
         );
