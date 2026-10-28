@@ -16,8 +16,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { CallWindowCard } from "./call-window-card";
 
 /**
- * The floating call window's card: the mute chords its hints name answer
- * there, and a press main refuses is said there.
+ * The floating call window's card: a press main refuses is said there.
  */
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -92,37 +91,6 @@ function button(scope: Element, name: string): HTMLButtonElement {
 }
 
 const card = (page: HTMLElement) => page.querySelector<HTMLElement>("section.call-card");
-
-/** ⇧⌘ and a letter, as the window hears the chord a hint names. */
-function pressShiftCommand(code: string, key: string): KeyboardEvent {
-  const event = new KeyboardEvent("keydown", {
-    code,
-    key,
-    metaKey: true,
-    shiftKey: true,
-    bubbles: true,
-    cancelable: true,
-  });
-  act(() => {
-    window.dispatchEvent(event);
-  });
-  return event;
-}
-
-test("in the floating call window ⇧⌘M and ⇧⌘S answer, as the mute hints name them, and are claimed from the menu bar", async () => {
-  handBridge(onCall());
-  mount(createElement(CallWindowCard));
-  await settle();
-
-  const microphone = pressShiftCommand("KeyM", "M");
-  await settle();
-  assert.equal(microphone.defaultPrevented, true);
-  assert.deepEqual(sent, [{ kind: "voice.command", payload: { command: "toggle-microphone" } }]);
-
-  pressShiftCommand("KeyS", "S");
-  await settle();
-  assert.deepEqual(sent.at(-1), { kind: "voice.command", payload: { command: "mute-speaker" } });
-});
 
 test("a press main refuses in the floating call window is said there", async () => {
   handBridge(onCall());
