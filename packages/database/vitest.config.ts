@@ -9,6 +9,7 @@ export default defineConfig({
   test: {
     name: "database",
     include: ["src/**/*.test.ts"],
+    setupFiles: ["../wire/src/testing/file-time-cap.ts"],
     exclude: [...configDefaults.exclude, ...POSTGRES_ONLY],
     // One migrated PGlite per run, which every file's opening loads.
     globalSetup: ["src/testing/migrated-pglite-setup.ts"],

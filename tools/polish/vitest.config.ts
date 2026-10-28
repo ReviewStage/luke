@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     name: "polish",
     include: ["*.test.ts"],
+    setupFiles: ["../../packages/wire/src/testing/file-time-cap.ts"],
   },
 });

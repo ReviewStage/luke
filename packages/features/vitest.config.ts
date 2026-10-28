@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     name: "features",
     include: ["src/**/*.test.ts"],
+    setupFiles: ["../wire/src/testing/file-time-cap.ts"],
   },
 });

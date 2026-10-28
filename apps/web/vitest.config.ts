@@ -23,6 +23,7 @@ export default defineConfig({
   test: {
     name: "web",
     include: ["tests/**/*.test.ts"],
+    setupFiles: ["../../packages/wire/src/testing/file-time-cap.ts"],
     // One migrated PGlite per run, which every file's opening loads.
     globalSetup: ["../../packages/database/src/testing/migrated-pglite-setup.ts"],
     css: { include: [INLINE_STYLESHEETS] },
