@@ -1376,7 +1376,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     tasksFile: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_FILE, {
-          taskId: params.taskId,
+          ...("taskId" in params
+            ? { taskId: params.taskId }
+            : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           firstLine: params.firstLine,
           lastLine: params.lastLine,

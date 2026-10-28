@@ -468,11 +468,25 @@ export const tasksEditAnswerSchema = EffectSchema.Union([
 
 export type TasksEditAnswer = typeof tasksEditAnswerSchema.Type;
 
-/** A window of a file of a task's repository, as the File tab asks the host for it: the task, the path, and the window's first and last line. */
-export const tasksFileParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  ...taskFileRequestSchema.fields,
-});
+/**
+ * A repository as a read with no plan names it, as an agent an automation
+ * started names its own: the workspace whose installation reaches it, and
+ * the repository.
+ */
+const repositoryPlaceFields = {
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+};
+
+/**
+ * A window of a file of a repository, as the File tab asks the host for it:
+ * the task whose repository it is, or the workspace and the repository
+ * where no task names it, the path, and the window's first and last line.
+ */
+export const tasksFileParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, ...taskFileRequestSchema.fields }),
+  EffectSchema.Struct({ ...repositoryPlaceFields, ...taskFileRequestSchema.fields }),
+]);
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
@@ -485,16 +499,6 @@ export const tasksFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksFileAnswer = typeof tasksFileAnswerSchema.Type;
-
-/**
- * A repository as a read with no plan names it, as an agent an automation
- * started names its own: the workspace whose installation reaches it, and
- * the repository.
- */
-const repositoryPlaceFields = {
-  workspaceId: workspaceIdSchema,
-  repository: githubRepositoryFullNameSchema,
-};
 
 /**
  * One folder of a repository, as the File tab's tree or an `@` list asks

@@ -43,10 +43,11 @@
  *
  * Beside it, one repository of the workspace's installation is read by the
  * workspace and its name, for a place no plan names, such as an agent an
- * automation started: `GET /api/github/repositories/tree`, one folder of it,
- * and `GET /api/github/repositories/skills`, the skills a developer may
- * choose of it, each answered exactly as a plan's own read answers
- * (`tasks/task-tree.ts`, `tasks/task-skills.ts`) to a member of the
+ * automation started: `GET /api/github/repositories/file`, a window of one
+ * file of it, `GET /api/github/repositories/tree`, one folder of it, and
+ * `GET /api/github/repositories/skills`, the skills a developer may choose
+ * of it, each answered exactly as a plan's own read answers
+ * (`tasks/task-file.ts`, `tasks/task-tree.ts`, `tasks/task-skills.ts`) to a member of the
  * workspace, through the same reach of its installation; a workspace the
  * account is not in is not found, and a repository the installation does
  * not reach is refused as a plan's is, inside the answer.
@@ -112,6 +113,8 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
+import { readRepositoryFileWindow } from "../tasks/task-file.js";
+import { fileWindowOf } from "../tasks/task-files-procedures.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
 import { GitHubApp, type GitHubWorkspaceReadFailure, markRefusedToken } from "./github-app.js";
@@ -431,6 +434,16 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
         ? addTokenRepository(context.userId, input.workspaceId, input.repository)
         : removeTokenRepository(context.userId, input.workspaceId, input.repository);
       return yield* tokenRepositoriesOf(context.userId, input.workspaceId);
+    }),
+    repositoryFile: signedIn.repositoryFile.effect(function* ({ context, input }) {
+      const place = yield* memberPlace(context.userId, input);
+      const window = yield* fileWindowOf(input);
+      return yield* readRepositoryFileWindow(
+        place.workspaceId,
+        place.repository,
+        place.member,
+        window,
+      );
     }),
     repositoryTree: signedIn.repositoryTree.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
