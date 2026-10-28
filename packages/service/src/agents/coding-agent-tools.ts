@@ -355,11 +355,17 @@ export const START_CODING_AGENT_REFUSAL = {
     `${CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
     `bounded the same or none, a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
     "characters or none, a branch as one git branch name or none, a model with its effort, " +
-    `both or neither, a taskId or none, and images as at most ${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} ` +
-    "attachment ids or none.",
-  NO_TASK:
-    `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} ` +
-    `answered it, or make one with ${AGENT_TOOL.CREATE_TASK} first.`,
+    `both or neither, a taskId or none, a repository as owner/name, null, or none, and images as ` +
+    `at most ${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids or none.`,
+  NO_PROMPT:
+    "Not started: you work on no task, so there is no plan to hand it; give it a prompt, or name " +
+    `a task by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
+  BRANCH_NO_REPOSITORY:
+    "Not started: the agent works in no repository, so there is no branch to clone; name a " +
+    "repository with the branch, or leave branch out.",
+  REPOSITORY_ON_TASK:
+    "Not started: an agent on a task works in the task's own repository; leave repository out " +
+    "where you start it on a task, or from another agent.",
   NEW_TASK:
     `Not started: start_agent no longer makes a task; make it with ${AGENT_TOOL.CREATE_TASK}, then ` +
     "start the agent on it by its taskId.",
@@ -376,7 +382,7 @@ export const START_CODING_AGENT_REFUSAL = {
   GITHUB_UNANSWERED:
     "Not started: GitHub did not answer whether the branch exists. The call may be made again.",
   NOT_REACHABLE:
-    "Not started: the GitHub installation connected to the task's workspace does not reach the task's repository.",
+    "Not started: the GitHub installation connected to the workspace does not reach the repository the agent would work in.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
   IMAGE_PREPARING:
@@ -582,6 +588,14 @@ const START_AGENT_INPUT = Schema.Struct({
         "for the task you work on.",
     ),
   ),
+  repository: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(githubRepositoryFullNameSchema),
+      "Where you work on no task and name none, the GitHub repository the agent works in, as " +
+        "owner/name, which the workspace's GitHub installation must reach; null for none. Leave " +
+        "it out for the repository you work in, if any. A task's agent works in the task's own.",
+    ),
+  ),
   prompt: Schema.optionalKey(
     describeWire(
       START_PROMPT,
@@ -782,8 +796,10 @@ export const START_AGENT_TOOL = {
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
     "branch, pull request, and transcript stand under that task; name another task only for " +
     "work unrelated to it, or where the developer asked for that, and for work that should " +
-    `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first; where you work ` +
-    "on no task, name one for any work. " +
+    `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first. Where you work ` +
+    "on no task, taskId left out starts it in your own workspace with no task, in the " +
+    "repository you work in or the one repository names, and it needs a prompt, since there is " +
+    "no plan to hand it. " +
     "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
@@ -1642,12 +1658,32 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
   };
 }
 
-/** Why a start's input asks for nothing that can start, read before anything is: a source with a prompt or a branch, or a coding agent continuing itself. */
+/**
+ * The caller's own place, which a start on no task lands in: its
+ * workspace, with no task, and the repository named, or the caller's own
+ * where none is, which is none for the member's operator.
+ */
+function ownPlaceOf(
+  agent: Pick<CodingAgent, "organizationId" | "repository">,
+  named: string | null | undefined,
+): StartWhere {
+  const repository = named === undefined ? agent.repository : named;
+  const { organizationId } = agent;
+  return repository === null
+    ? { taskId: null, organizationId, repository: null }
+    : { taskId: null, organizationId, repository };
+}
+
+/** Why a start's input asks for nothing that can start, read before anything is: a repository for an agent that lands on a task or with its source, a source with a prompt or a branch, or a coding agent continuing itself. */
 function startInputRefusal(
   caller: AgentCaller,
   start: typeof START_AGENT_CALL.Type,
 ): string | undefined {
   const { from } = start;
+  const onTask = start.taskId !== undefined || callerTask(caller) !== null;
+  if (start.repository !== undefined && (from !== undefined || onTask)) {
+    return START_CODING_AGENT_REFUSAL.REPOSITORY_ON_TASK;
+  }
   if (from === undefined) return undefined;
   const prompt = start.prompt ?? start.task;
   if (prompt !== undefined || start.branch !== undefined) {
@@ -1716,10 +1752,28 @@ export function runStartAgent(
       if (landing !== undefined && Result.isFailure(landing)) {
         return agentToolRejected(landing.failure);
       }
+      // A caller on no task starts beside itself where it names none, handing words alone.
       const taskId = named ?? ownTask;
       const place: StartWhere | undefined =
-        landing?.success.place ?? (taskId === null ? undefined : { taskId });
-      if (place === undefined) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+        landing?.success.place ??
+        (taskId !== null
+          ? { taskId }
+          : caller.kind === AGENT_CALLER.AGENT
+            ? ownPlaceOf(caller.agent, asked.success.repository)
+            : undefined);
+      if (
+        place === undefined ||
+        (place.taskId === null && from === undefined && prompt === undefined)
+      ) {
+        return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_PROMPT);
+      }
+      if (
+        place.taskId === null &&
+        place.repository === null &&
+        asked.success.branch !== undefined
+      ) {
+        return agentToolRejected(START_CODING_AGENT_REFUSAL.BRANCH_NO_REPOSITORY);
+      }
       // The pictures it is handed are read as the caller may read them, and refused whole where one is not.
       const images =
         asked.success.images === undefined

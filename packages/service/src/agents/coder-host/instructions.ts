@@ -387,7 +387,7 @@ Members and agents leave comment threads on the plan's text, each beside the wor
     olderLinks: " and `luke://folder/<path>/`",
     comments: "",
     status: "",
-    startAgent: ` You work on no task, so name the task to start it on by its id, or make one for it first with \`${CODER_TOOL.CREATE_TASK}\`, related work among it`,
+    startAgent: ` You work on no task, so leave its taskId out to start it beside you, in your own workspace and the repository you work in, if any, or name another repository, or null for none; name a task by its id only for work that belongs to that task, and make one first with \`${CODER_TOOL.CREATE_TASK}\` only for work that should stand as a task of its own`,
   },
 } as const;
 

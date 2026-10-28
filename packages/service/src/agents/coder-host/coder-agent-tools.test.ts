@@ -1618,20 +1618,50 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   );
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
-  // An agent on no task is offered the tool too, and names the task it starts on.
+  // An agent on no task starts one beside itself, in its own workspace and repository, or in none
+  // where it names none, and on a task only where it names one.
   const sweeper = await tasklessAgentOn(caller.userId, workspaceId);
   const fromNoTask = await peerCaller(hostOf(true), sweeper, eve.services);
-  assert.deepEqual(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-none"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: START_CODING_AGENT_REFUSAL.NO_TASK,
-  });
+  const placeOf = async (answer: WireRecord) => {
+    assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answer));
+    assert.ok(isRecord(answer.agent) && isWireString(answer.agent.id));
+    const made = Option.getOrThrow(
+      await database.run(readCodingAgent(caller.userId, answer.agent.id)),
+    );
+    return [made.taskId, made.organizationId, made.repository];
+  };
+  assert.deepEqual(
+    await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-none")),
+    [null, workspaceId, RELAY_FULL_NAME],
+  );
+  assert.deepEqual(
+    await placeOf(
+      await fromNoTask(
+        CODER_TOOL.START_AGENT,
+        { prompt: "Talk the release through.", repository: null },
+        "call-bare",
+      ),
+    ),
+    [null, workspaceId, null],
+  );
+  assert.deepEqual(
+    await fromNoTask(
+      CODER_TOOL.START_AGENT,
+      { prompt: "Talk the release through.", repository: null, branch: "release" },
+      "call-bare-branch",
+    ),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: START_CODING_AGENT_REFUSAL.BRANCH_NO_REPOSITORY,
+    },
+  );
   const onTask = await fromNoTask(
     CODER_TOOL.START_AGENT,
     { taskId: taskIds.invitations, prompt: "Sweep the invitation tests." },
     "call-task",
   );
   assert.equal(onTask.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onTask));
-  assert.equal(eve.sent.length, 2);
+  assert.equal(eve.sent.length, 4);
 });
 
 /** The ids of the tasks of the workspace the account reads under the name, newest first. */

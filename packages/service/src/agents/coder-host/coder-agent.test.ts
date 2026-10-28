@@ -479,9 +479,9 @@ test("an agent on a task is told of the task's links, pages, and comments, and o
   }
 });
 
-test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, names a task for them", () => {
+test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, starts them beside itself", () => {
   const OWN_TASK = "Start it on your own task";
-  const NO_TASK = "You work on no task, so name the task to start it on";
+  const NO_TASK = "You work on no task, so leave its taskId out to start it beside you";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     const taskless = coderInstructions("Acme/Relay", brief, true, null);

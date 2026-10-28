@@ -7,6 +7,18 @@
       "maxLength": 36,
       "description": "The task to start the agent on, by the id list_tasks answered; leave it out for the task you work on."
     },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 140
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Where you work on no task and name none, the GitHub repository the agent works in, as owner/name, which the workspace's GitHub installation must reach; null for none. Leave it out for the repository you work in, if any. A task's agent works in the task's own."
+    },
     "prompt": {
       "type": "string",
       "minLength": 1,
