@@ -180,6 +180,10 @@ const UNSAVED_CHECK = Duration.seconds(30);
 const UNSAVED_UNKNOWN = "its worktree could not be checked for work not saved elsewhere";
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
+/** How many beats in a row a kept launch the service no longer lists must have its settle refused before it is let go of as a line long gone; one only hidden by a stop queued after it is taken well before. */
+const GONE_AFTER_REFUSALS = 4;
+/** How many more times a kept launch's VM that a restart could not stop is stopped again, a beat apart, before its launch is settled regardless, since a VM already gone refuses every stop. */
+const VM_STOP_TRIES = 4;
 /** How a claim the service did not answer is asked again, well inside its own claim window. */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's group has to end after SIGTERM before it is sent SIGKILL. */
@@ -345,6 +349,9 @@ export function composeLocalAgents(
               Effect.flatMap(readState, (read) => Ref.set(state, read)),
             ),
           );
+
+    /** The kept launches whose VM a restart could not stop, by line id, with how many more times a beat stops it again before they are settled regardless. */
+    const unstopped = new Map<string, number>();
 
     const keepLaunch = (userId: string, id: string, agentId: string) =>
       updateState((current) => ({
@@ -1188,6 +1195,43 @@ export function composeLocalAgents(
          * where its answer (`open`) no longer holds the device to it, since a
          * line long settled may be gone and refuse every settle.
          */
+        /** The beats in a row each kept launch the service no longer listed had its settle refused on, by line id. */
+        const refusedUnlisted = new Map<string, number>();
+
+        /**
+         * The VM of a kept launch a restart could not stop, stopped again
+         * unless its agent runs or holds it now, which stops it in turn;
+         * whether its launch may be settled: once it stopped, or once
+         * `VM_STOP_TRIES` more stops failed, which is said.
+         */
+        const vmLetGo = (id: string, agentId: string) =>
+          vmLockOf(agentId).withPermit(
+            Effect.gen(function* () {
+              const triesLeft = unstopped.get(id) ?? 0;
+              const held = runners.has(agentId) || vmHolds.has(agentId);
+              if (!held && triesLeft > 0 && !(yield* platform.sandbox.stopped(agentId))) {
+                unstopped.set(id, triesLeft - 1);
+                return false;
+              }
+              if (!held && triesLeft === 0) {
+                report(
+                  "a local agent's VM left running could not be stopped, so its launch was settled regardless",
+                );
+              }
+              unstopped.delete(id);
+              return true;
+            }),
+          );
+
+        /**
+         * Every kept launch of the account's whose runner ended, settled
+         * again with how it ended, a VM a restart could not stop stopped
+         * first; let go of where the service took it, or where its answer
+         * (`open`) no longer listed it and its settle was refused on
+         * `GONE_AFTER_REFUSALS` beats in a row, since a line long settled
+         * may be gone and refuse every settle, while one only hidden by a
+         * stop queued after it is taken well before.
+         */
         const pendingSettled = (open: ReadonlySet<string> | undefined) =>
           Effect.gen(function* () {
             const running = runningLaunches();
@@ -1196,9 +1240,17 @@ export function composeLocalAgents(
                 launch.userId === userId && !running.has(launch.id) && !starting.has(launch.id),
             );
             for (const launch of pending) {
+              if (unstopped.has(launch.id) && launch.agentId !== undefined) {
+                if (!(yield* vmLetGo(launch.id, launch.agentId))) continue;
+              }
               const ending = endings.get(launch.id);
-              const taken = yield* settle(launch.id, ending?.exitCode, ending?.refusal);
-              if (!taken && (open === undefined || open.has(launch.id))) continue;
+              if (!(yield* settle(launch.id, ending?.exitCode, ending?.refusal))) {
+                const unlisted = open !== undefined && !open.has(launch.id);
+                const refusals = unlisted ? (refusedUnlisted.get(launch.id) ?? 0) + 1 : 0;
+                refusedUnlisted.set(launch.id, refusals);
+                if (refusals < GONE_AFTER_REFUSALS) continue;
+              }
+              refusedUnlisted.delete(launch.id);
               endings.delete(launch.id);
               yield* forgetLaunch(launch.id);
             }
@@ -1334,8 +1386,11 @@ export function composeLocalAgents(
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
-          // Note that a runner that ended with the app may have left its VM running, which nothing would stop after.
-          if (launch.agentId !== undefined) yield* platform.sandbox.stopped(launch.agentId);
+          // Note that a runner that ended with the app may have left its VM running, so its launch is settled only once its VM stopped, which a beat tries again (`vmLetGo`).
+          if (launch.agentId !== undefined && !(yield* platform.sandbox.stopped(launch.agentId))) {
+            unstopped.set(launch.id, VM_STOP_TRIES);
+            continue;
+          }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
         }
         // Note that a lease lost to another follower ends the follow, every runner it started with it.

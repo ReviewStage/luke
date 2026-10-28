@@ -121,6 +121,8 @@ const followingDevice = (
     readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
     readonly clock?: Clock.Clock;
+    /** How many of the first stops of a VM fail, as smolvm's can. */
+    readonly vmStopFails?: number;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -217,8 +219,16 @@ const followingDevice = (
         }),
     };
     const vm = fakeSandbox(ready);
+    let stopFails = options.vmStopFails ?? 0;
     const sandbox: LocalAgentSandbox = {
       ...vm.sandbox,
+      stopped: (agentId) =>
+        stopFails > 0
+          ? Effect.sync(() => {
+              stopFails -= 1;
+              return false;
+            })
+          : vm.sandbox.stopped(agentId),
       ...(options.started === undefined ? undefined : { started: options.started }),
       // Note that a runner signalled in its VM ends there, as the one the platform starts does.
       signalled: (agentId) =>
@@ -756,6 +766,57 @@ it.effect(
 
         assert.deepEqual([vm.signalled, settled, service.refused], [[], [], []]);
         assert.equal(spawned.find((each) => each.program === VM_RUNNER)?.ended, "running");
+      }),
+    ),
+);
+
+it.effect(
+  "a kept launch the service no longer lists, as a stop queued after it hides it, is settled again until the service takes it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { service, settled, spawned } = yield* followingDevice(() => Effect.void);
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        service.refusing = 2;
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => service.refused.length === 1);
+        service.held.delete(LINE_ID);
+        yield* beatsOn(1);
+        yield* until(() => service.refused.length === 2);
+        yield* beatsOn(1);
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+      }),
+    ),
+);
+
+it.effect(
+  "after a restart, a kept launch whose VM would not stop is settled only once a beat has stopped it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const files = new Map([
+          [
+            `${STATE_ROOT}/local-agents.json`,
+            `${JSON.stringify({
+              devices: { [USER_ID]: "device-1" },
+              launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
+            })}\n`,
+          ],
+        ]);
+        const { settled, vm, beats } = yield* followingDevice(() => Effect.void, {
+          files,
+          lines: [],
+          vmStopFails: 2,
+        });
+        yield* until(() => beats.length > 0);
+
+        assert.deepEqual([settled, keptLaunches(files)], [[], [GONE_LINE_ID]]);
+        yield* beatsOn(1);
+        yield* until(() => settled.length > 0);
+        assert.deepEqual(vm.stopped, [GONE_AGENT_ID]);
+        assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
       }),
     ),
 );
