@@ -180,10 +180,6 @@ export const APP_SETTING_SCHEMA = {
     field: "macCommands",
     id: APP_SETTING_ID.MAC_COMMANDS,
     label: "Let agents run commands on this Mac",
-    detail:
-      "Luke and coding agents run shell commands here from your home folder, and what each " +
-      "prints goes to the model and is kept with the conversation. Ask every time shows you " +
-      "each command before it runs.",
     values: MAC_COMMAND_MODE_LIST,
     token: (mode) => mode,
     optionLabel: (mode) => MAC_COMMAND_MODE_LABEL[mode],
