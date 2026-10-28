@@ -4,7 +4,6 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
-import { useCallVideoHeight } from "./call/use-call-video-size.js";
 import { useChosenWorkspace } from "./desktop/chosen-workspace.js";
 import {
   FILE_TREE_WIDTH,
@@ -236,14 +235,6 @@ test("the chosen workspace is read from the id it was kept as", () => {
   expect(chosen.now().chosen?.id).toBe("w2");
   act(() => chosen.now().choose("w1"));
   expect(kept("luke.chosenWorkspace")).toBe('"w1"');
-});
-
-test("the call's video stands as tall as it was kept, held to its bounds", () => {
-  keep("luke.callVideoHeight", "200");
-  const video = draw(() => useCallVideoHeight());
-  expect(video.now().height).toBe(200);
-  act(() => video.now().onResize(1000));
-  expect(kept("luke.callVideoHeight")).toBe("360");
 });
 
 test("the summary is pinned unless it was kept unpinned", () => {

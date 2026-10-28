@@ -8,7 +8,6 @@ import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
 import type { PlanEditorModule } from "./plan-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
-import { shellBundles } from "./shell-bundles.js";
 import type { TerminalModule } from "./terminal/contract.js";
 import type { WhiteboardModule } from "./whiteboard/contract.js";
 
@@ -23,14 +22,11 @@ import type { WhiteboardModule } from "./whiteboard/contract.js";
  * bundle has a stylesheet, its entry imports it. A bundle that landed is
  * kept, so leaving the surface and coming back loads nothing; one that
  * failed is not, so the next surface to read it imports it again, as a
- * connection that dropped for a moment has come back. A call's avatar is
- * the shell's to reach, imported through what it installed
- * (`shell-bundles.ts`).
+ * connection that dropped for a moment has come back.
  *
  * A surface reads its bundle through `useSideBundles`, whose atoms are built
  * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
- * others, as a test does to stand a bundle in or to have one fail. A call's
- * avatar, read outside any surface, is `avatarSessionAtom` alone.
+ * others, as a test does to stand a bundle in or to have one fail.
  */
 
 /** How a bundle is reached: its entry imported, answering the module it exports. */
@@ -131,16 +127,6 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
 
 /** The window's bundles, each through its own entry: what every surface reads unless a context hands others. */
 export const SIDE_BUNDLES = sideBundles();
-
-/**
- * A call's avatar, reached by the panel's call outside any surface
- * (`call/call-avatar.ts`), whose doors are what a test hands its own; so it
- * is read here rather than through the context.
- */
-export const avatarSessionAtom = bundleAtom(
-  () => shellBundles().avatarSession(),
-  "The video could not be started.",
-);
 
 /** The bundles the surfaces under it read. */
 export const SideBundlesContext = createContext<SideBundles>(SIDE_BUNDLES);

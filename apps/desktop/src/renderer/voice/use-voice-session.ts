@@ -16,7 +16,6 @@ import { createBrowserSilence } from "@luke/panel/voice/live-peer";
 import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
 import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { hostedVoiceFailure } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,
@@ -27,8 +26,7 @@ import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { startAvatarFeed } from "../avatar-feed/start-avatar-feed";
-import { type AvatarFeedActs, LiveCall, type LiveStreamSlot } from "./live-call";
+import { LiveCall, type LiveStreamSlot } from "./live-call";
 
 /**
  * How long a refused remote-audio play waits before trying again. Chromium
@@ -52,12 +50,6 @@ const localStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<MediaS
   undefined,
 );
 
-/** The avatar's status as the panel reported it, which redraws the session only as it moves, not as the words do. */
-const avatarStatusAtom: Atom.Atom<AvatarStatus> = Atom.map(
-  APP_SLICE.VOICE,
-  (voice) => voice?.avatar.status ?? AVATAR_STATUS.OFF,
-);
-
 /** One of the two atoms as the slot a call shows its stream in and reads back before clearing it. */
 function atomSlot(atom: Atom.Writable<MediaStream | undefined>): LiveStreamSlot {
   return {
@@ -74,15 +66,8 @@ function atomSlot(atom: Atom.Writable<MediaStream | undefined>): LiveStreamSlot 
  * `AudioContext`, the element Luke's voice plays through — and the
  * subscriptions the main process reaches this window on. Nothing is drawn
  * here, and nothing here appends to the model: every append is the host's.
- *
- * With `avatarFeed`, Luke's voice is also teed to his avatar while the call
- * window shows one, and the element is muted while the avatar voices him.
- * Like the acts, it is read once, when the window's orchestrator is made.
  */
-export function useVoiceSession(
-  remoteAudio: RefObject<HTMLAudioElement | null>,
-  avatarFeed?: AvatarFeedActs,
-): void {
+export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
   const { act, tell } = useAct();
   const local = useAtomValue(localStreamAtom);
   const remote = useAtomValue(remoteStreamAtom);
@@ -90,17 +75,14 @@ export function useVoiceSession(
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
   /**
    * Why Luke's voice is not played: the stop silencing the utterance it cut
-   * short, the developer's speaker toggle, and his avatar voicing him in the
-   * element's place. The element is muted while any stands, and never the
-   * stream, which the meter and the avatar's tee read.
+   * short, and the developer's speaker toggle. The element is muted while
+   * either stands, and never the stream, which the meter reads.
    */
   const outputSilenced = useRef(false);
   const speakerMuted = useRef(false);
-  const avatarVoiced = useRef(false);
   const playRemoteAudio = () => {
     if (remoteAudio.current) {
-      remoteAudio.current.muted =
-        outputSilenced.current || speakerMuted.current || avatarVoiced.current;
+      remoteAudio.current.muted = outputSilenced.current || speakerMuted.current;
     }
   };
   /** Everything the policy asks of the main process, over the one bridge this window has. */
@@ -167,16 +149,6 @@ export function useVoiceSession(
           outputSilenced.current = silenced;
           playRemoteAudio();
         },
-        ...(avatarFeed && {
-          avatarFeed: {
-            acts: avatarFeed,
-            startTee: startAvatarFeed,
-            onAvatarVoiced: (voiced: boolean) => {
-              avatarVoiced.current = voiced;
-              playRemoteAudio();
-            },
-          },
-        }),
         services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the
@@ -186,7 +158,6 @@ export function useVoiceSession(
           appBridge().recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
         },
       });
-      call.reportAvatarStatus(appStateNow()?.voice.avatar.status ?? AVATAR_STATUS.OFF);
       callRef.current = call;
       return call;
     },
@@ -217,13 +188,6 @@ export function useVoiceSession(
     };
     orchestrator.surround(surroundings);
   }, [orchestrator, settings, audio]);
-
-  // The avatar's status as the panel reported it, for the call to hand
-  // Luke's voice over to it, or take it back.
-  const avatarStatus = useAppSlice(avatarStatusAtom);
-  useEffect(() => {
-    callRef.current?.reportAvatarStatus(avatarStatus);
-  }, [avatarStatus]);
 
   // Two meters over one context: Luke's track decides the speaking status,
   // since the guide forbids reading it off transcript events, and the
@@ -277,14 +241,9 @@ export function useVoiceSession(
   useEffect(
     () =>
       appBridge().onVoiceCommand(({ command }) => {
-        if (command === VOICE_COMMAND.STOP_SPEAKING) {
-          callRef.current?.interruptAvatar();
-          drive(orchestrator.stopSpeaking());
-        } else if (command === VOICE_COMMAND.END_CALL) {
-          // The graceful close can take its bound, and the avatar must not talk on through it.
-          callRef.current?.interruptAvatar();
-          drive(orchestrator.stopCall());
-        } else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
+        if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
+        else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
+        else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
           drive(orchestrator.toggleMicrophone());
         else if (command === VOICE_COMMAND.MUTE_SPEAKER) drive(orchestrator.muteSpeaker(true));
         else if (command === VOICE_COMMAND.UNMUTE_SPEAKER) drive(orchestrator.muteSpeaker(false));

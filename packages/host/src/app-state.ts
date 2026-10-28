@@ -6,7 +6,6 @@ import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
-import type { AvatarState } from "@luke/voice/avatar";
 import type { NotificationsStatus } from "@luke/voice/settings-controls";
 import {
   callTranscriptChangeBetween,
@@ -81,10 +80,8 @@ export const RUN_PROFILE = {
   AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
   /** The same agent beside a page it showed, open in a tab of its own. */
   AGENT_PAGE: "agent-page",
-  /** The same agent mid-call, its video off, the floating call window standing over the panel. */
+  /** The same agent mid-call, the floating call window standing over the panel. */
   AGENT_CALL: "agent-call",
-  /** The same call with Luke's video on, its tile up in the floating call window and the agent's tab. */
-  AGENT_CALL_VIDEO: "agent-call-video",
   /** A synthetic account signed in, Settings opened at launch on its Account page. */
   SETTINGS_ACCOUNT: "settings-account",
   /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
@@ -150,12 +147,6 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
-  /**
-   * Luke's avatar on the call, as the panel reports it: what puts the video
-   * tile in the tab of the agent the call is into and what the tile draws. Main's rather than
-   * the voice window's, so a replaced voice window leaves it standing.
-   */
-  avatar: AvatarState;
   /**
    * Set once the voice window has been given up on for this run, after it
    * failed to load again and again: no call can run until Luke is reopened,

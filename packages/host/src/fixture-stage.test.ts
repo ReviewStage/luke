@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { AVATAR_STATUS, avatarStanding } from "@luke/voice/avatar";
 import { callInProgress } from "@luke/voice/voice-view";
 import { it } from "vitest";
 import { RUN_PROFILE } from "./app-state.js";
@@ -15,7 +14,7 @@ import { runModeFor } from "./run-mode.js";
 
 /**
  * fixture-stage.test.ts -- a call profile's fixture run opens on a call into
- * the fixture's agent, its avatar down or standing, which every window draws
+ * the fixture's agent, which every window draws
  * and the floating call window stands for, and a fixture run's page frames
  * read the fixture's page; a live run, and any other profile, stage nothing.
  */
@@ -35,22 +34,19 @@ function launched(profile: string, fixtureMode: boolean) {
   );
 }
 
-it("a call profile's fixture run opens on a call into the fixture's agent, video off or on", () => {
-  const off = launched(RUN_PROFILE.AGENT_CALL, true);
-  const on = launched(RUN_PROFILE.AGENT_CALL_VIDEO, true);
-  const view = off.voice.view;
+it("a call profile's fixture run opens on a call into the fixture's agent", () => {
+  const staged = launched(RUN_PROFILE.AGENT_CALL, true);
+  const view = staged.voice.view;
 
   assert.ok(view !== undefined && callInProgress(view));
   assert.deepEqual(view.call, { agentId: FIXTURE_IDS.AGENT, taskId: FIXTURE_IDS.TASK });
-  assert.equal(avatarStanding(off.voice.avatar), false);
-  assert.equal(on.voice.avatar.status, AVATAR_STATUS.LIVE);
-  assert.ok((off.callTranscript?.lines.length ?? 0) > 0, "what was said on the call stands");
+  assert.ok((staged.callTranscript?.lines.length ?? 0) > 0, "what was said on the call stands");
   assert.equal(
-    off.tasks.tasks.find((task) => task.id === FIXTURE_IDS.TASK)?.name,
+    staged.tasks.tasks.find((task) => task.id === FIXTURE_IDS.TASK)?.name,
     FIXTURE_TASK_NAME,
     "the call's task is named where the call window reads it",
   );
-  assert.equal(callStaged({ profile: RUN_PROFILE.AGENT_CALL_VIDEO, fixtureMode: true }), true);
+  assert.equal(callStaged({ profile: RUN_PROFILE.AGENT_CALL, fixtureMode: true }), true);
 });
 
 it("a live run, and a fixture run under any other profile, opens on no call", () => {

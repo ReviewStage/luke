@@ -1,11 +1,11 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where the folded sidebar's call card, which floats over that foot, reads it; and how tall a phone's card may stand under the column's bars.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where the folded sidebar's call card, which floats over that foot, reads it.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a call's video, whichever stand. */
-const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .agent-call-foot";
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, whichever stand. */
+const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer";
 
 /** The length the dock's height is written in. */
 const COLUMN_DOCK = "--luke-column-dock";
@@ -15,33 +15,6 @@ const FLOATING_CARD = '.call-card[data-surface="floating"]';
 
 /** The length the floating card's own height is written in. */
 const FLOATING_CARD_HEIGHT = "--floating-card";
-
-/** The floating card's video tile (`@luke/ui`'s `CallVideoTile`). */
-const CARD_TILE = ".luke-call-video-tile";
-
-/** The tile's still, where it draws Luke's face and its words in the video's place (`@luke/ui`'s `AvatarStill`). */
-const TILE_STILL = ".luke-call-video-still";
-
-/** The tile's wait once the video's first frame is drawn (`@luke/ui`'s `AvatarWaiting`), which fades out but stays laid out. */
-const TILE_GONE = '.luke-call-video-waiting[data-gone="true"]';
-
-/** The length the card hands its tile's height in (`@luke/ui`'s placement hook). */
-const CARD_TILE_HEIGHT = "--luke-call-video-height";
-
-/** The bars of a pane, a tab's own and its tabs (`@luke/ui`'s `PaneBar`), which a phone's card never covers where it can clear them. */
-const PANE_BAR = ".luke-pane-bar";
-
-/** The token the card stands clear of what it rises above by. */
-const CARD_GAP = "--luke-space-8";
-
-/** The token the card's tile never stands shorter than: a control's height, so its Video off stays a press. */
-const TILE_FLOOR = "--luke-control-height";
-
-/** The tile's own aspect on a card, height over width (`CALL_VIDEO_FIT.CARD`). */
-const TILE_ASPECT = 9 / 16;
-
-/** The token the card stands in from the window's corner by. */
-const CORNER_STEP = "--luke-space-16";
 
 /** Writes `length` on `element` as `value`, or takes it away where there is none, touching the style only when it changes. */
 function writeLength(element: HTMLElement, length: string, value: string | undefined): void {
@@ -91,115 +64,6 @@ function dockHeight(column: Element, docked: string): number {
   return Math.max(0, foot - top);
 }
 
-/** A length token read off the document's root, or none where it is unset. */
-function rootLength(root: HTMLElement, token: string): number {
-  const length = Number.parseFloat(getComputedStyle(root).getPropertyValue(token));
-  return Number.isNaN(length) ? 0 : length;
-}
-
-/**
- * The feet of the bars on screen in `column` that end above `rest`, the
- * card's foot. Note that a bar is kept by where it ends rather than by where
- * in the column it stands, because a pull request's header grows with its
- * title and can push its tabs past the column's middle, while a bar docked
- * at the column's foot ends under the card's own foot and is one no height
- * of the card's could clear.
- */
-function barFeet(column: Element, rest: number): number[] {
-  const span = column.getBoundingClientRect();
-  const feet: number[] = [];
-  for (const bar of column.querySelectorAll(PANE_BAR)) {
-    const box = bar.getBoundingClientRect();
-    if (seen(bar, box, span) && box.bottom < rest) feet.push(box.bottom);
-  }
-  return feet;
-}
-
-/**
- * What the tile's still needs where it draws words in the video's place
- * (Video ended, why, and Restart video; or the wait while it connects):
- * from its first line shown to its last, its padding, and the tile's border;
- * or nothing over a picture. Note that the lines are read where they lay
- * out, so a tile already shortened still answers what they need whole; and
- * that a wait gone from over the video's first frame (`TILE_GONE`) needs
- * nothing, since it stays laid out while it fades and then stands unseen.
- */
-function stillNeeds(tile: HTMLElement): number {
-  const still = [...tile.querySelectorAll<HTMLElement>(TILE_STILL)].find(
-    (each) => each.closest(TILE_GONE) === null,
-  );
-  if (still === undefined) return 0;
-  const lines = [...still.children].filter(
-    (line): line is HTMLElement => line instanceof HTMLElement && line.offsetHeight > 0,
-  );
-  if (lines.length === 0) return 0;
-  const top = Math.min(...lines.map((line) => line.offsetTop));
-  const bottom = Math.max(...lines.map((line) => line.offsetTop + line.offsetHeight));
-  const padding = getComputedStyle(still);
-  const inset = Number.parseFloat(padding.paddingTop) + Number.parseFloat(padding.paddingBottom);
-  return bottom - top + (Number.isNaN(inset) ? 0 : inset) + tile.offsetHeight - tile.clientHeight;
-}
-
-/**
- * The height a phone's card hands its video tile, or none where the tile
- * stands at its own 16:9: where the card at rest would reach over a bar
- * above its foot (`barFeet`), the tile gives up what it must for the card
- * to stand the gap clear of the lowest bar it can clear at its least, which
- * is `floor`, or what its still's words need (`stillNeeds`) where that is
- * more. Where it can clear none, it stands at its least and covers them
- * rather than lose the video or cut Restart video off; and a bar under one
- * it clears, which it could not clear too (a Chapters view's own head under
- * the pull request's tabs), costs the tile nothing. It never stands taller
- * than its own 16:9. Note that the card is read where it is laid out, its
- * `offsetTop`, not where its rise or its lift over a dock (`lift`) has
- * moved it, since neither the end of a rise nor the end of the lift's glide
- * reaches an observer; and that the card stands on its foot, so handing the
- * tile a height moves the card's top and leaves the room it is read from as
- * it was.
- */
-function tileHeight(
-  card: HTMLElement,
-  tile: HTMLElement,
-  column: Element,
-  lift: number,
-  gap: number,
-  floor: number,
-): number | undefined {
-  const rest = card.offsetTop + card.offsetHeight - lift;
-  const feet = barFeet(column, rest);
-  if (feet.length === 0) return undefined;
-  const chrome = card.offsetHeight - tile.offsetHeight;
-  const least = Math.max(floor, stillNeeds(tile));
-  const under = (foot: number) => rest - foot - gap - chrome;
-  const cleared = feet.filter((foot) => under(foot) >= least);
-  const height = cleared.length === 0 ? least : under(Math.max(...cleared));
-  return height >= tile.offsetWidth * TILE_ASPECT ? undefined : Math.floor(height);
-}
-
-/**
- * Hands the floating card's video tile the height `tileHeight` answers for
- * the bars of `column`, the column a phone's card stands over, or takes it
- * back where none is given or none answers, so the tile stands at its own
- * 16:9 again.
- */
-function fitTile(
-  card: Element | null,
-  column: Element | null,
-  dock: number,
-  root: HTMLElement,
-): void {
-  const tile = card?.querySelector(CARD_TILE);
-  if (!(card instanceof HTMLElement) || !(tile instanceof HTMLElement)) return;
-  const gap = rootLength(root, CARD_GAP);
-  // As far as the card's own rule lifts it over the dock (`call.css`).
-  const lift = Math.max(0, dock + gap - rootLength(root, CORNER_STEP));
-  const height =
-    column === null
-      ? undefined
-      : tileHeight(card, tile, column, lift, gap, rootLength(root, TILE_FLOOR));
-  writeLength(card, CARD_TILE_HEIGHT, height === undefined ? undefined : `${height}px`);
-}
-
 /**
  * Keeps two lengths for the folded sidebar's call card: the dock of the
  * column it stands over (`--luke-column-dock`), which it stands just above, and
@@ -209,9 +73,6 @@ function fitTile(
  * standing in its place, or the side panel while it fills the window; of
  * those found, the first on screen, and of its docked
  * parts, those on screen, so a pane or a panel on its way out lifts nothing.
- * On a phone, where a short screen leaves the card no room under the
- * column's bars at the card's full height, the card's video tile is handed
- * the height that does fit (`tileHeight`), so the card never covers a tab.
  *
  * One ResizeObserver follows the column, its docked parts, and the card;
  * a MutationObserver re-reads when the column or a part arrives or goes, a
@@ -229,7 +90,6 @@ function fitTile(
 export function useColumnDock(
   shell: RefObject<HTMLElement | null>,
   panelFull: boolean,
-  narrow: boolean,
   key: string,
 ): void {
   useLayoutEffect(() => {
@@ -253,7 +113,6 @@ export function useColumnDock(
         FLOATING_CARD_HEIGHT,
         card === null ? undefined : `${card.getBoundingClientRect().height}px`,
       );
-      fitTile(card, narrow ? column : null, dock ?? 0, root);
     }
     function follow(): void {
       if (host === null) return;
@@ -278,13 +137,7 @@ export function useColumnDock(
       });
     }
     const arrived = new MutationObserver(measure);
-    // Note that the card's wait goes from over the video's first frame by an attribute alone, which frees the room it held (`stillNeeds`).
-    arrived.observe(host, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["data-gone"],
-    });
+    arrived.observe(host, { childList: true, subtree: true });
     follow();
     write();
     return () => {
@@ -293,7 +146,6 @@ export function useColumnDock(
       arrived.disconnect();
       root.style.removeProperty(COLUMN_DOCK);
       host.style.removeProperty(FLOATING_CARD_HEIGHT);
-      host.querySelector<HTMLElement>(FLOATING_CARD)?.style.removeProperty(CARD_TILE_HEIGHT);
     };
-  }, [shell, panelFull, narrow, key]);
+  }, [shell, panelFull, key]);
 }

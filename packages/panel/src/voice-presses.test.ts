@@ -3,7 +3,7 @@
 /**
  * voice-presses.test.ts -- every press a person makes on a call goes out the
  * press door, so one main refuses says why in a toast: the call card's, the
- * agent box's, the video's, the voice's own, and a voice failure's remedy.
+ * agent box's, the voice's own, and a voice failure's remedy.
  * Synthetic call.
  */
 
@@ -14,15 +14,13 @@ import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { CALL_CONTROL_LABEL } from "@luke/ui";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { pressAct } from "./act.js";
-import { CALL_CARD_SURFACE, CallCard, callControls, cardVideo } from "./call/call-card.js";
-import { useAgentCallVideo } from "./call/panel-avatar.js";
+import { CALL_CARD_SURFACE, CallCard, callControls } from "./call/call-card.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { AgentCallControls } from "./tasks/agent-call.js";
 import { type FakeActPort, fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
@@ -79,7 +77,7 @@ async function drawOver(
   voice: VoiceView = ON_CALL,
   patch: Partial<AppStateSnapshot> = {},
 ): Promise<void> {
-  handState({}, { voice: { avatar: AVATAR_OFF, view: voice }, ...patch });
+  handState({}, { voice: { view: voice }, ...patch });
   fakeActPort(procedures);
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -133,17 +131,6 @@ test("the call card's End call and way back main refuses say why in a toast", as
   assert.equal(newestToast(), "The call's task is gone.");
 });
 
-test("the call card's Video off main refuses says why in a toast", async () => {
-  await drawOver(createElement(Fragment), {
-    [ACT_KIND.VOICE_SET_VIDEO]: refusing("The card's video is not offered on this call."),
-  });
-  const video = cardVideo(AVATAR_STATUS.LIVE, undefined, pressAct) ?? assert.fail("video offered");
-
-  await act(async () => video.onSetVideo(false));
-
-  assert.equal(newestToast(), "The card's video is not offered on this call.");
-});
-
 test("the agent box's speaker and End call main refuses say why in a toast", async () => {
   await drawOver(
     createElement(AgentCallControls, {
@@ -158,21 +145,6 @@ test("the agent box's speaker and End call main refuses say why in a toast", asy
   assert.equal(newestToast(), "The voice window refused mute-speaker.");
   await press(CALL_CONTROL_LABEL.END_CALL);
   assert.equal(newestToast(), "The voice window refused end-call.");
-});
-
-test("an agent's Video off main refuses says why in a toast", async () => {
-  let video: ReturnType<typeof useAgentCallVideo> | undefined;
-  function Probe(): null {
-    video = useAgentCallVideo(AGENT_ID);
-    return null;
-  }
-  await drawOver(createElement(Probe), {
-    [ACT_KIND.VOICE_SET_VIDEO]: refusing("The agent's video is not offered on this call."),
-  });
-
-  await act(async () => video?.onSetVideo(false));
-
-  assert.equal(newestToast(), "The agent's video is not offered on this call.");
 });
 
 test("the voice's Stop speaking and microphone ask main refuses say why in a toast", async () => {

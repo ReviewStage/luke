@@ -194,7 +194,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     };
     const holder = yield* LiveSessionHolder.make({
       source: () => (state.sourceAvailable ? source : undefined),
-      createId: () => "request",
       emit: (change) => changes.push(change),
       onTaskActivity: (word) => {
         activity.push(word);

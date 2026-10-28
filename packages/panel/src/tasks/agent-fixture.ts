@@ -879,7 +879,6 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   [RUN_PROFILE.TASKS_COMMENTS, { plan: true }],
   // The call itself is the host's to stage (`fixture-stage.ts`); beside it the agent's pull request stands.
   [RUN_PROFILE.AGENT_CALL, { view: PULL_REQUEST_VIEW.CONVERSATION }],
-  [RUN_PROFILE.AGENT_CALL_VIDEO, { view: PULL_REQUEST_VIEW.CONVERSATION }],
 ]);
 
 /** The shell the agent's sandbox holds. */

@@ -100,12 +100,7 @@ import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import {
-  AgentCallControls,
-  type AgentCallDoors,
-  AgentCallFoot,
-  useAgentOnCall,
-} from "./agent-call.js";
+import { AgentCallControls, type AgentCallDoors, useAgentOnCall } from "./agent-call.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
@@ -2817,7 +2812,6 @@ function AgentTabView({
         </AgentPicturesProvider>
       </MacOwnerProvider>
       <AgentTabFoot>
-        {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (

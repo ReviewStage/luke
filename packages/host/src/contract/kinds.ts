@@ -227,18 +227,6 @@ export const AGENT_INBOX_ACT_KIND = {
 } as const;
 
 /**
- * Luke's avatar as the windows reach it: the panel's word on it, starting,
- * live on its first frame, or ended and why, taken from the panel alone; and
- * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
- * for on the standing call or taken down, taken from the panel and the
- * floating call window, which draw the tile, alone.
- */
-export const AVATAR_ACT_KIND = {
-  AVATAR_REPORT: "avatar.report",
-  VOICE_SET_VIDEO: "voice.setVideo",
-} as const;
-
-/**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
  * read as its workspace keeps them, and generated for its head on Luke's own
  * model key when the developer presses Generate, the generation answered
@@ -622,7 +610,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHANNEL_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
@@ -649,7 +636,6 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  * the host's procedures answer every other.
  */
 export const PLATFORM_PORT_ACT_KIND = {
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,

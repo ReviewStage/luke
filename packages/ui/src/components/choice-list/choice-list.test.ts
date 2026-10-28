@@ -319,31 +319,6 @@ test("a settled list names each option, the pick beside its note and the rest wi
   assert.equal(rows(page).length, 0);
 });
 
-test("a picture list is a radio group of faces the arrows walk, each face's picture its mark", () => {
-  const container = render(
-    createElement(Held, {
-      look: CHOICE_LOOK.PICTURE,
-      start: ["three"],
-      options: [
-        { value: "three", label: "Atlas", mark: createElement("img", { alt: "", src: "a.png" }) },
-        { value: "never", label: "Orion", mark: createElement("img", { alt: "", src: "o.png" }) },
-      ],
-    }),
-  );
-  const faces = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-  assert.deepEqual(
-    faces.map((face) => face.textContent),
-    ["Atlas", "Orion"],
-  );
-  assert.ok(faces[0]?.querySelector(".luke-choice-mark img"));
-  act(() => faces[0]?.focus());
-  act(() => {
-    faces[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-  });
-  assert.equal(faces[1]?.getAttribute("aria-checked"), "true");
-  assert.equal(document.activeElement, faces[1]);
-});
-
 test("a card list holds each option's controls under its radio, and a key pressed in them is theirs", () => {
   const container = render(
     createElement(Held, {

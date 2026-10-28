@@ -49,7 +49,6 @@ import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF } from "@luke/voice/avatar";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
@@ -3516,7 +3515,7 @@ function voiceDelivered(): { stand: (view: VoiceView) => Promise<void> } {
     stand: async (view) => {
       act(() => {
         for (const listener of listeners) {
-          listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view } }));
+          listener(stateWith({}, { version: 2, voice: { view } }));
         }
       });
       await settle();

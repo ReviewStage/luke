@@ -503,10 +503,8 @@ subagent's tab stays in the side panel.
   labelled rule, "Call started" and when, with a Live mark that keeps it
   pinned to the transcript's top while the call stands, and closes at one,
   "Call ended", how long it ran, and when (`call-card.tsx`). While the call
-  stands, its tab's composer holds the speaker, the microphone, Video, and
-  End call, and Luke's video stands centred in a room of its own between
-  the transcript and the composer, S, M, or L or dragged from a top corner,
-  its size kept (`panel-avatar.tsx`).
+  stands, its tab's composer holds the speaker, the microphone, and End
+  call.
 - **Live.** While the tab shows and the agent is starting or running, the
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
   the service's held long-poll (`tasks/use-agent-transcript.ts`), ending on
@@ -519,7 +517,7 @@ subagent's tab stays in the side panel.
   tab, with no toast and no notification. The agent's tab reads in semibold
   until it is shown.
 - **Privacy.** Every word is the agent's, the developer's, or the plan's, so
-  the tab carries `ph-no-capture`; the call's video draws inside it.
+  the tab carries `ph-no-capture`.
 - **The web.** A browser has no voice, so its agent tabs draw their
   transcripts, calls among them, and their composer, with no Call button,
   and its "+" offers no New voice chat.
@@ -1100,7 +1098,7 @@ changes when a check is run, not when one is planned.
   the integrated application has not been run on one. The
   Tasks tab in the panel, the document's presentation, the
   document scrolling inside the panel's ceiling,
-  the microphone row, and the call's video during a call
+  and the microphone row
   have never been seen running. `./scripts/evidence.sh` captures the window
   on the Tasks tab over a synthetic task
   (`app-smoke-tasks.png`, from `--profile tasks`), on the

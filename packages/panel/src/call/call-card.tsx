@@ -12,11 +12,8 @@
  */
 
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import {
-  CALL_VIDEO_FIT,
   CallBar,
-  CallVideoTile,
   IconButton,
   KEEP_FOCUS,
   KEEP_FOCUS_ELEMENT,
@@ -28,10 +25,8 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  VideoToggle,
 } from "@luke/ui";
-import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
-import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
+import type { CallCardModel } from "@luke/ui/call-card-model";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import {
   type AnimationEvent,
@@ -42,8 +37,7 @@ import {
   useState,
 } from "react";
 import type { ActHandle } from "../act.js";
-import { useExperiment } from "../use-app-state.js";
-import { useMicrophoneGranted, useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
+import { useMicrophoneGranted } from "../use-voice-view.js";
 
 /** The way back's name, for a reader and its hover: the task it opens. */
 function returnLabel(taskName: string): string {
@@ -70,48 +64,11 @@ export interface CallControls {
   onEnd: () => void;
 }
 
-/**
- * The avatar as a card draws it (`callCardVideoStatus`): its tile while it
- * is starting or live, playing the track handed, and Video on beside the
- * plan's name while it is `OFF`. Video off and Video on ask main, as the
- * agent's tab's do, so one press turns video off or on in every view at once.
- */
-export interface CallCardVideo {
-  status: AvatarStatus;
-  /** The avatar's video, or nothing yet, which the tile draws as Luke's still face. */
-  track: MediaStreamTrack | undefined;
-  onSetVideo: (on: boolean) => void;
-}
-
 /** Everything a card is drawn from, as a Luke window hands it to wherever it docks. */
 export interface CallCardInput {
   card: CallCardModel;
   speakerMuted: boolean;
   controls: CallControls;
-  /** Absent on a call with no video to offer, which draws the card alone. */
-  video?: CallCardVideo | undefined;
-}
-
-/** What a card draws of the avatar on this window's document (`callCardVideoStatus`). */
-export function useCardVideoStatus(): AvatarStatus | undefined {
-  const view = useStandingVoiceView();
-  const avatar = useVoiceAvatar();
-  const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
-  return callCardVideoStatus({ view, avatar, videoCalls });
-}
-
-/**
- * The card's video from its status and the track the window holds for it,
- * its Video off and Video on asking main as the agent's tab's do, or nothing
- * while the card has no video to offer.
- */
-export function cardVideo(
-  status: AvatarStatus | undefined,
-  track: MediaStreamTrack | undefined,
-  press: ActHandle["press"],
-): CallCardVideo | undefined {
-  if (status === undefined) return undefined;
-  return { status, track, onSetVideo: (on) => press(ACT_KIND.VOICE_SET_VIDEO, { on }) };
 }
 
 /**
@@ -139,15 +96,12 @@ export function callControls(press: ActHandle["press"], speakerMuted: boolean): 
  * for the task it opens. In the floating window the name is the drag handle,
  * since macOS hands a press on a drag region to the drag, never the page.
  * There is no ×: End call is the way to put a call away, and a live call
- * nobody can see is what the card is for. On a video call the agent's
- * tab's own tile stands over the name while the avatar does, with its Video off
- * and no end of its own, and Video on stands beside the name once it is down.
+ * nobody can see is what the card is for.
  */
 export function CallCard({
   card,
   speakerMuted,
   controls,
-  video,
   surface,
   leaving = false,
   onLeft,
@@ -169,7 +123,6 @@ export function CallCard({
   const left = (event: AnimationEvent<HTMLElement>) => {
     if (leaving && event.target === event.currentTarget) onLeft?.();
   };
-  const tiled = video !== undefined && video.status !== AVATAR_STATUS.OFF;
   return (
     // In the floating window a press on a button acts without taking focus,
     // so the next drag never finds a button holding it.
@@ -182,14 +135,6 @@ export function CallCard({
       data-leaving={leaving}
       onAnimationEnd={left}
     >
-      {tiled ? (
-        <CallVideoTile
-          video={video.track}
-          status={video.status}
-          fit={CALL_VIDEO_FIT.CARD}
-          onSetVideo={video.onSetVideo}
-        />
-      ) : null}
       <div className="call-card-head flex min-w-0 items-center gap-tight-gap">
         <Text
           variant={TEXT_VARIANT.CAPTION}
@@ -198,9 +143,6 @@ export function CallCard({
         >
           <OneLine>{card.taskName}</OneLine>
         </Text>
-        {video?.status === AVATAR_STATUS.OFF ? (
-          <VideoToggle on={false} onSetVideo={video.onSetVideo} />
-        ) : null}
         {/* The floating window is too small to hold a tooltip, so there the
             system's own hint names the task the button opens. */}
         {inWindow ? (
@@ -234,7 +176,7 @@ export function CallCard({
  * handed one, and kept through its slide out once it is not, from the last
  * call it was handed, until that slide has ended.
  */
-export function CallCardDock({
+function CallCardDock({
   call,
   surface,
 }: {
@@ -259,7 +201,7 @@ export function CallCardDock({
 
 /**
  * The card this window draws, while it draws one, handed down from the
- * window's root (`StandingCallCard`, `panel-avatar.tsx`) past every page
+ * window's root (`StandingCallCard`) past every page
  * between, so the card's every change of status draws its docks alone and
  * not the pages they stand in.
  */

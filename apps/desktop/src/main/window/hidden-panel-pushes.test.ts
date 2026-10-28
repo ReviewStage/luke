@@ -1,5 +1,4 @@
 /** hidden-panel-pushes.test.ts -- what a panel no one can see is pushed, as its window hides and shows. */
-import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { initialAppState } from "@luke/host/client";
@@ -11,8 +10,8 @@ import { windowPushes } from "./window-pushes";
 
 /**
  * What a panel no one can see is pushed: no document while it is hidden, the
- * newest one the moment it shows, every document as before while it is in
- * view, and every one while it runs the avatar's session.
+ * newest one the moment it shows, and every document as before while it is
+ * in view.
  */
 
 const { windows, FakeBrowserWindow } = await vi.hoisted(async () => {
@@ -58,12 +57,6 @@ const RUN = {
   packaged: true,
   platform: "darwin",
 } as const;
-
-const GRANT: AvatarGrant = {
-  serverUrl: "wss://avatar.test",
-  participantToken: "token",
-  agentIdentity: "agent",
-};
 
 const stops: AbortController[] = [];
 
@@ -169,18 +162,4 @@ test("an event reaches a hidden panel, behind the document held before it", asyn
 
   expect((await nextHeard(stream)).heard()).toBe(1);
   expect((await nextHeard(stream)).heard()).toBe(PUSH.SHOW_AGENT);
-});
-
-test("a hidden panel running the avatar's session is told every document until the grant is withdrawn", async () => {
-  const { panels, window, stream, page } = shownPanel();
-  panels.showAvatarSession(GRANT);
-  window?.emit("hide");
-  windowPushes.pushState(page, documentAt(1));
-  expect((await nextHeard(stream)).heard()).toBe(1);
-  windowPushes.pushState(page, documentAt(2));
-  expect((await nextHeard(stream)).heard()).toBe(2);
-
-  panels.showAvatarSession(undefined);
-  windowPushes.pushState(page, documentAt(3));
-  expect((await nextHeard(stream)).heard()).toBeUndefined();
 });

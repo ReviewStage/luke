@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { WindowPushes } from "../act-port/push-procedures.js";
@@ -98,7 +97,7 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
     const seen = yield* watchChanges(app, 2, () => {
       app.update({});
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
-      app.update({ voice: { avatar: AVATAR_OFF } });
+      app.update({ voice: {} });
       // The one real patch is the second document `changes` ever carries; the
       // three no-ops before it wrote nothing for a collector to see.
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
@@ -113,7 +112,7 @@ it("two slices in one patch are one version", () => {
   const app = store();
   app.update({
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: { view: IDLE_VOICE_VIEW, avatar: AVATAR_OFF },
+    voice: { view: IDLE_VOICE_VIEW },
   });
   assert.equal(app.snapshot().version, 1);
   assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
@@ -176,14 +175,11 @@ it.effect("a touch re-announces the document without numbering it again", () =>
   }),
 );
 
-it("a voice window that went away leaves the document holding no view, and the avatar standing", () => {
+it("a voice window that went away leaves the document holding no view", () => {
   const app = store();
-  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
-  const ended = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
-  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: ended } });
-  app.update({ voice: voiceWindowGone(app.snapshot().voice) });
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true } } });
+  app.update({ voice: voiceWindowGone() });
   assert.equal(app.snapshot().voice.view, undefined);
-  assert.deepEqual(app.snapshot().voice.avatar, ended);
 });
 
 const BOOT: HostBootstrap = {
@@ -288,7 +284,7 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   };
   const first = said("row-1", "Invite a teammate");
   app.update({
-    voice: { avatar: AVATAR_OFF, view: IDLE_VOICE_VIEW },
+    voice: { view: IDLE_VOICE_VIEW },
     callTranscript: { voiceSessionId: "session-1", lines: [first] },
   });
   publish();
@@ -303,7 +299,7 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   publish();
   assert.deepEqual(await delivered(panel), {
     version: 2,
-    entries: { voice: { avatar: AVATAR_OFF, view } },
+    entries: { voice: { view } },
     callTranscript: {
       voiceSessionId: "session-1",
       from: 1,
@@ -312,7 +308,7 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   });
   assert.deepEqual(await delivered(call), {
     version: 2,
-    entries: { voice: { avatar: AVATAR_OFF, view } },
+    entries: { voice: { view } },
   });
   pushes.push(voiceWindow.handle, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
   assert.deepEqual((await voice.next()).value, {
@@ -321,14 +317,13 @@ it("a caption on a standing call hands a panel the voice and the line that grew,
   });
 });
 
-it("a voice window given up on sets voice unavailable for the run: no view, the avatar standing, and a later bootstrap keeps it", () => {
+it("a voice window given up on sets voice unavailable for the run: no view, and a later bootstrap keeps it", () => {
   const app = store();
   assert.equal(app.snapshot().voice.unavailable, undefined);
-  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: AVATAR_OFF } });
-  app.update({ voice: voiceWindowGaveUp(app.snapshot().voice) });
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true } } });
+  app.update({ voice: voiceWindowGaveUp() });
   assert.equal(app.snapshot().voice.unavailable, true);
   assert.equal(app.snapshot().voice.view, undefined);
-  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   assert.equal(app.snapshot().voice.unavailable, true);
 });

@@ -10,12 +10,9 @@
  * the guards are the declaration the pushes have.
  */
 
-import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
 import { isLinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
-import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
-import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
 import { isVoiceCommand, type VoiceCommand } from "@luke/voice/voice-view";
 import { EXCESS_KEYS, isRecord, isWireString } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -33,9 +30,6 @@ export const PUSH = {
   TASKS_TALK: "app:task-talk-forwarded",
   SHOW_AGENT: "app:show-agent",
   CALL_WINDOW_MOVED: "app:call-window-moved",
-  AVATAR_SESSION: "app:avatar-session",
-  AVATAR_FEED: "app:avatar-feed",
-  AVATAR_VIEW_SIGNAL: "app:avatar-view-signal",
   SHOW_LINK: "app:show-link",
   VOICE_COMMAND: "app:voice-command-forwarded",
 } as const;
@@ -100,30 +94,6 @@ export const PUSH_GUARD = {
    */
   [PUSH.CALL_WINDOW_MOVED]: result<void>((v) => v === undefined),
   /**
-   * Keyframe's grant for the call's own avatar, sent to the panel window
-   * alone, or nothing once the session is to close. A one-shot rather
-   * than a slice of the document, because the document reaches every window
-   * and the grant may reach this one only.
-   */
-  [PUSH.AVATAR_SESSION]: result<AvatarGrant | undefined>(
-    (value) => value === undefined || avatarGrantFromWire(value) !== undefined,
-  ),
-  /**
-   * One message of Luke's voice feed, relayed to the panel window alone for
-   * the avatar to lip-sync. A reading that expires as the next
-   * chunk arrives, so nothing bootstraps from it.
-   */
-  [PUSH.AVATAR_FEED]: result<AvatarFeed>((value) => avatarFeedFromWire(value) !== undefined),
-  /**
-   * One signal of the call window's view of Luke's avatar, relayed from the
-   * other end: the call window's offer or close to the panel, the panel's
-   * answer to the call window. An event, as the feed is, because a signal is
-   * read once and never bootstrapped from.
-   */
-  [PUSH.AVATAR_VIEW_SIGNAL]: result<AvatarViewSignal>(
-    (value) => avatarViewSignalFromWire(value) !== undefined,
-  ),
-  /**
    * A Luke link the system handed the app: the panel is to open the place it
    * names, in the workspace it was written under. An event, as a click is,
    * because it is an ask the window answers once.
@@ -156,9 +126,6 @@ export const PUSH_METHOD = {
   onTasksTalk: PUSH.TASKS_TALK,
   onShowAgent: PUSH.SHOW_AGENT,
   onCallWindowMoved: PUSH.CALL_WINDOW_MOVED,
-  onAvatarSession: PUSH.AVATAR_SESSION,
-  onAvatarFeed: PUSH.AVATAR_FEED,
-  onAvatarViewSignal: PUSH.AVATAR_VIEW_SIGNAL,
   onShowLink: PUSH.SHOW_LINK,
   onVoiceCommand: PUSH.VOICE_COMMAND,
 } as const;

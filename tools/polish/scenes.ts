@@ -423,7 +423,7 @@ export const SCENES: readonly Scene[] = [
   {
     id: "call-panel",
     place: PLACE.CALL,
-    title: "Mid-call, video off",
+    title: "Mid-call",
     profile: "agent-call",
     clients: DESKTOP_ONLY,
     macOnly: true,
@@ -435,14 +435,6 @@ export const SCENES: readonly Scene[] = [
     profile: "agent-call",
     clients: DESKTOP_ONLY,
     window: WINDOW.CALL,
-    macOnly: true,
-  },
-  {
-    id: "call-video",
-    place: PLACE.CALL,
-    title: "The video tile",
-    profile: "agent-call-video",
-    clients: DESKTOP_ONLY,
     macOnly: true,
   },
   // The voice, as a fixture run stages it. Note that the voice profiles stage no call and no window of

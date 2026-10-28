@@ -28,7 +28,7 @@ import { CatalogSection } from "../section";
 /**
  * choice-list.tsx -- a pick-one list with a recommended option and an
  * unavailable one, a pick-several list, both marked with their radios or
- * checkboxes and numbered, a yes and a no across, toned, pills, faces as pictures, cards holding controls of their own, rows with a mark before their words, an
+ * checkboxes and numbered, a yes and a no across, toned, pills, cards holding controls of their own, rows with a mark before their words, an
  * unavailable list, a settled record of what was picked, a marked list
  * stepped back beside a step and its presses, as an ask taken back, a list
  * and its presses on a tint laid over the column's ground, as a post that
@@ -88,20 +88,6 @@ const LONG: readonly ChoiceOption<string>[] = [
   },
   { value: "keep", label: "Leave it where it is" },
 ];
-
-const FACES: readonly ChoiceOption<string>[] = ["Atlas", "Caspian", "Celia", "Lyra", "Orion"].map(
-  (name, index) => ({
-    value: name.toLowerCase(),
-    label: name,
-    mark: (
-      <svg viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-        <rect width="40" height="40" fill={`hsl(${index * 62} 45% 55%)`} />
-        <circle cx="20" cy="16" r="7" fill="rgb(255 255 255 / 0.85)" />
-        <ellipse cx="20" cy="36" rx="13" ry="10" fill="rgb(255 255 255 / 0.85)" />
-      </svg>
-    ),
-  }),
-);
 
 const CREDENTIALS: readonly ChoiceOption<string>[] = [
   {
@@ -217,9 +203,6 @@ function ChoiceLists(): React.JSX.Element {
           start={["high"]}
           look={CHOICE_LOOK.PILL}
         />
-      </CatalogSection>
-      <CatalogSection id="choice-list-picture" title="Pictures">
-        <Held legend="Avatar" options={FACES} start={["atlas"]} look={CHOICE_LOOK.PICTURE} />
       </CatalogSection>
       <CatalogSection id="choice-list-card" title="Cards holding controls">
         <Held

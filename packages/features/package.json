@@ -19,7 +19,6 @@
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
-    "./avatar-grant": "./src/avatar-grant.js",
     "./credential-redaction": "./src/credential-redaction.js",
     "./memory-wire": "./src/memory-wire.js",
     "./sentry-addresses": "./src/sentry-addresses.js",

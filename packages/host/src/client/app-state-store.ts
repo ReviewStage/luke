@@ -6,7 +6,6 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { HostCapability } from "@luke/settings";
 import type { BuildCommit } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
@@ -168,7 +167,7 @@ interface WindowRole {
  * transcript reaches the panels alone, which draw it: the voice window
  * reports it and the call window draws no line of it. And the voice window
  * is handed no view, because the view is the one it reports itself
- * (`reportVoiceView`); what it reads of the voice slice is the avatar. Each
+ * (`reportVoiceView`), and nothing else of the voice slice. Each
  * stream sends a window only what moved in what it is handed
  * (`push-procedures.ts`), so a caption the voice window reports reaches it
  * as nothing, and the call window as the view alone.
@@ -180,19 +179,15 @@ export function windowAppState(
 ): AppStateSnapshot {
   if (!role.voice && !role.call) return { ...held, window };
   const { callTranscript: _callTranscript, ...drawn } = held;
-  return role.voice
-    ? { ...drawn, voice: { avatar: held.voice.avatar }, window }
-    : { ...drawn, window };
+  return role.voice ? { ...drawn, voice: {}, window } : { ...drawn, window };
 }
 
 /**
  * The voice slice once the voice window that reported its view is gone: no
- * view, since an idle voice is what every panel draws in its place, and the
- * avatar as it stood, since the panel holds the avatar rather than
- * that window.
+ * view, since an idle voice is what every panel draws in its place.
  */
-export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
-  return { avatar: held.avatar };
+export function voiceWindowGone(): AppState["voice"] {
+  return {};
 }
 
 /**
@@ -200,8 +195,8 @@ export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
  * gone as above, and voice unavailable until Luke is reopened, which every
  * panel says where it offers a call.
  */
-export function voiceWindowGaveUp(held: AppState["voice"]): AppState["voice"] {
-  return { ...voiceWindowGone(held), unavailable: true };
+export function voiceWindowGaveUp(): AppState["voice"] {
+  return { ...voiceWindowGone(), unavailable: true };
 }
 
 /** What a launch knows of itself before the host answers anything, which is the run slice's own facts. */
@@ -251,7 +246,7 @@ export function initialAppState(
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    voice: staged?.voice ?? { avatar: AVATAR_OFF },
+    voice: staged?.voice ?? {},
     tasks: staged?.tasks ?? IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },

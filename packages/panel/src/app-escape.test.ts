@@ -17,7 +17,6 @@ import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { PUSH_METHOD } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { memoryHistory } from "@luke/ui/history-adapter";
-import { AVATAR_OFF } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, VOICE_COMMAND } from "@luke/voice/voice-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -39,7 +38,6 @@ const LISTENING: AppStateSnapshot = {
   ...stateWith({}, {}),
   run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.TASKS_WORK },
   voice: {
-    avatar: AVATAR_OFF,
     view: {
       ...IDLE_VOICE_VIEW,
       voiceStatus: LIVE_STATUS.LISTENING,

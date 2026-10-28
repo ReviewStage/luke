@@ -2,7 +2,6 @@ import type { VoiceFailure } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF, type AvatarState } from "@luke/voice/avatar";
 import {
   callInProgress,
   IDLE_VOICE_VIEW,
@@ -50,17 +49,11 @@ export function fixtureVoice(profile: string): FixtureVoice | undefined {
 /**
  * The live conversation as the voice window last reported it, or an idle
  * voice where none stands, which tells its readers only as the view moves,
- * not as Luke's avatar or anything else beside it in the slice does.
+ * not as anything else beside it in the slice does.
  */
 const voiceViewAtom: Atom.Atom<VoiceView> = Atom.map(
   APP_SLICE.VOICE,
   (voice) => voice?.view ?? IDLE_VOICE_VIEW,
-);
-
-/** Luke's avatar on the call as main holds it, which tells its readers only as the avatar moves, not as the words do. */
-const voiceAvatarAtom: Atom.Atom<AvatarState> = Atom.map(
-  APP_SLICE.VOICE,
-  (voice) => voice?.avatar ?? AVATAR_OFF,
 );
 
 /** Whether the voice window was given up on for this run, which redraws its reader only as it turns. */
@@ -193,11 +186,6 @@ const callingAgentAtom: Atom.Atom<string | undefined> = Atom.map(voiceViewAtom, 
 /** The agent a call is in progress into, whose tab wears the live mark and draws the call; none while no call stands. */
 export function useCallingAgent(): string | undefined {
   return useAppSlice(callingAgentAtom);
-}
-
-/** Luke's avatar on the standing call, or none, as main holds it for every window. */
-export function useVoiceAvatar(): AvatarState {
-  return useAppSlice(voiceAvatarAtom);
 }
 
 /** What was said on the standing call so far, which its agent's tab's live transcript draws; none for no call. */

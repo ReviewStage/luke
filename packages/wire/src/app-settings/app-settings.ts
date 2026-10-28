@@ -10,6 +10,7 @@ import { Schema } from "effect";
 export const APP_SETTING_ID = {
   VOICE: "voice",
   VOICE_CAPTIONS: "voice_captions",
+  /** Offered by no build: the Video calls experiment's Avatar picker, removed with video calls. */
   VIDEO_AVATAR: "video_avatar",
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
