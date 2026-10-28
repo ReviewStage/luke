@@ -430,7 +430,8 @@ test("an account with no plan is welcomed on New task's composer, and the title 
   assert.ok(newTask, "the title bar offers New task");
   act(() => newTask.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-  assert.equal(dialog?.querySelector("h2")?.textContent, "New task");
+  const name = dialog?.getAttribute("aria-labelledby") ?? assert.fail("the dialog is named");
+  assert.equal(document.getElementById(name)?.textContent, "New task");
   act(() => {
     dialog?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
