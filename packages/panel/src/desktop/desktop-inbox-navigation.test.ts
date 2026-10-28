@@ -119,6 +119,27 @@ test("the Inbox left and come back to under the window's root draws the rows it 
   assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
 });
 
+test("the Inbox under the window's root draws each task held whole by the account's feed from it, following none on its own", async () => {
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the billing task's items are drawn",
+  );
+  assert.ok(
+    rows.some((row) => row.endsWith(EXPIRY.title)),
+    "the invites task's items are drawn",
+  );
+  for (const task of [BILLING, INVITES]) {
+    assert.equal(
+      world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: task.id }),
+      false,
+      `${task.name} is drawn from the feed alone`,
+    );
+  }
+});
+
 test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
   const { page } = mount([], { windowRoot: true });
   await settle();
