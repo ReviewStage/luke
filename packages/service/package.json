@@ -191,7 +191,6 @@
     "./orpc/base": "./src/orpc/base.js",
     "./orpc/handler": "./src/orpc/handler.js",
     "./orpc/router": "./src/orpc/router.js",
-    "./tasks/board-layout": "./src/tasks/board-layout.js",
     "./tasks/comment-tools": "./src/tasks/comment-tools.js",
     "./tasks/page-tool": "./src/tasks/page-tool.js",
     "./tasks/plan-comments-procedures": "./src/tasks/plan-comments-procedures.js",

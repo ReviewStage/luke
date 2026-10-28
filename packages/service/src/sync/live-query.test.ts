@@ -64,7 +64,7 @@ const probeDB = Layer.provideMerge(
 /** A toy read of one task's probe rows, standing in for a view's own; `sql` reads them, its one placeholder the task. */
 const probeQuery = (sql: string) =>
   defineLiveQuery({
-    name: "taskBoard",
+    name: "taskHistory",
     params: ["taskId"],
     reads: [probeSync],
     topics: ({ taskId }) => [[TOPIC.TASK, taskId]],

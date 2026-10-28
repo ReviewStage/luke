@@ -1,5 +1,5 @@
 /**
- * tasks-procedures.ts -- the account's plans: list, start, open, change, and delete, and each one's board, edit, and history.
+ * tasks-procedures.ts -- the account's plans: list, start, open, change, and delete, and each one's edit and history.
  *
  * Every procedure resolves the caller before it touches a row, and every row
  * it touches is one the caller reaches: a plan id another account owns
@@ -24,13 +24,11 @@
  * an older build still sends, lists no plan more, and an archive asked for
  * settles the plan instead (`archive-settle.ts`).
  *
- * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
- * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`@luke/database/models/board-store`). `/api/plans/{id}/revisions` is the
- * plan's history for the History tab, a page at a time;
- * `/api/plans/{id}/revisions/{seq}` one revision's content beside the one
- * before it; and `/api/plans/{id}/revisions/{seq}/restore` puts that content
- * back as a revision of the developer's (`@luke/database/models/plan-revisions`).
+ * `/api/plans/{id}/revisions` is the plan's history for the History tab, a
+ * page at a time; `/api/plans/{id}/revisions/{seq}` one revision's content
+ * beside the one before it; and `/api/plans/{id}/revisions/{seq}/restore`
+ * puts that content back as a revision of the developer's
+ * (`@luke/database/models/plan-revisions`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -43,7 +41,6 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
@@ -646,25 +643,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
       if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { deleted: true as const, txid: deleted.value.txid };
-    }),
-
-    /** The plan's board, with Luke's latest drawing. */
-    readBoard: plans.readBoard.effect(function* ({ input, context }) {
-      const taskId = yield* pathUuid(input.id);
-      const board = yield* hostedStoreOrUnavailable(readBoard(context.userId, taskId));
-      if (Option.isNone(board)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { board: board.value };
-    }),
-
-    /** The Mac's scene written whole, the last write winning; with the id of its transaction where the board's live row shows it. */
-    saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
-      const taskId = yield* pathUuid(input.params.id);
-      const save = input.body;
-      const written = yield* hostedStoreOrUnavailable(
-        writeScene(context.userId, taskId, save.elements, save.appliedDrawing, save.image),
-      );
-      if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return written.value;
     }),
 
     /**

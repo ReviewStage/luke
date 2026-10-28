@@ -14,8 +14,6 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
-import { boardAnswerSchema, boardSaveAnswerSchema } from "@luke/features/board-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
 import {
@@ -115,7 +113,6 @@ import { dispatched } from "./support/platform-landing";
 const ORIGIN = "https://luke.test";
 const TASKS = "/api/plans";
 const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
-const BOARD = (taskId: string) => `${ONE_TASK(taskId)}/board`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
 const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
 const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
@@ -415,18 +412,6 @@ const openConnectedWorkspace = (ownerId: string, installation: InstallationFixtu
     assert.equal(yield* connectWorkspaceGitHub(workspaceId, installation), LINK_OUTCOME.LINKED);
     return workspaceId;
   });
-
-/** A note the developer drew, as the canvas would send it. */
-const NOTE = {
-  id: "dev-note",
-  type: BOARD_ELEMENT_TYPE.TEXT,
-  x: 0,
-  y: 200,
-  width: 120,
-  height: 25,
-  text: "Rate limit invites",
-  fontFamily: 5,
-} as const;
 
 it.layer(getTestDB())("the plan routes", (it) => {
   it.effect("a started plan lists, and opens with what its notes saved", () =>
@@ -1018,73 +1003,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
             .plans.length,
           1,
-        );
-      }),
-  );
-
-  it.effect(
-    "another account's board answers as none, and a scene the board does not admit is refused",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, ask } = yield* openAccounts();
-        const taskId = startedId(
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        );
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-        const save = (userId: string, body: WireBoundaryInput) =>
-          ask(request(BOARD(taskId), userId, { method: "PUT", body }));
-
-        assert.deepEqual(yield* ask(request(BOARD(taskId), other)), notFound);
-        assert.deepEqual(yield* save(other, { elements: [NOTE], appliedDrawing: 0 }), notFound);
-        assert.deepEqual(
-          yield* save(owner, { elements: [{ ...NOTE, type: "image" }], appliedDrawing: 0 }),
-          invalid,
-        );
-        assert.deepEqual(
-          yield* save(owner, { elements: [NOTE], appliedDrawing: 0, taskId }),
-          invalid,
-        );
-        assert.deepEqual(yield* ask(request(BOARD(taskId), owner)), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { board: { elements: [], appliedDrawing: 0 } },
-        });
-      }),
-  );
-
-  it.effect(
-    "the board one member saves is read by the rest of the workspace, the save answering its transaction where the board's live row moved and none where it did not",
-    () =>
-      Effect.gen(function* () {
-        const { owner, other, ask } = yield* openAccounts();
-        const started = readAnswer(
-          taskAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
-        ).plan;
-        yield* joinWorkspace(started.workspaceId, other);
-        const save = () =>
-          Effect.map(
-            ask(
-              request(BOARD(started.id), other, {
-                method: "PUT",
-                body: { elements: [NOTE], appliedDrawing: 0 },
-              }),
-            ),
-            (answer) => readAnswer(boardSaveAnswerSchema, HOSTED_HTTP_STATUS.OK, answer),
-          );
-
-        const saved = yield* save();
-        assert.deepEqual(saved.board.elements, [NOTE]);
-        assert.match(saved.txid ?? "", /^\d+$/, "the board's first save adds its live row");
-        assert.equal((yield* save()).txid, undefined, "the same scene again moves nothing");
-        assert.deepEqual(
-          readAnswer(
-            boardAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(BOARD(started.id), owner)),
-          ).board.elements,
-          [NOTE],
         );
       }),
   );

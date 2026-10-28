@@ -150,8 +150,8 @@ readable by our own operators. Deleting your account removes it.
 workspace: the first workspace made for your account unless you start it in
 another workspace you are a member of, and the task records which, and who
 started it, named by their account's name to every member of the workspace. Every member of that
-workspace can read, change, and delete the task, its board, its pages, and
-its history, read what was said on its calls, yours included, and read,
+workspace can read, change, and delete the task, its pages, and its
+history, read what was said on its calls, yours included, and read,
 message, rename, and stop the coding agents any member started on it. Each
 message a member sends a coding agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
@@ -457,18 +457,6 @@ the sandbox, a command, or its output. After you save it, neither your Mac nor
 any answer from our service holds the token again, and we never log it or send
 it to our analytics, crash reports, or screen recordings. Removing it in
 Settings, or deleting your account, deletes it.
-
-**A task's whiteboard.** You can draw on a task's whiteboard. Our service
-stores it with the task, as drawn and readable by our own operators: every
-shape, arrow, line, stroke, and piece of text and where it stands, and, from
-before coding agents stopped drawing on and looking at the board, their latest
-drawing and the last picture of the board your Mac drew for them, at most
-1,200 pixels a side. Luke on your Mac sends the whole board each time it
-changes. No model reads the board or that picture now; a drawing call an agent
-made before then, with what it drew, stays in the agent's transcript, and the
-model's session history may keep a picture it looked at then (see "Who we send
-it to"). You cannot put an image or a file on the board. Deleting the task
-deletes its whiteboard.
 
 **How agents read your repository.** A task names a GitHub
 repository of the Luke GitHub App installation connected to the task's
@@ -1541,8 +1529,8 @@ and error, performance, and agent reports by Sentry.
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts and preferences, your pinned
-  repositories, your tasks with their history, whiteboards, pages, coding
-  agents, inbox items and pictures, the conversation with
+  repositories, your tasks with their history, pages, coding agents,
+  inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, your name on the memories
   Luke's agents kept in your words (the memories themselves stay with their
