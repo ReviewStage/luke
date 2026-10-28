@@ -15,8 +15,13 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  MENU_ROW_WHY,
   type MenuRow,
   POPOVER_ALIGN,
+  POPOVER_WIDTH,
+  STATUS_TONE,
+  StatusGlyph,
+  type StatusTone,
   Tooltip,
   useSecond,
 } from "@luke/ui";
@@ -24,7 +29,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
-import { ExperimentTag } from "../experiment-marks.js";
+import { EXPERIMENTAL, ExperimentBadge } from "../experiment-marks.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
 
@@ -37,7 +42,14 @@ import { keptKey, useKept } from "../use-kept.js";
  * each device the member registered, as the models answer lists them, by its
  * name under the glyph of its platform, a Mac or a Linux server, each saying
  * whether it is online, held against the window's own clock, or, online,
- * that it is still getting ready for local agents or couldn't set them up. A
+ * that it is still getting ready for local agents or couldn't set them up.
+ * Every device's glyph wears one dot at its corner rather than words, whose
+ * hint says them: green online, grey away, amber where its standing can't
+ * be checked, the working tone while it gets ready and red where it
+ * couldn't set up; one that takes no agent is dimmed and unpicked too. The
+ * dot stands on the glyph rather than at the row's end, which the check of
+ * the one picked keeps. The menu stands at the regular width rather than a settings
+ * picker's narrow one, so a device's whole name fits. A
  * device offline or not ready is listed but not picked, since the service
  * refuses a task set to one that has not beat lately or is not set up yet.
  * New task's chip starts on the member's last pick, kept in this window, and
@@ -45,7 +57,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * kept device that is offline, as a Mac is while Luke restarts on it, or
  * still getting ready or not set up, stays picked and says so, so its start
  * is refused by name rather than sent quietly to the cloud; it wears the
- * experiment's flask, which says Experimental in its hint; it stands only while the member has a device to pick. The task's
+ * experiment's flask as a badge on its corner, and its hint says
+ * Experimental; it stands only while the member has a device to pick. The task's
  * chip stands with its status and priority, saying the device it runs on
  * and whether it is online, or that the device was removed, with no menu, and
  * its hint says it was set when the task was created. Both are
@@ -104,28 +117,57 @@ const STANDING_WORDS = {
   [DEVICE_STANDING.CHECKING]: RUNS_ON_WORDS.CHECKING,
 } as const;
 
-/** Why a device offered takes no agent now: away, or still getting ready or not set up, whatever its standing; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
-function offerUnready(device: MacOffer, book: PresenceBook): string | undefined {
-  if (offerStanding(device, book) === DEVICE_STANDING.OFFLINE) return RUNS_ON_WORDS.OFFLINE;
+/** The tone of each standing's dot: green online, grey away or still being checked, the attention tone where it cannot be checked. */
+const STANDING_TONE = {
+  [DEVICE_STANDING.ONLINE]: STATUS_TONE.COMPLETE,
+  [DEVICE_STANDING.OFFLINE]: STATUS_TONE.NEUTRAL,
+  [DEVICE_STANDING.UNKNOWN]: STATUS_TONE.ATTENTION,
+  [DEVICE_STANDING.CHECKING]: STATUS_TONE.NEUTRAL,
+} as const;
+
+/** The tone of the dot of a device online but not ready: still getting ready is working, one that couldn't set up failed. */
+const SETUP_TONE = {
+  [DEVICE_SETUP.PREPARING]: STATUS_TONE.WORKING,
+  [DEVICE_SETUP.FAILED]: STATUS_TONE.DANGER,
+} as const;
+
+/** Why a device offered takes no agent now, and its dot's tone: away, or still getting ready or not set up, whatever its standing; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
+function offerUnready(
+  device: MacOffer,
+  book: PresenceBook,
+): { readonly words: string; readonly tone: StatusTone } | undefined {
+  if (offerStanding(device, book) === DEVICE_STANDING.OFFLINE)
+    return { words: RUNS_ON_WORDS.OFFLINE, tone: STANDING_TONE[DEVICE_STANDING.OFFLINE] };
   switch (device.setup) {
     case DEVICE_SETUP.PREPARING:
-      return RUNS_ON_WORDS.GETTING_READY;
+      return { words: RUNS_ON_WORDS.GETTING_READY, tone: SETUP_TONE[DEVICE_SETUP.PREPARING] };
     case DEVICE_SETUP.FAILED:
-      return RUNS_ON_WORDS.SETUP_FAILED;
+      return { words: RUNS_ON_WORDS.SETUP_FAILED, tone: SETUP_TONE[DEVICE_SETUP.FAILED] };
     case undefined:
       return undefined;
   }
 }
 
-/** What a device's row says: why it takes no agent, else that it is online, else that its standing cannot be told yet. */
-function offerDetail(device: MacOffer, book: PresenceBook): Pick<MenuRow, "detail" | "disabled"> {
+/** A device's row past its name: its platform's glyph wearing one dot, its words on hover and to a reader, for every device alike; one that takes no agent is dimmed and unpicked too, its dot saying why. */
+function offerMarks(
+  device: MacOffer,
+  book: PresenceBook,
+): Pick<MenuRow, "icon" | "disabled" | "why"> {
   const unready = offerUnready(device, book);
-  if (unready !== undefined) return { disabled: unready };
   const standing = offerStanding(device, book);
-  return { detail: STANDING_WORDS[standing] };
+  const tone = unready?.tone ?? STANDING_TONE[standing];
+  const words = unready?.words ?? STANDING_WORDS[standing];
+  const icon = (
+    <StatusGlyph tone={tone} label={words}>
+      <DeviceGlyph device={device} />
+    </StatusGlyph>
+  );
+  return unready === undefined
+    ? { icon }
+    : { icon, disabled: unready.words, why: MENU_ROW_WHY.MARK };
 }
 
-/** Cloud, then each device by name under its platform's glyph, one that takes an agent saying it is online and any other muted, unpicked, saying why. */
+/** Cloud, then each device by name, its platform's glyph wearing its standing's dot, one that takes no agent muted and unpicked. */
 function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly MenuRow[] {
   return [
     { id: CLOUD_ROW, label: RUNS_ON_WORDS.CLOUD, icon: <GLYPH.CLOUD /> },
@@ -133,8 +175,7 @@ function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly 
       (device): MenuRow => ({
         id: device.deviceId,
         label: device.name,
-        icon: <DeviceGlyph device={device} />,
-        ...offerDetail(device, book),
+        ...offerMarks(device, book),
       }),
     ),
   ];
@@ -159,7 +200,7 @@ export function useNewTaskRunsOn(
 /** What New task's chip says of the device picked: its name while it takes an agent, and why it does not, or that its standing cannot be told, otherwise. */
 function offerStateWords(device: MacOffer, book: PresenceBook): string {
   const unready = offerUnready(device, book);
-  if (unready !== undefined) return `${device.name} · ${unready}`;
+  if (unready !== undefined) return `${device.name} · ${unready.words}`;
   const standing = offerStanding(device, book);
   return standing === DEVICE_STANDING.ONLINE
     ? device.name
@@ -173,7 +214,7 @@ export function newTaskRunsOn(device: MacOffer | undefined): TaskRunsOnRequest {
     : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: device.deviceId };
 }
 
-/** New task's Runs on chip, with the experiment's flask after it: Cloud or the device picked, dropping the menu. */
+/** New task's Runs on chip, wearing the experiment's flask at its corner: Cloud or the device picked, dropping the menu. */
 export function NewTaskRunsOnChip({
   devices,
   device,
@@ -189,7 +230,7 @@ export function NewTaskRunsOnChip({
   useSecond();
   const book = useDevicePresence(true);
   return (
-    <span className="new-task-runs-on inline-flex min-w-0 items-center gap-item-gap">
+    <ExperimentBadge>
       <Picker
         label={RUNS_ON_WORDS.LABEL}
         value={device?.deviceId ?? CLOUD_ROW}
@@ -199,11 +240,12 @@ export function NewTaskRunsOnChip({
         noMatch={RUNS_ON_WORDS.NO_MATCH}
         align={POPOVER_ALIGN.START}
         width={CHIP_WIDTH.AUTO}
+        menuWidth={POPOVER_WIDTH.REGULAR}
         disabled={disabled}
+        hint={EXPERIMENTAL}
         onPick={(id) => onChoose(id === CLOUD_ROW ? undefined : id)}
       />
-      <ExperimentTag narrow />
-    </span>
+    </ExperimentBadge>
   );
 }
 

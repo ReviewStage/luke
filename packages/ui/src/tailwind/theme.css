@@ -391,7 +391,6 @@
   --spacing-em: 1em;
   --spacing-onboarding-foot: calc(var(--luke-stage-height) * 0.08);
   --color-sidebar: var(--luke-color-sidebar);
-  --tracking-experiment-tag: 0.01em; /* off-scale: a capsule's caption, a hair open */
   --ease-spring: var(--luke-spring);
   --spacing-viewport-top: var(--luke-viewport-top);
   --spacing-keyboard-inset: var(--luke-keyboard-inset);
@@ -718,6 +717,8 @@
   --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
   --spacing-workspace-shared-glyph: 11px; /* off-scale: a people glyph at a caption's x-height */
   --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
+  --spacing-corner-badge: var(--luke-space-16); /* the disc a press wears at its corner (`CornerBadge`) */
+  --spacing-corner-badge-glyph: 10px; /* off-scale: the glyph on that disc */
   --spacing-section-icon-scroll: 220px; /* off-scale: the icon grid's room, about seven rows */
   --grid-template-columns-section-icons: repeat(
     10,
