@@ -253,6 +253,17 @@ function sessionsFor(userId: string, sequence: { next: number }) {
   return claudeCodeSessions(options);
 }
 
+/** The first launch's runner as a row leaves it before the next message: as launched, exited, or tagged as one launched before lines were read from Luke, whose stdin a send writes. */
+const asLaunched = (_api: ReturnType<typeof runnerSandboxApi>) => undefined;
+const runnerExited = (api: ReturnType<typeof runnerSandboxApi>) => {
+  const first = api.commands[0];
+  if (first !== undefined) first.exitCode = 0;
+};
+const launchedBeforeTheRead = (api: ReturnType<typeof runnerSandboxApi>) => {
+  const sandbox = api.sandboxes[0];
+  if (sandbox !== undefined) sandbox.tags[RUNNER_TAG.LAUNCH] = "0";
+};
+
 const message = (agent: CodingAgent, text: string, lineId?: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
@@ -1242,12 +1253,17 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect.each([
-    ["at its upload of the message's files", (rest: string) => rest === "fs/write", false],
-    ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), false],
-    ["at the relaunch's command", (rest: string) => rest === "cmd", true],
+    ["at its upload of the message's files", (rest: string) => rest === "fs/write", asLaunched],
+    ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), asLaunched],
+    ["at the relaunch's command", (rest: string) => rest === "cmd", runnerExited],
+    [
+      "at the stdin of a runner launched before lines were read",
+      (rest: string) => rest.endsWith("/stdin"),
+      launchedBeforeTheRead,
+    ],
   ] as const)(
     "a message that meets its sandbox stopping %s resumes the sandbox and runs on a runner launched in its next session",
-    ([, call, runnerExited]) =>
+    ([, call, leave]) =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
@@ -1259,7 +1275,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* runnerTook(agent.id);
         sequence.next = 42;
         const first = api.commands[0];
-        if (runnerExited && first !== undefined) first.exitCode = 0;
+        leave(api);
         api.stopsAt.call = call;
         const pdf = Buffer.from("%PDF-1.7 the report").toString("base64");
 
