@@ -1515,10 +1515,25 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
   return needsReader(listed.item, readerId);
 }
 
-/** Whether a thread is an update: it holds messages and none of them asks anything, so nothing of it is answered but a nod; one from a service before threads is none. */
+/**
+ * Whether a listed item is one the reader is not done with: one that needs
+ * them (`needsYou`), or one of theirs (`readersItem`) still unread, such as
+ * a settled thread its agent wrote on again. What the first choice and the
+ * next item that needs you reach.
+ */
+function toDo(listed: InboxListed, readerId: string | undefined): boolean {
+  return (
+    needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
+  );
+}
+
+/** Whether a thread is an agent's update: its agent wrote on it and none of its messages asks anything, so nothing of it is answered but a nod. */
 function isUpdate(item: InboxItem): boolean {
   const thread = item.thread ?? [];
-  return thread.length > 0 && thread.every((message) => message.ask === undefined);
+  return (
+    thread.some((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT) &&
+    thread.every((message) => message.ask === undefined)
+  );
 }
 
 /** Whether a holder is a task still under way, neither Done nor Canceled; one from a service before statuses reads as under way. */
@@ -1529,17 +1544,21 @@ function taskUnderWay(holder: InboxHolder): boolean {
 }
 
 /**
- * Whether a listed item is one the reader is not done with, as To do lists
- * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
- * still unread, such as a settled thread its agent wrote on again, or an
- * update of theirs on a task still under way. Note that an update stays
- * once it is settled, because opening it settles it as Got it does
- * (`acknowledgedOnOpen`), and what it says holds until its task is done.
+ * Whether For you lists an item: one the reader is not done with (`toDo`),
+ * or an update of theirs acknowledged on a task still under way. Note that
+ * an acknowledged update stays, because opening it settles it as Got it
+ * does (`acknowledgedOnOpen`) and what it says holds until its task is
+ * done, while one resolved without answering, which is closed, leaves.
  */
-function toDo(listed: InboxListed, readerId: string | undefined): boolean {
-  if (needsYou(listed, readerId)) return true;
-  if (!readersItem(listed.item, readerId)) return false;
-  return isUnread(listed.item) || (isUpdate(listed.item) && taskUnderWay(listed.holder));
+function forYou(listed: InboxListed, readerId: string | undefined): boolean {
+  if (toDo(listed, readerId)) return true;
+  const { holder, item } = listed;
+  return (
+    item.status === INBOX_STATUS.ANSWERED &&
+    readersItem(item, readerId) &&
+    isUpdate(item) &&
+    taskUnderWay(holder)
+  );
 }
 
 /**
@@ -1763,11 +1782,11 @@ export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
 }
 
-/** Whether a scope lists the item: To do the reader's own not done with (`toDo`), and All all of them. */
+/** Whether a scope lists the item: To do what For you holds (`forYou`), and All all of them. */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.TO_DO:
-      return toDo(listed, readerId);
+      return forYou(listed, readerId);
     case INBOX_SHOW.ALL:
       return true;
   }
