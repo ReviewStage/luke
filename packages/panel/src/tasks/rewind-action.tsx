@@ -144,13 +144,18 @@ function takesWords(takes: Takes): string | undefined {
  * written again. Every message but the last is followed by one, which a
  * rewind to just before it drops, and so is the last while lines sent and not
  * yet read back (`pending`) stand after it, since the rewind drops those too.
- * Where a rewind drops messages another member than the reader (`readerId`)
- * wrote, the points say whose and how many, for the confirm to name.
+ * A line whose send has not answered yet (`going`, by the id it was written
+ * under) is neither written again nor reverted to, because the service may
+ * still withdraw its row, and a rewind waiting behind that send would then
+ * find no line. Where a rewind drops messages another member than the reader
+ * (`readerId`) wrote, the points say whose and how many, for the confirm to
+ * name.
  */
 export function rewindPoints(
   messages: readonly CodingAgentMessage[],
   pending: boolean,
   readerId: string | undefined,
+  going: ReadonlySet<string> = new Set(),
 ): {
   readonly editable: ReadonlySet<string>;
   readonly revertsAt: ReadonlyMap<string, string>;
@@ -181,8 +186,9 @@ export function rewindPoints(
       continue;
     }
     const opens = message.arrivedIn === undefined;
+    const answered = message.clientId === undefined || !going.has(message.clientId);
     // Note that an edit drops what follows the line, so its words are read before the line itself is counted.
-    if (opens && writtenByPerson(message)) {
+    if (opens && answered && writtenByPerson(message)) {
       editable.add(message.id);
       const after = takesWords(takes);
       if (after !== undefined) editTakes.set(message.id, after);
@@ -193,7 +199,7 @@ export function rewindPoints(
     if (!opens) continue;
     const from = takesWords(takes);
     if (from !== undefined) takenFrom.set(message.id, from);
-    next = message.id;
+    next = answered ? message.id : undefined;
   }
   return { editable, revertsAt, followed, revertTakes, editTakes };
 }

@@ -100,8 +100,8 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The agent's box over the transcript, every call it makes written down in order and answered by `rewound`. */
-async function box(rewound: CodingAgentAgentAnswer) {
+/** The agent's box over the transcript, every call it makes written down in order, a rewind answered by `rewound` and a send by `sent`. */
+async function box(rewound: CodingAgentAgentAnswer, sent: CodingAgentAgentAnswer = REWOUND) {
   const calls: string[] = [];
   const held: { composer: HeldComposer | undefined } = { composer: undefined };
   function Box(): ReactNode {
@@ -111,7 +111,7 @@ async function box(rewound: CodingAgentAgentAnswer) {
       messages: TRANSCRIPT,
       send: (_agentId, text) => {
         calls.push(`send:${text}`);
-        return Promise.resolve(REWOUND);
+        return Promise.resolve(sent);
       },
       rewind: (_agentId, messageId) => {
         calls.push(`rewind:${messageId}`);
@@ -178,6 +178,28 @@ test("a rewind that did not go sends nothing, and keeps the edit's line marked a
   assert.equal(composer().draft, "");
   assert.equal(composer().cut, undefined);
   assert.equal(composer().rewindOut, false);
+});
+
+test("an edit whose rewind went and whose words did not keeps them on its line, its Retry sending them without taking the agent back again", async () => {
+  const { calls, composer } = await box(REWOUND, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+
+  await act(async () => composer().sendEdit("second-line", "second line, again", []));
+  await settle();
+  const [line] = composer().sent;
+  await act(async () => composer().retryLine(line?.id ?? ""));
+  await settle();
+
+  assert.deepEqual(calls, [
+    "rewind:second-line",
+    "send:second line, again",
+    "send:second line, again",
+  ]);
+  assert.deepEqual(
+    composer().sent.map((each) => each.text),
+    ["second line, again"],
+    "the Retry that did not go either keeps the words on the line",
+  );
+  assert.equal(composer().draft, "");
 });
 
 test("an edit let go sends nothing and leaves the box as it was", async () => {
