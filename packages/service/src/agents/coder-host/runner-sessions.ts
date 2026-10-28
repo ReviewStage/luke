@@ -156,6 +156,7 @@ import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import {
+  COMMAND_GONE,
   NOT_FOUND_STATUS,
   type SandboxFile,
   SandboxUnavailable,
@@ -985,42 +986,47 @@ export const runnerSessions = <
           // the write: a change of it is handed to the runner by `retune`, which holds the same
           // lease, so it is written after this line, never undone by it. A runner that reads its
           // lines has its exit read beside them, at most `CODER.RUNNER_EXIT_READ`, as its liveness.
+          // A sandbox stopping under the files' upload, or the exit's read, is read as the runner
+          // gone, and relaunches below, which uploads the files again.
           const reads = running.mark.linesRead === true;
-          const [ahead, opened, , exit] = yield* Effect.all(
+          const [ahead, opened, uploaded, exit] = yield* Effect.all(
             [
               harness.ahead(agent),
               openedLine(agent, sessionId, sent, false),
-              filesWritten(runnerPlace, sent),
+              filesWritten(runnerPlace, sent).pipe(
+                Effect.as(true),
+                Effect.catchIf(sessionEnding, () => Effect.succeed(false)),
+              ),
               // Note that an exit Vercel did not answer reads as a runner that runs, so an outage
               // neither fails the message nor relaunches beside a runner still reading.
               reads
-                ? machine
-                    .runnerExit(running.handle, CODER.RUNNER_EXIT_READ)
-                    .pipe(Effect.orElseSucceed(() => null))
+                ? machine.runnerExit(running.handle, CODER.RUNNER_EXIT_READ).pipe(
+                    Effect.catchIf(sessionEnding, () => Effect.succeed(COMMAND_GONE)),
+                    Effect.orElseSucceed(() => null),
+                  )
                 : Effect.succeed(null),
             ],
             { concurrency: "unbounded" },
           );
           const lines = [...ahead.lines, opened.line];
           // Note that a write to stdin is that runner's liveness check: Vercel refuses stdin to a
-          // command that exited (`command_not_found_or_exited`, a 404), or whose sandbox is
-          // stopping under it, which relaunches below,
+          // command that exited (`command_not_found_or_exited`, a 404), which relaunches below,
           // because reading the exit first waits out `EXIT_WAIT` on a runner that runs. A runner
           // that reads its lines is queued them only where its exit read none, and one that ends
           // before it takes them hands them to the launch its END starts (`deliverWaiting`).
-          const wrote = reads
-            ? exit === null &&
-              (yield* Effect.as(queued(agent, running.mark.firstSequence, lines), true))
-            : yield* machine.writeLine(running.handle, lines.map(line).join("")).pipe(
-                Effect.as(true),
-                Effect.catchIf(
-                  (failure) =>
-                    (failure instanceof SandboxUnavailable &&
-                      failure.status === NOT_FOUND_STATUS) ||
-                    sessionEnding(failure),
-                  () => Effect.succeed(false),
-                ),
-              );
+          const wrote =
+            uploaded &&
+            (reads
+              ? exit === null &&
+                (yield* Effect.as(queued(agent, running.mark.firstSequence, lines), true))
+              : yield* machine.writeLine(running.handle, lines.map(line).join("")).pipe(
+                  Effect.as(true),
+                  Effect.catchIf(
+                    (failure) =>
+                      failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
+                    () => Effect.succeed(false),
+                  ),
+                ));
           if (wrote) {
             yield* opened.taken;
             // The installation token lives an hour, so each message sets a fresh one, after the

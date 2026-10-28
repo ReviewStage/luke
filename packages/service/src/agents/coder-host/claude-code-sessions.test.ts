@@ -1242,7 +1242,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect.each([
-    ["at its runner's stdin", (rest: string) => rest.endsWith("/stdin"), false],
+    ["at its upload of the message's files", (rest: string) => rest === "fs/write", false],
+    ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), false],
     ["at the relaunch's command", (rest: string) => rest === "cmd", true],
   ] as const)(
     "a message that meets its sandbox stopping %s resumes the sandbox and runs on a runner launched in its next session",
@@ -1251,16 +1252,24 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(api)),
-        );
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* runnerTook(agent.id);
+        sequence.next = 42;
         const first = api.commands[0];
         if (runnerExited && first !== undefined) first.exitCode = 0;
         api.stopsAt.call = call;
+        const pdf = Buffer.from("%PDF-1.7 the report").toString("base64");
 
-        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        const sent = yield* sessions.send(opened.sessionId, {
+          ...message(agent, "Now the emails."),
+          message: [
+            { type: "text" as const, text: "Now the emails." },
+            { type: "file" as const, data: pdf, mediaType: "application/pdf", filename: "r.pdf" },
+          ],
+        });
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes[0]?.status, "running");
@@ -1268,9 +1277,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
         assert.notEqual(relaunch?.sandboxSessionId, first?.sandboxSessionId);
-        const [, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        const [, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
         assert.ok(line.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+        assert.deepEqual(developerContent(line)[0], { type: "text", text: "Now the emails." });
       }),
   );
 
