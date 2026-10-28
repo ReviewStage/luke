@@ -563,6 +563,22 @@ export const taskPullRequestsSchema = EffectSchema.Struct({
 export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
 
 /**
+ * The reader's own pin of one agent on a plan (`agent_pin`), as a plan's
+ * is: the agent, the plan it stands on, when they pinned it, and where they
+ * dragged it in the sidebar's Pinned section (`pin-order.ts`), absent while
+ * it stands by `pinnedAt`. An agent with no plan carries its pin on its own
+ * row (`tasklessAgentSchema`).
+ */
+export const taskAgentPinSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  taskId: EffectSchema.String,
+  pinnedAt: countedNumber,
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type TaskAgentPin = typeof taskAgentPinSchema.Type;
+
+/**
  * What a task's coding agents are doing and what they published, in brief:
  * how many agents it has, how many of them are at work and how many failed,
  * the few agents the row names, and the pull requests they opened, each

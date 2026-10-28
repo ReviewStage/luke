@@ -14,7 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
-import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -44,7 +44,13 @@ const TASK: TaskSummary = {
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const PIN: PinnedTab = { task: TASK.id, tab: { agent: AGENT }, label: "Expiry job", at: 1 };
+const PIN: SidebarPin = {
+  task: TASK.id,
+  tab: { agent: AGENT },
+  label: "Expiry job",
+  at: 1,
+  model: "anthropic/claude-opus-5.5",
+};
 
 /** Each pull request read the service was asked, by agent. */
 let reads: string[] = [];
@@ -90,7 +96,7 @@ afterEach(() => {
 
 /** The pin's row drawn in the sidebar's list, answering its press. */
 function drawPin(
-  pin: PinnedTab = PIN,
+  pin: SidebarPin = PIN,
   task: TaskSummary = TASK,
   control: TasksControl = tasksControl({ tasks: [task] }),
 ): HTMLElement {
@@ -103,11 +109,12 @@ function drawPin(
         createElement(SidebarPinnedTab, {
           tasks: control,
           pin,
-          task,
+          on: { task },
           current: false,
           inSight: true,
           onOpen: () => undefined,
-          onOpenTask: () => undefined,
+          onOpenHolder: () => undefined,
+          onUnpin: () => undefined,
         }),
       ),
     ),
@@ -191,7 +198,7 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
 });
 
 test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {
-  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const held: TaskSummary = {
     ...TASK,
     agents: {
@@ -255,7 +262,7 @@ test("a pinned agent's tab of a task not open says its agent's name as the task'
 });
 
 test("a pinned Changes tab of an agent that shares its pull request with a newer one wears the open task's read of its own", () => {
-  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const newer = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const held: TaskSummary = {
     ...TASK,
@@ -310,7 +317,7 @@ test("a pinned Changes tab of an agent that shares its pull request with a newer
 });
 
 test("a pinned Changes tab naming a pull request by number keeps its pinned label where the task's pull requests stand in more than one repository, since a number names one only within its repository", () => {
-  const pin: PinnedTab = {
+  const pin: SidebarPin = {
     task: TASK.id,
     tab: { changes: AGENT, number: 42 },
     label: "#42 Old title",
@@ -341,7 +348,7 @@ test("a pinned Changes tab naming a pull request by number keeps its pinned labe
 });
 
 describe("a pinned Changes tab's card", () => {
-  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const summary: CodingAgentSummary = {
     id: AGENT,
     planId: TASK.id,

@@ -1348,9 +1348,9 @@ function PlanDocument({
                               unread={tasks.unreadTabs}
                               views={views}
                               pins={{
-                                pinned: sidePanel.pins,
-                                onPin: sidePanel.onPin,
-                                onUnpin: sidePanel.onUnpin,
+                                pinned: (agentId) =>
+                                  tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
+                                onPin: tasks.onPinAgent,
                               }}
                               keys={tasks.shown && !sideFocused}
                               shown={tasks.shown}

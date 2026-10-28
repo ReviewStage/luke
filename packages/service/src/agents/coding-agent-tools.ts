@@ -915,9 +915,6 @@ export const UPDATE_AGENT_REFUSAL = {
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
-  PIN_ON_TASK:
-    "Not changed: only an agent on no task is pinned in the sidebar; an agent on a task stands in " +
-    "its task's tabs, so leave pinned out.",
 } as const;
 
 /** The lead a refused choice of a change is said under. */
@@ -980,7 +977,7 @@ const UPDATE_AGENT_INPUT = Schema.Struct({
     describeWire(
       Schema.Boolean,
       "Whether the developer you work for keeps it pinned in their sidebar, the pin theirs alone; " +
-        "only an agent on no task is pinned, one on a task standing in its task's tabs.",
+        "an agent on a task or on none alike.",
     ),
   ),
   disabledServers: Schema.optionalKey(
@@ -1019,7 +1016,7 @@ export const UPDATE_AGENT_TOOL = {
     "Change a coding agent of your workspace by its id, as the developer's own menu, model " +
     "chip, and composer would, for the developer you work for: rename it (empty clears the " +
     "title), move it to another model and effort, and context window, from its next step, as " +
-    `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin an agent on no task in that ` +
+    `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin it in that ` +
     "developer's sidebar, replace the list of MCP servers switched off for it, or archive it " +
     "or bring it back. Name at least one change; an archive is checked first, and the rest " +
     "land together or not at all. Archive an idle helper agent whose work is done, such as one " +
@@ -2361,10 +2358,6 @@ export function runUpdateAgent(
       }
       // The catalog's own reading of the choice is written, a window the model does not offer apart dropped.
       const choice = accepted === undefined ? undefined : Result.getOrUndefined(accepted);
-      // A pin stands only on an agent with no task, in the sidebar's list of them; one on a task lives in its task's tabs.
-      if (pinned !== undefined && found.value.agent.taskId !== null) {
-        return agentToolRejected(UPDATE_AGENT_REFUSAL.PIN_ON_TASK);
-      }
       // An archive is checked first, so one refused, its agent working, leaves every change asked unwritten.
       // The archive and every other change are one transaction: a refused archive writes nothing, and
       // a change that finds no row takes the archive back with it.

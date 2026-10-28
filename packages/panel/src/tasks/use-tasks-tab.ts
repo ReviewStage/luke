@@ -4,7 +4,11 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentDefaultAnswer,
 } from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentAttachment,
+  CodingAgentSummary,
+  TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -20,6 +24,7 @@ import {
   type CodeRef,
   type RepositoryPin,
   type Task,
+  type TaskAgentPin,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -109,7 +114,6 @@ import {
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
-  agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
   choiceRequest,
@@ -162,10 +166,9 @@ import {
   drawsMacTerminal,
   drawsSubagent,
   drawsTerminal,
-  inColumn,
   isPinnable,
-  type PinnedTab,
   SIDE_PANEL_TAB,
+  type SidebarPin,
   type SidePanelControl,
   type SidePanelTab,
   type TaskHolds,
@@ -665,12 +668,12 @@ export interface TasksControl {
   boardView: BoardViewControl;
   /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (taskId: string, ref: CodeRef, commit: string | undefined) => void;
-  /** Opens a tab pinned to the sidebar: its task, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
-  onOpenPinnedTab: (pin: PinnedTab) => void;
+  /** Opens a tab-shaped pin of the sidebar's: its holder, the task where it is not the open one or the agent's own page, and the tab in its column, an agent's in the task's own and any other in the side panel. */
+  onOpenPinnedTab: (pin: SidebarPin) => void;
   /** Opens the tab closed latest again as it stood, on its task, opening the task first where it is not the open one; none while no closed tab is kept. */
   onReopenClosedTab: (() => void) | undefined;
   /** The pin the open task was last opened from, which the sidebar marks in the task's place for as long as the task stays open; none once a task is opened otherwise. */
-  chosenPin: PinnedTab | undefined;
+  chosenPin: SidebarPin | undefined;
   /** What the repository chip offers, in the composer and on the open task alike. */
   repositories: RepositoryChooser;
   /** The ask standing for the open task's chip to open its menu: which task it is about, and how many asks so far. */
@@ -789,11 +792,15 @@ export interface TasksControl {
   pinnedRepositories: readonly string[];
   /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
   onPinRepository: (repository: string, pinned: boolean) => void;
-  /** Pins an agent with no plan in the sidebar or unpins it, for the account alone: drawn at once, and put back with a toast if the service refuses. */
+  /** Pins an agent, on a plan or with none, in the sidebar or unpins it, for the account alone: drawn at once, and put back with a toast if the service refuses. */
   onPinAgent: (agentId: string, pinned: boolean) => void;
+  /** The account's pins of agents on a plan, the archived ones left out, which the sidebar's Pinned section draws beside the pinned plans; none while the list is not followed live. */
+  taskAgentPins: readonly TaskAgentPin[];
+  /** Every agent on a plan, the archived ones left out, as the list followed live names it; none while it is not. */
+  taskAgents: readonly CodingAgentSummary[];
   /**
    * Gives the pins a drag in the sidebar's Pinned section moved their new
-   * places, on the account: a plan's and an agent's with no plan, drawn
+   * places, on the account: a plan's and an agent's, drawn
    * there at once, and put back with a toast if the service refuses, along
    * with what `putBack` undoes. A tab pinned to the sidebar keeps its place
    * on this Mac instead (`sidePanel`), which the drop's `putBack` restores.
@@ -919,9 +926,30 @@ interface HistoryOpening {
   readonly spot: HistorySpot | undefined;
 }
 
+/**
+ * The pin the open place was last opened from, which the sidebar marks for
+ * as long as it stays open: one on a task while that task is the one bound,
+ * and one on an agent's own page while that page stands; none otherwise.
+ */
+function chosenPinOf(
+  chosen: PinChoice | undefined,
+  boundFor: string | undefined,
+  pageAgent: string | undefined,
+): SidebarPin | undefined {
+  if (chosen === undefined) return undefined;
+  const { pin } = chosen;
+  const open = "agent" in pin ? pin.agent === pageAgent : pin.task === boundFor;
+  return open ? pin : undefined;
+}
+
+/** Whether a pin of the sidebar's is of the task: a tab pinned on it, or an agent on it. */
+function pinOnTask(pin: SidebarPin, taskId: string): boolean {
+  return "task" in pin && pin.task === taskId;
+}
+
 /** A pin pressed in the sidebar, and the task open when it was, or its own once that opens. */
 interface PinChoice {
-  readonly pin: PinnedTab;
+  readonly pin: SidebarPin;
   readonly over: string | undefined;
 }
 
@@ -952,6 +980,12 @@ const NO_IDS: readonly string[] = [];
 
 /** No agent with no plan, before the list carries any. */
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
+
+/** No agent on a plan, the same array every render, while the list is not followed live. */
+const NO_TASK_AGENTS: readonly CodingAgentSummary[] = [];
+
+/** No pin of an agent on a plan, the same array every render. */
+const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const TASK_COPIED_NOTE = "Plan copied";
@@ -1423,9 +1457,6 @@ export function useTasksTab(input: {
   // pull request was read, or before a rename, catches up while its task is open.
   const pinLabels = useMemo(
     () => ({
-      agents: new Map(
-        (agents.agents ?? []).map((agent) => [agent.id, agentName(agent, agents.models)]),
-      ),
       pullRequests: new Map(
         [...agents.pullRequests].map(([agentId, pullRequest]) => [
           agentId,
@@ -1441,7 +1472,7 @@ export function useTasksTab(input: {
         ]),
       ),
     }),
-    [agents.agents, agents.models, agents.pullRequests, agents.numberedPullRequests],
+    [agents.pullRequests, agents.numberedPullRequests],
   );
   const { onRenamePins } = sidePanel;
   useEffect(() => {
@@ -1463,20 +1494,57 @@ export function useTasksTab(input: {
   const { onUnpin } = sidePanel;
   useEffect(() => {
     for (const pin of sidePanel.pins) {
-      if (pin.tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(pin.task)) continue;
-      const pinned = tasks.tasks.find((each) => each.id === pin.task);
+      if (!("task" in pin)) continue;
+      const { task: taskId, tab } = pin;
+      if (tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(taskId)) continue;
+      const pinned = tasks.tasks.find((each) => each.id === taskId);
       if (pinned === undefined) continue;
-      migratedPins.current.add(pin.task);
-      const { tab } = pin;
+      migratedPins.current.add(taskId);
       if (pinned.pinnedAt !== undefined) {
-        onUnpin(pin.task, tab);
+        onUnpin({ task: taskId }, tab);
         continue;
       }
       markTaskNow.current(pinned.id, TASK_MARK.PIN).then((changed) => {
-        if (changed) onUnpin(pin.task, tab);
+        if (changed) onUnpin({ task: taskId }, tab);
       });
     }
   }, [sidePanel.pins, tasks.tasks, onUnpin]);
+  // An agent's tab an earlier version pinned on this Mac becomes the agent's
+  // own pin on the account, standing where it was dragged, as a Plan tab's
+  // becomes its task's above: once the list names the agent, and let go of
+  // here only once the account's pin landed, so a refusal, or an agent the
+  // list does not name yet, keeps it for a later try, drawn nowhere. An
+  // agent already pinned only lets it go. Each agent is asked once a launch.
+  const carriedAsked = useRef(new Set<string>());
+  const { carried, onCarried } = sidePanel;
+  const { taskAgents = NO_TASK_AGENTS, taskAgentPins = NO_TASK_AGENT_PINS } = tasks;
+  useEffect(() => {
+    if (fixture !== undefined) return;
+    for (const pin of carried) {
+      if (carriedAsked.current.has(pin.agent)) continue;
+      const listed =
+        taskAgents.some((agent) => agent.id === pin.agent) ||
+        (tasklessAgents ?? []).some((agent) => agent.id === pin.agent);
+      if (!listed) continue;
+      carriedAsked.current.add(pin.agent);
+      const pinned =
+        taskAgentPins.some((each) => each.agentId === pin.agent) ||
+        (tasklessAgents ?? []).some(
+          (agent) => agent.id === pin.agent && agent.pinnedAt !== undefined,
+        );
+      if (pinned) {
+        onCarried(pin.agent);
+        continue;
+      }
+      const placed = pin.position === undefined ? {} : { position: pin.position };
+      act(ACT_KIND.CODING_AGENTS_PIN, { agentId: pin.agent, pinned: true, ...placed }).then(
+        (answer) => {
+          if ("agent" in answer) onCarried(pin.agent);
+        },
+        () => undefined,
+      );
+    }
+  }, [fixture, carried, taskAgents, taskAgentPins, tasklessAgents, onCarried, act]);
   // Main hears which agent's tab, or which task's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the task's
   // place, the side panel fills the window over the column, or the column
@@ -1558,7 +1626,8 @@ export function useTasksTab(input: {
   // lets it go. Note that this reads the task open rather than the one asked
   // for, because an ask the host refuses leaves the pin chosen.
   if (chosen !== undefined && openTaskId !== chosen.over) {
-    setChosen(openTaskId === chosen.pin.task ? { pin: chosen.pin, over: openTaskId } : undefined);
+    const pinTask = "task" in chosen.pin ? chosen.pin.task : undefined;
+    setChosen(openTaskId === pinTask ? { pin: chosen.pin, over: openTaskId } : undefined);
   }
   const listedId = listedWorkspace?.id;
   const tasksNow = tasks.tasks;
@@ -2230,7 +2299,7 @@ export function useTasksTab(input: {
   const opensNewTask = useAppSlice(OPENS_NEW_TASK);
   // A task opened from a list or a started task's toast, its pin no longer chosen.
   const openUnpinned = (taskId: string) => {
-    setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+    setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
     select(taskId);
   };
   // One opened from a list lands on its plan in a narrow room.
@@ -2880,8 +2949,13 @@ export function useTasksTab(input: {
   const taskOnScreen =
     shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
   const pinnedHere = (tab: StripTab) =>
-    isPinnable(tab) &&
-    sidePanel.pins.some((pin) => pin.task === viewed.activeTaskId && sameTab(pin.tab, tab));
+    isAgentTab(tab)
+      ? taskAgentPins.some((pin) => pin.agentId === tab.agent)
+      : isPinnable(tab) &&
+        viewed.activeTaskId !== undefined &&
+        sidePanel.pins.some(
+          (pin) => "task" in pin && pin.task === viewed.activeTaskId && sameTab(pin.tab, tab),
+        );
   useIdleTabs({
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     column:
@@ -3091,7 +3165,7 @@ export function useTasksTab(input: {
     // through `onRestoreTask` instead, standing the pane its step held.
     onSelect: guard(selectListed),
     onRestoreTask: guard((taskId: string) => {
-      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+      setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
       select(taskId);
     }),
     onShowAgent: guard((taskId: string, agentId: string) =>
@@ -3237,20 +3311,26 @@ export function useTasksTab(input: {
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
     onShowInbox: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
-    onOpenPinnedTab: guard((pin: PinnedTab) => {
+    onOpenPinnedTab: guard((pin: SidebarPin) => {
       const { tab } = pin;
       setChosen({ pin, over: openTaskId });
+      setHistoryFor(undefined);
+      // A tab pinned on an agent's own page opens that page, its panel on the tab.
+      if ("agent" in pin) {
+        setStandIn({ kind: STAND_IN.AGENT, agentId: pin.agent });
+        sidePanel.onShow(pin.agent, pin.tab);
+        return;
+      }
       if (pin.task !== tasks.activeTaskId) select(pin.task);
       setStandIn(undefined);
-      setHistoryFor(undefined);
-      if (!inColumn(tab)) {
+      if (!isAgentTab(tab)) {
         sidePanel.onShow(pin.task, tab);
         return;
       }
       if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
       mainTabs.onShow(pin.task, tab);
     }),
-    chosenPin: chosen !== undefined && chosen.pin.task === boundFor ? chosen.pin : undefined,
+    chosenPin: chosenPinOf(chosen, boundFor, agentView?.agentId),
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
     repositories,
     repositoryMenu,
@@ -3310,6 +3390,8 @@ export function useTasksTab(input: {
     taskSections,
     onWriteSections: writeSections,
     onPinAgent: pinAgent,
+    taskAgentPins,
+    taskAgents,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     back,

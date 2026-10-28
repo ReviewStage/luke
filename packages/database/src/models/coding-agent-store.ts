@@ -146,7 +146,7 @@ import type { ConversationTarget } from "./writer.js";
  * the developer archived is a stamp on its row: every list leaves it out
  * but the task's own where it asks for archived agents, and a read of the
  * agent by its id still finds it, so its transcript and pull request stand.
- * A pin of an agent with no plan is the reading member's own
+ * A pin of an agent, on a plan or with none, is the reading member's own
  * (`agent-pin.ts`), as a plan's is, so one member's pin reads pinned for
  * them alone, and is kept apart from the archive, so an agent archived and
  * brought back is pinned again.
@@ -3041,10 +3041,10 @@ export function unarchiveCodingAgentFrom(
  * The account's own pin of the agent set as asked: from now, or from the
  * instant already standing, so pinning twice moves nothing, at the position
  * given where one is; or taken away.
- * Every other member's pin stands as it was. Nothing for an agent of a
- * workspace the account is not in, which is neither pinned nor unpinned,
- * nor for an agent on a plan, which stands under its plan rather than in
- * the sidebar, so a pin of it would be read nowhere.
+ * Every other member's pin stands as it was. Nothing for an agent the
+ * account cannot read, which is neither pinned nor unpinned. An agent on a
+ * plan is pinned as one with none is, and stands in the sidebar's Pinned
+ * section beside the plans.
  */
 export function pinCodingAgent(
   userId: string,
@@ -3066,8 +3066,9 @@ export function pinCodingAgentCommitted(
   position?: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
   return Effect.gen(function* () {
-    const found = yield* findAgent({ userId, agentId });
-    if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
+    // Note that a pin is the member's reading of the agent, so it is gated as their read of it is, its task's reach among it.
+    const found = yield* findVisibleAgent({ userId, agentId });
+    if (Option.isNone(found)) return Option.none();
     const now = yield* DateTime.nowAsDate;
     const written = !pinned
       ? yield* deleteAgentPin({ userId, agentId })

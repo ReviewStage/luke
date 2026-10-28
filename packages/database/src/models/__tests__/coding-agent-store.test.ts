@@ -1428,18 +1428,21 @@ it.layer(getTestDB())("an agent's pin", (it) => {
     }),
   );
 
-  it.effect(
-    "an agent on a plan is not pinned, since only an agent with no plan stands in the sidebar",
-    () =>
-      Effect.gen(function* () {
-        const dean = yield* openAccount;
-        const workspace = yield* openWorkspace(dean);
-        const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
-        const { agentId } = yield* tasklessAgent(dean, workspace, { taskId: task.id });
+  it.effect("an agent on a plan is pinned as one with none is, the pinning member's alone", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const charles = yield* openAccount;
+      const workspace = yield* openWorkspace(dean);
+      yield* joinWorkspace(workspace, charles);
+      const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
+      const { agentId } = yield* tasklessAgent(dean, workspace, { taskId: task.id });
 
-        assert.ok(Option.isNone(yield* pinCodingAgent(dean, agentId, true)));
-        assert.deepEqual(yield* pinnedOnes(agentId), []);
-      }),
+      assert.equal(
+        Option.getOrUndefined(yield* pinCodingAgent(charles, agentId, true))?.id,
+        agentId,
+      );
+      assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: charles }]);
+    }),
   );
 
   it.effect("an agent's pins go with the agent, and an account's with the account", () =>

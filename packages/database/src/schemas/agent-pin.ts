@@ -4,7 +4,7 @@ import { user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
 
 /**
- * agent-pin.ts -- one coding agent with no plan an account pinned in its sidebar, and when.
+ * agent-pin.ts -- one coding agent, on a plan or with none, an account pinned in its sidebar, and when.
  *
  * A pin lives on the account rather than on the agent because it is the
  * developer's reading of their own work, as a plan's is (`plan-pin.ts`): an

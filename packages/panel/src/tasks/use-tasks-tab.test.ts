@@ -2766,10 +2766,70 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
   await act(async () => undefined);
   assert.deepEqual(asked(refused), [{ taskId: TASK.id, pinned: true }]);
   assert.deepEqual(
-    refused.control().sidePanel.pins.map(({ task }) => task),
+    refused.control().sidePanel.pins.map((pin) => ("task" in pin ? pin.task : pin.agent)),
     [TASK.id],
     "the refused task's tab stays pinned, the pinned task's goes",
   );
+});
+
+/** An agent pin's payload, read back as the act's own schema admits it. */
+const readAgentPin = Schema.decodeUnknownOption(
+  Schema.Struct({
+    agentId: Schema.String,
+    pinned: Schema.Boolean,
+    position: Schema.optionalKey(Schema.String),
+  }),
+);
+
+test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list names the agent, and leaves this Mac only once that pin landed", async () => {
+  const kept = () =>
+    window.localStorage.setItem(
+      "luke.sidePanel",
+      JSON.stringify({
+        open: true,
+        tabs: ["plan"],
+        width: 320,
+        pins: [{ task: TASK.id, tab: { agent: AGENT_ID }, label: "Agent", at: 1, position: "a3" }],
+      }),
+    );
+  const storedPins = () =>
+    JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").pins as unknown[];
+  const asked = (tab: ReturnType<typeof mount>) =>
+    tab.payloads
+      .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN)
+      .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
+  const naming = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+
+  kept();
+  const landed = mount(
+    { shown: true, tasks: listRead([listed()]) },
+    { [ACT_KIND.CODING_AGENTS_PIN]: () => Promise.resolve({ agent: RUNNING_AGENT }) },
+  );
+  await settle();
+  assert.deepEqual(asked(landed), [], "an agent the list does not name yet is asked nothing");
+  landed.stand({ tasks: naming });
+  await settle();
+  assert.deepEqual(asked(landed), [{ agentId: AGENT_ID, pinned: true, position: "a3" }]);
+  assert.deepEqual(landed.control().sidePanel.carried, []);
+  assert.deepEqual(storedPins(), [], "nor does it stay on this Mac");
+  closeWindow();
+
+  kept();
+  const refused = mount(
+    { shown: true, tasks: naming },
+    {
+      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+        Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
+    },
+  );
+  await settle();
+  assert.equal(asked(refused).length, 1);
+  assert.deepEqual(
+    refused.control().sidePanel.carried,
+    [{ agent: AGENT_ID, task: TASK.id, position: "a3" }],
+    "a refused pin keeps the tab's for the next launch",
+  );
+  assert.equal(storedPins().length, 1);
 });
 
 /** A start's agent, read back where it names one. */
@@ -3497,7 +3557,7 @@ it.effect(
       const pulls = { changes: AGENT_ID };
       act(() => panel().onOpenFile(FILE_REF));
       act(() => panel().onChoose(pulls));
-      act(() => panel().onPin(pulls, "Pull request"));
+      act(() => panel().onPin({ task: TASK.id }, pulls, "Pull request"));
       act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;
