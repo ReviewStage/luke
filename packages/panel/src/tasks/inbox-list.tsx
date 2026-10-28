@@ -136,6 +136,7 @@ import {
 import { NEW_THREAD } from "./inbox-compose.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
 import {
+  AddressedTo,
   addressedWords,
   HolderGlyph,
   InboxItemCard,
@@ -544,7 +545,13 @@ export function InboxItemRow({
               open={open}
               face={face}
               standing={false}
-              before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+              before={
+                <>
+                  {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+                  {/* Note that a row whose task line is not drawn says whom its thread is addressed to at its end instead. */}
+                  {line && chip ? null : <AddressedTo to={addressedTo} />}
+                </>
+              }
             />
           }
           metaAt={LIST_ROW_META.TITLE}
