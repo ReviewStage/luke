@@ -7,9 +7,10 @@
  * resolved first, on the resource's implementer, and each statement is
  * built with that account's id in it, as its held read's is, so it reads
  * that account's rows and no other's. A read that names where its rows
- * last stood (`after`) is held until they move past it, or answered
- * unchanged at the hold's end, its digests and no rows, and the desktop
- * asks again (`sealedParts`). The hold looks again every 3 s, or every
+ * last stood (`after`) is held until they move past it, each look reading
+ * only the digests Postgres computes of them, or answered unchanged at the
+ * hold's end, its digests and no rows, and the desktop asks again
+ * (`sealedParts`). The hold looks again every 3 s, or every
  * second for a read someone watches move, or, for a read Luke Sync wakes
  * (`../sync/live-queries.ts`), whenever a write to its topics lands, and
  * then answers with that write's txid (`liveQueryParts`). The account's
@@ -134,7 +135,7 @@ import {
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
-import { pollSealer } from "./poll-sealer.js";
+import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -147,12 +148,14 @@ export interface LiveProcedureSeams {
  * unchanged after 25, well inside a function's limit and the client's held
  * deadline.
  *
- * Note that the clock looks every 3 s, because each look reads every row of
- * the read back from the database whether or not one moved, and a window
- * holds a read for each task its Inbox lists: at every second that was most
- * of the database's traffic. A read someone watches move, an agent's
- * transcript, a Browser tab's pointer, or the commands a Mac waits to claim,
- * still looks every second (`WATCHED_LOOK`).
+ * Note that the clock looks every 3 s, because each look runs every part's
+ * statement whether or not a row moved, and a window holds a read for each
+ * task its Inbox lists: at every second that was most of the database's
+ * traffic. A look carries only each part's digest off the database
+ * (`heldParts`), but the database still reads every row to compute it. A
+ * read someone watches move, an agent's transcript, a Browser tab's pointer,
+ * or the commands a Mac waits to claim, still looks every second
+ * (`WATCHED_LOOK`).
  */
 const LIVE_POLL_HOLD = {
   LOOK: Duration.seconds(3),
@@ -178,23 +181,27 @@ function wokenBy<Part extends string>(
   ) as Record<Part, SealedLiveQueryWire>;
 }
 
-/** A read's parts as answered: the address it was read at, and each part's rows and digest. */
+/** A read's parts as answered: the address it was read at, and each part's digest, with its rows where they were read. */
 interface ReadParts<Part extends string> {
   readonly url: string;
   readonly queries: Record<Part, SealedLiveQueryWire>;
 }
 
-/** Each part's rows read now, inline at the poll address (`pollSealer`); unavailable where they could not be read. */
+/** Which of the sealer's reads answers a part: its digest alone, or its rows with it. */
+type PartRead = (sealer: LiveSealer) => LiveSealer["seal"];
+
+/** Each part read now at the poll address (`pollSealer`), as `how` reads it; unavailable where it could not be read. */
 function readParts<Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
+  how: PartRead,
 ): Effect.Effect<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (sql) => {
     const sealer = pollSealer(sql);
+    const read = how(sealer);
     return Effect.map(
       Effect.forEach(
         Object.entries<LiveStatement>(statements),
-        ([part, statement]) =>
-          Effect.map(sealer.seal(statement), (sealed) => [part, sealed] as const),
+        ([part, statement]) => Effect.map(read(statement), (sealed) => [part, sealed] as const),
         { concurrency: LIVE_PART_CONCURRENCY },
       ),
       (sealed) => ({
@@ -207,35 +214,30 @@ function readParts<Part extends string>(
 }
 
 /**
- * A read held until `moved` says it moved, waiting between looks on a
- * watch of the topics (or, where none wakes it, the look), and answered
- * then, carrying the txids of the writes that woke it, which is how the
- * desktop confirms a write once the read it follows shows it; or answered
- * unchanged at the hold's end, every part with its rows left out.
+ * A read held until `moved` says its digests moved, looking between waits
+ * on a watch of the topics (or, where none wakes it, the look) at its
+ * digests alone (`looked`), so a hold over rows that never move carries
+ * none of them off the database. Once they moved, its rows are read
+ * (`read`) and answered with their own digests, and with the txids of the
+ * writes that woke it, which is how the desktop confirms a write once the
+ * read it follows shows it. At the hold's end it looks once more, and
+ * answers that look, its digests and no rows, where nothing moved.
  */
 const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string, R>(
-  polled: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
-  moved: (read: ReadParts<Part>) => boolean,
+  looked: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
+  read: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
+  moved: (standing: ReadParts<Part>) => boolean,
   topics: readonly SyncTopic[],
   look: Duration.Duration,
 ): Effect.fn.Return<ReadParts<Part>, HostedRefusal, R> {
-  const woken = yield* heldUntil(polled, moved, topics, look, LIVE_POLL_HOLD.HOLD);
+  const woken = yield* heldUntil(looked, moved, topics, look, LIVE_POLL_HOLD.HOLD);
   if (Option.isSome(woken)) {
-    const { read, txids } = woken.value;
-    return { ...read, queries: wokenBy(read.queries, txids) };
+    // Note that the rows are read after the look that saw them move, so they are at least as new as it, and are answered with their own digests rather than its.
+    const answer = yield* read;
+    return { ...answer, queries: wokenBy(answer.queries, woken.value.txids) };
   }
-  const standing = yield* polled;
-  if (moved(standing)) return standing;
-  return {
-    ...standing,
-    // SAFETY: every part is kept, each with its rows left out.
-    queries: Object.fromEntries(
-      Object.entries<SealedLiveQueryWire>(standing.queries).map(([part, sealed]) => {
-        const { rows: _rows, ...unchanged } = sealed;
-        return [part, unchanged];
-      }),
-    ) as Record<Part, SealedLiveQueryWire>,
-  };
+  const standing = yield* looked;
+  return moved(standing) ? yield* read : standing;
 });
 
 /**
@@ -249,11 +251,13 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   topics: readonly SyncTopic[] = NO_TOPICS,
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
 ): Effect.fn.Return<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
+  const read = readParts(statements, (sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
-  if (after === undefined) return yield* readParts(statements);
+  if (after === undefined) return yield* read;
   return yield* heldParts(
-    readParts(statements),
-    (read) => liveDigestOf(read.queries) !== after,
+    readParts(statements, (sealer) => sealer.digest),
+    read,
+    (standing) => liveDigestOf(standing.queries) !== after,
     topics,
     look,
   );
@@ -282,13 +286,14 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
 
 /**
  * Whether a cursor read moved for its reader: its cursor no longer stands,
- * so its cursor parts are answered whole, a cursor part read a row past it,
- * or its other parts moved past `after`.
+ * so its cursor parts are answered whole, a cursor part stands at a row past
+ * it (its digest is not that of no rows, which a look at its digest alone
+ * tells as its rows would), or its other parts moved past `after`.
  */
 function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string | undefined) {
   const pastCursor = Object.values<SealedLiveQueryWire>(read.queries).some(
-    ({ cursor, rows }) =>
-      cursor !== undefined && (cursor.past === undefined || (rows?.length ?? 0) > 0),
+    ({ cursor, digest }) =>
+      cursor !== undefined && (cursor.past === undefined || digest !== NO_ROWS_DIGEST),
   );
   return pastCursor || liveDigestOf(read.queries) !== after;
 }
@@ -319,30 +324,38 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
     return yield* liveQueryParts(query, params, asked, look);
   }
   const followed: ReadonlySet<string> = new Set(following.parts);
-  const polled = Effect.gen(function* () {
-    // Note that where it stands is read before its rows, so a write that lands between the two is read again past the next cursor rather than missed.
-    const standing = yield* following
-      .standing(params)
-      .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
-    const past = standing.stands(cursor) ? cursor : undefined;
-    const statements = query.statements(params, past);
-    if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    const read = yield* readParts(statements.value);
-    const at = { ...(past === undefined ? undefined : { past }), next: standing.next };
-    return {
-      ...read,
-      // SAFETY: every part is kept, each cursor part with where it stands beside it.
-      queries: Object.fromEntries(
-        Object.entries<SealedLiveQueryWire>(read.queries).map(([part, sealed]) => [
-          part,
-          followed.has(part) ? { ...sealed, cursor: at } : sealed,
-        ]),
-      ) as Record<Part, SealedLiveQueryWire>,
-    };
-  });
+  const polled = (how: PartRead) =>
+    Effect.gen(function* () {
+      // Note that where it stands is read before its rows, so a write that lands between the two is read again past the next cursor rather than missed.
+      const standing = yield* following
+        .standing(params)
+        .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+      const past = standing.stands(cursor) ? cursor : undefined;
+      const statements = query.statements(params, past);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      const read = yield* readParts(statements.value, how);
+      const at = { ...(past === undefined ? undefined : { past }), next: standing.next };
+      return {
+        ...read,
+        // SAFETY: every part is kept, each cursor part with where it stands beside it.
+        queries: Object.fromEntries(
+          Object.entries<SealedLiveQueryWire>(read.queries).map(([part, sealed]) => [
+            part,
+            followed.has(part) ? { ...sealed, cursor: at } : sealed,
+          ]),
+        ) as Record<Part, SealedLiveQueryWire>,
+      };
+    });
+  const read = polled((sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
-  if (after === undefined) return yield* polled;
-  return yield* heldParts(polled, (read) => cursorMoved(read, after), query.topics(params), look);
+  if (after === undefined) return yield* read;
+  return yield* heldParts(
+    polled((sealer) => sealer.digest),
+    read,
+    (standing) => cursorMoved(standing, after),
+    query.topics(params),
+    look,
+  );
 });
 
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
