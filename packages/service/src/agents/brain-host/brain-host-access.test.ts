@@ -16,9 +16,9 @@ import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { CODER_DEPLOYMENT_TURNS } from "../coder-host/channel.js";
 import {
   actedForAccount,
+  DEPLOYMENT_ACT,
   DEPLOYMENT_PRESENCE,
   deploymentActor,
   lukeAccount,
@@ -234,9 +234,15 @@ test("who reaches the runtime session and the conversation reads from the rows",
 /** The deployment acting for an account: admitted for its turns on a message and refused, under its own secret, for everything else. */
 
 const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
+/** Every kind of turn admitted, opening and following up, so the door's own rules are what a request meets. */
+const EVERY_TURN = {
+  [BRAIN_HOST_TURN.TYPED]: true,
+  [BRAIN_HOST_TURN.SPOKEN]: true,
+  [BRAIN_HOST_TURN.UNHEARD]: true,
+} as const;
 const DEPLOYMENT = {
   secret: Redacted.make(DEPLOYMENT_SECRET),
-  admits: CODER_DEPLOYMENT_TURNS,
+  admits: { [DEPLOYMENT_ACT.OPEN]: EVERY_TURN, [DEPLOYMENT_ACT.FOLLOW_UP]: EVERY_TURN },
   presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
   streams: true,
 };

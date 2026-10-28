@@ -3038,7 +3038,7 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
   assert.equal(document.activeElement, press);
 });
 
-test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link", async () => {
+test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link and whose Run now runs it", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   const row = rowOf(page, SWEEP.name);
@@ -3077,7 +3077,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
     assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
     assert.deepEqual(
       items().map((item) => item.textContent),
-      ["Copy link", "Show details⌥↓", "Delete"],
+      ["Copy link", "Run now", "Show details⌥↓", "Delete"],
     );
     await closeMenu();
   }
@@ -3085,6 +3085,11 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
   await settle();
   await act(async () => menuItem("Copy link").click());
   assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
+  doors[0]?.();
+  await settle();
+  await act(async () => menuItem("Run now").click());
+  await settle();
+  assert.deepEqual(runsAsked, [SWEEP.id]);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {

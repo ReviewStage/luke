@@ -233,7 +233,6 @@ export function composeDesktop(
       const windows = createWindowService({
         config,
         state,
-        native,
         operator,
         run,
         launchStanding: quit.launchStanding,
@@ -315,15 +314,6 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showSettings();
         },
-      });
-
-      // The one edge no service could take as a constructor argument, because
-      // it is a cycle the concerns genuinely have: the windows draw what the
-      // operator hears while the operator is reached over the host's own
-      // server. Reading it before this has run throws by name rather than
-      // answering nothing.
-      operator.link({
-        sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
       });
 
       return {

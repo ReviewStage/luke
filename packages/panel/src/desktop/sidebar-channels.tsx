@@ -1,8 +1,10 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { readingWords } from "@luke/features/words";
 import {
+  BUTTON_SIZE,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  MoreButton,
   NAV_CURRENT,
   NavItem,
   NavItemSkeleton,
@@ -13,6 +15,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
+import { useRef } from "react";
 import { ChannelCard } from "../tasks/channel-card.js";
 import { useChannelMenu } from "../tasks/channel-menu.js";
 import { CHANNEL_SECTIONS, channelSections, channelUnread } from "../tasks/channels-model.js";
@@ -38,10 +41,11 @@ import { needsYouNoun } from "./places-waiting.js";
  * and opens it once made, or lists the archived ones to open or unarchive
  * (`archived-channels-dialog.tsx`). While the channels are first read, a
  * few rows' blocks stand in their place (`SidebarChannelRowsSkeleton`), and
- * where that read failed, it says so with Retry. A right-click offers the
- * channel's menu (`channel-menu.tsx`): Copy link, Mark as read, and Edit on
- * every channel, #general's name staying as it is, and Archive on any but
- * #general, which is never archived. Making and editing ask through
+ * where that read failed, it says so with Retry. The ⋯ a hovered row wears,
+ * and a right-click anywhere on it, offer the channel's menu
+ * (`channel-menu.tsx`): Copy link, and Mark as read while it is unread;
+ * Edit on every channel, #general's name staying as it is; and last and
+ * alone, Archive on any but #general, which is never archived. Making and editing ask through
  * `channel-dialog.tsx`; archiving the channel shown moves the window to
  * #general (`use-channels.ts`). Every answer waits on the service, and a
  * refusal stands in the card until what was asked changes.
@@ -79,6 +83,7 @@ function ChannelRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  const ellipsis = useRef<HTMLButtonElement | null>(null);
   return (
     <>
       <Tooltip
@@ -95,7 +100,17 @@ function ChannelRow({
             noun: needsYouNoun(channel.waiting),
             tone: STATUS_TONE.ATTENTION,
           }}
-          contextMenu={menu.contextMenu()}
+          contextMenu={menu.contextMenu(ellipsis)}
+          actions={
+            groups.length === 0 ? null : (
+              <MoreButton
+                ref={ellipsis}
+                thing="Channel"
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
+            )
+          }
           onClick={onOpen}
         >
           {channel.name}

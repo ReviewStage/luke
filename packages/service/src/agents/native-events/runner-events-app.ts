@@ -377,7 +377,7 @@ function landWrite(
       );
     case NATIVE_WRITE.TAKE_LINE:
       // A typed line awaits its turn as a row; a call's ask has none and is bound by its delivery,
-      // the line's id the ask named (`brain-host/brain-ask.ts`), so the call follows the turn.
+      // the line's id the ask named, so the call follows the turn.
       return Effect.flatMap(
         ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
         (bound) =>
@@ -644,7 +644,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     yield* settleTaskIfFinished(target.userId, taskId);
   }
   // A call's ask stopped before the runner took its line ends the turn it opened, as a Stop after
-  // its binding does (`brain-host/brain-ask.ts`), once the batch's writes stand, and
+  // its binding does, once the batch's writes stand, and
   // ahead of anything slower, as a title, so the runner hears the Stop at once.
   for (const turnId of applied.value.stops) {
     yield* stopTurnOfAsk(

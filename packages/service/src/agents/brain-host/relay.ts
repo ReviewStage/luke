@@ -217,8 +217,7 @@ type RelayEffect<Value> = Effect.Effect<Value, QueryError | Schema.SchemaError, 
 /**
  * The ask record a turn binds the asks delivered into it to, and the Stop a
  * waiting ask took, carried the moment the turn starts. A spoken ask that
- * joined a typed turn keeps its own Stop: the turn runs on, and only the
- * voice's following of the ask ends (`voice/live-agent.ts`).
+ * joined a typed turn keeps its own Stop: the turn runs on.
  */
 export interface RelayAskSeams {
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */

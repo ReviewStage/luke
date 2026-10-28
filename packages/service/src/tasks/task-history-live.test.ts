@@ -7,9 +7,7 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { planRevision } from "@luke/database/schemas/plan-revision";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { VOICE_DELEGATION_MODE } from "@luke/database/voice-vocabulary";
 import { revisionsOfLiveRows, taskHistoryLiveRowsSchema } from "@luke/features/live-wire";
 import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS } from "@luke/features/task-wire";
 import { Duration, Effect, Option, Schema } from "effect";
@@ -74,13 +72,6 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
         assert.deepEqual(yield* agrees, { revisions: [] });
 
         const db = yield* Database;
-        yield* db.insert(voiceSessions).values({
-          userId: owner,
-          taskId: task.id,
-          liveSessionId: CALL,
-          delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          model: "gpt-realtime",
-        });
         yield* saveNotes(binding, [added("Context", "A member cannot bring a teammate in.")], {
           actor: PLAN_ACTOR.NOTETAKER,
           liveSessionId: CALL,
@@ -107,7 +98,6 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
         yield* restoreRevision(binding, 1);
         const written = yield* agrees;
         assert.equal(written.revisions.length, 4);
-        assert.ok(written.revisions.some((line) => line.callId !== undefined));
         assert.ok(written.revisions.some((line) => line.restoredFrom !== undefined));
 
         // A history longer than a page answers its newest page and where the older one is read from.

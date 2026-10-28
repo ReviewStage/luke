@@ -20,8 +20,8 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The Automations pages' acts, through the act port as a window calls them:
- * only a panel of this build's own renderer asks; the voice and call
- * windows, and a frame this build does not trust, are refused in each
+ * only a panel of this build's own renderer asks; any other
+ * window, and a frame this build does not trust, are refused in each
  * kind's own words before the host is asked; and a panel's ask reaches the
  * host with its payload as the panel sent it. A follow's stream has the
  * host follow what it names from its first stream to its last, and hears
@@ -31,9 +31,8 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const ports: TestActPort<unknown>[] = [];
 
@@ -152,14 +151,12 @@ function windowPort(actor: typeof PANEL, trusted = true) {
   return { client, asked };
 }
 
-it("the voice and call windows are refused every automation act in the kind's own words, and the host is not asked", async () => {
-  for (const actor of [VOICE, CALL]) {
-    const { client, asked } = windowPort(actor);
-    for (const act of ACTS) {
-      assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
-    }
-    assert.deepEqual(asked, []);
+it("a window that is not a panel is refused every automation act in the kind's own words, and the host is not asked", async () => {
+  const { client, asked } = windowPort(OTHER_WINDOW);
+  for (const act of ACTS) {
+    assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
   }
+  assert.deepEqual(asked, []);
 });
 
 it("a frame this build does not trust is refused every automation act, even as a panel, and the host is not asked", async () => {

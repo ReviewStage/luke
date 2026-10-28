@@ -10,7 +10,6 @@ import { CONVERSATION_RUNTIME, type ConversationRuntime } from "../../storage-vo
 import { getTestDB, joinWorkspace, startTask } from "../../testing/index.js";
 import { VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
-import { readAgentTranscript } from "../transcript-store.js";
 import { voiceSessionRecord } from "../voice-session-record.js";
 
 /**
@@ -188,11 +187,10 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
   );
 
   it.effect(
-    "a new call into an agent reads back its own calls alone, and its transcript is those calls, never a sibling agent's or the task's own",
+    "a new call into an agent reads back its own calls alone, never a sibling agent's or the task's own",
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount;
-        const stranger = yield* openAccount;
         const task = yield* startTask(userId, { name: "Billing export" });
         const agent = yield* startAgent(userId, task.id);
         const sibling = yield* startAgent(userId, task.id);
@@ -205,52 +203,36 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           earlier.map((line) => line.text),
           ["Ship the CSV first.", "Starting on it."],
         );
-
-        const transcript = Option.getOrThrow(yield* readAgentTranscript(userId, agent.id));
-        assert.deepEqual(
-          transcript.calls.flatMap((call) =>
-            call.messages.flatMap((message) => message.parts.map((part) => part.text)),
-          ),
-          ["Ship the CSV first.", "Starting on it."],
-        );
-        assert.ok(Option.isNone(yield* readAgentTranscript(stranger, agent.id)));
       }),
   );
 });
 
 it.layer(getTestDB())("a call into a member's operator", (it) => {
-  it.effect(
-    "the operator is held for a call, and its calls' transcript read, by its member alone and by no teammate",
-    () =>
-      Effect.gen(function* () {
-        const member = yield* openAccount;
-        const teammate = yield* openAccount;
-        const { workspaceId } = yield* startTask(member, { name: "Billing export" });
-        yield* joinWorkspace(workspaceId, teammate);
-        const operator = Option.getOrThrow(
-          yield* createCodingAgent(member, {
-            taskId: null,
-            organizationId: workspaceId,
-            planSnapshot: null,
-            prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        ).agent;
+  it.effect("the operator is held for a call by its member alone and by no teammate", () =>
+    Effect.gen(function* () {
+      const member = yield* openAccount;
+      const teammate = yield* openAccount;
+      const { workspaceId } = yield* startTask(member, { name: "Billing export" });
+      yield* joinWorkspace(workspaceId, teammate);
+      const operator = Option.getOrThrow(
+        yield* createCodingAgent(member, {
+          taskId: null,
+          organizationId: workspaceId,
+          planSnapshot: null,
+          prompt: null,
+          kind: CODING_AGENT_KIND.OPERATOR,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: null,
+        }),
+      ).agent;
 
-        assert.equal(
-          (yield* record.heldAgent({ userId: member, agentId: operator.id }))?.agentId,
-          operator.id,
-        );
-        assert.ok(Option.isSome(yield* readAgentTranscript(member, operator.id)));
-        assert.equal(
-          yield* record.heldAgent({ userId: teammate, agentId: operator.id }),
-          undefined,
-        );
-        assert.ok(Option.isNone(yield* readAgentTranscript(teammate, operator.id)));
-      }),
+      assert.equal(
+        (yield* record.heldAgent({ userId: member, agentId: operator.id }))?.agentId,
+        operator.id,
+      );
+      assert.equal(yield* record.heldAgent({ userId: teammate, agentId: operator.id }), undefined);
+    }),
   );
 });

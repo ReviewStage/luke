@@ -565,11 +565,11 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row, and says Link copied", async () => {
+test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
   const copied = installClipboard();
   mount(createElement(ToastHost));
   const opened = openTab();
-  // The title's ⋯ stands over the plan, which the side panel shows.
+  // The title's Copy link button stands over the plan, which the side panel shows.
   const tasks: TasksControl = {
     ...opened.tasks,
     workspaces: [{ ...PERSONAL, slug: "dean" }],
@@ -584,10 +584,11 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
 
   openMenu(mountToolbar(tasks));
   await copyFromMenu();
-  const title = document.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
-  assert.ok(title, "the title has a ⋯");
-  openMenu(title);
-  await copyFromMenu();
+  const title = document.querySelector<HTMLButtonElement>(
+    '.luke-page-header-actions button[aria-label="Copy link"]',
+  );
+  assert.ok(title, "the title has a Copy link button");
+  await act(async () => title.click());
   unmountAll();
   mount(createElement(ToastHost));
   rightClick(mountSidebarTask(tasks, TASK, opened.asked), 40, 60);

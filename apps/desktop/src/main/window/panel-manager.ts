@@ -24,17 +24,12 @@ import {
 import { windowPushes } from "./window-pushes";
 import { trafficLightsAt } from "./zoom";
 
-interface PanelDuck {
-  setExchangeActive(active: boolean): void;
-}
-
 interface PanelManagerOptions {
   runMode: RunMode;
   /** The native material its windows are drawn on (`window-material.ts`); the sidebar's where unset. */
   material?: WindowMaterial | undefined;
   /** The named development instance this run is, which every window's title then carries; none for the plain one. */
   instance?: string | undefined;
-  mediaDuck: PanelDuck;
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
@@ -53,8 +48,7 @@ interface PanelManagerOptions {
   closing: () => boolean;
   /**
    * The last panel window went down on its own. All panels closed is how
-   * this process decides it is done, and `window-all-closed` can no longer
-   * say so once a hidden window of Luke's own stands beside them.
+   * this process decides it is done.
    */
   onAllClosed?: () => void;
   /**
@@ -149,7 +143,6 @@ function desktopBounds(display: Display): Rectangle {
 export class PanelManager {
   readonly #runMode: RunMode;
   readonly #instance: string | undefined;
-  readonly #mediaDuck: PanelDuck;
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
@@ -171,7 +164,6 @@ export class PanelManager {
     this.#runMode = options.runMode;
     this.#material = options.material ?? WINDOW_MATERIAL.SIDEBAR;
     this.#instance = options.instance;
-    this.#mediaDuck = options.mediaDuck;
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
@@ -284,14 +276,6 @@ export class PanelManager {
     this.#focusWindow(this.#windows.get(displayId));
   }
 
-  /**
-   * Whether a spoken exchange is live, as the main process derives it from the
-   * voice window's report. The media duck follows it directly.
-   */
-  setVoiceExchange(active: boolean): void {
-    this.#mediaDuck.setExchangeActive(active);
-  }
-
   /** How many panel windows stand — the count the process's lifetime is decided by. */
   get standing(): number {
     let count = 0;
@@ -394,11 +378,7 @@ export class PanelManager {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: trafficLightsAt(zoomFactor),
       webPreferences: {
-        ...hardenedWebPreferences({
-          preloadPath: this.#preloadPath,
-          runMode: this.#runMode,
-          backgroundThrottling: true,
-        }),
+        ...hardenedWebPreferences({ preloadPath: this.#preloadPath, runMode: this.#runMode }),
         zoomFactor,
       },
     };
@@ -410,9 +390,8 @@ export class PanelManager {
     refuseForeignNavigation(window, this.#rendererUrl);
     this.#followVisibility(window);
     // A page that stops answering is reported once per stretch, as it answers
-    // again or the window closes on it; unlike the voice window's, it is not
-    // reloaded, since it may answer again and the panel holds what the
-    // developer was doing. One whose renderer died has lost that already.
+    // again or the window closes on it; it is not reloaded, since it may
+    // answer again and the panel holds what the developer was doing. One whose renderer died has lost that already.
     this.#followResponsiveness?.(window);
     const revival = this.#followDeaths(window);
     const drew = () => {
@@ -473,7 +452,7 @@ export class PanelManager {
 
   /**
    * Reloads the window's page each time its renderer dies or fails to load,
-   * after a pause and within the voice window's bound (`renderer-revival.ts`),
+   * after a pause and within a bound (`renderer-revival.ts`),
    * so a blank window stands only for that pause. Past the bound the window
    * is shown with the question of reloading once more, since a window that
    * crash-loops unasked would spin the process, or quitting. A quit's own
@@ -488,8 +467,8 @@ export class PanelManager {
         void askReloadPanel(window).then((reload) => {
           if (window.isDestroyed() || this.#closing()) return;
           if (!reload) app.quit();
-          // Note that a quit a live call holds leaves the launch standing,
-          // and declining to end the call keeps it so, so the page is loaded
+          // Note that a quit held for its question leaves the launch
+          // standing, and declining it keeps it so, so the page is loaded
           // once more rather than left blank with no question on it.
           if (!this.#closing()) revival.restart();
         });

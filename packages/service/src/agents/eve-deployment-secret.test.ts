@@ -30,8 +30,7 @@ import { productionCoderHostSeams } from "./coder-host/production.js";
  * (`apps/dev/channels/eve.ts`), read from
  * `EVE_DEPLOYMENT_SECRET`. The cron's `CRON_SECRET`, which Vercel's scheduler
  * sends as its bearer, opens nothing there: not a typed turn minted as the
- * account's own principal, not a spoken one, and no cancel, retire, or
- * stream read. Nor does an eve secret that is blank, which reads as unset,
+ * account's own principal, and no cancel or retire. Nor does an eve secret that is blank, which reads as unset,
  * or one that is the cron's own value, which would hand the scheduler's
  * bearer eve's door again; and a bare `Bearer` opens nothing whatever the
  * deployment holds. The door here is composed exactly as that file
@@ -117,18 +116,14 @@ function underAuthorization(
 
 /**
  * Everything the deployment asks of the eve service under an authorization:
- * each kind of turn opened and followed up, a call speaking into a coding
- * agent among them, a cancel, a retire, and a stream read.
+ * a typed turn opened and followed up, a cancel, and a retire.
  */
 function deploymentAsks(authorization: string): readonly Request[] {
   return [
     underAuthorization(authorization, "/eve/v1/session", "POST", BRAIN_HOST_TURN.TYPED),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}`, "POST", BRAIN_HOST_TURN.TYPED),
-    underAuthorization(authorization, "/eve/v1/session", "POST", BRAIN_HOST_TURN.SPOKEN),
-    underAuthorization(authorization, `/eve/v1/session/${SESSION}`, "POST", BRAIN_HOST_TURN.SPOKEN),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/cancel`, "POST"),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/reset`, "POST"),
-    underAuthorization(authorization, `/eve/v1/session/${SESSION}/stream`, "GET"),
   ];
 }
 
@@ -148,10 +143,10 @@ const verdictsUnder = (door: EveChannelInput["auth"], authorization: string) =>
   verdicts(door, deploymentAsks(authorization));
 
 /** Every ask refused at the door as nobody signed in. */
-const REFUSED_EVERYWHERE = Array.from({ length: 7 }, () => 401);
+const REFUSED_EVERYWHERE = Array.from({ length: 4 }, () => 401);
 
 it.effect(
-  "the door admits the deployment acting for the account under EVE_DEPLOYMENT_SECRET, and under the cron's CRON_SECRET admits nobody: no typed turn as the account, no spoken turn, no cancel, no retire, and no stream read",
+  "the door admits the deployment acting for the account under EVE_DEPLOYMENT_SECRET, and under the cron's CRON_SECRET admits nobody: no typed turn as the account, no cancel, and no retire",
   () =>
     Effect.gen(function* () {
       const door = yield* doorFrom({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET });
@@ -159,7 +154,7 @@ it.effect(
       const cron = yield* verdictsUnder(door, `Bearer ${CRON_SECRET}`);
       assert.deepEqual(
         own,
-        Array.from({ length: 7 }, () => ACCOUNT),
+        Array.from({ length: 4 }, () => ACCOUNT),
       );
       assert.deepEqual(cron, REFUSED_EVERYWHERE);
     }),

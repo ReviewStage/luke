@@ -12,17 +12,6 @@ const voiceViewAtom: Atom.Atom<VoiceView> = Atom.map(
   (voice) => voice?.view ?? IDLE_VOICE_VIEW,
 );
 
-/**
- * The panel's view of the conversation the hidden voice window holds. The
- * panel owns none of it: the voice window reports one snapshot to the main
- * process, which carries it in the app-state document every window reads, so
- * every display draws the same voice at the same instant. A voice window
- * that went away leaves no view behind, and an idle voice stands in its place.
- */
-export function useVoiceView(): { view: VoiceView } {
-  return { view: useAppSlice(voiceViewAtom) };
-}
-
 /** The voice as the voice window last reported it, read alone. */
 export function useStandingVoiceView(): VoiceView {
   return useAppSlice(voiceViewAtom);

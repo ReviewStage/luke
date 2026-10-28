@@ -25,7 +25,7 @@ import { actPort } from "./base.js";
  * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: the skills listed, one read, a paste previewed, a previewed skill's `SKILL.md` read, a paste installed, one toggled, checked for an update, updated, shared with a workspace, or removed.
  *
  * The one check these procedures make is who asked: only a panel draws
- * Settings, so the takeover and the hidden voice window are refused in each
+ * Settings, so the takeover and any other window are refused in each
  * one's own sentence. What the service answers comes back as the panel's own
  * answer, or why there is none. Nothing is held here.
  */

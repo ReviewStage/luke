@@ -2,11 +2,13 @@ import {
   AVATAR_SIZE,
   Avatar,
   Badge,
+  BUTTON_SIZE,
   ChevronDownIcon,
   ComposeIcon,
   FolderIcon,
   GearIcon,
   InboxIcon,
+  MoreButton,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -22,7 +24,8 @@ import { CatalogSection } from "../section";
 
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
- * the one shown, one unavailable, one unread; an account's menu trigger;
+ * the one shown, one unavailable, one unread; a place whose ⋯ comes in
+ * over its count under the pointer; an account's menu trigger;
  * links with addresses of their own; long names in a narrow column; and
  * rows while the places they list are read.
  */
@@ -83,6 +86,22 @@ function Account(): React.JSX.Element {
   );
 }
 
+/** A place with acts of its own: its ⋯ stands over its count while it is hovered or reached for. */
+function WithActions(): React.JSX.Element {
+  const menu = useMenu(true);
+  return (
+    <div className="catalog-narrow">
+      <NavItem
+        icon={<GearIcon />}
+        count={{ value: 2, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
+        actions={<MoreButton thing="Channel" size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />}
+      >
+        launch
+      </NavItem>
+    </div>
+  );
+}
+
 /** Places with addresses of their own: a plain press stays here, a modified one opens a tab. */
 function Links(): React.JSX.Element {
   const [shown, setShown] = useState("dashboard");
@@ -113,6 +132,9 @@ function NavItems(): React.JSX.Element {
     <>
       <CatalogSection id="nav-item-places" title="Places, with counts, marks, and chords">
         <Places />
+      </CatalogSection>
+      <CatalogSection id="nav-item-actions" title="A place with a ⋯ of its own">
+        <WithActions />
       </CatalogSection>
       <CatalogSection id="nav-item-identity" title="Who: a menu's trigger">
         <Account />

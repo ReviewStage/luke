@@ -26,7 +26,7 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
+import type { BrainHostTurn } from "../brain-host/bounds.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import { isOperator } from "../steward.js";
@@ -130,11 +130,7 @@ const taskOf = (
     if (Option.isNone(stored)) return undefined;
     const threads = Option.getOrElse(comments, () => []);
     const key = taskKey(stored.value, threads);
-    // Note that a turn opened on a spoken line, heard or not, carries no task in its message.
-    const opening =
-      since === undefined &&
-      turn.kind !== BRAIN_HOST_TURN.SPOKEN &&
-      turn.kind !== BRAIN_HOST_TURN.UNHEARD;
+    const opening = since === undefined;
     const saved =
       since !== undefined &&
       savedByAnotherSince(
@@ -153,8 +149,8 @@ const taskOf = (
 
 /**
  * The message the agent's turn opens with after the history, and what the
- * session has handed once it is: the call's words on a spoken turn, or the
- * line saying they still hold or no longer do (`turnKindWords`); the
+ * session has handed once it is: after a spoken turn, the line saying the
+ * call's words no longer hold (`turnKindWords`); the
  * developer's time on every turn; the task as it stands where someone other
  * than the agent saved the plan since its previous turn started, or the rest
  * of it is not what the session last handed (`handed`); an operator's desk,
@@ -187,13 +183,11 @@ export function coderTurnMessage<R>(
     const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
     const fresh = desk !== undefined && (desk.notices.length > 0 || deskKey !== handed.desk);
     const desked = fresh ? [desk.text] : [];
-    const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
-    const kind = turnKindWords(turn.kind, handed, agent.taskId !== null);
+    const kind = turnKindWords(handed);
     const taskHanded = task === undefined ? handed.task : task.key;
     const next: TurnHanded = {
       ...(taskHanded === undefined ? undefined : { task: taskHanded }),
       ...(deskKey === undefined ? undefined : { desk: deskKey }),
-      ...(spoken ? { spoken: true, callWords: true } : undefined),
       opened: true,
       ...(flushed || handed.flushTold === true ? { flushTold: true } : undefined),
     };

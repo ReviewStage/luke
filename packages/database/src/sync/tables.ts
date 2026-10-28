@@ -17,7 +17,7 @@
  * is woken and answers without it.
  */
 import { attachment } from "../schemas/attachment.js";
-import { member, user } from "../schemas/auth.js";
+import { invitation, member, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
 import { codingAgent } from "../schemas/coding-agent.js";
@@ -28,6 +28,7 @@ import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { macCommand } from "../schemas/mac-command.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
+import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { task } from "../schemas/task.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
@@ -88,6 +89,11 @@ export const userSync = defineSyncTable(user, {
     },
   ],
   ignore: [user.updatedAt, user.lastLoginMethod],
+});
+
+/** An invitation to a workspace, pending or settled, on the workspace's topic. */
+export const invitationSync = defineSyncTable(invitation, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: invitation.organizationId }],
 });
 
 /** A member's own GitHub token, on the member's topic. */
@@ -256,11 +262,25 @@ export const automationRunSync = defineSyncTable(automationRun, {
   ],
 });
 
+/**
+ * A revision of a task's plan, on the task's topic. Note that its text is
+ * ignored, because every save folded into a revision rewrites it, and the
+ * same save moves `at` and `changes` beside it, which the history reads, so
+ * a save still notifies. The call it was written on (`live_session_id`) is
+ * set once and watched; the cut of voice calls drops it, re-rendering this
+ * capture as it does.
+ */
+export const planRevisionSync = defineSyncTable(planRevision, {
+  topics: [{ kind: TOPIC.TASK, column: planRevision.taskId }],
+  ignore: [planRevision.document],
+});
+
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
   codingAgentSync,
   memberSync,
   userSync,
+  invitationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   taskSectionSync,
@@ -277,4 +297,5 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   channelSync,
   automationSync,
   automationRunSync,
+  planRevisionSync,
 ];

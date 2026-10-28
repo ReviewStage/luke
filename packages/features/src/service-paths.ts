@@ -392,17 +392,6 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
 } as const;
 
-/**
- * Where the hosted voice service answers: a Vercel Function of the same
- * service, reached at `HOSTED_VOICE_SERVICE_ORIGIN`, the socket form of the
- * service's own origin. The path is a WebSocket upgrade; one connection
- * carries one session, or one attachment to a session that stands.
- */
-export const VOICE_SERVICE_PATH = {
-  /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
-  SESSIONS: "/api/voice/sessions",
-} as const;
-
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;

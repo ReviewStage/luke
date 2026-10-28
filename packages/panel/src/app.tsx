@@ -80,12 +80,6 @@ import { useVisualViewport } from "./use-visual-viewport.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
 
-/** Where an agent stands to be opened: its plan, on its tab, or its own page where it has no plan. */
-interface AgentPlace {
-  readonly taskId: string | null;
-  readonly agentId: string;
-}
-
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
 
@@ -388,26 +382,6 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
   );
-  // The call card's way back to its agent pressed: the Tasks tab, on that
-  // agent, its task's tab or its own page where it has no task. Read through
-  // refs, because the tab hands new closures each render and the subscription
-  // is owed to the window, not to a render. Note that the window is moved by
-  // more than one step asks once, as a whole, while a page holds unsaved
-  // work, so Leave takes every step and Cancel takes none.
-  const showAgent = useRef(tasks.onShowAgent);
-  showAgent.current = tasks.onShowAgent;
-  const showAgentPage = useRef(tasks.agentView.onOpen);
-  showAgentPage.current = tasks.agentView.onOpen;
-  const openAgent = useCallback(
-    ({ taskId, agentId }: AgentPlace) =>
-      guardLeave(() => {
-        changeTab(PANEL_TAB.TASKS);
-        if (taskId === null) showAgentPage.current(agentId);
-        else showAgent.current(taskId, agentId);
-      })(),
-    [changeTab, guardLeave],
-  );
-  useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;

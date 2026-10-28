@@ -82,16 +82,6 @@ export interface UpdateMenu {
 }
 
 /**
- * What a development build's Developer menu reaches beyond the window chosen
- * over: the hidden voice window, which can never be chosen, and the call
- * window, too small to hold the tools docked.
- */
-export interface DeveloperToolsMenu {
-  onOpenVoiceWindow: () => void;
-  onOpenCallWindow: () => void;
-}
-
-/**
  * What the menu reaches of the panel window beyond the window chosen over:
  * whether that window is the panel, and the panel brought back, for a
  * command chosen while it stands closed or behind another of Luke's windows.
@@ -289,10 +279,9 @@ function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
 
 /**
  * View's Developer submenu: the window chosen over's own tools, toggled by
- * the system's role, docked as Chrome docks them, and the two windows it
- * cannot reach, whose tools open in a window of their own.
+ * the system's role, docked as Chrome docks them.
  */
-function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
+function developerItem(): MenuItemConstructorOptions {
   return {
     label: "Developer",
     submenu: [
@@ -301,9 +290,6 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
         label: "Developer Tools",
         accelerator: shortcutAccelerator(DEVELOPER_TOOLS_CHORD),
       },
-      SEPARATOR,
-      { label: "Voice Window Developer Tools", click: () => tools.onOpenVoiceWindow() },
-      { label: "Call Window Developer Tools", click: () => tools.onOpenCallWindow() },
     ],
   };
 }
@@ -323,7 +309,7 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * the people who make Luke are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), a command item is
  * called what `named` says, which an experiment may rename (`shortcutLabel`), and View's
- * Developer submenu only where `developerTools` is given. New Task brings a
+ * Developer submenu only where `developerTools` is true. New Task brings a
  * closed window back only where `panel` is given, and Reload asks before it
  * loses unsaved edits only where `reload` is.
  */
@@ -331,7 +317,7 @@ export function appMenuTemplate(
   appName: string,
   update?: UpdateMenu,
   shown: (command: KeyedCommand) => boolean = () => true,
-  developerTools?: DeveloperToolsMenu,
+  developerTools = false,
   panel?: PanelMenu,
   reload?: ReloadMenu,
   named: (command: KeyedCommand) => string = (command) => APP_SHORTCUTS[command].label,
@@ -393,19 +379,19 @@ interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
   readonly capabilities: readonly HostCapability[];
-  readonly developerTools: DeveloperToolsMenu | undefined;
+  readonly developerTools: boolean;
   readonly panel: PanelMenu | undefined;
   readonly reload: ReloadMenu | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the windows' developer tools, the panel window, or the reload. */
+/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the developer tools offered, the panel window, or the reload. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
   | {
       readonly experiments: ExperimentChoices;
       readonly capabilities: readonly HostCapability[];
     }
-  | { readonly developerTools: DeveloperToolsMenu }
+  | { readonly developerTools: boolean }
   | { readonly panel: PanelMenu }
   | { readonly reload: ReloadMenu };
 
@@ -428,7 +414,7 @@ export function menuBarDrawer(
     update: undefined,
     experiments: NO_EXPERIMENTS,
     capabilities: [],
-    developerTools: undefined,
+    developerTools: false,
     panel: undefined,
     reload: undefined,
   };
@@ -450,7 +436,7 @@ export function menuBarDrawer(
         build.appName,
         state.update,
         (command) => shortcutShown(command, state.experiments, state.capabilities),
-        build.packaged ? undefined : state.developerTools,
+        !build.packaged && state.developerTools,
         state.panel,
         state.reload,
         (command) => shortcutLabel(command, state.experiments),
@@ -462,8 +448,8 @@ export function menuBarDrawer(
 /** Every menu and item, before the gate takes a gated feature's out. */
 function fullMenuTemplate(
   appName: string,
-  update?: UpdateMenu,
-  developerTools?: DeveloperToolsMenu,
+  update: UpdateMenu | undefined,
+  developerTools: boolean,
   panel?: PanelMenu,
   reload?: ReloadMenu,
 ): MenuItemConstructorOptions[] {
@@ -543,9 +529,6 @@ function fullMenuTemplate(
     {
       label: "View",
       submenu: [
-        // Note that the window chosen over is never the hidden voice window,
-        // which takes no focus, so a reload leaves a standing call up
-        // (`voice-window.ts`).
         reloadItem(reload),
         SEPARATOR,
         commandItem(APP_COMMAND.TOGGLE_SIDEBAR),
@@ -564,7 +547,7 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.PREVIOUS_TASK),
         commandItem(APP_COMMAND.NEXT_TASK),
-        ...(developerTools ? [SEPARATOR, developerItem(developerTools)] : []),
+        ...(developerTools ? [SEPARATOR, developerItem()] : []),
       ],
     },
     {

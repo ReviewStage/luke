@@ -94,7 +94,7 @@ const ROUTER_NOT_FOUND_BODY = '{"error":"not-found"}';
  * The requests a hand probe sends, the page, and eve's health, each with the
  * status its handler answers a caller with no credential: a 401, 405, or 426
  * is the handler present and refusing the caller, which is what a probe with no
- * credential should see. The voice sessions' 426 and the feedback courier's
+ * credential should see. The terminal relay's 426 and the feedback courier's
  * 405 are those functions answering at their own paths, which the fallback
  * stands behind; an exception's 405 is its route answering ahead of the
  * fallback; and an unknown path's 404 is the router's. The OPTIONS door meets the same handlers' preflight refusals;
@@ -108,7 +108,6 @@ const EXPECTED_STATUS = {
     ["/api/plans", PROBE_STATUS.UNAUTHORIZED],
     ["/api/maintenance/sweep", PROBE_STATUS.UNAUTHORIZED],
     ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
-    ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/terminal/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/browser/live", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
@@ -120,7 +119,6 @@ const EXPECTED_STATUS = {
     ["/api/plans", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/maintenance/sweep", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
-    ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
     [EXCEPTION_PATH, PROBE_STATUS.METHOD_NOT_ALLOWED],
     [UNKNOWN_API_PATH, PROBE_STATUS.NOT_FOUND],

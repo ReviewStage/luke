@@ -93,8 +93,7 @@ export function namedIn(
 /**
  * `EVE_DEPLOYMENT_SECRET` as an environment record holds it, under the rule
  * the layer below reads it by, for a reader that holds the record rather
- * than the service: the voice function's exchange and the admin dashboard's
- * health list. Nothing where it is unset, blank, or the cron's own value.
+ * than the service: the admin dashboard's health list. Nothing where it is unset, blank, or the cron's own value.
  */
 export function eveDeploymentSecretIn(
   environment: Readonly<Record<string, string | undefined>>,

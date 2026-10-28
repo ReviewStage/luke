@@ -1,14 +1,12 @@
-/** renderer-revival.test.ts -- a panel or voice renderer that dies is stood back up after a pause, a bounded number of times before a load succeeds. */
+/** renderer-revival.test.ts -- a panel renderer that dies is stood back up after a pause, a bounded number of times before a load succeeds. */
 import type { RunMode } from "@luke/host";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { PanelManager } from "./panel-manager";
-import { VoiceWindow } from "./voice-window";
 
 /**
  * What a window does once its renderer dies or its page fails to load: the
- * panel loads its page again after a pause, the voice window is replaced,
- * and past the bound with no load finished between, the panel asks whether
- * to reload once more and the voice window stays down.
+ * panel loads its page again after a pause, and past the bound with no load
+ * finished between, it asks whether to reload once more.
  *
  * Note that Electron's module is replaced whole, because it is the operating
  * system's door (its windows, its renderers, its sheets) and answers nothing
@@ -92,7 +90,6 @@ function drawnPanel() {
   const gone: string[] = [];
   const panels = new PanelManager({
     runMode: RUN_MODE,
-    mediaDuck: { setExchangeActive: () => undefined },
     preloadPath: "preload.js",
     rendererHtmlPath: "index.html",
     rendererUrl: "file:///index.html",
@@ -206,28 +203,4 @@ test("a load that finishes between deaths starts the count over", () => {
   }
   expect(window.loads).toBe(6);
   expect(sheets.shownOn).toEqual([]);
-});
-
-test("the voice window is replaced within the same bound, then stays down", () => {
-  const gone: string[] = [];
-  const gaveUp: string[] = [];
-  new VoiceWindow({
-    runMode: RUN_MODE,
-    preloadPath: "preload.js",
-    rendererHtmlPath: "voice.html",
-    rendererUrl: "file:///voice.html",
-    onGone: (reason) => gone.push(reason),
-    onGaveUp: (reason) => gaveUp.push(reason),
-  }).open();
-  for (let death = 0; death < 4; death += 1) {
-    const window = windows.at(-1);
-    if (window === undefined) throw new Error("The voice window was not opened.");
-    crash(window);
-    vi.advanceTimersByTime(PAST_THE_PAUSE_MS);
-  }
-  expect(windows).toHaveLength(4);
-  expect(gone).toHaveLength(3);
-  expect(gaveUp).toEqual([
-    "The voice renderer went (crashed). It was replaced 3 times without loading, so it stays down for this run.",
-  ]);
 });

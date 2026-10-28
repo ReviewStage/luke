@@ -115,9 +115,8 @@ import { codingAgentStatusOf } from "./status.js";
  * asked, is settled failed for its session's end
  * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
  * rather than running until the sweep's day-long bound. The words are then
- * no refusal: they open a fresh session over the same conversation, as the
- * brain's ask opens one for a conversation whose session retired
- * (`brain-host/brain-ask.ts`), and so does a message to an agent whose
+ * no refusal: they open a fresh session over the same conversation, and so
+ * does a message to an agent whose
  * session never claimed its record, past the grace its Start's session had
  * to come up in or where its Start opened none. The fresh session claims
  * the record forward, so the ended one is refused from then on, and is

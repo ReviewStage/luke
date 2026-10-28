@@ -5,20 +5,13 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
-import { type EventPushName, PUSH, type PushPayload } from "../contract/pushes.js";
 import type { HostBootstrap, HostOperator } from "../host-operator.js";
 import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
 import { type GatewayWiringDependencies, wireGateway } from "./gateway-wiring.js";
 
-/** What the host's events reach in the windows that draw them. */
-interface OperatorClientLinks {
-  sendToVoice: <Name extends EventPushName>(push: Name, payload: PushPayload<Name>) => void;
-}
-
 export interface OperatorClient {
   /** Names this concern in a failure report and in the order the set starts and stops in. */
   readonly name: string;
-  link: (links: OperatorClientLinks) => void;
   /** The host's own method vocabulary, as this client calls it. */
   readonly host: HostOperator;
   settings: () => AppSettings | undefined;
@@ -61,13 +54,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
     dependencies: OperatorClientDependencies,
   ): Effect.fn.Return<OperatorClient, never, Scope.Scope> {
     const { report, state } = dependencies;
-    let heldLinks: OperatorClientLinks | undefined;
-    const links = (): OperatorClientLinks => {
-      if (heldLinks === undefined) {
-        throw new Error("the operator client's links are read before link() has run");
-      }
-      return heldLinks;
-    };
 
     const unsubscribers: (() => void)[] = [];
 
@@ -83,8 +69,7 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       state.update(bootstrapPatch(state.snapshot(), boot));
     }
 
-    // Everything the host says is written to the document; the live session's
-    // change also reaches the voice window directly, as the event it is.
+    // Everything the host says is written to the document.
     unsubscribers.push(
       gateway.host.onSettingsChanged((change) => {
         state.update({ settings: change.settings });
@@ -97,10 +82,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onMacCommandAsksChanged((asks) => {
         state.update({ macCommands: { asks } });
-      }),
-      // The live session's phase is handed to the voice window as the event it is.
-      gateway.host.onVoiceLiveSessionChanged((change) => {
-        links().sendToVoice(PUSH.VOICE_LIVE_SESSION_CHANGED, change);
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.
@@ -115,9 +96,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
 
     return {
       name: "operator",
-      link: (next) => {
-        heldLinks = next;
-      },
       host: gateway.host,
       settings: () => state.snapshot().settings,
       ensureSettings: () =>

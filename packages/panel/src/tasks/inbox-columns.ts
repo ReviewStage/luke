@@ -6,7 +6,7 @@
  * and the one it shows is the list, however many items it holds, the same
  * in the window's Inbox, a task's own Inbox tab, and a phone's: an item
  * stands alone, the whole Inbox wide, only once it was opened, by a row's
- * press, a link, Next, or New thread, and its way back, which Back's chord
+ * press, a link, Next, or a thread started from its box, and its way back, which Back's chord
  * and Escape take as well, stands the list again. An item opened while the
  * Inbox was split stays open once it narrows, as Material's list-detail
  * layout keeps it; one merely chosen first does not, so a narrowed Inbox
@@ -178,10 +178,7 @@ function shownColumns(
  * the window paints, while the hidden control still holds it. `kept` is
  * whether the list was asked for where the holder keeps it.
  */
-export function useInboxColumns(
-  chosen: string | undefined,
-  kept?: InboxListing,
-): InboxColumns {
+export function useInboxColumns(chosen: string | undefined, kept?: InboxListing): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
   const { ref: measure, single: measured } = useColumnSplit();
   const single = measured === true;

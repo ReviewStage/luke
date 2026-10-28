@@ -30,7 +30,7 @@
  * - `actions` end the bar, at the control gap.
  *
  * A bar whose heading is crumbs or a title beside a way back and its
- * actions (`wrapHeading`: an Inbox item's, New thread's) answers its own
+ * actions (`wrapHeading`: an Inbox item's) answers its own
  * width: under 360px the lead's labelled controls draw their glyphs alone,
  * named still, and once one row would show less of the page's own name than
  * reads (`--luke-title-floor`, `use-wrap-when-cut.ts`), the heading takes a

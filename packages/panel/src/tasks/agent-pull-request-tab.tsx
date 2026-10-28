@@ -2784,12 +2784,15 @@ function PullRequestTabBody({
   // Refresh dimmed while a read is out; a read saying there is none takes them away with the header.
   const refreshNow = useRef(refresh);
   refreshNow.current = refresh;
+  // Note that the ⋯'s Refresh reads Files changed again too where its view was shown, because it is the one Refresh
+  // on the screen, Files changed's ⋯ offering none of its own; a write reads back without it.
+  const refreshAllNow = useRef(refresh);
   const url = none ? undefined : held?.url;
   const handed = useMemo(
     () =>
       url === undefined
         ? undefined
-        : [pullRequestActions(url, reading, () => refreshNow.current())],
+        : [pullRequestActions(url, reading, () => refreshAllNow.current())],
     [url, reading],
   );
   // A phone draws no actions beside the title: its header's ⋯ offers Preview and Run after the
@@ -2826,6 +2829,10 @@ function PullRequestTabBody({
     control,
     shown && !none && (view === PULL_REQUEST_VIEW.FILES || view === PULL_REQUEST_VIEW.CHAPTERS),
   );
+  refreshAllNow.current = () => {
+    refresh();
+    if (askedYet(changes)) changes.ask();
+  };
   // The Chapters view's chunk is asked for only once the view is first shown.
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);

@@ -2006,7 +2006,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
     [...(page.querySelector(".inbox-tasks > .luke-toolbar")?.querySelectorAll("button") ?? [])].map(
       (each) => each.getAttribute("aria-label"),
     );
-  assert.deepEqual(buttons(), ["New thread", "View options"]);
+  assert.deepEqual(buttons(), ["View options"]);
   const input = page.querySelector<HTMLInputElement>(
     '.inbox-tasks input[aria-label="Search inbox"]',
   );
@@ -2017,7 +2017,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   assert.deepEqual(listed(page), ["# Billing usage alerts", "How is a failed email retried?"]);
   assert.equal(paneTitle(page), "Alert at 80%?", "the pane keeps the item open");
   assert.equal(headTitle(page), title, "the name stands while the search is used");
-  assert.deepEqual(buttons(), ["New thread", "View options"], "and so do the buttons");
+  assert.deepEqual(buttons(), ["View options"], "and so do the buttons");
 
   searchList(page, "zzz");
   assert.deepEqual(listed(page), []);

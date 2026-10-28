@@ -1,4 +1,9 @@
 import type { Channel } from "@luke/features/channel-wire";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxMessagedView,
+} from "@luke/features/coding-agent-view";
+import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
@@ -33,14 +38,13 @@ import {
   useChannelHead,
 } from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
-import { agentName } from "../tasks/coding-agent-model.js";
+import { agentName, messageFailureWords } from "../tasks/coding-agent-model.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxCompose } from "../tasks/inbox-compose.js";
 import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
@@ -52,7 +56,7 @@ import {
   NEEDS_YOU,
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
-import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
+import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { useMoveThreadDialog } from "../tasks/move-thread-dialog.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
@@ -64,6 +68,7 @@ import {
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import {
+  openChannelThread,
   useArchivedChannels,
   useChannelPlace,
   useChannels,
@@ -143,8 +148,7 @@ import { taskCardOf } from "./task-card.js";
  * With Channels on, a channel chosen from the sidebar narrows the page to
  * its own items, the same list, reading pane, and keys, under the channel's
  * name and purpose (`channel-head.tsx`), on a scope of the channel's own
- * that opens on All of everyone's (`use-inbox-listing.ts`); New thread
- * there moves the thread it starts into the channel; leaving it stamps the
+ * that opens on All of everyone's (`use-inbox-listing.ts`); leaving it stamps the
  * reader's look at it; and a row's ⋯ moves its thread to another channel
  * (`move-thread-dialog.tsx`). An item opened into a channel from a link
  * narrows the page to its own channel once read, and a channel archived or
@@ -165,9 +169,6 @@ const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
   Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
 const _nothing = (): void => undefined;
-
-/** The column a New thread stands in, which the Inbox shows as it would an item. */
-const COMPOSE_COLUMN = "new-thread";
 
 /** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
 const NO_UNREAD: readonly StripTab[] = [];
@@ -254,7 +255,6 @@ export function DesktopInbox({
     choose,
     closeItem,
     onRetry,
-    compose,
   } = useInboxListing(tasks, narrowed ? channelPlace.channelId : undefined);
   // An item opened into a channel from a link, which names its item and not its channel, narrows the Inbox to its own channel once read.
   useThreadChannel(narrowed ? chosen?.item : undefined);
@@ -280,12 +280,17 @@ export function DesktopInbox({
       ? (listed: InboxListed) => askThreadMove(listed.item)
       : undefined;
   const general = generalChannel(channels.channels ?? NO_CHANNELS);
-  // A New thread started while a channel is shown is moved into it, since a thread starts in #general; a move refused says why.
+  // A thread started from an item's box lands in that item's channel where it is open, else in #general, where a thread starts.
+  const landsIn = (from: InboxItem): Channel | undefined =>
+    channelsOn
+      ? (channels.channels?.find((each) => each.id === from.channelId) ?? general)
+      : undefined;
+  // It is moved there once started, since a thread starts in #general; a move refused says why.
   const toast = useToast();
-  const startedIn = (item: { readonly id: string; readonly channelId?: string }) => {
-    const into = channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
-    if (into === undefined || item.channelId === into) return;
-    channels.onMove(item.id, into).then((refused) => {
+  const startedIn = (started: InboxItem, from: InboxItem) => {
+    const into = landsIn(from)?.id;
+    if (into === undefined || started.channelId === into) return;
+    channels.onMove(started.id, into).then((refused) => {
       if (refused === undefined) return channels.onRefresh();
       toast({ words: refused, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     });
@@ -296,14 +301,11 @@ export function DesktopInbox({
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
   const { listed, onListed, onSingle } = view;
   const columns = useInboxColumns(
-    compose.on
-      ? COMPOSE_COLUMN
-      : (chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined)),
+    chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined),
     { asked: listed, onAsk: onListed, onSingle },
   );
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
-    compose.onEnd();
     choose(listed);
     columns.onOpen(listed.item.id);
   };
@@ -350,21 +352,41 @@ export function DesktopInbox({
       : (tasks.workspaces.find((each) => each.id === chosenWorkspaceId)?.slug ?? chosenWorkspaceId);
   // What the chosen item's box offers an `@`, read under that workspace and repository.
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, tasks.tasks, named.models);
-  // What a New thread's To offers: the agents of the workspace the Inbox lists.
-  const readWorkspaceAgents = useMentionAgentsReader(
-    tasks.workspace?.id,
-    tasks.tasks,
-    named.models,
-  );
-  const startCompose = compose.onStart;
-  // Note that an archived channel offers no New thread, since a thread started there would land in #general.
-  const onCompose =
-    tasks.signedIn && archivedShown === undefined
-      ? () => {
-          startCompose();
-          columns.onOpen(COMPOSE_COLUMN);
-        }
-      : undefined;
+  // An item's box starts a new thread with its agent, which lands in the item's channel and opens in its place.
+  const { startInboxThread } = agents;
+  const newThread: InboxNewThread | undefined = tasks.signedIn
+    ? {
+        channelOf: landsIn,
+        workspaceId: tasks.workspace?.id,
+        onStart: (item, start) =>
+          startInboxThread({
+            agentId: item.agentId,
+            text: start.text,
+            ...(start.attachments.length === 0 ? undefined : { attachments: start.attachments }),
+            clientKey: start.clientKey,
+          })
+            .catch(
+              (): CodingAgentInboxMessagedView => ({
+                failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+              }),
+            )
+            .then((answer) => {
+              if ("failure" in answer) return messageFailureWords(answer.failure);
+              startedIn(answer.item, item);
+              // An Inbox narrowed to a channel turns to the one the thread lands in, which is #general's where the item's is archived.
+              openChannelThread(answer.item.id, landsIn(item)?.id);
+              const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
+              view.onChoose({
+                ...(holder?.kind === INBOX_HOLDER.TASK
+                  ? { taskId: holder.task.id }
+                  : { agentId: item.agentId }),
+                itemId: answer.item.id,
+                opened: true,
+              });
+              return undefined;
+            }),
+      }
+    : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
   // A file the item names opens beside the Inbox as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
@@ -390,7 +412,7 @@ export function DesktopInbox({
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
   const opened =
-    tasks.shown && !compose.on && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+    tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
       ? chosen
       : undefined;
   useReadOnOpen({
@@ -498,6 +520,7 @@ export function DesktopInbox({
               next={next}
               mentions={mentions}
               channelName={channel?.name}
+              newThread={newThread}
               phone={
                 phone ? { onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle } : undefined
               }
@@ -556,7 +579,6 @@ export function DesktopInbox({
                         onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
                       },
                       search,
-                      onCompose,
                       phone:
                         room === SHELL_ROOM.NARROW
                           ? { start: <NewTaskButton tasks={tasks} /> }
@@ -586,44 +608,7 @@ export function DesktopInbox({
                     onAskMove={askMove}
                   />
                 )}
-                {compose.on ? (
-                  <InboxCompose
-                    // Note that the pane is the listed workspace's, so another listed starts it afresh, its To and its agents read there.
-                    key={listedWorkspace?.id}
-                    hidden={columns.shown === INBOX_COLUMNS.LIST}
-                    workspace={
-                      listedWorkspace === undefined
-                        ? undefined
-                        : {
-                            workspace: listedWorkspace.slug ?? listedWorkspace.id,
-                            workspaceId: listedWorkspace.id,
-                          }
-                    }
-                    repositoryOf={(id) =>
-                      tasks.tasks.find((each) => each.id === id)?.repository ?? null
-                    }
-                    onShowMention={tasks.onShowMention}
-                    onBack={columns.onBack}
-                    readAgents={readWorkspaceAgents}
-                    to={chosen?.item.agentId}
-                    keywords={agents.keywords}
-                    start={agents.startInboxThread}
-                    onStarted={({ item, agent }) => {
-                      compose.onEnd();
-                      startedIn(item);
-                      view.onChoose({
-                        ...(agent.task === undefined
-                          ? { agentId: agent.id }
-                          : { taskId: agent.task.id }),
-                        itemId: item.id,
-                        opened: true,
-                      });
-                    }}
-                    onDiscard={compose.onEnd}
-                    phone={room === SHELL_ROOM.NARROW}
-                    onRestore={() => onCompose?.()}
-                  />
-                ) : chosen === undefined ? (
+                {chosen === undefined ? (
                   <section
                     className={INBOX_VIEW_ITEMS}
                     aria-label="Inbox"

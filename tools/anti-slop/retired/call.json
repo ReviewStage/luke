@@ -1,14 +1,14 @@
 {
-  "instead": "Draw a call's controls with CallBar and CallMute from @luke/ui.",
+  "instead": "Luke no longer draws calls; nothing replaces their controls.",
   "classes": [
-    { "class": "call-bar", "allow": ["packages/ui/src/components/call/"] },
-    { "class": "call-controls", "allow": ["packages/ui/src/components/call/"] },
-    { "class": "call-mutes", "allow": ["packages/ui/src/components/call/"] },
-    { "class": "call-status*", "allow": ["packages/ui/src/components/call/"] },
-    { "class": "call-backend*", "allow": ["packages/ui/src/components/call/"] },
+    { "class": "call-bar", "allow": [] },
+    { "class": "call-controls", "allow": [] },
+    { "class": "call-mutes", "allow": [] },
+    { "class": "call-status*", "allow": [] },
+    { "class": "call-backend*", "allow": [] },
     { "class": "voice-notice", "allow": [] },
     { "class": "voice-notice-row", "allow": [] },
     { "class": "voice-notice-text", "allow": [] },
-    { "class": "agent-call-notice", "allow": ["packages/ui/src/components/call/"] }
+    { "class": "agent-call-notice", "allow": [] }
   ]
 }
