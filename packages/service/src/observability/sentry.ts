@@ -251,8 +251,7 @@ function scrubbedEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
 
 /**
  * The options every process starts Sentry with. The release is the SDK's
- * own: it reads Vercel's `VERCEL_GIT_COMMIT_SHA`, which is the release the
- * source maps are uploaded under (`scripts/bundle-functions.ts`).
+ * own: it reads Vercel's `VERCEL_GIT_COMMIT_SHA`, the deployment's commit.
  */
 export function sentryOptions(): SentryOptions {
   return {

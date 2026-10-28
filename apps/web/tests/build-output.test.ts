@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -145,19 +145,4 @@ test("the default .func, loaded alone, lands the fallback's requests on the host
   };
   assert.equal(answered("route=orpc&route-path=models"), '401 {"error":"invalid-token"}');
   assert.equal(answered("route=orpc&route-path=nope"), '404 {"error":"not-found"}');
-});
-
-test("the site is copied under static/ whole, but for any source map the client build left in it", async () => {
-  const site = mkdtempSync(join(tmpdir(), "luke-build-site-"));
-  mkdirSync(join(site, "assets"));
-  writeFileSync(join(site, "app.html"), "<!doctype html>");
-  writeFileSync(join(site, "assets", "app-1a2b.js"), "console.log(1);");
-  writeFileSync(join(site, "assets", "app-1a2b.js.map"), '{"version":3}');
-  writeFileSync(join(site, "assets", "app-1a2b.css.map"), '{"version":3}');
-  const outputDirectory = mkdtempSync(join(tmpdir(), "luke-build-output-"));
-
-  await emitBuildOutput({ outputDirectory, functions: [], staticDirectory: site });
-
-  const served = readdirSync(join(outputDirectory, "static"), { recursive: true }).map(String);
-  assert.deepEqual(served.sort(), ["app.html", "assets", join("assets", "app-1a2b.js")]);
 });

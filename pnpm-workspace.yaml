@@ -99,10 +99,9 @@ patchedDependencies:
 # coding agent tool's 8.8 MB, forty-eight times over. That held enough memory
 # to push the coding agent's `eve build` past Vercel's 8 GB build machine. The
 # patch writes those compile-time bundles without the map; what Nitro bundles
-# for the deployment, and the hidden maps `nitro.config.ts` asks of it, are
-# untouched. `packages/service/src/agents/agent-runtime/build.test.ts` holds
-# it. Move the patch with every `eve` bump, and delete it if eve stops writing
-# the map.
+# for the deployment is untouched.
+# `packages/service/src/agents/agent-runtime/build.test.ts` holds it. Move the
+# patch with every `eve` bump, and delete it if eve stops writing the map.
 #
 # The same patch makes a session whose Vercel sandbox is gone, or whose
 # sandbox's snapshot expired, open a fresh sandbox. eve 0.74.0 runs a
