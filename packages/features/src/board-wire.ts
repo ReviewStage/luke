@@ -16,9 +16,8 @@ import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "./board-vocabulary.js";
  * Excalidraw's own converter, puts it in place of Luke's previous one beside
  * whatever the developer drew, and writes the scene back.
  *
- * A scene element is typed in the fields the service reads (`board-text.ts`
- * renders them for the model) and carries Excalidraw's other fields as opaque
- * wire values. The types a scene admits leave out every element that holds a
+ * A scene element is typed in the fields the service reads and carries
+ * Excalidraw's other fields as opaque wire values. The types a scene admits leave out every element that holds a
  * file, a page, or an embedded frame.
  */
 

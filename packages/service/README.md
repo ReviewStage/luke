@@ -1166,7 +1166,7 @@ mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
 section the agent's starter keeps it in, and those sections; `read_task`
 and `create_task` (`src/agents/task-tools.ts`), which read one task of the
-workspace with its plan, its brief, and the issues it links, and
+workspace with its plan and its brief, and
 make one for the starter, on the repository named or the agent's own,
 confirmed through the workspace's installation, with a brief and a plan to
 start from and no agent on it, under an id drawn from eve's key for the
@@ -1526,12 +1526,7 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's plan as the Markdown Copy puts on the clipboard
-(`@luke/features/plan-markdown`), with the issues the task links after it,
-oldest linked first, in one section (`issueLinksBrief`): a branch named
-`luke/<key>-<slug>` after the first, and each issue as a mention with the line
-its link's relation asks of the pull request, `Fixes <key>` or `Part of <key>`
-for Linear's own GitHub integration to link the pull request and move the
-issue's status, and its description fenced as data; then
+(`@luke/features/plan-markdown`); then
 makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start

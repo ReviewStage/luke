@@ -99,18 +99,14 @@ export const CODER_TOOL = {
   QUEUE_QUESTION: AGENT_TOOL.QUEUE_QUESTION,
   WITHDRAW_QUESTION: AGENT_TOOL.WITHDRAW_QUESTION,
   END_CALL: AGENT_TOOL.END_CALL,
-  SHOW_CODE: AGENT_TOOL.SHOW_CODE,
-  DRAW_ON_BOARD: AGENT_TOOL.DRAW_ON_BOARD,
-  LOOK_AT_BOARD: AGENT_TOOL.LOOK_AT_BOARD,
 } as const;
 
-/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
+/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, and the four that read and answer its comments. */
 export type TaskTool =
   | typeof CODER_TOOL.EDIT_PLAN
   | typeof CODER_TOOL.SHOW_PAGE
   | typeof CODER_TOOL.LOOK_AT_PICTURE
-  | (typeof COMMENT_TASK_TOOLS)[number]
-  | (typeof BOARD_TASK_TOOLS)[number];
+  | (typeof COMMENT_TASK_TOOLS)[number];
 
 /** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
 const COMMENT_TASK_TOOLS = [
@@ -120,9 +116,6 @@ const COMMENT_TASK_TOOLS = [
   CODER_TOOL.REOPEN_THREAD,
 ] as const;
 
-/** The whiteboard's tools, which draw on the task's board and look at it as the developer's Mac drew it (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`). */
-const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as const;
-
 /**
  * The task's tools an agent is offered: `show_page` alone for one on no
  * task, as an automation's run starts one, whose pages stand on the agent
@@ -130,7 +123,7 @@ const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as
  * it was handed the plan or a prompt, since New task starts every agent on
  * the developer's own words while Luke writes the plan beside it. Note that
  * each tool withheld is one its call would only be refused by (`host.ts`'s
- * `editPlan`, `showPage`, and `board`), and that the instructions leave out
+ * `editPlan` and `showPage`), and that the instructions leave out
  * the same words (`instructions.ts`).
  */
 export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
@@ -141,7 +134,6 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<Tas
     CODER_TOOL.SHOW_PAGE,
     CODER_TOOL.LOOK_AT_PICTURE,
     ...COMMENT_TASK_TOOLS,
-    ...BOARD_TASK_TOOLS,
   ]);
 }
 
@@ -181,17 +173,14 @@ export function runCallTool(
     : { status: ACTION_RESULT_STATUS.REJECTED, reason: OFF_CALL_REASON[tool] };
 }
 
-/** The tools only an agent working in a repository is offered: the pull request the service opens for it, `apply_patch`, which edits its checkout, and `show_code`, which puts lines of it on the developer's screen. */
-export type RepositoryTool =
-  | typeof CODER_TOOL.OPEN_PULL_REQUEST
-  | typeof CODER_TOOL.APPLY_PATCH
-  | typeof CODER_TOOL.SHOW_CODE;
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it and `apply_patch`, which edits its checkout. */
+export type RepositoryTool = typeof CODER_TOOL.OPEN_PULL_REQUEST | typeof CODER_TOOL.APPLY_PATCH;
 
 /**
  * The repository's tools an agent is offered, on every turn, typed or
  * spoken: all of them for one working in a repository, and none for one
- * with no repository, whose sandbox holds no checkout to patch or show
- * lines of and which has no branch to open a pull request from. Note that
+ * with no repository, whose sandbox holds no checkout to patch and which
+ * has no branch to open a pull request from. Note that
  * its shell, its reads, and `write_file` stay, in the empty working folder
  * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), where it
  * writes the files its work makes, such as a page to show; and that the
@@ -201,7 +190,7 @@ export function repositoryToolsOf(
   agent: Pick<CodingAgent, "repository">,
 ): ReadonlySet<RepositoryTool> {
   if (agent.repository === null) return new Set();
-  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH, CODER_TOOL.SHOW_CODE]);
+  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.APPLY_PATCH]);
 }
 
 /** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` and `delete_automation` to every agent but an operator. */
@@ -287,8 +276,10 @@ export function offeredCoderTools(agent: CoderOfferedTo, memoryOn: boolean): rea
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, that post and its read, since named `post_thread` and
- * `read_threads`, and the four of the workspace's Chat, removed with it. A
- * transcript written then names them, and reads back under the same set.
+ * `read_threads`, the four of the workspace's Chat, removed with it, and
+ * `show_code`, `draw_on_board`, and `look_at_board`, removed with the Code
+ * and Board tabs. A transcript written then names them, and reads back under
+ * the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -304,6 +295,9 @@ export const RETIRED_CODER_TOOL = {
   READ_CHAT: RETIRED_TOOL.READ_CHAT,
   RESOLVE_ASK: RETIRED_TOOL.RESOLVE_ASK,
   EDIT_CHANNEL: RETIRED_TOOL.EDIT_CHANNEL,
+  SHOW_CODE: RETIRED_TOOL.SHOW_CODE,
+  DRAW_ON_BOARD: RETIRED_TOOL.DRAW_ON_BOARD,
+  LOOK_AT_BOARD: RETIRED_TOOL.LOOK_AT_BOARD,
 } as const;
 
 /**
@@ -323,7 +317,6 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
   CODER_TOOL.SHOW_IMAGE,
-  CODER_TOOL.SHOW_CODE,
   // The browser runs in the sandbox, which its call opens first.
   CODER_TOOL.BROWSER,
 ]);

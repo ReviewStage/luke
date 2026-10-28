@@ -29,7 +29,7 @@ import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { openGithubUser } from "../testing/github-app-fake.js";
-import { SHOW_CODE_TOOL } from "./show-code.js";
+import { SHOW_CODE_TOOL_NAME } from "./show-code.js";
 import { taskRecordLiveStatements } from "./task-record-live.js";
 import { readTaskCode } from "./task-work-store.js";
 
@@ -63,7 +63,7 @@ const openUser = Effect.gen(function* () {
 /** An accepted `show_code` part of a journal, as the relay writes one. */
 function answeredShowCode(callId: string, line: string) {
   return {
-    type: `tool-${SHOW_CODE_TOOL.name}`,
+    type: `tool-${SHOW_CODE_TOOL_NAME}`,
     toolCallId: callId,
     state: "output-available",
     input: { path: "src/invite.ts", startLine: 1, endLine: 1, note: "Invitations last a week." },

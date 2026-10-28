@@ -18,11 +18,9 @@ test("a call into an agent on no task, in no repository, on the developer's Mac,
   );
   for (const withheld of [
     AGENT_TOOL.EDIT_PLAN,
-    AGENT_TOOL.DRAW_ON_BOARD,
     AGENT_TOOL.READ_COMMENTS,
     AGENT_TOOL.OPEN_PULL_REQUEST,
     AGENT_TOOL.APPLY_PATCH,
-    AGENT_TOOL.SHOW_CODE,
     AGENT_TOOL.LIST_OPEN_ASKS,
     AGENT_TOOL.REMEMBER,
     AGENT_TOOL.RECALL,

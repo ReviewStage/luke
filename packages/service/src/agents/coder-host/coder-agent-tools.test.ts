@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Database } from "@luke/database/core/query";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { sweepAbandonedTurns, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import {
   readAccountPreferences,
@@ -44,13 +43,11 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { device } from "@luke/database/schemas/device";
 import { messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   joinWorkspace,
   leaveWorkspace,
-  linearIssueLink,
   openHostedStoreTestDatabase,
   openWorkspace,
   startTask,
@@ -74,7 +71,6 @@ import {
 import { DEVICE_AGENT_LINE_KIND, DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import {
@@ -82,7 +78,6 @@ import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
-import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -125,7 +120,7 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
-import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
+import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
@@ -146,7 +141,6 @@ import {
 } from "../coding-agent-tools.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
 import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
-import { TASK_ISSUE_REFUSAL } from "../task-issue-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
@@ -384,79 +378,6 @@ async function fakeCoderEve(
       retired = true;
     },
   };
-}
-
-/** The workspace's Linear, connected, as a suite's Connect grants it. */
-const LINEAR_CONNECTED = integrationConnectOver({
-  LINEAR_CONNECTOR_UID: "mcp.linear.app/linear",
-  LINEAR_WORKSPACE_CONNECTOR_UID: "linear/luke-workspaces",
-}).pipe(Layer.orDie);
-
-/** Linear's ENG-42, as its GraphQL API answers it to a link and to a read of its state. */
-const LINEAR_ISSUE = {
-  id: "5b6c1f0e-2a7d-4c3e-9f1a-0d8e7b6a5c4d",
-  identifier: "ENG-42",
-  title: "Invitations expire too soon",
-  url: "https://linear.app/acme/issue/ENG-42/invitations-expire-too-soon",
-  description: "Make them last a week.",
-  state: { name: "In Progress" },
-  assignee: null,
-};
-
-/**
- * GitHub with the workspace's installation granting the App issues on
- * Relay, whose issues 7 and 8 it answers, and Linear's GraphQL API on the
- * same network double answering ENG-42, with the workspace's Linear
- * connected; every other issue GitHub's not found.
- */
-async function issueReadingGitHub(workspaceId: string) {
-  installations += 1;
-  const installation: InstallationFixture = {
-    id: 70 + installations,
-    login: RELAY.owner,
-    repositories: [RELAY],
-    permissions: {
-      contents: "write",
-      metadata: "read",
-      pull_requests: "write",
-      issues: "write",
-    },
-  };
-  assert.equal(
-    await database.run(connectWorkspaceGitHub(workspaceId, installation)),
-    LINK_OUTCOME.LINKED,
-  );
-  await database.run(
-    Database.use((db) =>
-      db.insert(workspaceIntegrationConnection).values({
-        organizationId: workspaceId,
-        provider: INTEGRATION_PROVIDER.LINEAR,
-        status: INTEGRATION_ROW_STATUS.CONNECTED,
-      }),
-    ),
-  );
-  const github = githubReaching([installation], undefined, undefined, (request) => {
-    if (request.url === "https://api.linear.app/graphql") {
-      return Response.json({ data: { issue: LINEAR_ISSUE } });
-    }
-    const numbered = new RegExp(`^/repos/${RELAY_FULL_NAME}/issues/(7|8)$`, "u").exec(
-      new URL(request.url).pathname,
-    );
-    if (numbered === null) return undefined;
-    const number = Number(numbered[1]);
-    return Response.json({
-      node_id: `I_kwDOrelay${number}`,
-      number,
-      title: `Relay issue ${number}`,
-      html_url: `https://github.com/${RELAY_FULL_NAME}/issues/${number}`,
-      state: "open",
-      body: "",
-      user: { login: "octo-dev" },
-      author_association: "MEMBER",
-      updated_at: "2026-10-01T00:00:00Z",
-    });
-  });
-  return github.layer;
 }
 
 /** Luke's Sentry integration as a deployment that configures it holds it. */
@@ -1720,150 +1641,6 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   );
   assert.equal(onTask.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onTask));
   assert.equal(eve.sent.length, 2);
-});
-
-test("create_task links the GitHub and Linear issues named, each read through the workspace first with its keyword, and one named wrong or read for none makes no task", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const bob = agents.teammates.userId;
-  const caller = await agentOn(bob, tasks.invitations);
-  const call = await peerCaller(
-    hostOf(true),
-    caller,
-    await issueReadingGitHub(workspaceId),
-    modelCatalogOf(CATALOG),
-    LINEAR_CONNECTED,
-  );
-
-  const made = await call(
-    CODER_TOOL.CREATE_TASK,
-    {
-      name: "Invite expiry",
-      issues: [
-        { issue: "#7" },
-        { issue: "eng-42", relation: TASK_ISSUE_RELATION.PART_OF },
-        { issue: `https://github.com/${RELAY_FULL_NAME}/issues/8` },
-      ],
-    },
-    "call-linked",
-  );
-  const unnamed = await call(
-    CODER_TOOL.CREATE_TASK,
-    { name: "Unnamed", issues: [{ issue: "the login bug" }] },
-    "call-unnamed",
-  );
-  const unread = await call(
-    CODER_TOOL.CREATE_TASK,
-    { name: "Unread", issues: [{ issue: `${RELAY_FULL_NAME}#99` }] },
-    "call-unread",
-  );
-
-  assert.equal(made.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(made));
-  assert.ok(isRecord(made.task), JSON.stringify(made));
-  assert.deepEqual(made.task.issues, [
-    {
-      provider: TASK_ISSUE_PROVIDER.GITHUB,
-      key: `${RELAY_FULL_NAME}#7`,
-      title: "Relay issue 7",
-      url: `https://github.com/${RELAY_FULL_NAME}/issues/7`,
-      relation: TASK_ISSUE_RELATION.CLOSES,
-    },
-    {
-      provider: TASK_ISSUE_PROVIDER.LINEAR,
-      key: "ENG-42",
-      title: LINEAR_ISSUE.title,
-      url: LINEAR_ISSUE.url,
-      relation: TASK_ISSUE_RELATION.PART_OF,
-    },
-    {
-      provider: TASK_ISSUE_PROVIDER.GITHUB,
-      key: `${RELAY_FULL_NAME}#8`,
-      title: "Relay issue 8",
-      url: `https://github.com/${RELAY_FULL_NAME}/issues/8`,
-      relation: TASK_ISSUE_RELATION.CLOSES,
-    },
-  ]);
-  assert.deepEqual(unnamed, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_ISSUE_REFUSAL.UNNAMED("the login bug"),
-  });
-  assert.deepEqual(unread, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_ISSUE_REFUSAL.NOT_FOUND(`${RELAY_FULL_NAME}#99`),
-  });
-  assert.deepEqual(await tasksNamed(bob, workspaceId, "Unnamed"), []);
-  assert.deepEqual(await tasksNamed(bob, workspaceId, "Unread"), []);
-});
-
-test("update_task links, relates, and unlinks a task's issues by name, answers the issues it then links, and refuses one the task does not link", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
-  const bob = agents.teammates.userId;
-  const caller = await agentOn(bob, tasks.invitations);
-  const call = await peerCaller(
-    hostOf(true),
-    caller,
-    await issueReadingGitHub(workspaceId),
-    modelCatalogOf(CATALOG),
-    LINEAR_CONNECTED,
-  );
-  const made = await call(
-    CODER_TOOL.CREATE_TASK,
-    { name: "Invite expiry", issues: [{ issue: "#7" }] },
-    "call-made",
-  );
-  assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
-  const taskId = made.task.id;
-  const keysAndKeywords = (answer: WireRecord) => {
-    assert.ok(isRecord(answer.task) && Array.isArray(answer.task.issues), JSON.stringify(answer));
-    return answer.task.issues.map((each) =>
-      isRecord(each) ? [each.key, each.relation] : assert.fail("an issue is a record"),
-    );
-  };
-
-  const relinked = await call(CODER_TOOL.UPDATE_TASK, {
-    taskId,
-    linkIssues: [{ issue: "ENG-42" }, { issue: `${RELAY_FULL_NAME}#8` }],
-    relateIssues: [
-      {
-        issue: `https://github.com/${RELAY_FULL_NAME}/issues/7`,
-        relation: TASK_ISSUE_RELATION.PART_OF,
-      },
-    ],
-  });
-  const unlinked = await call(CODER_TOOL.UPDATE_TASK, { taskId, unlinkIssues: ["eng-42"] });
-  const again = await call(CODER_TOOL.UPDATE_TASK, {
-    taskId,
-    relateIssues: [{ issue: "#7", relation: TASK_ISSUE_RELATION.PART_OF }],
-  });
-  const notLinked = await call(CODER_TOOL.UPDATE_TASK, { taskId, unlinkIssues: ["ENG-1"] });
-  // #N names a link of the repository the task stands on before the call takes it away.
-  const unlinkedAway = await call(CODER_TOOL.UPDATE_TASK, {
-    taskId,
-    repository: null,
-    unlinkIssues: ["#8"],
-  });
-
-  assert.deepEqual(keysAndKeywords(relinked), [
-    [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
-    ["ENG-42", TASK_ISSUE_RELATION.CLOSES],
-    [`${RELAY_FULL_NAME}#8`, TASK_ISSUE_RELATION.CLOSES],
-  ]);
-  assert.equal(relinked.already, false);
-  assert.deepEqual(keysAndKeywords(unlinkedAway), [
-    [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
-  ]);
-  assert.deepEqual(keysAndKeywords(unlinked), [
-    [`${RELAY_FULL_NAME}#7`, TASK_ISSUE_RELATION.PART_OF],
-    [`${RELAY_FULL_NAME}#8`, TASK_ISSUE_RELATION.CLOSES],
-  ]);
-  assert.equal(again.already, true);
-  assert.deepEqual(notLinked, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_ISSUE_REFUSAL.NOT_LINKED("ENG-1"),
-  });
-  assert.deepEqual(
-    Option.getOrThrow(await database.run(readTask(bob, taskId))).issueLinks.map(({ key }) => key),
-    [`${RELAY_FULL_NAME}#7`],
-  );
 });
 
 /** The ids of the tasks of the workspace the account reads under the name, newest first. */
@@ -3509,31 +3286,6 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
 
-  const linearIssue = {
-    identifier: "REL-7",
-    title: "Seat pricing",
-    url: "https://linear.app/acme/issue/REL-7",
-    description: "Charge per active seat.",
-  };
-  const fromLinear = await database.run(
-    createTask(teammates.userId, {
-      organizationId: workspaceId,
-      name: "Seats",
-      issueLinks: [linearIssueLink(linearIssue)],
-    }),
-  );
-  const linear = await call(CODER_TOOL.READ_TASK, { taskId: fromLinear.id });
-  assert.deepEqual(isRecord(linear.task) && linear.task.issues, [
-    {
-      provider: TASK_ISSUE_PROVIDER.LINEAR,
-      key: linearIssue.identifier,
-      title: linearIssue.title,
-      url: linearIssue.url,
-      relation: TASK_ISSUE_RELATION.CLOSES,
-      description: linearIssue.description,
-    },
-  ]);
-
   // A task started from a brief, its plan still untouched, is read with the developer's words.
   const briefed = await database.run(
     createTask(teammates.userId, {
@@ -3547,7 +3299,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     isRecord(withBrief.task) && withBrief.task.brief,
     "Allow admins to bulk invite members.",
   );
-  assert.equal(isRecord(linear.task) && linear.task.brief, null);
+  assert.equal(isRecord(read.task) && read.task.brief, null);
 
   for (const taskId of [taskIds.elsewhere, randomUUID()]) {
     assert.deepEqual(await call(CODER_TOOL.READ_TASK, { taskId }), {

@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
-import { writeDrawing, writeScene } from "@luke/database/models/board-store";
 import {
   createCodingAgent,
   recordCodingAgentRunnerToken,
@@ -14,7 +13,6 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
@@ -76,12 +74,10 @@ import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
   type AgentToolCall,
-  runAgentBoard,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
-  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -363,9 +359,6 @@ const SERVED_TOOLS = [
   "show_image",
   "show_page",
   "read_page",
-  "show_code",
-  "draw_on_board",
-  "look_at_board",
   "start_agent",
   "stop_agent",
   "list_agents",
@@ -440,9 +433,6 @@ const DOOR_OF: Readonly<
   show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
   show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
   read_page: agentTool("read_page"),
-  show_code: (admitted, input) => runAgentShowCode(admitted, input, NO_CHECKOUT),
-  draw_on_board: (admitted, input) => runAgentBoard(admitted, "draw_on_board", input),
-  look_at_board: (admitted, input) => runAgentBoard(admitted, "look_at_board", input),
   start_agent: agentTool("start_agent"),
   stop_agent: agentTool("stop_agent"),
   list_agents: agentTool("list_agents"),
@@ -673,7 +663,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list leaves out what eve offers no agent on no task and in no repository, the plan's, the board's, the comments', and the checkout's, and the memory where its starter has Memory off",
+    "tools/list leaves out what eve offers no agent on no task and in no repository, the plan's, the comments', and the checkout's, and the memory where its starter has Memory off",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -686,14 +676,11 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const withheld = [
           "edit_plan",
           "look_at_picture",
-          "draw_on_board",
-          "look_at_board",
           "read_comments",
           "reply_to_comment",
           "resolve_thread",
           "reopen_thread",
           "open_pull_request",
-          "show_code",
           "list_open_asks",
           "remember",
           "recall",
@@ -796,10 +783,8 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const client = yield* connected(fetch, agent.bearer);
 
         for (const [name, door] of Object.entries(DOOR_OF)) {
-          // A look at the whiteboard that takes nothing waits on the Mac's image; one that names anything is refused at once.
-          const input = name === "look_at_board" ? { probe: name } : {};
-          const called = yield* Effect.promise(() => client.callTool({ name, arguments: input }));
-          const direct = yield* door(admitted, unparsedWire(input), seams).pipe(
+          const called = yield* Effect.promise(() => client.callTool({ name, arguments: {} }));
+          const direct = yield* door(admitted, unparsedWire({}), seams).pipe(
             Effect.provide(yield* doorServices),
           );
           assert.deepEqual(firstJson(called), JSON.parse(JSON.stringify(direct)), name);
@@ -969,37 +954,6 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
 
         assert.deepEqual(called.content, [
           { type: "text", text: JSON.stringify(pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO)) },
-        ]);
-      }),
-  );
-
-  it.effect(
-    "a look at the agent's whiteboard comes back as its look's status and image content, never as text",
-    () =>
-      Effect.gen(function* () {
-        const fetch = yield* standing;
-        const agent = yield* agentWithBearer;
-        yield* writeDrawing(agent.userId, agent.taskId, [
-          { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" },
-        ]);
-        yield* writeScene(
-          agent.userId,
-          agent.taskId,
-          [{ id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 }],
-          1,
-          "iVBORw0KGgo=",
-        );
-        const client = yield* connected(fetch, agent.bearer);
-
-        const called = yield* Effect.promise(() =>
-          client.callTool({ name: "look_at_board", arguments: {} }),
-        );
-        yield* Effect.promise(() => client.close());
-
-        assert.equal(called.isError, false);
-        assert.deepEqual(called.content, [
-          { type: "text", text: '{"status":"looked"}' },
-          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
         ]);
       }),
   );

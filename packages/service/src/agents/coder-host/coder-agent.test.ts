@@ -532,7 +532,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent on a task is offered edit_plan, show_page, the comment tools, and the whiteboard's, whether it was handed the plan or a prompt, and one an automation started with no task show_page alone, its pages standing on itself", () => {
+test("an agent on a task is offered edit_plan, show_page, look_at_picture, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task show_page alone, its pages standing on itself", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -540,13 +540,11 @@ test("an agent on a task is offered edit_plan, show_page, the comment tools, and
     CODER_TOOL.REPLY_TO_COMMENT,
     CODER_TOOL.RESOLVE_THREAD,
   ];
-  const board = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD];
   const all = [
     CODER_TOOL.EDIT_PLAN,
     CODER_TOOL.SHOW_PAGE,
     CODER_TOOL.LOOK_AT_PICTURE,
     ...comments,
-    ...board,
   ].sort();
   const handedItsTask = { taskId: "plan-1", prompt: null };
   const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
