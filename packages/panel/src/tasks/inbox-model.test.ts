@@ -759,6 +759,38 @@ test("a task done or canceled hides none of its items: its open ones need you an
   assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
 });
 
+test("To do keeps the reader's own update once it is opened and settled while its task is under way, and lets it go once the task is done, as it lets a settled ask go", () => {
+  const said = message({
+    text: "The pull request is ready for your review.",
+    createdAt: 1_000,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+  });
+  const asked = asking({ type: INBOX_ASK.ANSWER });
+  const answered = { ...asked, ask: { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.ANSWERED } };
+  const settled = { status: INBOX_STATUS.ANSWERED, startedBy: ME, needsReply: false } as const;
+  const tasks = [
+    {
+      holder: taskHolder({ ...BILLING, status: TASK_STATUS.IN_PROGRESS }),
+      items: [
+        item({ id: "update", thread: [said], ...settled }),
+        item({ id: "asked", thread: [said, answered], ...settled }),
+      ],
+    },
+    {
+      holder: taskHolder({ ...INVITES, status: TASK_STATUS.DONE }),
+      items: [item({ id: "done-update", thread: [said], ...settled })],
+    },
+  ];
+  const toDo = inboxList(tasks, {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.TO_DO,
+    readerId: ME.userId,
+    chosen: undefined,
+  });
+  assert.deepEqual(drawn(toDo), ["update"]);
+  assert.equal(inboxCounts(tasks, ME.userId)[INBOX_SHOW.TO_DO], 1);
+});
+
 test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
   const list = inboxList(SHARED, {
     grouping: INBOX_GROUPING.NONE,

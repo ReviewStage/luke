@@ -104,7 +104,8 @@ import { taskCardOf } from "./task-card.js";
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-inbox-items.ts`), under its task, its
  * person, its status, or in one run, the latest first or the oldest
- * first, For you, what needs them and what of theirs is unread, or All,
+ * first, For you, what needs them, what of theirs is unread, and their
+ * updates on a task still under way, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered

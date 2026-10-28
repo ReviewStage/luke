@@ -45,7 +45,7 @@ import {
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskFileRequest, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
@@ -1515,15 +1515,31 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
   return needsReader(listed.item, readerId);
 }
 
+/** Whether a thread is an update: it holds messages and none of them asks anything, so nothing of it is answered but a nod; one from a service before threads is none. */
+function isUpdate(item: InboxItem): boolean {
+  const thread = item.thread ?? [];
+  return thread.length > 0 && thread.every((message) => message.ask === undefined);
+}
+
+/** Whether a holder is a task still under way, neither Done nor Canceled; one from a service before statuses reads as under way. */
+function taskUnderWay(holder: InboxHolder): boolean {
+  if (holder.kind !== INBOX_HOLDER.TASK) return false;
+  const status = holder.task.status;
+  return status !== TASK_STATUS.DONE && status !== TASK_STATUS.CANCELED;
+}
+
 /**
  * Whether a listed item is one the reader is not done with, as To do lists
  * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
- * still unread, such as a settled thread its agent wrote on again.
+ * still unread, such as a settled thread its agent wrote on again, or an
+ * update of theirs on a task still under way. Note that an update stays
+ * once it is settled, because opening it settles it as Got it does
+ * (`acknowledgedOnOpen`), and what it says holds until its task is done.
  */
 function toDo(listed: InboxListed, readerId: string | undefined): boolean {
-  return (
-    needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
-  );
+  if (needsYou(listed, readerId)) return true;
+  if (!readersItem(listed.item, readerId)) return false;
+  return isUnread(listed.item) || (isUpdate(listed.item) && taskUnderWay(listed.holder));
 }
 
 /**
