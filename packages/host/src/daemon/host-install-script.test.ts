@@ -86,11 +86,15 @@ const onBox = (
  * The boot check run against a fake `smolvm` that writes each command it is
  * given to a file and fails the subcommand named, saying why on its last line
  * after a line of progress, through a fake `runuser` that runs what it is
- * handed as the test's own user, on a box enrolled before where asked, whose
- * unit and fake `systemctl` stand in the test's folder. Answers what the shell
- * printed and exited with, the commands smolvm was given, and those systemctl was.
+ * handed as the test's own user, on a box enrolled before. Where asked, the
+ * run stopped a running service first, whose unit and fake `systemctl` (failing where asked) stand
+ * in the test's folder. Answers what the shell printed and exited with, the
+ * commands smolvm was given, and those systemctl was.
  */
-const bootCheck = (failAt: string, enrolled = false) => {
+const bootCheck = (
+  failAt: string,
+  service: { readonly stopped: boolean; readonly restartFails?: boolean } = { stopped: false },
+) => {
   const bin = linuxUname();
   const root = folder();
   const log = join(root, "smolvm.log");
@@ -99,15 +103,11 @@ const bootCheck = (failAt: string, enrolled = false) => {
   const systemctlLog = join(root, "systemctl.log");
   writeFileSync(systemctlLog, "");
   writeFileSync(join(bin, "runuser"), '#!/bin/sh\nshift 3\nexec "$@"\n', { mode: 0o755 });
-  writeFileSync(join(bin, "systemctl"), '#!/bin/sh\nprintf \'%s\\n\' "$*" >>"$SYSTEMCTL_LOG"\n', {
-    mode: 0o755,
-  });
-  const unitFile = join(root, "luke-host.service");
-  if (enrolled) {
-    mkdirSync(join(root, "state"));
-    writeFileSync(join(root, "state", "device.json"), "{}");
-    writeFileSync(unitFile, "");
-  }
+  writeFileSync(
+    join(bin, "systemctl"),
+    `#!/bin/sh\nprintf '%s\\n' "$*" >>"$SYSTEMCTL_LOG"\n${service.restartFails ? '[ "$1" != restart ]\n' : ""}`,
+    { mode: 0o755 },
+  );
   writeFileSync(
     join(bin, "smolvm"),
     [
@@ -122,10 +122,15 @@ const bootCheck = (failAt: string, enrolled = false) => {
     ].join("\n"),
     { mode: 0o755 },
   );
+  // Note that the box is enrolled, its unit written, whether or not its service ran.
+  const unitFile = join(root, "luke-host.service");
+  writeFileSync(unitFile, "");
+  mkdirSync(join(root, "state"));
+  writeFileSync(join(root, "state", "device.json"), "{}");
   const answer = sh(
     [
       "-c",
-      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; require_vm_boots`,
+      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; STOPPED_SERVICE=${service.stopped}; require_vm_boots`,
     ],
     {
       LUKE_HOST_INSTALL_LIBRARY: "1",
@@ -296,22 +301,31 @@ describe("the host's install script", () => {
     ]);
   });
 
-  it("fails a VM that will not boot with smolvm's last line, saying nothing was started", () => {
-    const { answer } = bootCheck("start");
+  it("fails a VM that will not boot with smolvm's last line, leaving a service it did not stop stopped", () => {
+    const { answer, systemctl } = bootCheck("start");
     expect(answer.status).toBe(1);
     expect(answer.stdout).not.toContain("Booted");
     expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
     expect(answer.stderr).toContain("Luke host was not started");
+    expect(systemctl).toEqual([]);
   });
 
-  it("restarts the service of a box enrolled before when its upgrade's VM will not boot", () => {
-    const { answer, systemctl } = bootCheck("start", true);
+  it("starts again the service this run stopped when its VM will not boot", () => {
+    const { answer, systemctl } = bootCheck("start", { stopped: true });
     expect(answer.status).toBe(1);
     expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
     expect(answer.stderr).toContain(
       "luke-host.service was restarted on this box's existing enrollment",
     );
     expect(systemctl).toContain("restart luke-host.service");
+  });
+
+  it("says so when the service it stopped will not start again", () => {
+    const { answer } = bootCheck("start", { stopped: true, restartFails: true });
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
+    expect(answer.stderr).toContain("luke-host.service could not be started again either");
+    expect(answer.stderr).not.toContain("was restarted");
   });
 
   it("fails a VM that booted but could not be deleted, rather than leave it behind", () => {

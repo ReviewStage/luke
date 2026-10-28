@@ -62,6 +62,8 @@ KVM_DEVICE="${LUKE_HOST_KVM_DEVICE:-/dev/kvm}"
 SYSTEMD_RUN_DIR="${LUKE_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
 # Whether the box is WSL2, which require_supported_os reads from /proc/version.
 ON_WSL=false
+# Whether this run stopped a running luke-host.service to swap its files.
+STOPPED_SERVICE=false
 # The daemon exits with this (EX_CONFIG) where its smolvm is not the pinned
 # release, and the unit leaves it stopped rather than start it over.
 EXIT_REFUSED=78
@@ -208,17 +210,17 @@ UNIT_EOF
   systemctl daemon-reload
 }
 
-# Fails with why ($1), luke-host not started by this run. A box enrolled
-# before, whose service this run stopped to swap its files, has it restarted on
-# that enrollment, so a failed upgrade leaves it serving rather than offline.
+# Fails with why ($1), luke-host not started by this run. A service this run
+# stopped to swap its files is started again on the box's enrollment, so a
+# failed upgrade leaves it serving rather than offline; one stopped before the
+# run stays stopped.
 fail_unstarted() {
-  if [ -f "$HOST_HOME/state/device.json" ] && [ -f "$UNIT_FILE" ]; then
-    # Note that the unit is rewritten first, since the daemon just installed refuses to run under the previous release's, which names no smolvm.
-    write_unit
-    systemctl restart "$UNIT" || true
-    fail "$1. $UNIT was restarted on this box's existing enrollment."
-  fi
-  fail "$1. Luke host was not started."
+  [ "$STOPPED_SERVICE" = true ] || fail "$1. Luke host was not started."
+  # Note that the unit is rewritten first, since the daemon just installed refuses to run under the previous release's, which names no smolvm.
+  write_unit
+  systemctl restart "$UNIT" ||
+    fail "$1. $UNIT could not be started again either; see journalctl -u $UNIT."
+  fail "$1. $UNIT was restarted on this box's existing enrollment."
 }
 
 # Runs smolvm as the luke-host user, in its home, as the daemon's service does:
@@ -431,6 +433,7 @@ ok "$made"
 # on its next message.
 if systemctl is-active --quiet "$UNIT"; then
   systemctl stop "$UNIT"
+  STOPPED_SERVICE=true
 fi
 rm -rf "$INSTALL_DIR.new" "$INSTALL_DIR.old"
 mv "$work/unpacked/luke-host" "$INSTALL_DIR.new"
