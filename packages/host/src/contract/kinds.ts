@@ -466,6 +466,17 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
+ * This Mac's `luke-host` as Settings › Agents reaches it
+ * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
+ * an explicit turn-on, which enrolls the Mac again where Luke removed it or
+ * the last turn-on failed. Answered by the host, which runs it.
+ */
+export const THIS_MAC_HOST_ACT_KIND = {
+  THIS_MAC_HOST_READ: "thisMacHost.read",
+  THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
+} as const;
+
+/**
  * The updater as Settings' row and the sidebar's foot reach it: a check
  * asked for, answered with where the updater then stands; the ready build
  * installed; and the releases page and the changelog opened.
@@ -623,6 +634,7 @@ export const PORT_ACT_KIND = {
   ...TASKS_ACT_KIND,
   ...TASK_ISSUE_ACT_KIND,
   ...TERMINAL_ACT_KIND,
+  ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,

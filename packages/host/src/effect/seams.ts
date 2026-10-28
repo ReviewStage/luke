@@ -21,6 +21,7 @@ import {
   Layer,
   Logger,
   type Path,
+  type Result,
   type Stream,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
@@ -251,14 +252,14 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
  * the start adds to its environment; the name, platform, and architecture
  * the device is offered under at Start; and the scripts that make an
  * agent's own repository and check it for unsaved work
- * (`@luke/host/node`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
+ * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that
- * built them could not load in a browser. Only the local agents concern asks
- * for it.
+ * built them could not load in a browser. Only the follower asks for it, as
+ * `luke-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
  */
 export interface LocalAgentPlatformSeam {
-  /** The process a runner is started as, given what it runs and the environment made for it: `smolvm machine exec` into the agent's VM, through the desktop's launcher on a Mac. */
+  /** The process a runner is started as, given what it runs and the environment made for it: `smolvm machine exec` into the agent's VM. */
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
@@ -283,7 +284,7 @@ export interface LocalAgentPlatformSeam {
   }) => string;
   /**
    * The script that says what a discard would lose from the agent's worktree
-   * (`@luke/host/node`'s `agentUnsavedWorkScript`): it prints a line naming
+   * (`node/open-on-mac.ts`'s `agentUnsavedWorkScript`): it prints a line naming
    * the work at risk, nothing where there is none, and exits non-zero where it
    * could not tell, which keeps the folder. A discard on a device that names
    * none removes the folder unconditionally, as a host's does, whose folder
@@ -311,6 +312,56 @@ export class LocalAgentPlatform extends Context.Service<
   LocalAgentPlatform,
   LocalAgentPlatformSeam
 >()("@luke/host/LocalAgentPlatform") {}
+
+/** What may be asked of This Mac's `luke-host` login item. */
+export const HOST_LOGIN_ITEM_ACT = {
+  REGISTER: "register",
+  UNREGISTER: "unregister",
+  STATUS: "status",
+} as const;
+
+export type HostLoginItemAct = (typeof HOST_LOGIN_ITEM_ACT)[keyof typeof HOST_LOGIN_ITEM_ACT];
+
+/** Where This Mac's `luke-host` login item stands (`SMAppService.Status`). */
+export const HOST_LOGIN_ITEM_STATUS = {
+  ENABLED: "enabled",
+  NOT_REGISTERED: "not-registered",
+  /** Registered, and waiting on the member in System Settings › General › Login Items. */
+  REQUIRES_APPROVAL: "requires-approval",
+  /** The app carries no such item. */
+  NOT_FOUND: "not-found",
+} as const;
+
+export type HostLoginItemStatus =
+  (typeof HOST_LOGIN_ITEM_STATUS)[keyof typeof HOST_LOGIN_ITEM_STATUS];
+
+/**
+ * This Mac's `luke-host` as the desktop runs it (`compose-this-mac-host.ts`):
+ * its login item asked an act, and the version of the `luke-host` the app
+ * carries, which its enroll names. Each answers, never fails: what it
+ * answered, or the words it could not with. A development build carries no
+ * login item, so its shell answers the same acts by running the same
+ * `luke-host` as a child of the app. Only the local agents concern asks for
+ * it.
+ */
+export interface ThisMacHostSeam {
+  readonly loginItem: (
+    act: HostLoginItemAct,
+  ) => Effect.Effect<
+    Result.Result<HostLoginItemStatus, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
+  readonly version: Effect.Effect<
+    Result.Result<string, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
+}
+
+export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(
+  "@luke/host/ThisMacHost",
+) {}
 
 /**
  * Where the account's identity and credentials come from, as the shell

@@ -95,11 +95,22 @@ const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
  * where its state lives, under the home its service hands it: the
  * `luke-host` user's from systemd, the member's from launchd.
  */
-const runtime = hostRuntime({
+const runtimeOfOs = hostRuntime({
   platform: process.platform,
   home: process.env.HOME ?? os.homedir(),
   app: { developerIdSigned: buildCarriesDeveloperIdSigning() },
 });
+
+/**
+ * The runtime the daemon runs as, its state folder named by
+ * `LUKE_HOST_STATE_ROOT` where a development build of the desktop app runs
+ * it as a child (`apps/desktop/src/main/native/host-login-item.ts`), since
+ * that build's own state folder is not the one a packaged app's is.
+ */
+const runtime: HostRuntime | undefined =
+  runtimeOfOs === undefined || process.env.LUKE_HOST_STATE_ROOT === undefined
+    ? runtimeOfOs
+    : { ...runtimeOfOs, stateRoot: process.env.LUKE_HOST_STATE_ROOT };
 
 const nodeServices = Layer.mergeAll(
   NodeChildProcessSpawner.layer.pipe(
@@ -128,10 +139,17 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
       reportToStderr(
-        "Luke host: this box is not enrolled. Run the install command from Settings › Agents › Hosts, with its --token.",
+        "Luke host: this box is not enrolled. Run the install command from Settings › Agents › Machines, with its --token.",
       );
       yield* Effect.sleep(UNENROLLED_REST);
       return false;
+    }
+    // Note that a box Luke refused before is not asked again on the dead secret: it rests removed until it is enrolled again.
+    if (device.value.refused === true) {
+      reportToStderr(
+        "Luke host: Luke refused this box's secret before, so it was removed. Enroll it again to follow its agents.",
+      );
+      return true;
     }
     const boxArch = yield* arch(runtime);
     const platform = hostPlatform({
@@ -140,6 +158,7 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
       arch: boxArch,
       stateRoot,
       smolvm,
+      runnerFolder: process.env.LUKE_HOST_RUNNER_FOLDER,
       // Note that every command in an agent's VM runs as the daemon's user, luke-host or the member, which owns the agent's folder it mounts.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
     });
@@ -184,11 +203,11 @@ const enroll = (runtime: HostRuntime, token: string, name: string, origin: strin
         );
         return ENROLL_EXIT.ENROLLED;
       case HOST_ENROLL_OUTCOME.STILL_ENROLLED:
-        process.stdout.write(`Kept this box's enrollment as ${name}: it is still enrolled\n`);
+        process.stdout.write(`Kept this box's enrollment as ${name}\n`);
         return ENROLL_EXIT.ENROLLED;
       case HOST_ENROLL_OUTCOME.REFUSED:
         process.stderr.write(
-          "Luke refused the install token: it is unknown, revoked, or past its 24 hours. Copy a fresh command from Settings › Agents › Hosts › Add hosts.\n",
+          "Luke refused the install token: it is unknown, revoked, or past its 24 hours. Copy a fresh command from Settings › Agents › Machines › Add Linux servers.\n",
         );
         return ENROLL_EXIT.REFUSED;
       case HOST_ENROLL_OUTCOME.UPGRADE_NEEDED:

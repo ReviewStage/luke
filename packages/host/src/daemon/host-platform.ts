@@ -15,7 +15,7 @@ import type { HostOs } from "./host-os.js";
  *
  * A host is sandbox-only: every runner starts in its agent's VM
  * (`@luke/host/node`'s `smolvmSandbox`), with the agent's folder mounted at
- * the path it has on the box and the release's `lib/` read-only beside it,
+ * the path it has on the box and the runner's folder read-only beside it,
  * and nothing of an agent's runs on the box itself, a tool's command
  * included. Each agent gets a repository of its own in its folder
  * (`agentWorktreeScript`), since a worktree's Git folder would stand in the
@@ -28,14 +28,16 @@ import type { HostOs } from "./host-os.js";
  * before, comes from its description (`HostOs`).
  */
 
-/** The folder of the runner's bundle, under the folder the host's release is installed in, and the bundle in it. */
-const RUNNER = { FOLDER: "lib", BUNDLE: "agent-runner.mjs" } as const;
+/** The runner's bundle, in the folder the host's OS names for it (`HostOs.runnerFolder`). */
+const RUNNER_BUNDLE = "agent-runner.mjs";
 
 export interface HostPlatformOptions {
   /** The OS the host runs on, which names its platform, its name and whether its VMs nest. */
   readonly os: HostOs;
-  /** The folder the host's release is installed in (`/opt/luke-host`), whose `lib/` holds the runner's bundle. */
+  /** The folder the host's release is installed in (`/opt/luke-host`), beside or under which the runner's bundle stands (`HostOs.runnerFolder`). */
   readonly installFolder: string;
+  /** The runner's folder where something other than the OS names it: a development build's own, which its VMs mount. */
+  readonly runnerFolder?: string | undefined;
   readonly arch: DeviceArch;
   /** The daemon's state, under which each agent's GitHub token is kept, outside every VM. */
   readonly stateRoot: string;
@@ -47,7 +49,7 @@ export interface HostPlatformOptions {
 
 /** A host's local agent platform, for the release installed in the folder given. */
 export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSeam {
-  const runnerFolder = `${options.installFolder}/${RUNNER.FOLDER}`;
+  const runnerFolder = options.runnerFolder ?? options.os.runnerFolder(options.installFolder);
   const vm = smolvmSandbox({
     smolvm: options.smolvm,
     stateRoot: options.stateRoot,
@@ -58,7 +60,7 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
   return {
     launch: vm.launch,
     sandbox: vm.sandbox,
-    runnerBundle: `${runnerFolder}/${RUNNER.BUNDLE}`,
+    runnerBundle: `${runnerFolder}/${RUNNER_BUNDLE}`,
     runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
     formerlyDirect: options.os.formerlyDirect,
     deviceName: options.os.deviceName(),

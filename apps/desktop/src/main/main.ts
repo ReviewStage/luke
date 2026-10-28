@@ -1,18 +1,11 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
 import { launchFailureReported } from "@luke/features/sentry-reporting";
 import { closeEveryMacTerminal, reportToStderr, tolerateClosedStderr } from "@luke/host/node";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
-import { Duration, Effect, Fiber, Layer, ManagedRuntime, Option, Result } from "effect";
+import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
-import {
-  HOST_LOGIN_ITEM_VARIABLE,
-  type HostLoginItemAct,
-  hostLoginItem,
-  hostLoginItemActOf,
-} from "./native/host-login-item";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { initializeCrashReporting, mainSentry } from "./services/telemetry-service";
 import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
@@ -144,9 +137,6 @@ async function main(): Promise<void> {
   // their shortcuts.
   // The update item joins once the updater has said where it stands.
   config.showMenuBar();
-  // A launch with LUKE_HOST_LOGIN_ITEM set asks This Mac's login item that, once, beside the standup.
-  const loginItemAct = hostLoginItemActOf(config.environment[HOST_LOGIN_ITEM_VARIABLE]);
-  if (loginItemAct !== undefined) void askHostLoginItem(loginItemAct);
 
   const runtime = ManagedRuntime.make(composeDesktop(config, quit));
   quit.closesThrough(() => Effect.runPromise(closeRuntime(runtime)));
@@ -171,27 +161,6 @@ async function main(): Promise<void> {
     await Effect.runPromise(launchFailureReported(mainSentry, failure));
     app.quit();
   }
-}
-
-/**
- * This Mac's `luke-host` login item asked the act a launch named, and where
- * it then stands, or why it could not, reported. Nothing of the app's
- * registers it on its own yet; this is how it is tried by hand.
- */
-function askHostLoginItem(act: HostLoginItemAct): Promise<void> {
-  const spawner = NodeChildProcessSpawner.layer.pipe(
-    Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-  );
-  return Effect.runPromise(
-    hostLoginItem(act).pipe(
-      Effect.map((answer) =>
-        config.report(
-          `luke-host login item (${act}): ${Result.isSuccess(answer) ? answer.success : answer.failure}`,
-        ),
-      ),
-      Effect.provide(spawner),
-    ),
-  );
 }
 
 /**

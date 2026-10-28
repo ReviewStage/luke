@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { enrollHost, HOST_ENROLL_OUTCOME, type HostEnrollOutcome } from "@luke/features";
 import type { DeviceArch, DevicePlatform } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
-import { Effect, Option, Path, Schema } from "effect";
-import * as FileSystem from "effect/FileSystem";
+import { Effect, Option } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { readHostDevice, writeHostDevice } from "../host-device-record.js";
 
 /**
- * host-device.ts -- the box's own record of the device it enrolled as: its id, its device secret, and the service it enrolled with, kept readable by the `luke-host` user alone.
+ * host-device.ts -- a box enrolled with an install token, and its record of the device it enrolled as written (`../host-device-record.ts`): its id, its device secret, and the service it enrolled with, kept readable by the `luke-host` user alone.
  *
  * The install script runs the enroll once as that user (`luke-host enroll`),
  * which mints the box's device id the first time and keeps it, trades the
@@ -23,50 +23,6 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
  * every procedure on its secret from then on; the record is never logged,
  * and no answer or report names the secret.
  */
-
-/** The record's file, in the daemon's state. */
-const DEVICE_FILE = "device.json";
-
-const HostDeviceSchema = Schema.Struct({
-  deviceId: Schema.String,
-  deviceSecret: Schema.String.check(
-    Schema.makeFilter(
-      (value: string) => value.startsWith(HOST_WIRE.DEVICE_SECRET_PREFIX) || "a device secret",
-    ),
-  ),
-  serviceOrigin: Schema.String,
-});
-
-/** The device the box enrolled as. */
-export type HostDevice = typeof HostDeviceSchema.Type;
-
-const decodeDevice = Schema.decodeUnknownOption(Schema.fromJsonString(HostDeviceSchema));
-const encodeDevice = Schema.encodeSync(Schema.fromJsonString(HostDeviceSchema));
-
-/** The device the box enrolled as, from its state; none where it never enrolled, or its record does not read. */
-export const readHostDevice = Effect.fnUntraced(function* (stateRoot: string) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const text = yield* fileSystem
-    .readFileString(path.join(stateRoot, DEVICE_FILE))
-    .pipe(Effect.orElseSucceed(() => ""));
-  return decodeDevice(text);
-});
-
-/** The record written whole, readable by its owner alone, beside the file and moved over it. */
-const writeHostDevice = Effect.fnUntraced(function* (stateRoot: string, device: HostDevice) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  yield* fileSystem.makeDirectory(stateRoot, { recursive: true, mode: 0o700 });
-  yield* fileSystem.chmod(stateRoot, 0o700);
-  const file = path.join(stateRoot, DEVICE_FILE);
-  const written = `${file}.writing`;
-  yield* fileSystem.remove(written, { force: true });
-  // Note that the file is made 0600 before the secret is written into it, so it is never readable by another user.
-  yield* fileSystem.writeFileString(written, "", { flag: "wx", mode: 0o600 });
-  yield* fileSystem.writeFileString(written, `${encodeDevice(device)}\n`);
-  yield* fileSystem.rename(written, file);
-});
 
 export interface HostEnrollInput {
   readonly stateRoot: string;

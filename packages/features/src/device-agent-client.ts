@@ -142,6 +142,45 @@ export function enrollHost(
   );
 }
 
+/** How an own device's enroll ended (`HostedDeviceAgentClient.enrollOwn`). */
+export const OWN_ENROLL_OUTCOME = {
+  /** The service converted the device in place and answered its device secret, this once. */
+  ENROLLED: "enrolled",
+  /** The account holds no device of that id, or has the Local agents experiment off. */
+  NOT_FOUND: "not-found",
+  /** The service refused the enroll for any other reason, its slug kept. */
+  REFUSED: "refused",
+  /** The service refused the host program's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
+  UPGRADE_NEEDED: "upgrade-needed",
+  /** No answer could be read: the network, the deadline, or a service answering something else. */
+  UNANSWERED: "unanswered",
+} as const;
+
+export type OwnEnrollOutcome =
+  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.ENROLLED; readonly deviceSecret: string }
+  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.NOT_FOUND }
+  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.REFUSED; readonly refusal: string }
+  | {
+      readonly outcome: typeof OWN_ENROLL_OUTCOME.UPGRADE_NEEDED;
+      readonly minimumVersion?: string | undefined;
+    }
+  | { readonly outcome: typeof OWN_ENROLL_OUTCOME.UNANSWERED };
+
+/** How a refusal of an own device's enroll reads, by its slug. */
+function ownEnrollRefusal(failed: HostedRefused): OwnEnrollOutcome {
+  switch (failed.refusal) {
+    case HOSTED_API_ERROR.NOT_FOUND:
+      return { outcome: OWN_ENROLL_OUTCOME.NOT_FOUND };
+    case HOSTED_API_ERROR.HOST_UPGRADE_NEEDED:
+      return {
+        outcome: OWN_ENROLL_OUTCOME.UPGRADE_NEEDED,
+        minimumVersion: failed.data?.minimumVersion,
+      };
+    default:
+      return { outcome: OWN_ENROLL_OUTCOME.REFUSED, refusal: failed.refusal };
+  }
+}
+
 export interface HostedDeviceAgentClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
@@ -173,6 +212,31 @@ export class HostedDeviceAgentClient {
         hostGithubTokenAnswerSchema,
       ),
       (answer) => answer?.githubToken,
+    );
+  }
+
+  /**
+   * One of the account's own registered devices enrolled on its sign-in
+   * (`contract/device-agents.ts`'s `enrollOwn`): converted in place under its
+   * id and traded for a device secret, answered this once. The host
+   * program's version rides on the caller's own `HttpClient`, as on a host's
+   * every call.
+   */
+  enrollOwn(deviceId: string): Effect.Effect<OwnEnrollOutcome, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.enrollOwn, { deviceId }).pipe(
+      Effect.map(
+        (answer): OwnEnrollOutcome => ({
+          outcome: OWN_ENROLL_OUTCOME.ENROLLED,
+          deviceSecret: answer.deviceSecret,
+        }),
+      ),
+      Effect.catch((failed) =>
+        Effect.succeed(
+          failed._tag === "HostedRefused"
+            ? ownEnrollRefusal(failed)
+            : { outcome: OWN_ENROLL_OUTCOME.UNANSWERED },
+        ),
+      ),
     );
   }
 

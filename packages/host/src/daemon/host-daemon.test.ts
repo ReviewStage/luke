@@ -10,9 +10,10 @@ import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
+import { readHostDevice } from "../host-device-record.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
-import { enrollHostDevice, readHostDevice } from "./host-device.js";
+import { enrollHostDevice } from "./host-device.js";
 import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
 import { hostPlatform } from "./host-platform.js";
 
@@ -25,7 +26,12 @@ const INSTALL_TOKEN = `lkh_${"b".repeat(40)}`;
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
 const SMOLVM = "/usr/local/bin/smolvm";
-const RUNNER_BUNDLE = "/opt/luke-host/lib/agent-runner.mjs";
+/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's, which its VMs mount. */
+const RUNNER_BUNDLE = {
+  LINUX: "/opt/luke-host/lib/agent-runner.mjs",
+  DARWIN: "/opt/agent-runner/agent-runner.mjs",
+} as const;
+const RUNNER_BUNDLES: ReadonlySet<string> = new Set(Object.values(RUNNER_BUNDLE));
 const HTTP = {
   OK: 200,
   UNAUTHORIZED: 401,
@@ -67,7 +73,7 @@ const box = Effect.gen(function* () {
 
 /** Whether a spawn is the runner, started in its agent's VM. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
-  each.program === SMOLVM && each.args.includes(RUNNER_BUNDLE);
+  each.program === SMOLVM && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
 
 /** What smolvm prints for a machine it has not made. */
 const NOT_FOUND = JSON.stringify({ error: { code: "NOT_FOUND", message: "machine not found" } });
@@ -146,16 +152,18 @@ describe("a host's daemon", () => {
       name: "fra-01",
       platform: "linux",
       nested: true,
+      runnerBundle: RUNNER_BUNDLE.LINUX,
     },
     {
       os: { ...DARWIN_HOST, deviceName: () => "Studio" },
       name: "Studio",
       platform: "darwin",
       nested: false,
+      runnerBundle: RUNNER_BUNDLE.DARWIN,
     },
   ])(
     "registers as its OS ($platform) on its device secret with its version on every call, hands a launch to its VM, nested where its OS allows, with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
-    ({ os, name, platform: devicePlatform, nested }) =>
+    ({ os, name, platform: devicePlatform, nested, runnerBundle }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -236,6 +244,7 @@ describe("a host's daemon", () => {
         const [runner] = launched;
         const folder = `${home}/.luke/agents/${AGENT_ID}`;
         expect(runner?.args.slice(0, 4)).toEqual(["machine", "exec", "--name", `luke-${AGENT_ID}`]);
+        expect(runner?.args).toContain(runnerBundle);
         expect(runner?.args).toContain(`${folder}/repository`);
         expect(runner?.args).toContain(`HOME=${folder}/home`);
         expect(runner?.env).toMatchObject({

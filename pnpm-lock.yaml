@@ -206,9 +206,6 @@ importers:
       '@keyframelabs/sdk':
         specifier: 0.3.0
         version: 0.3.0(@types/dom-mediacapture-record@1.0.22)
-      '@luke/agent-runner':
-        specifier: workspace:*
-        version: link:../../packages/agent-runner
       '@luke/brand':
         specifier: workspace:*
         version: link:../../packages/brand

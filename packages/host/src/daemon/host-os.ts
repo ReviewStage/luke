@@ -53,6 +53,8 @@ export interface HostOs {
   readonly unsavedWorkScript?: LocalAgentPlatformSeam["unsavedWorkScript"];
   /** The folder the daemon's state lives in, for the home it runs with (`hostRuntime`). */
   readonly stateRoot: (home: string, app: HostApp) => string;
+  /** The folder holding the runner's bundle, which every agent's VM mounts read-only, for the folder the release is installed in. */
+  readonly runnerFolder: (installFolder: string) => string;
 }
 
 /** What a daemon knows of the app it shipped in, where it ships in one. */
@@ -71,6 +73,7 @@ export const LINUX_HOST: HostOs = {
   smolvm: { kind: HOST_SMOLVM.PATH, variable: "LUKE_HOST_SMOLVM" },
   formerlyDirect: false,
   stateRoot: (home) => path.join(home, "state"),
+  runnerFolder: (installFolder) => path.join(installFolder, "lib"),
 };
 
 /**
@@ -82,7 +85,9 @@ export const LINUX_HOST: HostOs = {
  * state is the app's own folder, which Electron puts under Application
  * Support by the app's name (`resolveAppName`, a packaged build's), and the
  * app's device ids, agent folders, VMs and fetched `smolvm` are where it
- * looks.
+ * looks. Its runner is the app's own bundle, beside the release in
+ * `Contents/Resources/agent-runner`, because every VM the app made before
+ * mounts that folder and keeps the mounts it was made with.
  */
 export const DARWIN_HOST: HostOs = {
   name: "macOS",
@@ -100,6 +105,7 @@ export const DARWIN_HOST: HostOs = {
       "Application Support",
       resolveAppName({ packaged: true, developerIdSigned: app.developerIdSigned }),
     ),
+  runnerFolder: (installFolder) => path.join(installFolder, "..", "agent-runner"),
 };
 
 /** Node's `process.arch` as a device architecture a release for the OS given is built for, or none. */

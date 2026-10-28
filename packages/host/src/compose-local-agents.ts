@@ -29,6 +29,7 @@ import {
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import {
   Config,
+  Deferred,
   Duration,
   Effect,
   Exit,
@@ -58,9 +59,15 @@ import {
   type LocalAgentSandboxCommand,
   Reporter,
 } from "./effect/seams.js";
-import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
+import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
 import type { HostKernel } from "./host-kernel.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
+import {
+  type LocalAgentState,
+  localAgentDeviceOf,
+  readLocalAgentState,
+  writeLocalAgentState,
+} from "./local-agent-state.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -157,8 +164,6 @@ const SETTLE_RETRIES = 30;
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's group has to end after SIGTERM before it is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
-/** The file in the host's state the device ids and the launches running are kept in. */
-const STATE_FILE = "local-agents.json";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
 /** How soon a GitHub token the service did not hand is asked for again, well inside the hour the last one lasts. */
@@ -194,33 +199,12 @@ function endedInVm(
 /** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of Luke's is handed on. */
 const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
 
-/**
- * What the host keeps of local agents between runs: the device id each
- * account registered under, the launches whose runners this device started
- * and no exit has settled yet, and, on a device whose agents may have run
- * directly on it (`formerlyDirect`), how each agent has run here, in a VM or
- * directly, absent from a state file from before it.
- */
-const LocalAgentStateSchema = Schema.Struct({
-  devices: Schema.Record(Schema.String, Schema.String),
-  launches: Schema.Array(Schema.Struct({ userId: Schema.String, id: Schema.String })),
-  modes: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.Literals(Object.values(DEVICE_ISOLATION))),
-  ),
-});
-
-type LocalAgentState = typeof LocalAgentStateSchema.Type;
-
-const NO_STATE: LocalAgentState = { devices: {}, launches: [] };
-
 /** Where a device's setup stands as it registers: nothing once it is ready, else preparing, or failed and why. */
 type DeviceSetupRegister = Pick<DeviceAgentDevice, "setup" | "setupFailure">;
 
 /** What a device says of the harnesses signed in on it by itself: none, since no login of the device's reaches its agents' VMs. */
 const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
 
-const decodeState = Schema.decodeUnknownOption(Schema.fromJsonString(LocalAgentStateSchema));
-const encodeState = Schema.encodeSync(Schema.fromJsonString(LocalAgentStateSchema));
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 const decodeStdin = Schema.decodeUnknownOption(deviceAgentStdinPayloadSchema);
 const decodeFiles = Schema.decodeUnknownOption(deviceAgentFilesPayloadSchema);
@@ -251,8 +235,6 @@ export interface LocalAgentsDependencies {
   client: LocalAgentClient;
 }
 
-export type LocalAgentsComposer = Composer;
-
 /** A runner this Mac started: the launch line it settles, its stdin, and the process it is. */
 interface Runner {
   readonly lineId: string;
@@ -273,7 +255,7 @@ type LocalAgentServices =
 
 export function composeLocalAgents(
   dependencies: LocalAgentsDependencies,
-): Effect.Effect<LocalAgentsComposer, never, LocalAgentServices> {
+): Effect.Effect<Composer, never, LocalAgentServices> {
   return Effect.gen(function* () {
     const { report } = yield* Reporter;
     const platform = yield* LocalAgentPlatform;
@@ -298,30 +280,29 @@ export function composeLocalAgents(
       if (Option.isSome(value)) handedOn[name] = value.value;
     }
     const { kernel, account, switchedOn, client } = dependencies;
-    const statePath = path.join(kernel.stateRoot, STATE_FILE);
 
     // -- the host's state ----------------------------------------------------
 
-    const readState = fileSystem.readFileString(statePath).pipe(
-      Effect.map((text) => Option.getOrElse(decodeState(text), () => NO_STATE)),
-      Effect.orElseSucceed(() => NO_STATE),
-    );
+    const readState = readLocalAgentState(kernel.stateRoot);
     const state = yield* Ref.make(yield* readState);
     const writing = yield* Semaphore.make(1);
+    /** The state read again from its file, as the other follower left it. */
+    const reread = writing.withPermit(Effect.flatMap(readState, (read) => Ref.set(state, read)));
 
     /**
      * The state changed and written whole, one change at a time, so a write
      * never lands over a newer one; written beside the file and moved over
      * it, so a write cut off leaves the last whole one. A write that cannot
-     * land is reported, and the next one tries again.
+     * land is reported, and the next one tries again. Note that This Mac's
+     * turn-on writes the file too (`local-agent-state.ts`), never while this
+     * follower follows, so the state is read again whenever this one takes
+     * the machine's lease (`reread`).
      */
     const updateState = (change: (current: LocalAgentState) => LocalAgentState) =>
       writing.withPermit(
         Effect.gen(function* () {
           const next = yield* Ref.updateAndGet(state, change);
-          const written = `${statePath}.writing`;
-          yield* fileSystem.writeFileString(written, `${encodeState(next)}\n`);
-          yield* fileSystem.rename(written, statePath);
+          yield* writeLocalAgentState(kernel.stateRoot, next);
         }).pipe(
           Effect.catch(() =>
             Effect.sync(() => report("the local agents' state could not be saved")),
@@ -329,19 +310,15 @@ export function composeLocalAgents(
         ),
       );
 
-    /** The device id this account registers under on this device: the one it enrolled under, or one minted the first time. */
+    /** The device id this account registers under on this device: the one it enrolled under, or the one kept for it, minted the first time. */
     const deviceOf = (userId: string) =>
-      Effect.gen(function* () {
-        if (dependencies.deviceId !== undefined) return dependencies.deviceId;
-        const kept = (yield* Ref.get(state)).devices[userId];
-        if (kept !== undefined) return kept;
-        const minted = kernel.createId();
-        yield* updateState((current) => ({
-          ...current,
-          devices: { ...current.devices, [userId]: minted },
-        }));
-        return minted;
-      });
+      dependencies.deviceId !== undefined
+        ? Effect.succeed(dependencies.deviceId)
+        : writing.withPermit(
+            Effect.tap(localAgentDeviceOf(kernel.stateRoot, userId, kernel.createId), () =>
+              Effect.flatMap(readState, (read) => Ref.set(state, read)),
+            ),
+          );
 
     const keepLaunch = (userId: string, id: string) =>
       updateState((current) => ({ ...current, launches: [...current.launches, { userId, id }] }));
@@ -1085,12 +1062,47 @@ export function composeLocalAgents(
         yield* presence(userId, deviceId);
       });
 
+    /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
+    const holder = kernel.createId();
+    /** Whether this follower last found the machine's lease held by another, so it says so once rather than every turn. */
+    const refusedLock = yield* Ref.make(false);
+
+    /**
+     * The machine's lease, taken for as long as the scope stands and renewed
+     * every `IDLE` while it does; none where another follower holds it,
+     * which is said once, and otherwise what waits until the lease is lost
+     * to another follower, which is said too.
+     */
+    const leased = Effect.gen(function* () {
+      if (!(yield* takeFollowerLock(kernel.stateRoot, holder))) {
+        if (!(yield* Ref.getAndSet(refusedLock, true))) {
+          report("another follower runs this machine's local agents, so this one follows none");
+        }
+        return Option.none<Effect.Effect<void>>();
+      }
+      yield* Ref.set(refusedLock, false);
+      yield* Effect.addFinalizer(() => releaseFollowerLock(kernel.stateRoot, holder));
+      const lost = yield* Deferred.make<void>();
+      yield* Effect.forkScoped(
+        Effect.andThen(Effect.sleep(IDLE), renewFollowerLock(kernel.stateRoot, holder)).pipe(
+          Effect.repeat({ until: (held) => !held }),
+          Effect.andThen(
+            Effect.sync(() => report("this follower lost the machine's lease, so it stops")),
+          ),
+          Effect.andThen(Deferred.succeed(lost, undefined)),
+        ),
+      );
+      yield* reread;
+      return Option.some(Deferred.await(lost));
+    });
+
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
-     * device registered, every launch it kept from a runner that ended with the
-     * app or the gate settled as gone, and the account's agents followed
-     * until the gate shuts or the account changes, when the follow's scope
-     * closes and every runner it started is stopped with its group.
+     * machine's lease taken, the device registered, every launch it kept
+     * from a runner that ended with the app or the gate settled as gone, and
+     * the account's agents followed until the gate shuts or the account
+     * changes, when the follow's scope closes, every runner it started is
+     * stopped with its group, and the lease is given back.
      */
     const turn = Effect.gen(function* () {
       const userId = dependencies.accountId();
@@ -1099,31 +1111,45 @@ export function composeLocalAgents(
         yield* Ref.set(readyTried, false);
         return yield* Effect.sleep(IDLE);
       }
-      const deviceId = yield* deviceOf(userId);
-      const { tools } = platform.sandbox;
-      const registered = (setup: DeviceSetupRegister) =>
-        client.register(deviceId, {
-          name: platform.deviceName,
-          platform: platform.devicePlatform,
-          arch: platform.deviceArch,
-          isolation: platform.deviceIsolation,
-          home: home.value,
-          claudeExecutable: tools.claude,
-          codexExecutable: tools.codex,
-          signedIn: NOT_SIGNED_IN,
-          capabilities: platform.deviceCapabilities,
-          ...setup,
-        });
-      // Note that the device registers as ready only once it has what its VMs run on, so Start never takes one that cannot run an agent.
-      if (!(yield* readyForOpening(userId, deviceId, registered))) return yield* Effect.sleep(IDLE);
-      const shellVariables = yield* shellEnvironment;
-      if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
-      const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
-      for (const launch of left) {
-        if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
-      }
-      yield* Effect.scoped(follow(userId, deviceId, home.value, shellVariables));
+      yield* Effect.scoped(openTurn(userId, home.value));
     });
+
+    /** An open gate's turn for the account `userId` names, from its home folder, under the machine's lease. */
+    const openTurn = (userId: string, folder: string) =>
+      Effect.gen(function* () {
+        const lost = yield* leased;
+        if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
+        const deviceId = yield* deviceOf(userId);
+        const { tools } = platform.sandbox;
+        const registered = (setup: DeviceSetupRegister) =>
+          client.register(deviceId, {
+            name: platform.deviceName,
+            platform: platform.devicePlatform,
+            arch: platform.deviceArch,
+            isolation: platform.deviceIsolation,
+            home: folder,
+            claudeExecutable: tools.claude,
+            codexExecutable: tools.codex,
+            signedIn: NOT_SIGNED_IN,
+            capabilities: platform.deviceCapabilities,
+            ...setup,
+          });
+        // Note that the device registers as ready only once it has what its VMs run on, so Start never takes one that cannot run an agent.
+        if (!(yield* readyForOpening(userId, deviceId, registered))) {
+          return yield* Effect.sleep(IDLE);
+        }
+        const shellVariables = yield* shellEnvironment;
+        if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
+        const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
+        for (const launch of left) {
+          if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
+        }
+        // Note that a lease lost to another follower ends the follow, every runner it started with it.
+        yield* Effect.race(
+          Effect.scoped(follow(userId, deviceId, folder, shellVariables)),
+          lost.value,
+        );
+      });
 
     const lifetime = Effect.gen(function* () {
       // A turn that died is reported and the follow rests before the next, as a shut gate does.
@@ -1136,7 +1162,8 @@ export function composeLocalAgents(
       yield* Effect.forkScoped(Effect.forever(guarded));
     });
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {};
-    return { methods, lifetime } satisfies LocalAgentsComposer;
+    // Note that the follower answers nothing itself: the panel asks This Mac's luke-host (`compose-this-mac-host.ts`).
+    const methods: Composer["methods"] = {};
+    return { methods, lifetime } satisfies Composer;
   });
 }

@@ -451,6 +451,10 @@ export const GATEWAY_METHOD = {
   MAC_REPOSITORY_SET: "macRepositories.set",
   /** The developer's answer to one command an agent asked to run on this Mac (`@luke/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
+  /** Where This Mac's `luke-host` stands (`@luke/host/contract`'s `THIS_MAC_HOST_STANDING`), as the host last found it. */
+  THIS_MAC_HOST_READ: "thisMacHost.read",
+  /** This Mac's `luke-host` turned on by the member's own act, enrolling the Mac again where Luke removed it or the last turn-on failed; where it then stands. */
+  THIS_MAC_HOST_TURN_ON: "thisMacHost.turnOn",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",

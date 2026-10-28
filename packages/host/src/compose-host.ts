@@ -38,12 +38,12 @@ import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
-import { composeLocalAgents } from "./compose-local-agents.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
+import { composeThisMacHost } from "./compose-this-mac-host.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
@@ -52,11 +52,11 @@ import {
   type AccountSource,
   type AppIdentity,
   type Environment,
-  type LocalAgentPlatform,
   Reporter,
   ShutdownSignal,
   SignInConsent,
   TerminalSocket,
+  type ThisMacHost,
   VoiceSocket,
 } from "./effect/seams.js";
 import {
@@ -106,9 +106,7 @@ type HostAssemblyRequirements =
 /** What each platform concern adds to the assembly's requirements when it is chosen. */
 interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]:
-    | ChildProcessSpawner.ChildProcessSpawner
-    | LocalAgentPlatform;
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
@@ -263,7 +261,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
     const localAgents = platform.has(HOST_PLATFORM_CONCERN.LOCAL_AGENTS)
-      ? yield* composeLocalAgents({
+      ? yield* composeThisMacHost({
           kernel,
           account,
           accountId,

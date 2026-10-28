@@ -65,9 +65,7 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * before it registers as sandboxed (`ready`) pulls the image once through a
  * throwaway machine, which leaves smolvm's own seed of it behind, so every
  * agent's VM made afterwards starts from a copy of that disk rather than
- * pulling the image again. A Mac starts every `smolvm` command through its
- * launcher (`through`), so the VM answers for its own privacy decisions
- * rather than taking Luke's.
+ * pulling the image again.
  *
  * Nothing `smolvm` prints is kept but the last line of a failure to make or
  * start a machine, which names no secret: a credential is only ever a
@@ -151,8 +149,6 @@ const AGENT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 interface SmolvmSandboxOptions {
   /** The `smolvm` the device runs: a program at the path given, as on a Linux host, or the pinned release it fetches and checks under its state, as on a Mac. */
   readonly smolvm: string | AgentToolPin;
-  /** The program every `smolvm` command is started through, given `smolvm` and its arguments, as a Mac's launcher is; none starts it directly. */
-  readonly through?: string | undefined;
   /** The device's own state, under which each agent's GitHub credential is kept, outside every folder a VM mounts. */
   readonly stateRoot: string;
   /** The folder of the runner's bundle, mounted read-only at the same path. */
@@ -217,11 +213,8 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     typeof options.smolvm === "string"
       ? options.smolvm
       : keptToolBinary(options.stateRoot, options.smolvm);
-  /** A `smolvm` command as the process it is started as: through the launcher where the device names one. */
-  const spawned = (args: readonly string[]) =>
-    options.through === undefined
-      ? { command: program, args }
-      : { command: options.through, args: [program, ...args] };
+  /** A `smolvm` command as the process it is started as. */
+  const spawned = (args: readonly string[]) => ({ command: program, args });
   const credentialsOf = (agentId: string) => {
     const folder = [options.stateRoot, CREDENTIALS_FOLDER, agentId].join("/");
     return {
