@@ -591,7 +591,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         const moved = yield* Effect.forkChild(poll(digest));
         yield* TestClock.adjust(Duration.seconds(3));
         yield* writeDrawing(dana, started.id, BOX);
-        yield* TestClock.adjust(Duration.seconds(1));
+        yield* TestClock.adjust(Duration.seconds(3));
         const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
           (yield* Fiber.join(moved)).body,
         );

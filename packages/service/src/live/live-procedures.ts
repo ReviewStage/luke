@@ -9,9 +9,10 @@
  * that account's rows and no other's. A read that names where its rows
  * last stood (`after`) is held until they move past it, or answered
  * unchanged at the hold's end, its digests and no rows, and the desktop
- * asks again (`sealedParts`). The hold looks again every second, or, for a
- * read Luke Sync wakes (`../sync/live-queries.ts`), whenever a write to its
- * topics lands, and then answers with that write's txid (`liveQueryParts`).
+ * asks again (`sealedParts`). The hold looks again every 3 s, or every
+ * second for a read someone watches move, or, for a read Luke Sync wakes
+ * (`../sync/live-queries.ts`), whenever a write to its topics lands, and
+ * then answers with that write's txid (`liveQueryParts`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
  * account reaches and every agent of them and with no task, as two
@@ -135,11 +136,22 @@ export interface LiveProcedureSeams {
 /**
  * How a poll past the reader's digest is held: looked at again each time a
  * write to its rows wakes it where it has a definition (`LIVE_QUERIES`),
- * and every second where it has none or nothing wakes it, and answered
+ * and on a clock where it has none or nothing wakes it, and answered
  * unchanged after 25, well inside a function's limit and the client's held
  * deadline.
+ *
+ * Note that the clock looks every 3 s, because each look reads every row of
+ * the read back from the database whether or not one moved, and a window
+ * holds a read for each task its Inbox lists: at every second that was most
+ * of the database's traffic. A read someone watches move, an agent's
+ * transcript, a Browser tab's pointer, or the commands a Mac waits to claim,
+ * still looks every second (`WATCHED_LOOK`).
  */
-const LIVE_POLL_HOLD = { LOOK: Duration.seconds(1), HOLD: Duration.seconds(25) } as const;
+const LIVE_POLL_HOLD = {
+  LOOK: Duration.seconds(3),
+  WATCHED_LOOK: Duration.seconds(1),
+  HOLD: Duration.seconds(25),
+} as const;
 
 /** How many of a read's parts are read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
@@ -162,15 +174,17 @@ function wokenBy<Part extends string>(
 /**
  * Each part's rows read inline at the poll address (`pollSealer`); where
  * the reader names where they last stood (`after`), held until they move
- * past it, waiting between looks on a watch of the topics, or answered
- * unchanged at the hold's end. An answer a write woke carries that write's
- * txid, which is how the desktop confirms a write once the read it follows
- * shows it. Unavailable where the rows could not be read.
+ * past it, waiting between looks on a watch of the topics (or, where none
+ * wakes it, the look), or answered unchanged at the hold's end. An answer a
+ * write woke carries that write's txid, which is how the desktop confirms a
+ * write once the read it follows shows it. Unavailable where the rows could
+ * not be read.
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   topics: readonly SyncTopic[] = NO_TOPICS,
+  look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
 ): Effect.fn.Return<
   {
     readonly url: string;
@@ -205,7 +219,7 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
     polled,
     (read) => liveDigestOf(read.queries) !== after,
     topics,
-    LIVE_POLL_HOLD.LOOK,
+    look,
     LIVE_POLL_HOLD.HOLD,
   );
   if (Option.isSome(moved)) {
@@ -366,13 +380,23 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statement = taskBrowserTabsLiveStatement(context.userId, taskId);
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts({ tabs: statement.value }, input);
+      return yield* sealedParts(
+        { tabs: statement.value },
+        input,
+        NO_TOPICS,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
+      );
     }),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const statement = macCommandsLiveStatement(context.userId, macCommandKindsRead(input.kinds));
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts({ commands: statement.value }, input);
+      return yield* sealedParts(
+        { commands: statement.value },
+        input,
+        NO_TOPICS,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
+      );
     }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -391,7 +415,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         agentFollowedBy(target.userId, target.conversationId, context.userId),
       );
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* sealedParts(statements.value, input, NO_TOPICS, LIVE_POLL_HOLD.WATCHED_LOOK);
     }),
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
