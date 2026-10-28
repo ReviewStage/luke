@@ -469,7 +469,7 @@ test("another agent of the plan the words mention is handed by its id, where its
 
   assert.match(
     part,
-    /another coding agent of your workspace on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is #42 \(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
+    /another coding agent of your workspace on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is \[@#42\]\(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
   );
   assert.match(part, /`gh pr diff 42`/u);
   assert.match(part, /To message it, call `message_agent` with its id\./u);
