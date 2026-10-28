@@ -133,7 +133,7 @@ export interface AgentWake {
   readonly words?: string | undefined;
   /** GitHub's id of a review, by which its inline comments are read. */
   readonly reviewId?: number | undefined;
-  /** The commit whose checks finished, which the agent's pull request's head must still be. */
+  /** The commit whose checks failed, or whose checks all finished, which the agent's pull request's head must then still be. */
   readonly sha?: string | undefined;
 }
 
@@ -364,6 +364,7 @@ function checkFailedWake(payload: UnparsedWireValue, now: number): AgentWake | u
     url: `${repository.html_url}/commit/${suite.head_sha}/checks`,
     by: `${suite.app?.slug ?? "github"}${BOT_LOGIN_SUFFIX}`,
     at: instantOf(suite.updated_at, now),
+    sha: suite.head_sha,
   };
 }
 
@@ -384,6 +385,7 @@ function statusFailedWake(payload: UnparsedWireValue, now: number): AgentWake | 
     url: `${repository.html_url}/commit/${sha}/checks`,
     by: sender.login,
     at: instantOf(read.success.updated_at, now),
+    sha,
   };
 }
 

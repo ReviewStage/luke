@@ -127,7 +127,8 @@ import { codingAgentStatusOf } from "./status.js";
  * send is made under, which a repeat carries again, and what sent them, which
  * the row keeps and eve is not told; and what the row says carried it, the
  * developer's typed ask unless the caller names another agent's message, a
- * thread, GitHub, Luke, or an automation's run, which eve is not told either.
+ * thread, a plan comment, GitHub, Luke, or an automation's run, which eve is
+ * not told either.
  */
 export interface SteerLine {
   readonly text: string;

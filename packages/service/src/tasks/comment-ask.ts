@@ -8,6 +8,7 @@ import {
   type PlanCommentAsked,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -114,11 +115,13 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly to: CommentRecipient;
     readonly clientKey: string;
     readonly text: string;
+    /** The comment thread handed over, which the line's row names. */
+    readonly threadId: string;
     /** The asking member's own words, whose servers and links alone the agent's next turn takes up, never another writer's in the thread. */
     readonly words: string;
   },
 ) {
-  const { userId, to, clientKey, text, words } = input;
+  const { userId, to, clientKey, text, threadId, words } = input;
   const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   yield* steerCodingAgent(eve, writer, userId, to, {
@@ -126,5 +129,10 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     serverWords: words,
     clientKey,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    metadata: {
+      author: MESSAGE_AUTHOR.DEVELOPER,
+      channel: MESSAGE_CHANNEL.COMMENT,
+      thread_id: threadId,
+    },
   });
 });

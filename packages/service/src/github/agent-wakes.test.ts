@@ -322,6 +322,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     url: `https://github.com/${RELAY_FULL_NAME}/commit/0123abcd/checks`,
     by: "github-actions[bot]",
     at: MADE_AT,
+    sha: "0123abcd",
   });
 
   const status = (branch: string, state: string) => ({
@@ -341,6 +342,7 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
     url: `https://github.com/${RELAY_FULL_NAME}/commit/4567cdef/checks`,
     by: "buildkite[bot]",
     at: MADE_AT,
+    sha: "4567cdef",
   });
 
   for (const [event, payload] of [

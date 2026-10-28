@@ -226,7 +226,8 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     thread,
     sender: asked?.writer.by?.name ?? "A member",
   });
-  yield* handCommentAskOver(seams, request, { userId, to, clientKey, text, words }).pipe(
+  const threadId = thread.id;
+  yield* handCommentAskOver(seams, request, { userId, to, clientKey, text, threadId, words }).pipe(
     Effect.onError(() =>
       withdrawPlanCommentAsk(taskId, clientKey).pipe(
         Effect.tapError(logStoreFailure),

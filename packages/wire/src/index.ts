@@ -59,6 +59,7 @@ export {
   type AssistantMessageMetadata,
   type AutomationLineMetadata,
   COMPACTION_METADATA,
+  type CommentLineMetadata,
   type CompactionMetadata,
   GITHUB_LINE_BOUNDS,
   GITHUB_LINE_EVENT,
