@@ -203,7 +203,7 @@ case "$(uname -m)" in
 esac
 
 if [ -z "$token" ] && [ ! -f "$HOST_HOME/state/device.json" ]; then
-  fail "This box is not enrolled yet. Run the command from Settings › Agents › Machines › Add Linux servers, with its --token."
+  fail "This box is not enrolled yet. Run the command from Settings › Machines › Add Linux servers, with its --token."
 fi
 
 printf 'Luke host %s for linux-%s\n' "$VERSION" "$arch"
