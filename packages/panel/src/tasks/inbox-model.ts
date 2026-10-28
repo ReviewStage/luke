@@ -1144,10 +1144,10 @@ export const INBOX_HOLDER = {
   AUTOMATION: "automation",
 } as const;
 
-/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, the automation that started it, and the workspace it belongs to, where the service names it. */
+/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, the automation that started it, its repository, and the workspace it belongs to, where the service names it. */
 type InboxAgentLine = Pick<
   AppInboxTasklessItem,
-  "agentTitle" | "agentModel" | "automationId" | "workspaceId"
+  "agentTitle" | "agentModel" | "automationId" | "repository" | "workspaceId"
 >;
 
 /**
@@ -1315,6 +1315,7 @@ export function tasklessGroups(
       agentTitle: entry.agentTitle,
       agentModel: entry.agentModel,
       automationId: entry.automationId,
+      repository: entry.repository,
       ...(entry.workspaceId === undefined ? undefined : { workspaceId: entry.workspaceId }),
     });
     const holder: InboxHolder = groups.get(key)?.holder ?? {

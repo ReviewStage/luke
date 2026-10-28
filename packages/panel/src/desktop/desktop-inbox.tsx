@@ -41,6 +41,7 @@ import {
 } from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
 import { agentName, messageFailureWords } from "../tasks/coding-agent-model.js";
+import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -90,6 +91,7 @@ import { NewTaskButton } from "./new-task-button.js";
 import {
   COLUMN,
   changesTabOf,
+  type PanelRepositoryPlace,
   SIDE_PANEL_HOLDER,
   SidePanel,
   type SidePanelDrawing,
@@ -167,7 +169,7 @@ const ITEM_NOT_READ = readFailedWords("this item");
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
 const BACK_TO_INBOX = backToWords("inbox");
 
-/** A taskless item's code reads no file, there being no task whose repository it reads through. */
+/** The code of an item whose agent's repository is not known yet reads no file, there being no repository to read it through. */
 const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
   Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
@@ -401,13 +403,15 @@ export function DesktopInbox({
     sidePanel.onOpenFile(ref);
     tasks.onShowPanelTab(going, { file: ref.path });
   };
+  // A file the item's words or box name opens as its code does, in the panel beside the Inbox.
+  const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
+    openFile(fileRef(path, lines), lines?.commit);
   const mentions =
     place === undefined
       ? undefined
-      : itemMentions(
-          tasklessMentions(place, tasks.onShowMention, readMentionAgents),
-          taskId === undefined ? undefined : openFile,
-        );
+      : tasklessMentions(place, tasks.onShowMention, readMentionAgents, {
+          onOpenFile: openMentionedFile,
+        });
   const drawing = useSidePanelDrawing(sidePanel);
   const views = useTabViews();
   const { onArea, focus } = useColumnFocus();
@@ -465,7 +469,8 @@ export function DesktopInbox({
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
       taskId,
-      repository: chosenTask?.repository ?? null,
+      repository:
+        taskId === undefined ? (place?.repository ?? null) : (chosenTask?.repository ?? null),
       pullRequests,
       agentIds: named.agentIds,
     });
@@ -519,7 +524,7 @@ export function DesktopInbox({
       <SkillFiles
         source={agents.readSkills}
         onOpen={(skill) => {
-          // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the item has no plan's panel to open it in.
+          // Note that a skill's file opens in the panel beside the Inbox, as a file the item names does, and on GitHub where the panel cannot open it.
           if (place === undefined) return;
           const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
           if (!openHere(url)) appPlatform().openGitHub(url);
@@ -549,6 +554,7 @@ export function DesktopInbox({
                   act,
                   now,
                   panelFor,
+                  place,
                   besideAgents: named.agentIds,
                 }),
                 onMark: markItem,
@@ -675,7 +681,14 @@ export function DesktopInbox({
                   focused={sideFocused}
                   taskId={taskId}
                   panelFor={panelFor}
-                  repository={chosenTask?.repository ?? agents.agentRepository ?? null}
+                  repository={
+                    chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
+                  }
+                  repositoryPlace={
+                    taskId === undefined && place !== undefined && place.repository !== null
+                      ? { workspaceId: place.workspaceId, repository: place.repository }
+                      : undefined
+                  }
                   pages={pages}
                   agents={named}
                   views={views}
@@ -703,27 +716,12 @@ function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
 }
 
 /**
- * The mentions of the chosen item's words and box, read where `answerPlace`
- * says: a file or its lines an item of a task names opens through
- * `openFile`, as its code and its links do; an item of an agent with no
- * task has no File tab to open it in, so its file stays GitHub's.
- */
-function itemMentions(
-  taskless: TaskMentionsValue,
-  openFile: ((ref: CodeRef, commit: string | undefined) => void) | undefined,
-): TaskMentionsValue {
-  if (openFile === undefined) return taskless;
-  const onOpenFile = (path: string, lines: MentionLines | undefined) =>
-    openFile(fileRef(path, lines), lines?.commit);
-  return { ...taskless, doors: { ...taskless.doors, onOpenFile } };
-}
-
-/**
  * Where the chosen item's words are read in the window's Inbox, which
  * stands on no plan's page: its plan's workspace, by its slug, and
  * repository, or, for an agent with no plan, the agent's own as its read
- * names them, never its group's, which agents of other repositories share
- * and which an agent a link reached stands under with none. Its box
+ * names them, or its line in main's read before that read lands, never its
+ * group's, which agents of other repositories share and which an agent a
+ * link reached stands under with none. Its box
  * mentions what that repository and workspace hold, as the page of an
  * agent no plan holds does (`tasklessMentions`), and its skills' files
  * open there. None until both are known.
@@ -739,7 +737,9 @@ function answerPlace(
       ? holder.task.workspaceId
       : (agents.workspaceId ?? itemWorkspaceId(holder, item.agentId));
   const repository =
-    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : agents.agentRepository;
+    holder.kind === INBOX_HOLDER.TASK
+      ? holder.task.repository
+      : (agents.agentRepository ?? holder.agents.get(item.agentId)?.repository);
   if (workspaceId === undefined || repository === undefined || repository === null) {
     return undefined;
   }
@@ -762,6 +762,7 @@ function InboxSidePanel({
   taskId,
   panelFor,
   repository,
+  repositoryPlace,
   pages,
   agents,
   views,
@@ -775,6 +776,8 @@ function InboxSidePanel({
   taskId: string | undefined;
   panelFor: string | undefined;
   repository: string | null;
+  /** The workspace and repository the panel reads a file through where the item's agent is on no task. */
+  repositoryPlace: PanelRepositoryPlace | undefined;
   pages: TasksControl["inboxView"]["pages"];
   agents: CodingAgentsControl;
   views: TabViews;
@@ -841,6 +844,7 @@ function InboxSidePanel({
       holder={SIDE_PANEL_HOLDER.INBOX}
       taskId={panelFor ?? ""}
       repository={repository}
+      repositoryPlace={repositoryPlace}
       pages={pages}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}
@@ -867,11 +871,34 @@ function InboxSidePanel({
 }
 
 /**
+ * The code doors of an item of an agent with no task: its lines read
+ * through the agent's workspace and repository, and its file opened in the
+ * panel beside the Inbox, which stands for the agent and reads it the same
+ * way; nothing read or opened until both are known.
+ */
+function tasklessCode(
+  tasks: TasksControl,
+  act: ReturnType<typeof useAct>["act"],
+  place: TasklessPlace | undefined,
+): InboxCodeDoors {
+  if (place === undefined || place.repository === null) {
+    return { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined };
+  }
+  const { workspaceId, repository } = place;
+  return {
+    repository,
+    readFile: (window) => act(ACT_KIND.TASKS_FILE, { workspaceId, repository, ...window }),
+    onOpenFile: (ref, commit) => tasks.sidePanel.onPreviewFile(ref, commit),
+  };
+}
+
+/**
  * The pane's doors for what holds its item: a task's open the task, its
  * agents' tabs, and its files, a file in the panel beside the Inbox where
  * the panel stands for the task; an automation's open its page where the
- * Automations experiment is on, its agents' own pages, and no file, there
- * being no task whose repository a file is read through.
+ * Automations experiment is on, its agents' own pages, and its agent's
+ * files, read through its workspace and repository (`answerPlace`), in the
+ * panel beside the Inbox, which stands for that agent.
  */
 function paneDoors(
   tasks: TasksControl,
@@ -883,6 +910,8 @@ function paneDoors(
     panelFor: string | undefined;
     /** The task's agents whose transcripts the panel beside the Inbox draws: its agents not archived, once read. */
     besideAgents: readonly string[] | undefined;
+    /** Where the item's words are read (`answerPlace`), whose repository an agent with no task reads its files through; none until known. */
+    place: TasklessPlace | undefined;
   },
 ): InboxPaneDoors {
   if (holder.kind === INBOX_HOLDER.TASK) {
@@ -917,6 +946,6 @@ function paneDoors(
         : undefined,
     taskCard: undefined,
     onOpenAgent: (agentId) => tasks.agentView.onOpen(agentId),
-    code: { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined },
+    code: tasklessCode(tasks, seams.act, seams.place),
   };
 }

@@ -81,6 +81,7 @@ import {
   saying,
   settle,
   showScope,
+  skillReads,
   standKeymap,
   TEAMMATE,
   THRESHOLD,
@@ -1709,4 +1710,46 @@ test("the channels' counts add up to the Inbox's, Luke's question among them, bu
     [1, 2],
     "the channels count three of them, Luke's in #app among them, the archived channel's on no row",
   );
+});
+
+test("an item of an agent with no task reads the lines its code names through the agent's workspace and repository, and a file its words name opens beside the Inbox rather than on GitHub", async () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const words = [
+    `https://github.com/acme/relay/blob/${commit}/src/flaky.test.ts#L3-L5`,
+    "The retry is in [@flaky.test.ts](https://github.com/acme/relay/blob/HEAD/src/flaky.test.ts).",
+  ].join("\n\n");
+  world.agentInboxes = new Map([[SWEEP_AGENT, [saying(QUARANTINE, words)]]]);
+  const openedOnGitHub = skillReads();
+  const previewed: string[] = [];
+  const panel: SidePanelControl = {
+    ...tasksControl().sidePanel,
+    onPreviewFile: (ref, at) => previewed.push(`${JSON.stringify(ref)} ${at}`),
+  };
+  const { page } = mount([{ ...waitingTaskless(QUARANTINE), workspaceId: "workspace-acme" }], {
+    panel,
+  });
+  await settle();
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  assert.deepEqual(
+    world.fileReads.map(({ firstLine: _first, lastLine: _last, ...place }) => place),
+    [
+      {
+        path: "src/flaky.test.ts",
+        workspaceId: "workspace-acme",
+        repository: "acme/relay",
+        ref: commit,
+      },
+    ],
+    "the code reads its lines by the agent's workspace and repository, naming no task",
+  );
+
+  const chip = [
+    ...page.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
+  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent === "flaky.test.ts");
+  assert.ok(chip, "the file is its chip");
+  act(() => chip.click());
+  assert.deepEqual(previewed, [`${JSON.stringify({ path: "src/flaky.test.ts" })} undefined`]);
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });

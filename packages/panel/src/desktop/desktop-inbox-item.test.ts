@@ -1313,9 +1313,6 @@ async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
   act(() => chip.click());
 }
 
-/** Where the release skill's file stands on GitHub. */
-const RELEASE_ON_GITHUB = "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md";
-
 test("in the window's Inbox a skill an answer's words name is the chip a sent message draws, which opens its SKILL.md in the panel beside it as its preview, as a file the item names does", async () => {
   const answered = answeredBy(
     item(RETRY.id, RETRY.title, 5_000),
@@ -1343,20 +1340,26 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
   assert.deepEqual(opened, [], "nothing leaves for GitHub");
 });
 
-test("a skill named by a settled item of an agent with no plan that a link reached opens in the agent's own repository, which its group names none of", async () => {
+test("a skill named by a settled item of an agent with no plan that a link reached opens beside the Inbox, in the agent's own repository, which its group names none of", async () => {
   const settled = answeredBy(BUMP, READER, "Retry once", "Run /release first.", 2_000);
   world.agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
   world.pageAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
   ]);
   const opened = skillReads();
-  const { page } = mount();
+  const files: string[] = [];
+  const panel: SidePanelControl = {
+    ...tasksControl().sidePanel,
+    onPreviewFile: (ref) => files.push(ref.path),
+  };
+  const { page } = mount([], { panel });
   await settle();
   act(() => world.chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
   await settle();
   await pressNoteSkill(page, "/release");
 
-  assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
+  assert.deepEqual(files, [".agents/skills/release/SKILL.md"]);
+  assert.deepEqual(opened, [], "nothing leaves for GitHub");
 });
 
 test("Got it on a notice whose agent waits to hear back reaches the agent, so the window reads its agents again, as it does for no nod on a notice that needs none", async () => {

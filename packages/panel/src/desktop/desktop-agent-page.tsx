@@ -7,7 +7,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import type { MentionLines } from "@luke/features/mention-link";
 import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -35,7 +35,6 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
-import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
@@ -518,12 +517,27 @@ export function DesktopAgentPage({
       }),
     [control, views.held, tab, sideTab, planId, agentId],
   );
-  // A skill's file opens where a file the agent names does: its page on GitHub.
+  // The agent's repository, which the panel beside it reads a file of by its workspace, once the read named both.
+  const repositoryPlace = useMemo(
+    () =>
+      workspaceId === undefined || agentRepository === undefined
+        ? undefined
+        : { workspaceId, repository: agentRepository },
+    [workspaceId, agentRepository],
+  );
+  // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
+  const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
+    lines === undefined
+      ? sidePanel.onPreviewFile({ path })
+      : sidePanel.onPreviewFile(
+          { path, startLine: lines.startLine, endLine: lines.endLine },
+          lines.commit,
+        ),
+  );
+  // A skill's file opens where a file the agent names does: in the panel beside it.
   const openSkill = (skill: { readonly path: string }) => {
-    if (agentRepository === undefined) return;
-    const place = { workspace: listed?.slug ?? workspaceId ?? "", repository: agentRepository };
-    const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-    appPlatform().openGitHub(url);
+    if (repositoryPlace === undefined) return;
+    sidePanel.onPreviewFile({ path: skill.path });
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
   const pullRequestCard = useSteadyDoor((url: string) => {
@@ -556,7 +570,10 @@ export function DesktopAgentPage({
             { workspace: mentionWorkspace, workspaceId, repository: agentRepository ?? null },
             onShowMention,
             readMentionAgents,
-            pullRequestCard,
+            {
+              pullRequestOf: pullRequestCard,
+              onOpenFile: repositoryPlace === undefined ? undefined : openMentionedFile,
+            },
           ),
     [
       workspaceId,
@@ -565,6 +582,8 @@ export function DesktopAgentPage({
       onShowMention,
       readMentionAgents,
       pullRequestCard,
+      repositoryPlace,
+      openMentionedFile,
     ],
   );
   // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
@@ -711,6 +730,7 @@ export function DesktopAgentPage({
                           holder={SIDE_PANEL_HOLDER.AGENT}
                           taskId={agentId}
                           repository={agentRepository ?? null}
+                          repositoryPlace={repositoryPlace}
                           pages={tasks.agentView.pages}
                           agents={control}
                           openAgents={openAgents}

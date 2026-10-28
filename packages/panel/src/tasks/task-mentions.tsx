@@ -136,16 +136,18 @@ export interface TasklessPlace {
  * The mentions of a page no task holds, as the page of an agent an
  * automation started is: its repository's files and folders, its skills,
  * and the servers, and no plan's sections; a task or a section a message
- * names opens through `onOpenTask`, and a file is GitHub's, since no File
- * tab stands there. A place of no repository, as Luke's page is, offers
- * the rest all the same. A link to a pull request the place's agent opened
- * hangs the card `pullRequestOf` answers, where the place hands one.
+ * names opens through `onOpenTask`, and a file through `onOpenFile`, in
+ * the panel beside the page, which reads it by the place's workspace and
+ * repository, or on GitHub where the place hands none. A place of no
+ * repository, as Luke's page is, offers the rest all the same. A link to a
+ * pull request the place's agent opened hangs the card `pullRequestOf`
+ * answers, where the place hands one.
  */
 export function tasklessMentions(
   place: TasklessPlace,
   onOpenTask: MentionDoors["onOpenTask"],
   readAgents?: MentionAgentsReader,
-  pullRequestOf?: MentionDoors["pullRequestOf"],
+  opens: Partial<Pick<MentionDoors, "pullRequestOf" | "onOpenFile">> = {},
 ): TaskMentionsValue {
   const { workspace, workspaceId, repository } = place;
   return {
@@ -161,8 +163,8 @@ export function tasklessMentions(
       place: { workspace, repository },
       anchors: NO_ANCHORS,
       onOpenTask,
-      onOpenFile: undefined,
-      pullRequestOf,
+      onOpenFile: repository === null ? undefined : opens.onOpenFile,
+      pullRequestOf: opens.pullRequestOf,
     },
   };
 }
