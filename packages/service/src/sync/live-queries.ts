@@ -194,14 +194,15 @@ export const agentInboxLive = defineLiveQuery({
  * One workspace's channels and where each one's threads stand, woken by a
  * channel or an item written in any of the account's workspaces, both of
  * which name every member (`channelSync`, `inboxItemSync`), and by what
- * admits the account to a workspace or a repository. Note that an agent
- * written itself wakes none, because the read only asks whether the reader
- * sees each thread's agent, which the agent's GitHub reach decides.
+ * admits the account to a workspace or a repository. Note that an agent or
+ * a task written itself wakes none, because the read only asks whether the
+ * reader sees each thread's agent and its task (`itemVisibleTo`), which
+ * their GitHub reach decides.
  */
 export const channelsLive = defineLiveQuery({
   name: "channels",
   params: ["userId", "workspaceId"],
-  reads: [channelSync, inboxItemSync, codingAgentSync, ...ITEM_GATES],
+  reads: [channelSync, inboxItemSync, codingAgentSync, taskSync, ...ITEM_GATES],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
   statements: ({ userId, workspaceId }) => channelsLiveStatements(userId, workspaceId),
   mode: LIVE_MODE.SNAPSHOT,
@@ -294,6 +295,7 @@ export const agentPagesLive = defineLiveQuery({
   params: ["userId", "agentId"],
   reads: [
     codingAgentSync,
+    taskSync,
     planPageVersionSync,
     memberSync,
     githubPersonalTokenSync,
@@ -367,7 +369,9 @@ export const taskBrowserTabsLive = defineLiveQuery({
  * (`transcript-live.ts`). It is woken by a write to the transcript's
  * messages, turns, asks, or conversation, to a worker's conversation or
  * delegation under the agent's, to the agent itself, and to what admits the
- * reader to its workspace or repository.
+ * reader to its workspace or repository; the agent's task is read for the
+ * reader's reach of it (`agentVisibleTo`) and wakes nothing, as a task's
+ * reach moves with what admits the reader.
  *
  * Its newest messages (`window`, `windowParts`) are followed by cursor:
  * where the reader holds them, the highest sequence it has and the journal
@@ -397,6 +401,7 @@ export const agentTranscriptLive = defineLiveQuery({
     codingAgentDelegationSync,
     userSync,
     codingAgentSync,
+    taskSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
