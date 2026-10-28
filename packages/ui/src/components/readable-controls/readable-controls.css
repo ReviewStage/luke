@@ -8,8 +8,18 @@
   }
 
   /* Note that the words select rather than the control around them, so a
-     badge, a key's number, and a box beside the words stay out of a copy. */
-  .luke-readable-controls :is(.luke-choice-label, .luke-choice-detail, .luke-checkbox-words) {
+     badge, a key's number, and a box beside the words stay out of a copy;
+     a field's name selects too, and its Optional, inside the label that
+     keeps its own words from selecting as a label that presses what it
+     names. */
+  .luke-readable-controls
+  :is(
+    .luke-choice-label,
+    .luke-choice-detail,
+    .luke-checkbox-words,
+    .luke-field-words,
+    .luke-field-optional
+  ) {
     -webkit-user-select: text;
     user-select: text;
   }

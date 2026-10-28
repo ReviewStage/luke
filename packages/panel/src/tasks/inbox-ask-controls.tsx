@@ -67,11 +67,12 @@ import { SentWords } from "./skill-chip.js";
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
  * stand in (`DraftQuestion`), a form of several fields too, where Space or
- * a press picks an option. An ask's words, its options and its
- * steps, select and copy whether it is open or not (`ReadableControls`), a
- * drag over them picking and ticking nothing, and stand Reply over them as
- * the words around them do (`reply-to-selection.tsx`), a field's own
- * typing aside.
+ * a press picks an option. An ask's words, its options, its steps, and its
+ * fields' names, select and copy whether it is open or not
+ * (`ReadableControls`), as do the presses an answer gave and the values it
+ * filled in, a drag over them picking and ticking nothing, and stand Reply
+ * over them as the words around them do (`reply-to-selection.tsx`), a
+ * field's own typing aside.
  */
 
 /** An ask's box, in an Inbox thread, which gives way to its column. */
@@ -208,10 +209,13 @@ function fieldFrame(field: InboxField, readOnly: boolean) {
 }
 
 /**
- * A text field's words as an answer gave them, in the field's own frame:
- * drawn as the agent's tab draws a sent message, so a mention they hold is
- * its chip, and empty where the field was left empty. Note that the
- * composer's editor is not loaded for it, since nothing is written here.
+ * A text or number field's value as an answer gave it, in the field's own
+ * frame: drawn as the agent's tab draws a sent message, so a mention it
+ * holds is its chip, and empty where the field was left empty. Note that
+ * the composer's editor is not loaded for it, since nothing is written
+ * here, and that a number is words here rather than a read-only field,
+ * since a reply quotes no selection inside a field
+ * (`reply-to-selection.tsx`).
  */
 function AnsweredText({
   control,
@@ -308,15 +312,21 @@ function InboxFormField({
           <FormField label={field.label} optional={optionalField(field)}>
             {(control) => (
               <div className="inbox-field-short max-w-inbox-field-short">
-                <TextField
-                  field={control}
-                  type={TEXT_FIELD_TYPE.NUMBER}
-                  maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-                  value={value === undefined ? undefined : Number(value)}
-                  disabled={disabled}
-                  readOnly={readOnly}
-                  onChange={set}
-                />
+                {readOnly ? (
+                  <AnsweredText
+                    control={control}
+                    words={value === undefined ? "" : String(value)}
+                  />
+                ) : (
+                  <TextField
+                    field={control}
+                    type={TEXT_FIELD_TYPE.NUMBER}
+                    maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                    value={value === undefined ? undefined : Number(value)}
+                    disabled={disabled}
+                    onChange={set}
+                  />
+                )}
               </div>
             )}
           </FormField>
@@ -872,11 +882,9 @@ export function WithdrawnWords({
 export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.JSX.Element | null {
   if (reason === undefined) return null;
   return (
-    // Note that its words may be quoted into a reply, as the agent's own words may.
     <p
       className="inbox-ask-why m-0 text-muted-foreground wrap-anywhere"
       data-inbox-withdrawn-why=""
-      {...{ [REPLY_SCOPE]: "" }}
     >
       {reason}
     </p>
