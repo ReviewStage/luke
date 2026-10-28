@@ -8,18 +8,21 @@
 #
 # Every agent runs in a smolvm VM of its own, with no mode that runs one
 # without, so it refuses a box with no usable /dev/kvm before it changes
-# anything. It then downloads the release's tarball for the box's architecture
-# and the pinned smolvm's, and checks each against the SHA-256 this script
-# carries before anything of either is installed; installs the daemon to
+# anything. On Windows it runs inside WSL2 alone, whose kernel is Linux's; WSL1
+# has none, so it is refused. It then downloads the release's tarball for the
+# box's architecture and the pinned smolvm's, and checks each against the
+# SHA-256 this script carries before anything of either is installed; installs the daemon to
 # /opt/luke-host and smolvm to /opt/luke-smolvm, both owned by root, smolvm only
 # where the box's is not the pinned release already; makes the luke-host user
 # the daemon and every agent's VM run as, in the kvm group; enrolls the box under
 # its hostname, which writes the box's device secret readable by luke-host
-# alone; installs and starts luke-host.service as that user, restarted only
-# when it crashes, and told by its environment which smolvm to run; and, last,
-# fetches Luke's sandbox image as luke-host, so the first agent does not wait
-# for its 1.3 GB. smolvm's own state lives under luke-host's home. Run again
-# without --token, it upgrades in place and keeps the box's enrollment.
+# alone; and installs and starts luke-host.service as that user, restarted only
+# when it crashes, and told by its environment which smolvm to run. Before it
+# enrolls or starts anything, it fetches Luke's sandbox image as luke-host, so
+# the first agent does not wait for its 1.3 GB, and boots one throwaway VM from
+# it as the daemon would, so a box that cannot boot one is told so here rather
+# than by its first agent. smolvm's own state lives under luke-host's home. Run
+# again without --token, it upgrades in place and keeps the box's enrollment.
 # `sudo luke-host uninstall` removes it.
 #
 # smolvm's own install script is never run: its release is fetched and checked
@@ -55,14 +58,30 @@ SMOLVM_DIR="/opt/luke-smolvm"
 SMOLVM="$SMOLVM_DIR/smolvm"
 # The device every VM needs; a test points it at a path that is not there.
 KVM_DEVICE="${LUKE_HOST_KVM_DEVICE:-/dev/kvm}"
+# The folder that stands where systemd runs the box; a test points it elsewhere.
+SYSTEMD_RUN_DIR="${LUKE_HOST_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+# Whether the box is WSL2, which require_supported_os reads from /proc/version.
+ON_WSL=false
+# Whether this run stopped a running luke-host.service to swap its files.
+STOPPED_SERVICE=false
 # The daemon exits with this (EX_CONFIG) where its smolvm is not the pinned
 # release, and the unit leaves it stopped rather than start it over.
 EXIT_REFUSED=78
 # How long the script waits for the service's first word with Luke: its first
 # start fetches the pinned Claude Code before it registers.
 CONNECT_WAIT_SECONDS=300
-# How long fetching the sandbox image may take before the script goes on without it.
+# How long fetching the sandbox image may take.
 IMAGE_WAIT_SECONDS=1800
+# The throwaway machine the boot check makes; every agent's is named luke-<id>,
+# so this one never collides with one.
+BOOT_MACHINE="install-boot-check"
+# The workload and user every agent's machine is made with (smolvm-sandbox.ts).
+BOOT_WORKLOAD='while true; do sleep 3600; done'
+BOOT_WORKLOAD_USER="0:0"
+# How long each step of the boot check may take, the image already fetched.
+BOOT_WAIT_SECONDS=180
+# How long stopping or deleting the throwaway machine may take.
+BOOT_CLEANUP_SECONDS=60
 
 if [ -t 1 ]; then
   CHECK="$(printf '\033[32m✓\033[0m')"
@@ -91,7 +110,8 @@ hardware_machine() {
 
 # Refuses a computer Luke host does not run on, as the script's first word on
 # it, before it changes anything: its kernel ($1), its machine ($2), and its
-# /proc/version ($3), which names Microsoft under WSL.
+# /proc/version ($3). WSL2's names its kernel microsoft-standard (and WSL2 since
+# 5.10) and is let through, setting ON_WSL; WSL1's names Microsoft alone.
 require_supported_os() {
   case "$1" in
     Linux) ;;
@@ -104,7 +124,10 @@ require_supported_os() {
     *) fail "Luke host runs on Linux, not $1." ;;
   esac
   case "$3" in
-    *[Mm]icrosoft* | *WSL*) fail "Luke host does not run on Windows, including WSL." ;;
+    *microsoft-standard* | *WSL2*) ON_WSL=true ;;
+    *[Mm]icrosoft* | *WSL*)
+      fail "Luke host needs WSL2, and this is WSL1, which has no Linux kernel. Upgrade it with: wsl --set-version <distro> 2"
+      ;;
   esac
 }
 
@@ -123,10 +146,24 @@ require_kvm() {
     printf '  Every agent runs in a VM of its own, which needs hardware virtualization (KVM).\n'
     printf '  There is no bare mode that runs agents on the box itself, so nothing was installed.\n'
     printf '  Check with: ls -l /dev/kvm   (it should be a character device, group kvm)\n'
-    printf '  On a cloud VM, turn on nested virtualization or pick a bare-metal instance;\n'
-    printf '  on a box of your own, turn on VT-x or AMD-V in its BIOS or UEFI settings.\n'
+    if [ "$ON_WSL" = true ]; then
+      printf '  Under WSL2 on Windows 11, turn on nested virtualization: [wsl2] nestedVirtualization=true in %%UserProfile%%\\.wslconfig, then wsl --shutdown.\n'
+    else
+      printf '  On a cloud VM, turn on nested virtualization or pick a bare-metal instance;\n'
+      printf '  on a box of your own, turn on VT-x or AMD-V in its BIOS or UEFI settings.\n'
+    fi
   } >&2
   exit 1
+}
+
+# Refuses a box not run by systemd, which the daemon's service needs, saying
+# under WSL how to turn it on.
+require_systemd() {
+  command -v systemctl >/dev/null 2>&1 && [ -d "$SYSTEMD_RUN_DIR" ] && return 0
+  if [ "$ON_WSL" = true ]; then
+    fail "Luke host needs systemd. Turn it on with [boot] systemd=true in /etc/wsl.conf, run wsl --shutdown in Windows, and run this again."
+  fi
+  fail "Luke host needs systemd."
 }
 
 # Fails unless the file's SHA-256 is the one given: $1 the file, $2 its digest.
@@ -173,6 +210,118 @@ UNIT_EOF
   systemctl daemon-reload
 }
 
+# Fails with why ($1), luke-host not started by this run. A service this run
+# stopped to swap its files is started again on the box's enrollment, so a
+# failed upgrade leaves it serving rather than offline; one stopped before the
+# run stays stopped.
+fail_unstarted() {
+  [ "$STOPPED_SERVICE" = true ] || fail "$1. Luke host was not started."
+  # Note that the unit is rewritten first, since the daemon just installed refuses to run under the previous release's, which names no smolvm.
+  write_unit
+  systemctl restart "$UNIT" ||
+    fail "$1. $UNIT could not be started again either; see journalctl -u $UNIT."
+  fail "$1. $UNIT was restarted on this box's existing enrollment."
+}
+
+# Runs smolvm as the luke-host user, in its home, as the daemon's service does:
+# $@ smolvm's arguments, after a timeout command and its seconds where $1 is
+# --within <seconds>.
+smolvm_as_host() {
+  limit=""
+  if [ "$1" = "--within" ]; then
+    command -v timeout >/dev/null 2>&1 && limit="timeout $2"
+    shift 2
+  fi
+  (cd "$HOST_HOME" && runuser -u "$HOST_USER" -- env \
+    -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME HOME="$HOST_HOME" \
+    $limit "$SMOLVM" "$@")
+}
+
+# The last line smolvm printed in the file $1, or that it timed out where it
+# exited $2 124, the timeout command's code.
+smolvm_said() {
+  if [ "$2" -eq 124 ]; then
+    printf 'timed out'
+    return 0
+  fi
+  last="$(grep -v '^[[:space:]]*$' "$1" | tail -n 1)"
+  printf '%s' "${last:-exited $2}"
+}
+
+# Fetches Luke's sandbox image, about 1.3 GB, by smolvm's own documented way:
+# a run of the image, which keeps the image for every VM after it.
+fetch_sandbox_image() {
+  printf 'Fetching the sandbox image (about 1.3 GB), so the first agent does not wait for it...\n'
+  said="$(mktemp)"
+  code=0
+  smolvm_as_host --within "$IMAGE_WAIT_SECONDS" machine run --net --image "$SANDBOX_IMAGE" -- true \
+    >/dev/null 2>"$said" || code=$?
+  if [ "$code" -ne 0 ]; then
+    why="$(smolvm_said "$said" "$code")"
+    rm -f "$said"
+    fail_unstarted "Could not fetch the sandbox image (smolvm: $why)"
+  fi
+  rm -f "$said"
+  ok "Fetched the sandbox image"
+}
+
+# Stops and deletes the boot check's machine, whatever it was left in, stopping
+# it at once where a graceful stop fails, as the daemon does; fails where it
+# could not be deleted, with what smolvm said written to the file $1.
+remove_boot_machine() {
+  smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine stop --name "$BOOT_MACHINE" >/dev/null 2>&1 ||
+    smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine stop --name "$BOOT_MACHINE" --timeout 0 \
+      >/dev/null 2>&1 || true
+  smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine delete --name "$BOOT_MACHINE" -f >/dev/null 2>"$1"
+}
+
+# Proves a VM boots before anything is started: one throwaway machine made from
+# the pinned image as the daemon makes every agent's (smolvm-sandbox.ts), with
+# the same smolvm, user and flags, nested where the box has $KVM_DEVICE on
+# Linux, started, `true` run in it as luke-host, then stopped and deleted
+# whether it booted or not. It fails with the step and smolvm's last line, and
+# where the machine booted but could not be deleted.
+require_vm_boots() {
+  boot_nested=""
+  if [ "$(uname -s)" = "Linux" ] && [ -e "$KVM_DEVICE" ]; then
+    boot_nested="--nested"
+  fi
+  boot_user="$(id -u "$HOST_USER"):$(id -g "$HOST_USER")"
+  said="$(mktemp)"
+  removal="$(mktemp)"
+  # Note that one an interrupted run left behind is cleared first, so the name is free.
+  remove_boot_machine "$removal" || true
+  boot_step=create
+  code=0
+  smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine create --name "$BOOT_MACHINE" \
+    --image "$SANDBOX_IMAGE" --net --user "$BOOT_WORKLOAD_USER" $boot_nested \
+    -- sh -c "$BOOT_WORKLOAD" >/dev/null 2>"$said" || code=$?
+  if [ "$code" -eq 0 ]; then
+    boot_step=start
+    smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine start --name "$BOOT_MACHINE" \
+      >/dev/null 2>"$said" || code=$?
+  fi
+  if [ "$code" -eq 0 ]; then
+    boot_step=exec
+    smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine exec --name "$BOOT_MACHINE" \
+      --user "$boot_user" -- true >/dev/null 2>"$said" || code=$?
+  fi
+  removed=0
+  remove_boot_machine "$removal" || removed=$?
+  if [ "$code" -ne 0 ]; then
+    why="$(smolvm_said "$said" "$code")"
+    rm -f "$said" "$removal"
+    fail_unstarted "No VM booted (smolvm machine $boot_step: $why)"
+  fi
+  if [ "$removed" -ne 0 ]; then
+    why="$(smolvm_said "$removal" "$removed")"
+    rm -f "$said" "$removal"
+    fail_unstarted "A VM booted, but smolvm could not delete it (smolvm machine delete --name $BOOT_MACHINE: $why)"
+  fi
+  rm -f "$said" "$removal"
+  ok "Booted a VM from the sandbox image"
+}
+
 # A test sources the script up to here, to call its functions and read what it carries.
 [ -z "${LUKE_HOST_INSTALL_LIBRARY:-}" ] || return 0
 
@@ -209,7 +358,7 @@ esac
 require_supported_os "$(uname -s)" "$(hardware_machine)" "$(cat /proc/version 2>/dev/null || true)"
 require_kvm
 [ "$(id -u)" -eq 0 ] || fail "Run it as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
-command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] || fail "Luke host needs systemd."
+require_systemd
 command -v sha256sum >/dev/null 2>&1 || fail "Luke host needs sha256sum (coreutils)."
 command -v git >/dev/null 2>&1 || fail "Luke host needs git, which its agents make their worktrees with."
 command -v bash >/dev/null 2>&1 || fail "Luke host needs bash, which smolvm's launcher script runs on."
@@ -284,6 +433,7 @@ ok "$made"
 # on its next message.
 if systemctl is-active --quiet "$UNIT"; then
   systemctl stop "$UNIT"
+  STOPPED_SERVICE=true
 fi
 rm -rf "$INSTALL_DIR.new" "$INSTALL_DIR.old"
 mv "$work/unpacked/luke-host" "$INSTALL_DIR.new"
@@ -319,6 +469,11 @@ else
     fail "The smolvm installed to $SMOLVM_DIR does not answer smolvm $SMOLVM_VERSION."
   ok "Installed smolvm $SMOLVM_VERSION to $SMOLVM_DIR"
 fi
+
+# Note that both come before the box is enrolled, so a box that cannot boot a
+# VM keeps its token for another try, and before the service is started.
+fetch_sandbox_image
+require_vm_boots
 
 name="$(hostname -s 2>/dev/null || hostname)"
 if [ -n "$token" ]; then
@@ -361,24 +516,11 @@ else
   printf '! Not connected to Luke yet. Follow it with: journalctl -u %s -f\n' "$UNIT"
 fi
 
-# Note that the first VM of an image pulls it, about 1.3 GB, so it is fetched
-# here, by smolvm's own documented way (a run of the image, which keeps the
-# image for every VM after it), rather than leave the first agent to wait for
-# it. It is last because nothing needs it to finish, and a failure only means the
-# first agent pulls it as it would have.
-printf 'Fetching the sandbox image (about 1.3 GB), so the first agent does not wait for it...\n'
-limit=""
-if command -v timeout >/dev/null 2>&1; then
-  limit="timeout $IMAGE_WAIT_SECONDS"
-fi
-if (cd "$HOST_HOME" && runuser -u "$HOST_USER" -- env \
-  -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME HOME="$HOST_HOME" \
-  $limit "$SMOLVM" machine run --net --image "$SANDBOX_IMAGE" -- true >/dev/null 2>&1); then
-  ok "Fetched the sandbox image"
-else
-  printf '! Could not fetch the sandbox image. The first agent fetches it as it starts.\n'
-fi
-
 printf '\n%s is ready. Pick it under a task'"'"'s Runs on.\n' "$name"
 printf 'To upgrade later, run the same command without --token.\n'
 printf 'To remove it: sudo luke-host uninstall\n'
+# Note that a systemd service does not keep a WSL distro up: WSL stops it about
+# 15 seconds after its last window closes, unless instanceIdleTimeout is -1.
+if [ "$ON_WSL" = true ]; then
+  printf 'Under WSL, Windows stops %s about 15 seconds after its last WSL window closes: keep one open, or set [general] instanceIdleTimeout=-1 in %%UserProfile%%\\.wslconfig (WSL 2.5 or later).\n' "$UNIT"
+fi
