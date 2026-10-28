@@ -99,7 +99,8 @@ import {
   withdrawInboxClose,
   withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
-import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
+import { wokenOnHub } from "../../testing/sync-woken.js";
+import { accountInboxPast, agentInboxPast, taskInboxPast } from "./inbox-page.js";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions
@@ -113,7 +114,8 @@ import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
  * on an item's thread whatever its status, which moves the item's last
  * change and nothing else of it, and nothing of a workspace the account is
  * not in is read or written. A member's operator's items are that member's
- * alone.
+ * alone. On Luke Sync, a task's, an agent's, and the account's held reads
+ * each answer an agent's post within a coalesce window.
  *
  * Synthetic accounts, tasks, and words throughout.
  */
@@ -1128,6 +1130,42 @@ it.layer(getTestDB())("the inbox store", (it) => {
 });
 
 /** Whether the item is unread for the reader, as their read of it says. */
+it.layer(getTestDB())("the inbox's held reads on Luke Sync", (it) => {
+  it.effect(
+    "a task's, an agent's, and the account's held reads each answer an agent's post within a coalesce window of it",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const agent = yield* openAgent;
+          const taskId = agent.taskId ?? "";
+
+          const task = yield* taskInboxPast(agent.userId, taskId, INBOX_CURSOR_START);
+          const onTask = yield* wokenOnHub(
+            taskInboxPast(agent.userId, taskId, task.cursor),
+            post(agent, NOTICE),
+          );
+          const own = yield* agentInboxPast(agent.userId, agent.agentId, INBOX_CURSOR_START);
+          const onAgent = yield* wokenOnHub(
+            agentInboxPast(agent.userId, agent.agentId, own.cursor),
+            post(agent, SETTINGS),
+          );
+          const account = yield* accountInboxPast(agent.userId, INBOX_CURSOR_START);
+          const onAccount = yield* wokenOnHub(
+            accountInboxPast(agent.userId, account.cursor),
+            post(agent, { ...SETTINGS, key: "release-tag" }),
+          );
+
+          assert.deepEqual(
+            onTask.answered.items.map((item) => item.id),
+            [onTask.written.id],
+          );
+          assert.ok(onAgent.answered.items.some((item) => item.id === onAgent.written.id));
+          assert.ok(onAccount.answered.items.some((item) => item.id === onAccount.written.id));
+        }),
+      ),
+  );
+});
+
 const unreadFor = (reader: string, itemId: string) =>
   Effect.map(readInboxItem(reader, itemId), (found) => Option.getOrThrow(found).item.unread);
 

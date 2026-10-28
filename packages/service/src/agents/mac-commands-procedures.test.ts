@@ -9,7 +9,8 @@
  * refuses is answered not run with the Mac's reason. Only the Mac's bearer
  * is read, never a cookie,
  * and before anything the body says. Each refusal answers what the old
- * group answered.
+ * group answered. On Luke Sync, the held read answers within a coalesce
+ * window of a command queued, and a call within one of the Mac settling it.
  *
  * Synthetic accounts, bearers, and commands throughout.
  */
@@ -19,11 +20,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
+  claimMacCommands,
   macCommandResult,
   macCommandsWaiting,
   macListeningSince,
   markMacListening,
   queueMacCommand,
+  settleMacCommand,
 } from "@luke/database/models/mac-command-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, messages } from "@luke/database/schemas/storage";
@@ -41,7 +44,8 @@ import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
-import { askMac, MAC_COMMAND_STATUS, runOnMacTool } from "./mac-command.js";
+import { wokenOnHub } from "../testing/sync-woken.js";
+import { askMac, MAC_COMMAND_STATUS, macCommandsFor, runOnMacTool } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
 
 const ORIGIN = "https://luke.test";
@@ -408,5 +412,33 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
           "nothing was queued for the starter's Mac",
         );
       }),
+  );
+
+  it.effect(
+    "on Luke Sync, the held read answers a command queued, and a call its result, each within a coalesce window of the write",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* account("user-sync");
+          const kinds = [MAC_COMMAND_KIND.SHELL];
+          const queued = { ...COMMAND, id: randomUUID() };
+
+          const read = yield* wokenOnHub(
+            macCommandsFor("user-sync", kinds),
+            queueMacCommand("user-sync", queued),
+          );
+          const call = yield* wokenOnHub(
+            askMac("user-sync", { kind: MAC_COMMAND_KIND.SHELL, command: COMMAND.command }),
+            Effect.gen(function* () {
+              const [claimed] = yield* claimMacCommands("user-sync", new Date(0), kinds);
+              assert.ok(claimed !== undefined, "the call queued its command");
+              yield* settleMacCommand("user-sync", claimed.id, RESULT);
+            }),
+          );
+
+          assert.deepEqual(read.answered, [queued]);
+          assert.deepEqual(call.answered, { status: MAC_COMMAND_STATUS.RAN, ...RESULT });
+        }),
+      ),
   );
 });
