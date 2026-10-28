@@ -73,6 +73,15 @@ ignoredOptionalDependencies:
 patchedDependencies:
   "@better-auth/oauth-provider@1.7.7": patches/@better-auth__oauth-provider@1.7.7.patch
 #
+# `@sentry/electron` 8.3.0 captures a frozen renderer's stack through the
+# debugger, which lists the newest frame first, then reverses the frames and
+# keeps the first 50: the oldest. On a deep stack, such as a React render,
+# the frames that held the page never reached Sentry (LUKE-DESKTOP-B: 50
+# frames, all React's recursion). The patch keeps the newest 50 before the
+# reverse, in the ESM and CommonJS copies of `main/integrations/renderer-anr.js`.
+# Delete it when an upstream release keeps the newest frames.
+  "@sentry/electron@8.3.0": patches/@sentry__electron@8.3.0.patch
+#
 # `drizzle-orm` 1.0.0-rc.4's Effect code is patched for three things. Its error
 # classes call `Schema.TaggedErrorClass`, which Effect 4.0.4 stable names
 # `Schema.TaggedError`, so the Effect drivers fail to load at all; the patch

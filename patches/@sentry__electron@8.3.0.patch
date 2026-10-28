@@ -1,0 +1,38 @@
+diff --git a/esm/main/integrations/renderer-anr.js b/esm/main/integrations/renderer-anr.js
+index aa9b7ea9e9d145aee92378de6a8d4545f3451f82..b0066994d87a1b9183e8a8fc3e040c30df2867f5 100644
+--- a/esm/main/integrations/renderer-anr.js
++++ b/esm/main/integrations/renderer-anr.js
+@@ -61,11 +61,13 @@ function debuggerStackTraceCapture(contents, pausedStack) {
+                 return;
+             }
+             // copy the frames
++            // Note: the debugger lists the newest frame first, and the frames are reversed and then
++            // cut to 50, so keep the newest 50 here, or a deep stack loses the frames that held the page.
+             const callFrames = [...param.callFrames];
+             contents.debugger.sendCommand('Debugger.resume').then(null, () => {
+                 // ignore
+             });
+-            const stackFrames = stripSentryFramesAndReverse(callFrames.map((frame) => callFrameToStackFrame(frame, scripts.get(frame.location.scriptId), getModuleFromFilename)));
++            const stackFrames = stripSentryFramesAndReverse(callFrames.slice(0, 50).map((frame) => callFrameToStackFrame(frame, scripts.get(frame.location.scriptId), getModuleFromFilename)));
+             pausedStack(stackFrames);
+         }
+     });
+diff --git a/main/integrations/renderer-anr.js b/main/integrations/renderer-anr.js
+index 97a4d79432ca77f9bb8f3bb76e43778e41e1908f..0bea7cb6df05f0a73d46959217090b653b171ed1 100644
+--- a/main/integrations/renderer-anr.js
++++ b/main/integrations/renderer-anr.js
+@@ -61,11 +61,13 @@ function debuggerStackTraceCapture(contents, pausedStack) {
+                 return;
+             }
+             // copy the frames
++            // Note: the debugger lists the newest frame first, and the frames are reversed and then
++            // cut to 50, so keep the newest 50 here, or a deep stack loses the frames that held the page.
+             const callFrames = [...param.callFrames];
+             contents.debugger.sendCommand('Debugger.resume').then(null, () => {
+                 // ignore
+             });
+-            const stackFrames = core.stripSentryFramesAndReverse(callFrames.map((frame) => server.callFrameToStackFrame(frame, scripts.get(frame.location.scriptId), getModuleFromFilename)));
++            const stackFrames = core.stripSentryFramesAndReverse(callFrames.slice(0, 50).map((frame) => server.callFrameToStackFrame(frame, scripts.get(frame.location.scriptId), getModuleFromFilename)));
+             pausedStack(stackFrames);
+         }
+     });

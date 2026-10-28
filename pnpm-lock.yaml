@@ -82,6 +82,9 @@ patchedDependencies:
   '@better-auth/oauth-provider@1.7.7':
     hash: b4b560cbadacfe5a94972c9a6c390e724b8fc4d34b6328f41345f642cd1ec060
     path: patches/@better-auth__oauth-provider@1.7.7.patch
+  '@sentry/electron@8.3.0':
+    hash: aa39cda84a1361cf776a9abe8bbd2c38042fdcdbd5cfa33ad2ea814335afa240
+    path: patches/@sentry__electron@8.3.0.patch
   drizzle-orm@1.0.0-rc.4:
     hash: 7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b
     path: patches/drizzle-orm@1.0.0-rc.4.patch
@@ -186,7 +189,7 @@ importers:
     dependencies:
       '@sentry/electron':
         specifier: 8.3.0
-        version: 8.3.0(@babel/core@7.29.7)(rollup@4.62.4)
+        version: 8.3.0(patch_hash=aa39cda84a1361cf776a9abe8bbd2c38042fdcdbd5cfa33ad2ea814335afa240)(@babel/core@7.29.7)(rollup@4.62.4)
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9
@@ -10099,7 +10102,7 @@ snapshots:
       - rollup
       - webpack
 
-  '@sentry/electron@8.3.0(@babel/core@7.29.7)(rollup@4.62.4)':
+  '@sentry/electron@8.3.0(patch_hash=aa39cda84a1361cf776a9abe8bbd2c38042fdcdbd5cfa33ad2ea814335afa240)(@babel/core@7.29.7)(rollup@4.62.4)':
     dependencies:
       '@sentry/browser': 11.8.0
       '@sentry/conventions': 0.27.0
