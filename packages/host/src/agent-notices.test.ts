@@ -461,8 +461,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED)]);
+      notices.observeAgents([tasklessAgent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([tasklessAgent(CODING_AGENT_STATUS.COMPLETED)]);
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
@@ -485,14 +485,14 @@ it.effect(
         });
       const said = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
       yield* settled;
       assert.deepEqual(f.unseen, [], "a quiet end dots nothing");
 
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { turnId: said })]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { turnId: said })]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.RUNNING, { turnId: said })]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.COMPLETED, { turnId: said })]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
     }),
@@ -508,51 +508,34 @@ it.effect(
         tasklessAgent(status, { kind: CODING_AGENT_KIND.OPERATOR, ...patch });
 
       // A quiet mark read mid-turn is not the end's: the page ends the turn, which reads as news.
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
       notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
+      notices.observeAgents([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), []);
     }),
 );
-it.effect(
-  "a teammate's agent with no plan on the plan list is not held, so its end is dotted for its starter alone",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const theirs = { startedBy: { userId: "user-sam", name: "Sam" } };
+it.effect.each([
+  { held: "on a plan", planId: TASK_ID },
+  { held: "with no plan", planId: null },
+])("a teammate's agent $held is dotted as its turn ends, as the account's own is", ({ planId }) =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const notices = yield* f.notices;
+    f.focus(false);
+    const theirs = agent(CODING_AGENT_STATUS.RUNNING, {
+      planId,
+      startedBy: { userId: "user-sam", name: "Sam" },
+    });
 
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
-      yield* Effect.yieldNow;
+    notices.observeAgents([theirs]);
+    notices.observeAgents([{ ...theirs, status: CODING_AGENT_STATUS.COMPLETED }]);
+    yield* settled;
 
-      assert.deepEqual(f.unseen, []);
-    }),
-);
-it.effect(
-  "a teammate's agent with no plan named by an act's answer, a rename or a message on its page, is not held",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const theirs = {
-        ...agent(CODING_AGENT_STATUS.RUNNING),
-        planId: null,
-        startedBy: { userId: "user-sam", name: "Sam" },
-      };
-
-      notices.observeAgents([theirs]);
-      notices.observeMessaged(theirs);
-      notices.observeAgents([{ ...theirs, status: CODING_AGENT_STATUS.COMPLETED }]);
-      yield* settled;
-
-      assert.deepEqual(f.unseen, []);
-    }),
+    assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+  }),
 );
 /** An item of an agent with no task waiting on the developer, as the account's inbox read carries it. */
 function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
