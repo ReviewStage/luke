@@ -603,8 +603,8 @@ export const runnerSessions = <
       resume: string | undefined,
       credential: HarnessLaunch,
       alongside: Effect.Effect<void, AE, AR>,
-      /** The first message as the Start composed and queued it before it answered, which the launch takes over rather than composes again. */
-      queuedFirst?: InputLine,
+      /** The first message as the Start composed and queued it before it answered, which the launch takes over rather than composes again, its words marked handed once the runner has it. */
+      queuedFirst?: OpenedLine,
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
@@ -649,7 +649,7 @@ export const runnerSessions = <
                 first === undefined
                   ? Effect.succeed(undefined)
                   : queuedFirst !== undefined
-                    ? Effect.succeed({ line: queuedFirst, taken: Effect.void })
+                    ? Effect.succeed(queuedFirst)
                     : openedLine(agent, place.session, first, resume === undefined);
               // The launch's record is written before its command starts, so an END the launch it
               // replaces posts late is told apart from this one's and stops nothing.
@@ -849,7 +849,7 @@ export const runnerSessions = <
       first: RunnerMessage | undefined,
       credential: HarnessLaunch,
       waitOnImage: boolean,
-      queuedFirst?: InputLine,
+      queuedFirst?: OpenedLine,
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -1332,12 +1332,11 @@ export const runnerSessions = <
             // Note that a launch that failed takes its first message back, as its turn reads failed,
             // and so does an open that fails once it queued it, which answers failed.
             yield* Effect.gen(function* () {
-              if (opened !== undefined) yield* opened.taken;
               yield* afterResponse(
                 `A ${harness.name} launch`,
                 holdingRunner(
                   agent.id,
-                  openedPlace(agent, sessionId, layout, first, credential, true, opened?.line),
+                  openedPlace(agent, sessionId, layout, first, credential, true, opened),
                 ).pipe(
                   Effect.catch((failure) =>
                     Effect.andThen(withdrawn, launchFailed(agent)(failure)),
@@ -1415,15 +1414,28 @@ export const runnerSessions = <
             if (Option.isSome(found) && found.value.agentId !== agent.id) {
               return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
             }
+            // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
+            // the message, and where a runner is recorded they go ahead of it for that runner's launch,
+            // so a change of model since it launched holds; a launch still opening its sandbox reads
+            // the agent's model as it starts, and is queued the message alone for whichever launch runs.
             // Note that the runner's repository credential is not renewed for this message, as
             // `sendHolding` renews it, because the lease is another call's; it lives an hour, and the
-            // next message renews it.
-            const opened = yield* openedLine(agent, sessionId, sent, false);
-            yield* queued(agent, ANY_LAUNCH, [opened.line]);
-            yield* opened.taken;
+            // next message renews it. The message is queued as the developer's words alone, since
+            // the turn's own words (`openedLine`) are marked handed only once a runner took them, and
+            // no runner may take this line: they go ahead of the next message handed over instead.
+            // Its hand-on waits as long as a lease can stand, so it outlasts the launch it is behind.
+            const ahead = yield* harness.ahead(agent);
+            const recorded = Option.isSome(found) ? found.value.runner : undefined;
+            yield* recorded === undefined
+              ? queued(agent, ANY_LAUNCH, [sent.line])
+              : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
             yield* afterResponse(
               `A ${harness.name} hand-on`,
-              holdingRunner(agent.id, handedOn(sessionId, agent, sent.line.uuid)),
+              holdingRunner(
+                agent.id,
+                handedOn(sessionId, agent, sent.line.uuid),
+                CODER.RUNNER_LEASE.HOLD,
+              ),
             );
             return {
               outcome: EVE_SEND_OUTCOME.ACCEPTED,

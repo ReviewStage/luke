@@ -2141,6 +2141,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
         assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
         const kept = keptAfterResponse();
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
 
         const answers = yield* Effect.forEach(["Now the emails.", "And the docs."], (text) =>
           sessions.send(opened.sessionId, message(agent, text)).pipe(Effect.provide(kept.layer)),
@@ -2156,12 +2160,25 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           since: new Date(0),
           limit: 10,
         });
+        // The developer's words close each message, the turn's own words ahead of them on the first
+        // alone, and the agent's model as it stands now goes ahead of each message queued behind.
+        const model = {
+          type: INPUT_LINE.MODEL,
+          model: "claude-sonnet-5-5",
+          fast: false,
+          effort: "low",
+        };
         assert.deepEqual(
-          read.map((line) => developerContent(JSON.parse(line.text) as InputLine)),
+          read.map((line) => {
+            const parsed = JSON.parse(line.text) as InputLine;
+            return parsed.type === INPUT_LINE.MESSAGE ? parsed.content.at(-1) : parsed;
+          }),
           [
-            [{ type: "text", text: "Fix the invitations." }],
-            [{ type: "text", text: "Now the emails." }],
-            [{ type: "text", text: "And the docs." }],
+            { type: "text", text: "Fix the invitations." },
+            model,
+            { type: "text", text: "Now the emails." },
+            model,
+            { type: "text", text: "And the docs." },
           ],
         );
       }),
