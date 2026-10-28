@@ -17,8 +17,9 @@
  * inbox is one such read (`inboxLive`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
- * account reaches and every agent of them and with no task, as two
- * statements built with the account's id (`task-list-live.ts`).
+ * account reaches and every agent of them and with no task, as statements
+ * built with the account's id (`task-list-live.ts`), woken by a write to
+ * the account's topic or to one of its workspaces' (`tasksLive`).
  *
  * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
  * the same way, one statement a part that marks where it stands
@@ -42,7 +43,7 @@
  *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
- * to them. `GET /api/live/workspace-members?workspaceId=` answers one
+ * to them, woken as the task list is (`workspacesLive`). `GET /api/live/workspace-members?workspaceId=` answers one
  * workspace's people as two, its members and who its work names but left,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found, as its held read answers.
@@ -85,7 +86,6 @@ import { readTaskHeader } from "@luke/database/models/task-store";
 import {
   isWorkspaceMember,
   workspaceOf as workspaceOfAccount,
-  workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
@@ -129,12 +129,13 @@ import {
   taskInboxLive,
   taskPagesLive,
   taskRecordLive,
+  tasksLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
+  workspacesLive,
 } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 
 export interface LiveProcedureSeams {
@@ -263,12 +264,22 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   );
 });
 
+/** The topics a defined live read's params name, or that it looks up from them; unavailable where the lookup fails. */
+function topicsOf<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+) {
+  const named = query.topics(params);
+  return Effect.isEffect(named) ? hostedStoreOrUnavailable(named) : Effect.succeed(named);
+}
+
 /**
  * A defined live read's parts (`defineLiveQuery`), built from the params
  * its procedure bound once it admitted the caller, and held on a watch of
- * the topics those params name, which looks again every `look` where
- * nothing wakes it. This is how a procedure answers a read Luke Sync wakes;
- * unavailable where its statements can't be built.
+ * the topics those params name, or that the read looks up from them, which
+ * looks again every `look` where nothing wakes it. This is how a procedure
+ * answers a read Luke Sync wakes; unavailable where its statements can't be
+ * built or its topics looked up.
  */
 export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
@@ -281,7 +292,7 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
 ) {
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* sealedParts(statements.value, asked, query.topics(params), look);
+  return yield* sealedParts(statements.value, asked, yield* topicsOf(query, params), look);
 });
 
 /**
@@ -349,11 +360,12 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const read = polled((sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
   if (after === undefined) return yield* read;
+  const topics = yield* topicsOf(query, params);
   return yield* heldParts(
     polled((sealer) => sealer.digest),
     read,
     (standing) => cursorMoved(standing, after),
-    query.topics(params),
+    topics,
     look,
   );
 });
@@ -393,9 +405,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const statements = taskListLiveStatements(context.userId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(tasksLive, { userId: context.userId }, input);
     }),
     automations: signedIn.automations.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -526,9 +536,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const statements = workspacesLiveStatements(context.userId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(workspacesLive, { userId: context.userId }, input);
     }),
     workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
