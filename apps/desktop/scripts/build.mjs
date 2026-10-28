@@ -152,14 +152,25 @@ async function assertModuleEntry(document, entry) {
 // down never holds a release back; its traces stay unreadable until maps are
 // uploaded for it by hand. The maps ship in no package either way, since
 // electron-builder's `files` (`electron-builder-config.mjs`) leaves them out.
-function sentryPlugins() {
+//
+// `byPath`, where given, also uploads every map under its folder filed by
+// release and address (Sentry's legacy upload) beside the debug-ID upload.
+// Note that the renderer needs it for two reasons: the plugin gives a debug
+// ID only to an entry, never to a chunk `splitting` writes, and a freeze
+// report is built by main from the paused page's frames, so it carries
+// main's debug IDs and none of the renderer's. Matched by release and
+// address, every renderer frame finds its map.
+function sentryPlugins(byPath) {
   if (!uploadsSourceMaps) return [];
   return [
     sentryEsbuildPlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: "stage-review",
       project: "luke-desktop",
-      release: { name: sentryRelease },
+      release: {
+        name: sentryRelease,
+        ...(byPath === undefined ? {} : { uploadLegacySourcemaps: byPath }),
+      },
       errorHandler: (error) => {
         console.warn(
           `warning: Sentry source-map upload failed, so the build goes on without it: ${error.message}`,
@@ -230,7 +241,13 @@ const rendererBuild = build({
   jsx: "automatic",
   minify: true,
   conditions: ["production"],
-  plugins: [panelRedirects, lucideWholeOnDemand, sideStylesheetsLinked, ...sentryPlugins()],
+  plugins: [
+    panelRedirects,
+    lucideWholeOnDemand,
+    sideStylesheetsLinked,
+    // A renderer frame reads `app:///dist/renderer/<file>`, which `~` matches whatever its host.
+    ...sentryPlugins({ paths: [path.join(outputRoot, "renderer")], urlPrefix: "~/dist/renderer" }),
+  ],
   // Every map is written beside its file and named by none: the maps stay
   // out of the app (`electron-builder-config.mjs`), so a comment would point
   // at a file that is not there. The upload finds each by `<file>.map`.
