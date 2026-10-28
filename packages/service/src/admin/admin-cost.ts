@@ -4,8 +4,8 @@
  * Every number here is list price: the tokens a turn recorded, priced at AI
  * Gateway's catalog by the coding agent's own pricer (`costOfTurns`, behind
  * `usageOfTurns`), and
- * the seconds of voice, dictation, and avatar time the service metered,
- * priced per second at the providers' published list prices below. No turn
+ * the seconds of dictation the service metered, priced per second at the
+ * provider's published list price. No turn
  * records whose key paid for it — a coding agent's step on the account's own
  * key keeps the same usage row as one on Luke's — so the totals count every
  * model token whichever key paid, and say so. A model the catalog does not
@@ -66,12 +66,6 @@ export interface AdminCostSecondsRow {
   day: string;
   source: SecondsCostSource;
   userId: string;
-  /**
-   * The Live model a voice session ran on, as its session row keeps it; null
-   * for dictation and the avatar, and for a voice session whose row is gone
-   * or predates the column, which ran on the deployment's default.
-   */
-  model: string | null;
   seconds: number;
 }
 
@@ -148,21 +142,15 @@ function priceTokenRow(row: AdminCostTokenRow, offered: readonly OfferedModel[])
   };
 }
 
-/**
- * One group of seconds at its list price. A voice session that ran on a Live
- * model other than the one the table prices is left unpriced, as a token
- * model the catalog does not price is, rather than priced at the wrong rate.
- */
+/** One group of seconds at its list price. */
 function priceSecondsRow(row: AdminCostSecondsRow): PricedCostRow {
   const price = SECONDS_LIST_PRICE[row.source];
-  const model = row.model ?? price.model;
   return {
     day: row.day,
     source: row.source,
     userId: row.userId,
-    model,
-    usd:
-      model === price.model ? (row.seconds / SECONDS_PER_MINUTE) * price.usdPerMinute : undefined,
+    model: price.model,
+    usd: (row.seconds / SECONDS_PER_MINUTE) * price.usdPerMinute,
     tokens: 0,
     seconds: row.seconds,
   };
@@ -233,9 +221,7 @@ function emptyDay(day: string): AdminCostDay {
     day,
     [COST_SOURCE.CODING_AGENTS]: 0,
     [COST_SOURCE.LUKE]: 0,
-    [COST_SOURCE.VOICE]: 0,
     [COST_SOURCE.DICTATION]: 0,
-    [COST_SOURCE.AVATAR]: 0,
   };
 }
 
@@ -321,9 +307,6 @@ export function buildAdminCost(input: {
   const accountSpends = [...accounts.values()].filter((spend) => spend.usd > 0);
   const mergedInWindow = mergedByAccount(input.merged, window);
   const mergedPullRequests = sum([...mergedInWindow.values()]);
-  const voiceRows = input.priced.filter(
-    (row) => window.has(row.day) && row.source === COST_SOURCE.VOICE,
-  );
 
   const topAccounts = topCostAccountIds(input.priced, input.now, input.windowDays).flatMap((id) => {
     const info = input.accounts.get(id);
@@ -362,13 +345,6 @@ export function buildAdminCost(input: {
     perMergedPullRequest: {
       mergedPullRequests,
       spendUsd: mergedPullRequests === 0 ? null : spendUsd / mergedPullRequests,
-    },
-    voice: {
-      minutes: sum(voiceRows.map((row) => row.seconds)) / SECONDS_PER_MINUTE,
-      spendUsd: sum(voiceRows.map((row) => row.usd ?? 0)),
-      unpricedMinutes:
-        sum(voiceRows.filter((row) => row.usd === undefined).map((row) => row.seconds)) /
-        SECONDS_PER_MINUTE,
     },
     daily: dailySpend(input.priced, keys.window),
     byModel: spendByModel(input.priced, window),

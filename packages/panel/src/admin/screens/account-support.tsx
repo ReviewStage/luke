@@ -72,7 +72,6 @@ const SKELETON_EXPERIMENTS_WIDTH = "192px";
 /** What each kind of failure is called on the timeline. */
 const FAILURE_SUBJECT = {
   [ADMIN_FAILURE_KIND.AGENT]: "Coding agent failed",
-  [ADMIN_FAILURE_KIND.CALL]: "Call dropped",
   [ADMIN_FAILURE_KIND.KEY]: "Provider key",
   [ADMIN_FAILURE_KIND.CONNECTION]: "Connection",
   [ADMIN_FAILURE_KIND.AUTOMATION]: "Automation run failed",
@@ -97,7 +96,7 @@ function percentOf(part: number, whole: number): string | undefined {
   return whole === 0 ? undefined : formatPercent(part / whole);
 }
 
-/** The window's work as four stat cards: tasks, agents, pull requests, and call minutes. */
+/** The window's work as three stat cards: tasks, agents, and pull requests. */
 function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[] {
   return [
     {
@@ -123,11 +122,6 @@ function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[]
       value: ({ totals }) => formatCount(totals.pullRequestsMerged),
       hint: ({ totals }) => `of ${formatCount(totals.pullRequestsOpened)} opened`,
       title: () => "Of the pull requests opened by the agents started in the window",
-    },
-    {
-      key: "call-minutes",
-      label: () => `Call minutes · ${windowDays} days`,
-      value: ({ totals }) => formatCount(totals.callMinutes),
     },
   ];
 }

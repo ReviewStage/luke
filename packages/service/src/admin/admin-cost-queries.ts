@@ -3,8 +3,8 @@
  *
  * Turns are summed by UTC day, account, source, and the model each share of
  * their tokens ran on, so the read answers a few rows per active account per
- * day rather than every turn. Seconds are summed the same way from the three
- * ledgers that meter them, and merged pull requests counted by the day
+ * day rather than every turn. Dictation's seconds are summed the same way
+ * from the ledger that meters them, and merged pull requests counted by the day
  * GitHub said each merged. Every read is held to the window and the one
  * before it, keeps the dashboard's scope through the account's user row,
  * and may be narrowed to one account, which is how an account's own page
@@ -15,8 +15,7 @@ import { Database, type DatabaseServices, type QueryError } from "@luke/database
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { hostedUsage, voiceSessionUsage } from "@luke/database/schemas/usage";
-import { voiceAvatarSessions, voiceSessions } from "@luke/database/schemas/voice";
+import { hostedUsage } from "@luke/database/schemas/usage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   type AdminCost,
@@ -156,35 +155,6 @@ const SecondsRowSchema = Schema.Struct({
   seconds: NullableAggregateColumnSchema,
 });
 
-const VOICE_DAY = utcDayOfEpochMs(voiceSessionUsage.recordedAt);
-
-/**
- * The billed seconds by the Live model each session ran on, which its
- * session row keeps; a row gone with its task, or written before the model
- * was kept, answers none.
- */
-const findVoiceSeconds = SqlSchema.findAll({
-  Request: UsageFilterSchema,
-  Result: Schema.Struct({ ...SecondsRowSchema.fields, model: Schema.NullOr(Schema.String) }),
-  execute: (filter) =>
-    Database.use((db) =>
-      db
-        .select({
-          day: VOICE_DAY,
-          userId: voiceSessionUsage.userId,
-          model: voiceSessions.model,
-          seconds: sum(voiceSessionUsage.seconds),
-        })
-        .from(voiceSessionUsage)
-        .innerJoin(user, eq(user.id, voiceSessionUsage.userId))
-        .leftJoin(voiceSessions, eq(voiceSessions.liveSessionId, voiceSessionUsage.sessionId))
-        .where(
-          and(gte(voiceSessionUsage.recordedAt, filter.fetchStart.getTime()), keptAccounts(filter)),
-        )
-        .groupBy(VOICE_DAY, voiceSessionUsage.userId, voiceSessions.model),
-    ),
-});
-
 const findDictationSeconds = SqlSchema.findAll({
   Request: UsageFilterSchema,
   Result: SecondsRowSchema,
@@ -206,32 +176,6 @@ const findDictationSeconds = SqlSchema.findAll({
           ),
         )
         .groupBy(hostedUsage.day, hostedUsage.userId),
-    ),
-});
-
-const AVATAR_DAY = utcDayOf(voiceAvatarSessions.startedAt);
-
-const findAvatarSeconds = SqlSchema.findAll({
-  Request: UsageFilterSchema,
-  Result: SecondsRowSchema,
-  execute: (filter) =>
-    Database.use((db) =>
-      db
-        .select({
-          day: AVATAR_DAY,
-          userId: voiceAvatarSessions.userId,
-          seconds: sum(voiceAvatarSessions.seconds),
-        })
-        .from(voiceAvatarSessions)
-        .innerJoin(user, eq(user.id, voiceAvatarSessions.userId))
-        .where(
-          and(
-            isNotNull(voiceAvatarSessions.seconds),
-            gte(voiceAvatarSessions.startedAt, filter.fetchStart),
-            keptAccounts(filter),
-          ),
-        )
-        .groupBy(AVATAR_DAY, voiceAvatarSessions.userId),
     ),
 });
 
@@ -264,14 +208,9 @@ const findMergedPullRequests = SqlSchema.findAll({
 
 function secondsRows(
   source: AdminCostSecondsRow["source"],
-  rows: readonly (typeof SecondsRowSchema.Type & { model?: string | null })[],
+  rows: readonly (typeof SecondsRowSchema.Type)[],
 ): AdminCostSecondsRow[] {
-  return rows.map((row) => ({
-    ...row,
-    source,
-    model: row.model ?? null,
-    seconds: row.seconds ?? 0,
-  }));
+  return rows.map((row) => ({ ...row, source, seconds: row.seconds ?? 0 }));
 }
 
 /**
@@ -292,14 +231,8 @@ export function readAdminCostUsage(input: {
       scope: input.scope,
       userId: input.userId ?? null,
     };
-    const [tokens, voice, dictation, avatar, merged] = yield* Effect.all(
-      [
-        findTokenUsage(filter),
-        findVoiceSeconds(filter),
-        findDictationSeconds(filter),
-        findAvatarSeconds(filter),
-        findMergedPullRequests(filter),
-      ],
+    const [tokens, dictation, merged] = yield* Effect.all(
+      [findTokenUsage(filter), findDictationSeconds(filter), findMergedPullRequests(filter)],
       { concurrency: "unbounded" },
     );
     return {
@@ -311,11 +244,7 @@ export function readAdminCostUsage(input: {
         reasoningTokens: row.reasoningTokens ?? 0,
         cacheWriteTokens: row.cacheWriteTokens ?? 0,
       })),
-      seconds: [
-        ...secondsRows(COST_SOURCE.VOICE, voice),
-        ...secondsRows(COST_SOURCE.DICTATION, dictation),
-        ...secondsRows(COST_SOURCE.AVATAR, avatar),
-      ],
+      seconds: secondsRows(COST_SOURCE.DICTATION, dictation),
       merged,
     };
   });

@@ -28,10 +28,9 @@ const GPT = "gpt";
 const MAKER_WORD = "Claude ";
 
 /**
- * A recorded model as the catalog names it. Note that what Luke runs on its
- * own OpenAI key records OpenAI's own id where it names no catalog id: a
- * call's voice model (`gpt-live-1`), and the brain's turn rows written before
- * it named its model by the catalog's id. The catalog names those under their
+ * A recorded model as the catalog names it. Note that what Luke ran on its
+ * own OpenAI key recorded OpenAI's own id where it named no catalog id: the
+ * brain's turn rows written before it named its model by the catalog's id. The catalog names those under their
  * provider, which is how a card reads whose mark the model wears; an id that
  * already names one is kept.
  */
