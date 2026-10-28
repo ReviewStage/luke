@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { Channel } from "@luke/features/channel-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
   fieldValueWords,
@@ -32,6 +33,8 @@ import {
   Fill,
   GAP,
   IconButton,
+  INLINE_REF_LOOK,
+  InlineRef,
   LAYOUT_ELEMENT,
   MoreButton,
   moreLabel,
@@ -57,6 +60,7 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -74,7 +78,8 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { InboxAnswerBox } from "./inbox-answer-box.js";
+import { ChannelCard } from "./channel-card.js";
+import { type AnswerNewThread, InboxAnswerBox, type NewThreadStart } from "./inbox-answer-box.js";
 import {
   ANSWERED,
   AnsweredCard,
@@ -1066,6 +1071,46 @@ export interface InboxPaneDoors {
   readonly onClose?: InboxCloser | undefined;
 }
 
+/** What starts a new thread from an item's box instead of a reply, where the page offers one. */
+export interface InboxNewThread {
+  /** The channel the item stands in, which a thread started from it lands in; none where the window lists no channels. */
+  readonly channelOf: (item: InboxItem) => Channel | undefined;
+  /** The workspace whose channels those are, whose members name a channel's maker on its card. */
+  readonly workspaceId: string | undefined;
+  /** Starts a thread with the item's agent, in the item's channel, and opens it; answers why it did not start, or nothing once it did. */
+  readonly onStart: (item: InboxItem, start: NewThreadStart) => Promise<string | undefined>;
+}
+
+/**
+ * The box's new thread for one item: the item's agent's chip, as the
+ * crumbs name the agent, and its channel's chip, each hanging its card and
+ * opening nothing, since a press on the checkbox's words ticks it.
+ */
+function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
+  const { name, agent } = by.subject;
+  const channel = offer.channelOf(item);
+  return {
+    agent: (
+      <InlineRef
+        look={INLINE_REF_LOOK.PILL}
+        glyph={tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
+        label={name}
+        card={<AgentCard subject={by.subject} models={by.models} />}
+      />
+    ),
+    channel:
+      channel === undefined ? undefined : (
+        <InlineRef
+          look={INLINE_REF_LOOK.PILL}
+          glyph={<GLYPH.CHANNEL />}
+          label={channel.name}
+          card={<ChannelCard channel={channel} workspaceId={offer.workspaceId} />}
+        />
+      ),
+    onStart: (start) => offer.onStart(item, start),
+  };
+}
+
 /**
  * An automation's crumb, as its page's own look names it: its clock and its
  * name, hanging its card where the window reads it, and opening its page
@@ -1185,6 +1230,7 @@ export function InboxPane({
   mentions,
   phone,
   channelName,
+  newThread,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1212,6 +1258,8 @@ export function InboxPane({
   phone?: InboxPanePhone | undefined;
   /** The channel the Inbox is narrowed to, by name, which the way back to the list names; none where it lists every channel. */
   channelName?: string | undefined;
+  /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
+  newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1276,6 +1324,7 @@ export function InboxPane({
           keywords={answerKeywords(holder, item)}
           replyScope={board}
           onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
+          newThread={newThread === undefined ? undefined : answerNewThread(newThread, item, by)}
         />
       </DraftReply>
     </AnswerMentions>

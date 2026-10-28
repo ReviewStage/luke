@@ -13,28 +13,20 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxStartParams,
 } from "@luke/features/coding-agent-view";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_BOUNDS,
-  INBOX_MESSAGE_AUTHOR,
-  INBOX_STATUS,
-  type InboxItem,
-} from "@luke/features/inbox-wire";
+import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import { PROFILE } from "@luke/ui";
 import { Effect } from "effect";
 import { act } from "react";
-import { beforeAll, onTestFinished, test } from "vitest";
+import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -48,18 +40,11 @@ import {
   fakeActsAnswer,
 } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import {
-  composerEditor,
-  editorBundleLanded,
-  pasteInComposer,
-  typeInComposer,
-} from "../testing/composer.js";
-import { layContainersAt } from "../testing/container-width.js";
+import { editorBundleLanded, typeInComposer } from "../testing/composer.js";
 import {
   ACME,
   AGENT,
   arrowNamed,
-  attachedNames,
   BILLING,
   BUMP,
   backToList,
@@ -67,7 +52,6 @@ import {
   columnsShown,
   EXPIRY,
   GENERAL,
-  handFiles,
   headerNamed,
   headTitle,
   heardName,
@@ -80,6 +64,7 @@ import {
   listed,
   menuItem,
   mount,
+  noticeOf,
   openings,
   pagerOf,
   pressKey,
@@ -90,14 +75,11 @@ import {
   ROW_TITLE,
   readTitle,
   rowNamed,
-  SHARED_MEMBERS,
-  SHARED_WORKSPACE,
   STRAY_AGENT,
   SWEEP_AGENT,
   saying,
   settle,
   showScope,
-  skillReads,
   standKeymap,
   TEAMMATE,
   THRESHOLD,
@@ -108,7 +90,6 @@ import {
   world,
 } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
-import { pixelsOf } from "../testing/laid-length.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -917,7 +898,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   );
 });
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening New thread and View options' own menu, and the search standing under the head", async () => {
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu, and the search standing under the head", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
@@ -949,7 +930,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
     ),
-    ["New thread", "View options"],
+    ["View options"],
     "the ⋯ holds what the wide head draws as buttons",
   );
   act(() => more().click());
@@ -967,7 +948,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
   assert.equal(asked.newTasks, 1);
 });
 
-/** The thread a New thread starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
+/** The thread a box's checkbox starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
 const STARTED: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-0000000000f1", "Annual plan copy", 9_000),
   key: "annual-plan-copy",
@@ -985,34 +966,14 @@ const STARTED: InboxItem = {
   ],
 };
 
-/**
- * Every thread the pane starts, written down and answered as the service
- * starts it, the task's inbox then holding it; the workspace's newest agents
- * read as `agents`, and those a search names as `found` answers its words.
- */
-function heldStarts(
-  agents: readonly CodingAgentSummary[],
-  found: (words: string) => readonly CodingAgentSummary[] = () => [],
-  /** The reads that do not answer while a test holds them so: the newest agents, and a search. */
-  unread: { list: boolean; search: boolean } = { list: false, search: false },
-): CodingAgentInboxStartParams[] {
+/** Every thread the box starts, written down and answered as the service starts it, the task's inbox then holding it. */
+function heldStarts(): CodingAgentInboxStartParams[] {
   const sent: CodingAgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        const { words } = request.payload;
-        if (words === undefined ? unread.list : unread.search) {
-          return Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-          });
-        }
-        const value = { agents: words === undefined ? agents : found(words) };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
       world.inboxes.set(BILLING.id, [STARTED, ...(world.inboxes.get(BILLING.id) ?? [])]);
@@ -1022,686 +983,6 @@ function heldStarts(
   });
   return sent;
 }
-
-/** The To menu `openTo` opened. */
-function toMenu(): HTMLElement {
-  return document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"]') ?? assert.fail();
-}
-
-/** What To's menu says of a read that did not answer: the alert's words, and Retry's press. */
-function toAlert(menu: HTMLElement): { words: string | undefined; retry: HTMLButtonElement } {
-  const alert = menu.querySelector("[role=alert]");
-  return {
-    words: alert?.textContent ?? undefined,
-    retry: alert?.querySelector("button") ?? assert.fail("the alert offers Retry"),
-  };
-}
-
-test("a New thread whose agents could not be read says so in To with Retry, which reads them again", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const unread = { list: true, search: false };
-  heldStarts([AGENT], () => [], unread);
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-  const menu = toMenu();
-
-  const { words, retry } = toAlert(menu);
-  assert.equal(words, "The workspace's agents could not be read.Retry");
-
-  unread.list = false;
-  act(() => retry.click());
-  await settle();
-
-  assert.equal(menu.querySelector("[role=alert]"), null);
-  assert.equal(menu.querySelectorAll("[role=option]").length, 1, "the agent is listed");
-});
-
-test("a New thread's search that failed says so in To with Retry, never that no agent matches, and Retry searches again", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const unread = { list: false, search: true };
-  heldStarts([AGENT], () => [], unread);
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-  const menu = toMenu();
-
-  const field = menu.querySelector<HTMLInputElement>("input") ?? assert.fail("To searches");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(field, "zzz");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-
-  const { words, retry } = toAlert(menu);
-  assert.equal(words, "The search for agents could not be read.Retry");
-  assert.doesNotMatch(menu.textContent ?? "", /No agent matches/u);
-
-  unread.search = false;
-  act(() => retry.click());
-  await settle();
-
-  assert.equal(menu.querySelector("[role=alert]"), null);
-  assert.match(menu.textContent ?? "", /No agent matches/u);
-});
-
-test("New thread in the Inbox's head opens a draft in the pane, To naming the agent of the item read; Send starts the thread with that agent, once however often it is pressed, and the Inbox then opens the thread it started, the reader's words its first message", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const starts = heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-
-  const compose = page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]');
-  assert.ok(compose, "the head offers New thread");
-  act(() => compose.click());
-  await settle();
-  const pane = itemPane(page);
-  assert.equal(pane.getAttribute("aria-label"), "New thread");
-  assert.equal(
-    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    "To: Alerts",
-    "To names the agent of the item that was read",
-  );
-  const send = () =>
-    pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-    assert.fail("the box has a Send");
-  assert.equal(send().disabled, true, "a draft with no words sends nothing");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  assert.equal(send().disabled, false, "To and words light Send, the subject being optional");
-
-  const subject = subjectField(pane);
-  assert.equal(
-    subjectLabel(pane).textContent,
-    "SubjectOptional",
-    "the Subject says it may be left empty, in its label",
-  );
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(subject, "Annual plan copy");
-    subject.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => send().click());
-  await settle();
-
-  assert.deepEqual(
-    starts.map(({ agentId, title, text, attachments }) => ({ agentId, title, text, attachments })),
-    [
-      {
-        agentId: AGENT.id,
-        title: "Annual plan copy",
-        text: "Draft the annual plan's line too.",
-        attachments: undefined,
-      },
-    ],
-  );
-  const opened = itemPane(page);
-  assert.equal(
-    opened.getAttribute("aria-label"),
-    "Annual plan copy",
-    "the thread it started opens",
-  );
-  assert.match(opened.textContent ?? "", /Draft the annual plan's line too\./u);
-});
-
-test("Discard takes a New thread away and shows the item it stood over again, as pressing a row does", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const compose = () =>
-    page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-    assert.fail("the head offers New thread");
-
-  act(() => compose().click());
-  await settle();
-  const discard = [...itemPane(page).querySelectorAll("button")].find(
-    (button) => button.textContent === "Discard",
-  );
-  assert.ok(discard);
-  act(() => discard.click());
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title);
-
-  act(() => compose().click());
-  await settle();
-  act(() => rowNamed(page, RETRY.title).click());
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
-});
-
-test("New thread's bar leads with the way back to the Inbox, titles itself New thread, and ends in Discard", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  layOut(page, 700);
-  await settle();
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-
-  const bar = itemPane(page).querySelector("header") ?? assert.fail("New thread draws a bar");
-  const words = (selector: string) =>
-    [...bar.querySelectorAll(selector)].map(
-      (each) => each.getAttribute("aria-label") ?? each.textContent,
-    );
-  assert.deepEqual(words(".luke-toolbar-lead button"), ["Inbox"], "the way back leads");
-  assert.deepEqual(words("h1.luke-toolbar-title"), ["New thread"], "the title names it");
-  assert.deepEqual(words(".luke-toolbar-actions button"), ["Discard"], "Discard ends the bar");
-});
-
-/** Opens a New thread from the Inbox's head and hands back its pane. */
-async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const pane = itemPane(page);
-  assert.equal(pane.getAttribute("aria-label"), "New thread");
-  return pane;
-}
-
-/** The label of a New thread's Subject. */
-function subjectLabel(pane: HTMLElement): HTMLLabelElement {
-  return (
-    [...pane.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Subject")) ??
-    assert.fail("the draft has a Subject")
-  );
-}
-
-/** The field a New thread's Subject label names. */
-function subjectField(pane: HTMLElement): HTMLInputElement {
-  const field = pane.querySelector<HTMLInputElement>(`input[id="${subjectLabel(pane).htmlFor}"]`);
-  return field ?? assert.fail("the Subject label names a field");
-}
-
-/** Types `words` into a New thread's Subject. */
-function typeSubject(pane: HTMLElement, words: string): void {
-  const subject = subjectField(pane);
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(subject, words);
-    subject.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-/** What a New thread's pane holds, as a reader sees it: To, Subject, the words in its box, and its files. */
-function threadDraft(pane: HTMLElement) {
-  return {
-    to: pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    subject: subjectField(pane).value,
-    words: composerEditor(pane).textContent,
-    files: attachedNames(pane),
-  };
-}
-
-/** The ground an element is filled with, as the tokens it names spell it where it stands. */
-function groundOf(element: Element): string {
-  const style = getComputedStyle(element);
-  let spelled = style.backgroundColor;
-  for (let named = /var\((--[\w-]+)\)/u.exec(spelled); named !== null; ) {
-    const [whole, property = ""] = named;
-    spelled = spelled.replace(whole, style.getPropertyValue(property).trim());
-    named = /var\((--[\w-]+)\)/u.exec(spelled);
-  }
-  return spelled;
-}
-
-test("a New thread's head reads as one on the desktop: Subject is filled with the message box's ground, and the box stands as far under Subject as Subject stands under To", async () => {
-  // Note that the desktop's palette is the one whose input well is darker than a card in the dark.
-  document.documentElement.dataset.lukeProfile = PROFILE.DESKTOP;
-  const sheets = layContainersAt({});
-  onTestFinished(() => {
-    sheets.remove();
-    delete document.documentElement.dataset.lukeProfile;
-  });
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  layOut(page, 700);
-  await settle();
-  const pane = await openNewThread(page);
-
-  const subject = subjectField(pane);
-  const frame = composerEditor(pane).closest("form") ?? assert.fail("the box is a form");
-  assert.equal(groundOf(subject), groundOf(frame), "Subject is filled with the box's ground");
-
-  // The room a row leaves around its control, half over it and half under it.
-  const room = (row: Element) =>
-    pixelsOf(row, getComputedStyle(row).minHeight) - pixelsOf(row, "var(--luke-control-height)");
-  const toRow =
-    pane.querySelector('[aria-label^="To: "]')?.closest(".inbox-compose-row") ??
-    assert.fail("To stands in a row");
-  const subjectRow =
-    subject.closest(".inbox-compose-row") ?? assert.fail("Subject stands in a row");
-  const box = frame.parentElement ?? assert.fail("the box stands in the form");
-  const boxStyle = getComputedStyle(box);
-  assert.equal(
-    room(subjectRow) / 2 +
-      pixelsOf(box, boxStyle.marginTop) +
-      pixelsOf(box, boxStyle.paddingTop || "0px"),
-    room(toRow) / 2 + room(subjectRow) / 2,
-    "the gap under Subject is the gap over it",
-  );
-});
-
-test("a New thread's To, Subject, words, and files outlast a row pressed meanwhile, and stand again as New thread opens once more", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-  typeSubject(pane, "Annual plan copy");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "pick");
-  const written = threadDraft(pane);
-
-  act(() => rowNamed(page, RETRY.title).click());
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
-
-  assert.deepEqual(threadDraft(await openNewThread(page)), written);
-  assert.deepEqual(written, {
-    to: "To: Alerts",
-    subject: "Annual plan copy",
-    words: "Draft the annual plan's line too.",
-    files: ["spec.pdf"],
-  });
-});
-
-test("words written in a New thread before the workspaces are read stay in it once they are, as the workspace's draft", async () => {
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-  typeSubject(pane, "Annual plan copy");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-
-  world.listedWorkspace = ACME;
-  act(() => world.setTasks([BILLING, INVITES]));
-  await settle();
-
-  const now = threadDraft(itemPane(page));
-  assert.deepEqual(
-    { subject: now.subject, words: now.words },
-    { subject: "Annual plan copy", words: "Draft the annual plan's line too." },
-  );
-});
-
-test("a New thread open as another workspace is listed starts on that workspace's draft, leaving the agent picked in the last one behind", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const OLDER: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b28",
-    planId: INVITES.id,
-    title: "Seat limits",
-  };
-  heldStarts([AGENT], (words) => (words === "seat" ? [OLDER] : []));
-  const { page } = mount();
-  await settle();
-  const pane = await openTo(page);
-  const search =
-    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
-    assert.fail("To's menu has a search field");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(search, "seat");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-  act(() =>
-    (
-      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
-      assert.fail("To lists the agent found")
-    ).click(),
-  );
-  await settle();
-  typeInComposer(pane, "Raise the seat limit.");
-  assert.equal(threadDraft(pane).to, "To: Seat limits");
-
-  world.listedWorkspace = { ...ACME, id: "workspace-globex", slug: "globex" };
-  act(() => world.setTasks([BILLING, INVITES]));
-  await settle();
-
-  const now = threadDraft(itemPane(page));
-  assert.deepEqual({ to: now.to, words: now.words }, { to: "To: Alerts", words: "" });
-});
-
-test("Discard takes a written New thread away at once and offers Undo, which opens it again holding everything written", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  const { page } = mount([], { toasts: true });
-  await settle();
-  const pane = await openNewThread(page);
-  typeSubject(pane, "Annual plan copy");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  const written = threadDraft(pane);
-
-  act(() =>
-    (
-      [...pane.querySelectorAll("button")].find((button) => button.textContent === "Discard") ??
-      assert.fail("the draft offers Discard")
-    ).click(),
-  );
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title, "it goes at once");
-  const undo =
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Undo",
-    ) ?? assert.fail("a toast offers Undo");
-  act(() => undo.click());
-  await settle();
-
-  assert.deepEqual(threadDraft(itemPane(page)), written);
-  assert.equal(itemPane(page).getAttribute("aria-label"), "New thread");
-});
-
-test("a file dropped on a New thread's box is attached, and goes with the thread it starts", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const starts = heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-
-  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "drop");
-  assert.deepEqual(attachedNames(pane), ["spec.pdf"]);
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-      assert.fail("the box has a Send")
-    ).click(),
-  );
-  await settle();
-  assert.deepEqual(
-    starts.map(({ attachments }) => attachments),
-    [[{ name: "spec.pdf", mediaType: "application/pdf", data: btoa("%PDF-1.7") }]],
-  );
-});
-
-test("a paste past a New thread's cap is cut to the room left and its note line says so, until the words change", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-  const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
-
-  pasteInComposer(pane, "x".repeat(cap + 100));
-  await settle();
-  assert.equal(composerEditor(pane).textContent?.length, cap);
-  assert.equal(note(), pasteCutWords(cap));
-
-  const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
-  act(() => {
-    editor.view.dispatch(editor.state.tr.delete(1, 2));
-  });
-  await settle();
-  assert.equal(note(), undefined, "the note goes once the words change again");
-});
-
-test("an @ in a New thread's box offers the workspace's agents and people, but for the agent To names", async () => {
-  world.listedWorkspace = SHARED_WORKSPACE;
-  world.members = SHARED_MEMBERS;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const SEATS: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27",
-    planId: INVITES.id,
-    title: "Seat limits",
-  };
-  heldStarts([AGENT, SEATS]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-
-  typeInComposer(pane, "@");
-  await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
-    (name) => name.textContent,
-  );
-  assert.ok(offered.includes("Seat limits"), `the agent is offered among ${offered.join(", ")}`);
-  assert.ok(offered.includes(TEAMMATE.name), `the teammate is offered among ${offered.join(", ")}`);
-  assert.equal(offered.includes("Alerts"), false, "To's agent is not offered");
-});
-
-test("a / in a New thread's box offers the skills of the task of the agent To names", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  skillReads();
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-
-  typeInComposer(pane, "/");
-  await settle();
-  assert.deepEqual(
-    [...pane.querySelectorAll(".skill-menu .luke-combobox-option-label")].map(
-      (name) => name.textContent,
-    ),
-    ["/release"],
-  );
-});
-
-/** The menu To opens, as a reader sees it: each task's heading, then each agent's name and what it says beside it. */
-function toMenuRows(): string[] {
-  const menu = document.querySelector('[role="dialog"][aria-label="To"]');
-  assert.ok(menu, "To's menu is open");
-  return [
-    ...menu.querySelectorAll(
-      '.luke-combobox-heading, .luke-searchable-menu-heading, [role="option"]',
-    ),
-  ].map((node) => {
-    if (!node.matches('[role="option"]')) return `# ${node.textContent}`;
-    const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";
-    const detail = node.querySelector(".luke-combobox-option-detail")?.textContent;
-    return detail === undefined ? name : `${name} · ${detail}`;
-  });
-}
-
-test("To lists the workspace's agents as one list, newest first, each in its tab's look and named as its tab is, its task beside it as the @ menu says it, No task for one on none, and nothing where the task only says the agent's name again", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const MAYA: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
-    planId: INVITES.id,
-    title: "Move the frontend into shared components",
-  };
-  const LONE: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
-    planId: null,
-    title: "Nightly dependency sweep",
-  };
-  const NAMESAKE: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b24",
-    title: BILLING.name,
-  };
-  heldStarts([NAMESAKE, LONE, MAYA, AGENT]);
-  const { page } = mount();
-  await settle();
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const to =
-    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
-    assert.fail("the draft has To");
-  act(() => to.click());
-  await settle();
-
-  assert.deepEqual(toMenuRows(), [
-    BILLING.name,
-    "Nightly dependency sweep · No task",
-    `Move the frontend into shared components · ${INVITES.name}`,
-    `Alerts · ${BILLING.name}`,
-  ]);
-});
-
-test("To's rows keep no check's room while no agent is chosen, and each hangs its agent's card while the pointer rests on it, as ⌘K's rows do", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map();
-  heldStarts([AGENT]);
-  const { page } = mount([], { standing: [BILLING], holding: [] });
-  await settle();
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const to =
-    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
-    assert.fail("the draft has To");
-  assert.equal(to.getAttribute("aria-label"), "To: Choose an agent");
-  act(() => to.click());
-  await settle();
-
-  const option =
-    document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
-    assert.fail("To lists the agent");
-  assert.equal(
-    option.querySelector(".luke-combobox-option-end"),
-    null,
-    "no row keeps a check's room",
-  );
-  restOn(option);
-  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Alerts");
-  assert.match(
-    card.textContent ?? "",
-    new RegExp(`On ${BILLING.name}`, "u"),
-    "the card stands whole as it is hung, its task named, as ⌘K's does, with nothing read",
-  );
-});
-
-/** Opens a New thread from the Inbox's head, then its To menu, and hands back the draft's pane. */
-async function openTo(page: HTMLElement): Promise<HTMLElement> {
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const pane = itemPane(page);
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
-      assert.fail("the draft has To")
-    ).click(),
-  );
-  await settle();
-  return pane;
-}
-
-test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const OLDER: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b26",
-    planId: INVITES.id,
-    title: "Seat limits",
-  };
-  const searched: string[] = [];
-  const starts = heldStarts([AGENT], (words) => {
-    searched.push(words);
-    return words === "seat" ? [OLDER] : [];
-  });
-  const { page } = mount();
-  await settle();
-  const pane = await openTo(page);
-
-  const search =
-    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
-    assert.fail("To's menu has a search field");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(search, "seat");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-  assert.deepEqual(searched, ["seat"], "the words reach the service");
-  assert.deepEqual(toMenuRows(), [`Seat limits · ${INVITES.name}`]);
-
-  act(() =>
-    (
-      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
-      assert.fail("To lists the agent found")
-    ).click(),
-  );
-  await settle();
-  assert.equal(
-    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    "To: Seat limits",
-  );
-  typeInComposer(pane, "Raise the seat limit.");
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-      assert.fail("the box has a Send")
-    ).click(),
-  );
-  await settle();
-  assert.deepEqual(
-    starts.map(({ agentId }) => agentId),
-    [OLDER.id],
-  );
-});
-
-test("an agent of the workspace's newest stays found by every word its row shows, its name and its task, though the service finds nothing for the words", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const searched: string[] = [];
-  heldStarts([AGENT], (words) => {
-    searched.push(words);
-    return [];
-  });
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-
-  const search =
-    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
-    assert.fail("To's menu has a search field");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(search, "billing alerts");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-  assert.deepEqual(searched, ["billing alerts"]);
-  assert.deepEqual(toMenuRows(), [`Alerts · ${BILLING.name}`]);
-});
 
 test("on a phone an item is headed by its way back's glyph, its title centred, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
@@ -1786,28 +1067,6 @@ test("on a phone the panel open over an item heads itself: the way back to the i
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]')?.click());
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.equal(shut, 1, "the way back shuts the panel");
-});
-
-test("on a phone New thread is headed by its way back's glyph, its title centred, and Discard's glyph", async () => {
-  const { page } = mount([], { room: SHELL_ROOM.NARROW });
-  await settle();
-  layOut(page, 390);
-  const listHead = page.querySelector<HTMLElement>(".inbox-head") ?? assert.fail("the list's head");
-  act(() => listHead.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]')?.click());
-  const compose = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "New thread",
-  );
-  act(() => compose?.click());
-  await settle();
-  const head = page.querySelector<HTMLElement>(".new-thread-head");
-  assert.ok(head, "the phone's head stands");
-  assert.deepEqual(
-    [...head.querySelectorAll("button")].map(
-      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
-    ),
-    ["Inbox", "Discard"],
-  );
-  assert.equal(head.querySelector("h1")?.textContent, "New thread");
 });
 
 /** #app, a second standing channel of the workspace. */
@@ -2004,7 +1263,7 @@ test("a channel chosen while the workspace's channels could not be read says so 
   assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
 });
 
-test("a New thread started while a channel is shown is moved into it", async () => {
+test("ticking the box's checkbox sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   const moves: unknown[] = [];
@@ -2014,23 +1273,41 @@ test("a New thread started while a channel is shown is moved into it", async () 
       if (write.kind === ACT_KIND.CHANNELS_MOVE) moves.push(write.payload);
     },
   });
-  world.inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: APP_CHANNEL.id }]]]);
-  heldStarts([AGENT]);
+  // Note that the item asks nothing, since a question's controls standing in the box leave no checkbox under it.
+  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: APP_CHANNEL.id }]]]);
+  const starts = heldStarts();
   const { page } = mount();
-  chooseChannel(APP_CHANNEL.id);
   await settle();
 
-  const pane = await openNewThread(page);
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-      assert.fail("the box has a Send")
-    ).click(),
+  const box = () =>
+    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
+    assert.fail("the box offers a new thread");
+  assert.equal(
+    box().closest("label")?.textContent,
+    "Send as a new thread to Alerts in app",
+    "it names the item's agent and channel",
   );
+  act(() => box().click());
+  const pane = itemPane(page);
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  const send =
+    pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+    assert.fail("the box has a Send");
+  assert.equal(send.textContent, "Start thread");
+  act(() => send.click());
   await settle();
 
+  assert.deepEqual(
+    starts.map(({ agentId, title, text }) => ({ agentId, title, text })),
+    [{ agentId: AGENT.id, title: undefined, text: "Draft the annual plan's line too." }],
+  );
   assert.deepEqual(moves, [{ threadId: STARTED.id, channelId: APP_CHANNEL.id }]);
+  assert.equal(
+    itemPane(page).getAttribute("aria-label"),
+    STARTED.title,
+    "the thread it started opens",
+  );
+  assert.equal(box().getAttribute("aria-checked"), "false", "its box is a reply again");
 });
 
 test("with Channels on, a row's ⋯ moves its thread to the channel picked", async () => {
@@ -2156,11 +1433,6 @@ test("an archived channel narrows the Inbox under its name and when it was archi
   assert.equal(headTitle(page), "#old-app");
   assert.match(headDetail(page) ?? "", /^Archived /u);
   assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
-  assert.equal(
-    page.querySelector('button[aria-label="New thread"]'),
-    null,
-    "no thread is started where it would land in #general",
-  );
   act(() => buttonSaying("Unarchive").click());
   await settle();
   assert.deepEqual(unarchived, [old.id]);

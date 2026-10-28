@@ -446,7 +446,7 @@ export interface CodingAgentsControl {
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
   messageInbox: InboxMessenger;
-  /** One thread started with an agent, as the Inbox's New thread sends it. */
+  /** One thread started with an agent, as an Inbox item's box sends it when its checkbox is ticked. */
   startInboxThread: InboxThreadStarter;
   /** One read of an inbox item's image, as its card asks it. */
   readInboxImage: InboxImageReader;
