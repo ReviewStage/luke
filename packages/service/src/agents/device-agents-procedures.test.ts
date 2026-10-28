@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: an account with the experiment off is answered nothing, no account follows, claims, or beats another account's Mac, and a host enrolls on its member's install token and calls on its own secret, for itself alone, at or past the version floor, until it is removed.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: an account with the experiment off is answered nothing, a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, at or past the version floor, until it is removed.
  *
  * Synthetic accounts, bearers, tokens, Macs, and hosts throughout.
  */
@@ -115,6 +115,22 @@ function registered(deviceId: string) {
   return { deviceId, name: "Studio", ...DEVICE_LAYOUT };
 }
 
+/** A Mac's enroll on its desktop's sign-in under the id given, naming the Mac. */
+function enrollOwn(bearer: string, deviceId: string) {
+  return request(bearer, PATH.ENROLL_OWN, {
+    version: HOST_VERSION.FLOOR,
+    body: { deviceId, name: "Studio", platform: DEVICE_PLATFORM.DARWIN, arch: DEVICE_ARCH.ARM64 },
+  });
+}
+
+/** A Mac's register on its own secret, as its host program's first call is. */
+function macRegister(secret: string, deviceId: string) {
+  return request(secret, PATH.DEVICES, {
+    version: HOST_VERSION.FLOOR,
+    body: registered(deviceId),
+  });
+}
+
 /** An install token of the account's, kept by its hash as Settings keeps one, and its id. */
 const installToken = (userId: string) =>
   Effect.gen(function* () {
@@ -201,46 +217,44 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
   it.effect("an account with the experiment off is answered nothing, and nothing is written", () =>
     Effect.gen(function* () {
       const off = yield* account(false);
-      const deviceId = randomUUID();
 
-      const register = yield* statusOf(request(off, PATH.DEVICES, { body: registered(deviceId) }));
-      const lines = yield* statusOf(request(off, PATH.LINES, { deviceId }));
+      const enrolled = yield* statusOf(enrollOwn(off, randomUUID()));
 
-      assert.equal(register, HOSTED_HTTP_STATUS.NOT_FOUND);
-      assert.equal(lines, HOSTED_HTTP_STATUS.NOT_FOUND);
+      assert.equal(enrolled, HOSTED_HTTP_STATUS.NOT_FOUND);
       assert.deepEqual(yield* devicesSeenSince(off, new Date(0)), []);
     }),
   );
 
-  it.effect("no account follows, claims, beats, or takes over another account's Mac", () =>
-    Effect.gen(function* () {
-      const owner = yield* account(true);
-      const other = yield* account(true);
-      const deviceId = randomUUID();
-      const owned = yield* statusOf(request(owner, PATH.DEVICES, { body: registered(deviceId) }));
+  it.effect(
+    "a desktop's own sign-in is refused as needing an upgrade on the register, the beat, the follow reads and a claim, while its Mac registers on its secret",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const deviceId = randomUUID();
+        const secret: string = (yield* answerOf(enrollOwn(owner, deviceId))).body.deviceSecret;
+        const upgrade = {
+          status: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
+          body: { error: "host-upgrade-needed" },
+        };
 
-      const takenOver = yield* statusOf(
-        request(other, PATH.DEVICES, { body: registered(deviceId) }),
-      );
-      const followed = yield* statusOf(request(other, PATH.LINES, { deviceId }));
-      const claimed = yield* statusOf(
-        request(other, PATH.LINE_CLAIM, { body: { deviceId, id: randomUUID() } }),
-      );
-      const beaten = yield* statusOf(request(other, PATH.PRESENCE, { body: { deviceId } }));
-      const ownBeat = yield* statusOf(request(owner, PATH.PRESENCE, { body: { deviceId } }));
+        const answers = [
+          yield* answerOf(request(owner, PATH.DEVICES, { body: registered(deviceId) })),
+          yield* answerOf(request(owner, PATH.PRESENCE, { body: { deviceId } })),
+          yield* answerOf(request(owner, PATH.LINES, { deviceId })),
+          yield* answerOf(
+            request(owner, PATH.LINE_CLAIM, { body: { deviceId, id: randomUUID() } }),
+          ),
+        ];
+        const unknown = yield* statusOf(request("nobody", PATH.LINES, { deviceId }));
 
-      assert.equal(owned, HOSTED_HTTP_STATUS.OK);
-      assert.deepEqual(
-        [takenOver, followed, claimed, beaten],
-        [
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-          HOSTED_HTTP_STATUS.NOT_FOUND,
-        ],
-      );
-      assert.equal(ownBeat, HOSTED_HTTP_STATUS.OK, "the owner's Mac still beats");
-    }),
+        assert.deepEqual(answers, [upgrade, upgrade, upgrade, upgrade]);
+        assert.equal(
+          unknown,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          "a bearer naming no one is unauthenticated",
+        );
+        assert.equal(yield* statusOf(macRegister(secret, deviceId)), HOSTED_HTTP_STATUS.OK);
+      }),
   );
 
   it.effect(
@@ -255,7 +269,10 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const ownBeat = yield* statusOf(hostBeat(host.secret, host.deviceId));
         const otherDeviceBeat = yield* statusOf(hostBeat(host.secret, otherHost.deviceId));
         const followedByOther = yield* statusOf(
-          request(other, PATH.LINES, { deviceId: host.deviceId }),
+          request(otherHost.secret, PATH.LINES, {
+            deviceId: host.deviceId,
+            version: HOST_VERSION.FLOOR,
+          }),
         );
         // Note that the other member's token naming the owner's host's id takes nothing over.
         const otherToken = yield* installToken(other);
@@ -403,38 +420,44 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
   );
 
   it.effect(
-    "a desktop enrolls its own Mac on its sign-in, which then calls on its secret, is listed as a Mac, and is removed as any machine; no other account enrolls it",
+    "a desktop enrolls its own Mac on its sign-in, created where Luke never saw it, which then calls on its secret, is listed as a Mac, and is removed as any machine; no other account enrolls it",
     () =>
       Effect.gen(function* () {
         const owner = yield* account(true);
         const other = yield* account(true);
         const deviceId = randomUUID();
-        yield* statusOf(request(owner, PATH.DEVICES, { body: registered(deviceId) }));
-        const enrollOwn = (bearer: string) =>
-          answerOf(
-            request(bearer, PATH.ENROLL_OWN, { version: HOST_VERSION.FLOOR, body: { deviceId } }),
-          );
 
-        const byOther = yield* enrollOwn(other);
-        const enrolled = yield* enrollOwn(owner);
+        const unnamed = yield* statusOf(
+          request(owner, PATH.ENROLL_OWN, { version: HOST_VERSION.FLOOR, body: { deviceId } }),
+        );
+        const enrolled = yield* answerOf(enrollOwn(owner, deviceId));
+        const byOther = yield* statusOf(enrollOwn(other, deviceId));
         const secret: string = enrolled.body.deviceSecret;
-        const beat = yield* statusOf(hostBeat(secret, deviceId));
+        const register = yield* statusOf(macRegister(secret, deviceId));
         const listed = yield* answerOf(request(owner, PATH.HOSTS));
         const removed = yield* statusOf(
           request(owner, PATH.HOST_REMOVE, { body: { id: deviceId } }),
         );
         const beatAfterRemove = yield* statusOf(hostBeat(secret, deviceId));
 
-        assert.equal(byOther.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(
+          unnamed,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+          "an enroll naming no machine creates none",
+        );
         assert.equal(enrolled.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(byOther, HOSTED_HTTP_STATUS.NOT_FOUND, "another account's id is never taken");
         assert.ok(secret.startsWith(HOST_WIRE.DEVICE_SECRET_PREFIX));
-        assert.equal(beat, HOSTED_HTTP_STATUS.OK, "the Mac calls on its new secret");
+        assert.equal(register, HOSTED_HTTP_STATUS.OK, "the Mac registers on its new secret");
         assert.deepEqual(
-          listed.body.hosts.map((each: { readonly id: string; readonly platform: string }) => [
-            each.id,
-            each.platform,
-          ]),
-          [[deviceId, DEVICE_PLATFORM.DARWIN]],
+          listed.body.hosts.map(
+            (each: { readonly id: string; readonly name: string; readonly platform: string }) => [
+              each.id,
+              each.name,
+              each.platform,
+            ],
+          ),
+          [[deviceId, "Studio", DEVICE_PLATFORM.DARWIN]],
         );
         assert.equal(removed, HOSTED_HTTP_STATUS.OK);
         assert.equal(beatAfterRemove, HOSTED_HTTP_STATUS.UNAUTHORIZED, "Remove refuses its secret");

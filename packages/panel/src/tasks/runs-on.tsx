@@ -6,7 +6,6 @@ import {
 import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
-  type DeviceKind,
   type DevicePlatform,
 } from "@luke/features/device-agent-wire";
 import type { MacOffer } from "@luke/features/models-wire";
@@ -36,7 +35,7 @@ import { keptKey, useKept } from "../use-kept.js";
  * where every agent started on it runs, and it is set when the task is
  * created and never changed. New task's chip drops a menu: Cloud first, then
  * each device the member registered, as the models answer lists them, by its
- * name under the glyph of its kind, a Mac running Luke or a host, each saying
+ * name under the glyph of its platform, a Mac or a Linux server, each saying
  * whether it is online, held against the window's own clock, or, online,
  * that it is still getting ready for local agents or couldn't set them up. A
  * device offline or not ready is listed but not picked, since the service
@@ -82,7 +81,7 @@ const RUNS_ON_CLOUD: TaskRunsOnRequest = { machine: CODING_AGENT_MACHINE.VERCEL 
 function DeviceGlyph({
   device,
 }: {
-  device: { readonly platform?: DevicePlatform; readonly kind?: DeviceKind } | undefined;
+  device: { readonly platform?: DevicePlatform } | undefined;
 }): React.JSX.Element {
   return devicePlatformOf(device ?? {}) === DEVICE_PLATFORM.LINUX ? (
     <GLYPH.HOST />

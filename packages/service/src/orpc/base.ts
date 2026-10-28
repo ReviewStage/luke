@@ -93,40 +93,37 @@ export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
   });
 }
 
-/** A device's caller: its account, and where an enrolled machine called on its device secret, that machine's device, which is the one device it may act for. */
+/** A device's caller: the enrolled machine its device secret names, by its account and its device, the one device it may act for. */
 export interface DeviceCaller extends HostedCaller {
-  readonly hostDeviceId: string | undefined;
+  readonly deviceId: string;
 }
 
 /**
  * The caller as a device: an enrolled machine by its device secret, of any
- * kind or platform (`auth/device-secret.ts`'s `hostCallerOf`, which refuses
- * a secret no standing machine holds and a host program below the floor),
- * and otherwise a desktop by its sign-in; nothing where the request names
- * neither. The one read of a device's caller, which the device-agents
- * procedures and the runner token route both take.
+ * platform (`auth/device-secret.ts`'s `hostCallerOf`, which refuses a
+ * secret no standing machine holds and a host program below the floor).
+ * A desktop's own sign-in, which released desktop builds followed the
+ * queue on before every machine ran the host program, is refused as
+ * needing an upgrade, so such a build says to update Luke rather than
+ * failing unexplained; any other bearer is refused as unauthenticated. The
+ * one read of a device's caller, which the device-agents procedures and
+ * the runner token route both take.
  */
 export const deviceCallerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   resolveUserId: UserIdResolver,
   request: Request,
-): Effect.fn.Return<Option.Option<DeviceCaller>, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<DeviceCaller, HostedRefusal, DatabaseServices> {
   const host = yield* hostCallerOf(request);
-  if (Option.isSome(host)) {
-    return Option.some({ userId: host.value.userId, hostDeviceId: host.value.deviceId });
-  }
+  if (Option.isSome(host)) return host.value;
   const account = yield* resolvedAccount(resolveUserId, request);
-  return Option.map(account, (userId) => ({ userId, hostDeviceId: undefined }));
+  return yield* Effect.fail(
+    Option.isSome(account) ? HOSTED_REFUSAL.HOST_UPGRADE_NEEDED : HOSTED_REFUSAL.INVALID_TOKEN,
+  );
 });
 
-/**
- * Whether a device's caller may act for the device named: an enrolled
- * machine for itself alone, and a desktop on its sign-in, which names no
- * device of its own, for any device of its account, as every released
- * desktop build has. Note that the account is the store's to hold the
- * device to; this is the one rule of which device, every route alike.
- */
+/** Whether a device's caller may act for the device named: an enrolled machine for itself alone, every route alike. */
 export function actsForDevice(caller: DeviceCaller, deviceId: string): boolean {
-  return caller.hostDeviceId === undefined || caller.hostDeviceId === deviceId;
+  return caller.deviceId === deviceId;
 }
 
 /** The caller as a device (`deviceCallerOf`), by its bearer alone, on `bearerOnlyMiddleware`'s terms. */
@@ -134,9 +131,7 @@ export function deviceMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, DeviceCaller>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    const caller = yield* deviceCallerOf(resolveUserId, context.request);
-    if (Option.isNone(caller)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: caller.value });
+    return yield* next({ context: yield* deviceCallerOf(resolveUserId, context.request) });
   });
 }
 

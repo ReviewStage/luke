@@ -23,12 +23,12 @@
  * A device asks here too, for a GitHub token for one of its agents
  * (`@luke/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
  * agents' VMs never reach a developer's git login: an enrolled machine on
- * its device secret, a Linux box and a Mac alike, and a released desktop
- * build on its own sign-in's bearer (`RunnerTokenSeams.resolveUserId`), both
- * read as one device caller (`../../orpc/base.ts`'s `deviceCallerOf`) and
- * held to one rule (`deviceGithubToken`): the member's Local agents
- * experiment on, the agent the member's own and pinned to a device the
- * caller acts for, and that device running its agents in a VM. It is
+ * its device secret, a Linux box and a Mac alike, read as a device caller
+ * (`../../orpc/base.ts`'s `deviceCallerOf`, which refuses a released
+ * desktop build on its own sign-in's bearer as needing an upgrade) and held
+ * to one rule (`deviceGithubToken`): the member's Local agents experiment
+ * on, the agent the member's own and pinned to the caller's own device,
+ * and that device running its agents in a VM. It is
  * answered only an installation token the App mints for the agent's
  * repository, on the terms the cloud's checkout mints its sandbox's
  * (`coder-host/checkout.ts`'s `agentRepositoryToken`): good for an hour, cut
@@ -91,7 +91,7 @@ import { admitRunnerBearer, presentedBearer } from "../luke-mcp/bearer.js";
 
 /** What the route is handed of the deployment's. */
 export interface RunnerTokenSeams {
-  /** The account a desktop's own sign-in names, read from its bearer alone, never a browser's session. */
+  /** The account a desktop's own sign-in names, read from its bearer alone, never a browser's session, so a released desktop build is refused as needing an upgrade. */
   readonly resolveUserId: UserIdResolver;
 }
 
@@ -187,12 +187,10 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
 
 /**
  * A GitHub token for a device's own agent named in the body, the one rule
- * every device caller is held to, an enrolled machine on its secret and a
- * desktop on its sign-in alike: an installation token for the agent's
+ * every device caller is held to: an installation token for the agent's
  * repository, where the member's Local agents experiment is on, the agent
- * is the member's own and pinned to a device the caller acts for
- * (`actsForDevice`: an enrolled machine its own device alone, a desktop on
- * its sign-in any of its account's), that device runs its agents in a VM
+ * is the member's own and pinned to the caller's own device
+ * (`actsForDevice`), that device runs its agents in a VM
  * of their own (`DEVICE_ISOLATION.SANDBOX`), since an agent run directly on
  * a device pushes on its developer's own login, and the agent works in a
  * repository the installation of its task's workspace reaches; refused
@@ -253,9 +251,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
   // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
   if (Option.isNone(admitted)) {
-    const device = yield* deviceCallerOf(seams.resolveUserId, request);
-    if (Option.isSome(device)) return yield* deviceGithubToken(device.value, brake);
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    return yield* deviceGithubToken(yield* deviceCallerOf(seams.resolveUserId, request), brake);
   }
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(

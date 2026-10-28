@@ -1,11 +1,13 @@
 /**
  * device-agents-procedures.ts -- a local agent's Mac registers and beats, takes its agents' lines and its tools' requests, and says what came of each.
  *
- * Every procedure but the enroll reads the device's bearer alone, never a
+ * Every procedure but the enrolls reads the device's bearer alone, never a
  * browser's session cookie (`deviceMiddleware`), since a line carries a
  * runner's secrets and an answer is the word of the device that ran it, and
- * names the device's id: a desktop's sign-in, or a host's device secret,
- * which acts for its own device alone and answers not found for any other.
+ * names the device's id: the machine's device secret, which acts for its
+ * own device alone and answers not found for any other. A desktop's own
+ * sign-in, which released desktop builds followed the queue on, is refused
+ * there as needing an upgrade.
  * The enroll's bearer is an install token instead (`installTokenMiddleware`),
  * which it trades for a host and the secret it calls on from then on
  * (`@luke/features/host-wire`), answered this once; it refuses an unknown,
@@ -13,9 +15,13 @@
  * token's member's standing hosts as still enrolled. The own enroll's
  * bearer is the desktop's sign-in alone (`bearerOnlyMiddleware`, never a
  * browser's cookie, since it mints a credential), and it converts a device
- * the member's account registered in place under its id, answering its new
- * secret this once, or not found for an id the account holds no device of,
- * another account's among them. A host's every call,
+ * the member's account registered in place under its id, or creates one
+ * under the account with the name, platform and architecture the enroll
+ * sends where the account never registered the id, answering its new
+ * secret this once; it answers not found for another account's id, and
+ * for an id the account never registered where the enroll sent no
+ * machine, and refuses an enroll naming only some of the machine's fields
+ * as invalid. A host's every call,
  * the enroll's included, is refused as needing an upgrade where its daemon
  * is below the floor (`auth/device-secret.ts`). Each answers not found,
  * before it touches a row, where the account has the `local-agents`
@@ -38,7 +44,7 @@ import {
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollHost, enrollOwnDevice, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
 import { DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
-import { HOST_WIRE } from "@luke/features/host-wire";
+import { HOST_WIRE, type OwnDeviceEnrollRequest } from "@luke/features/host-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
 import {
@@ -69,7 +75,7 @@ import {
 } from "./device-agent.js";
 
 export interface DeviceAgentsProcedureSeams {
-  /** The account behind a desktop's request, read from its bearer alone (`deviceMiddleware`). */
+  /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and a released desktop build's, refused elsewhere as needing an upgrade (`deviceMiddleware`). */
   resolveUserId: UserIdResolver;
 }
 
@@ -96,6 +102,16 @@ const followed = (caller: DeviceCaller, deviceId: string) =>
       return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     }
   });
+
+/** The machine an own enroll names, all of its name, platform and architecture or none; refused as invalid where it names only some. */
+const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
+  if (name !== undefined && platform !== undefined && arch !== undefined) {
+    return Effect.succeed({ name, platform, arch });
+  }
+  return name === undefined && platform === undefined && arch === undefined
+    ? Effect.succeed(undefined)
+    : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+};
 
 /** Kept, or not found where the account holds no such row. */
 const keptOrNotFound = (kept: boolean) =>
@@ -133,8 +149,14 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       yield* experimentOn(userId);
       const version = yield* admittedHostVersion(presentedHostVersion(context.request));
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
+      const machine = yield* enrollingMachine(input);
       const enrolled = yield* hostedStoreOrUnavailable(
-        enrollOwnDevice(userId, { id: input.deviceId, version, secretHash: minted.hash }),
+        enrollOwnDevice(userId, {
+          id: input.deviceId,
+          version,
+          secretHash: minted.hash,
+          ...(machine === undefined ? undefined : { machine }),
+        }),
       );
       if (!enrolled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { deviceId: input.deviceId, deviceSecret: minted.secret };

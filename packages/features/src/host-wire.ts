@@ -101,11 +101,15 @@ function secretOf(prefix: string) {
  * lkh_…`) as a device secret does on every later call, and its daemon's
  * version in `HOST_WIRE.VERSION_HEADER`.
  */
-export const hostEnrollRequestSchema = EffectSchema.Struct({
-  deviceId: wireUuidSchema,
+const enrollingMachineFields = {
   name: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(200)),
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
+};
+
+export const hostEnrollRequestSchema = EffectSchema.Struct({
+  deviceId: wireUuidSchema,
+  ...enrollingMachineFields,
 });
 
 export type HostEnrollRequest = typeof hostEnrollRequestSchema.Type;
@@ -124,16 +128,25 @@ export const hostEnrollAnswerSchema = EffectSchema.Struct({
 export type HostEnrollAnswer = typeof hostEnrollAnswerSchema.Type;
 
 /**
- * An own device's enroll: the id of a device the member's account already
- * registered, a Mac its desktop signed in on. The desktop's own sign-in is
- * its credential, as its bearer and never a browser's session, and the
- * version of the host program it enrolls for rides in
- * `HOST_WIRE.VERSION_HEADER`, as on a token's enroll. It answers as a
- * token's enroll does (`hostEnrollAnswerSchema`), the device converted in
- * place under the same id so its agents keep it; a device already enrolled
- * is keyed again, its old secret refused from then on.
+ * An own device's enroll: the id of the member's machine, a Mac its desktop
+ * signed in on, and its name, platform and architecture, which create the
+ * device under the account where the account never registered the id; all
+ * three or none, since a device the account already has needs none. The
+ * desktop's own sign-in is its credential, as its bearer and never a
+ * browser's session, and the version of the host program it enrolls for
+ * rides in `HOST_WIRE.VERSION_HEADER`, as on a token's enroll. It answers
+ * as a token's enroll does (`hostEnrollAnswerSchema`), a device the account
+ * has converted in place under the same id so its agents keep it; a device
+ * already enrolled is keyed again, its old secret refused from then on.
  */
-export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({ deviceId: wireUuidSchema });
+export const ownDeviceEnrollRequestSchema = EffectSchema.Struct({
+  deviceId: wireUuidSchema,
+  name: EffectSchema.optionalKey(enrollingMachineFields.name),
+  platform: EffectSchema.optionalKey(enrollingMachineFields.platform),
+  arch: EffectSchema.optionalKey(enrollingMachineFields.arch),
+});
+
+export type OwnDeviceEnrollRequest = typeof ownDeviceEnrollRequestSchema.Type;
 
 /** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes. */
 export const hostUpgradeNeededDataSchema = EffectSchema.Struct({

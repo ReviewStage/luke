@@ -17,7 +17,11 @@ import {
   type DeviceSetup,
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
-import { type HostEnrollRequest, hostGithubTokenAnswerSchema } from "./host-wire.js";
+import {
+  type HostEnrollRequest,
+  hostGithubTokenAnswerSchema,
+  type OwnDeviceEnrollRequest,
+} from "./host-wire.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
@@ -142,6 +146,9 @@ export function enrollHost(
   );
 }
 
+/** The machine an own enroll names, which the service creates the device from where the account never registered its id. */
+type OwnEnrollingMachine = Required<Omit<OwnDeviceEnrollRequest, "deviceId">>;
+
 /** How an own device's enroll ended (`HostedDeviceAgentClient.enrollOwn`). */
 export const OWN_ENROLL_OUTCOME = {
   /** The service converted the device in place and answered its device secret, this once. */
@@ -216,14 +223,18 @@ export class HostedDeviceAgentClient {
   }
 
   /**
-   * One of the account's own registered devices enrolled on its sign-in
+   * One of the account's own machines enrolled on its sign-in
    * (`contract/device-agents.ts`'s `enrollOwn`): converted in place under its
-   * id and traded for a device secret, answered this once. The host
-   * program's version rides on the caller's own `HttpClient`, as on a host's
-   * every call.
+   * id, or created under the account as the machine given names itself
+   * where the account never registered the id, and traded for a device
+   * secret, answered this once. The host program's version rides on the
+   * caller's own `HttpClient`, as on a host's every call.
    */
-  enrollOwn(deviceId: string): Effect.Effect<OwnEnrollOutcome, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.enrollOwn, { deviceId }).pipe(
+  enrollOwn(
+    deviceId: string,
+    machine?: OwnEnrollingMachine,
+  ): Effect.Effect<OwnEnrollOutcome, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.enrollOwn, { deviceId, ...machine }).pipe(
       Effect.map(
         (answer): OwnEnrollOutcome => ({
           outcome: OWN_ENROLL_OUTCOME.ENROLLED,

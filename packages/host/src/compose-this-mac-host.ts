@@ -3,6 +3,7 @@ import {
   OWN_ENROLL_OUTCOME,
   type OwnEnrollOutcome,
 } from "@luke/features";
+import { DEVICE_ARCH } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { carried, GATEWAY_METHOD } from "@luke/gateway";
 import { Duration, Effect, Option, type Path, Ref, Result, Semaphore } from "effect";
@@ -13,6 +14,7 @@ import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "./contract/this-mac-host.js";
+import { DARWIN_HOST } from "./daemon/host-os.js";
 import {
   HOST_LOGIN_ITEM_ACT,
   HOST_LOGIN_ITEM_STATUS,
@@ -153,16 +155,21 @@ export function composeThisMacHost(
 
     const set = (next: ThisMacHostStanding) => Effect.as(Ref.set(standing, next), next);
 
-    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for. */
+    /** The enroll on the sign-in, with the version of the `luke-host` it enrolls for, naming the Mac as its `luke-host` registers it, so Luke creates the device where it never saw this Mac. */
     const enrolled = (deviceId: string, version: string) =>
-      client
-        .enrollOwn(deviceId)
-        .pipe(
-          Effect.updateService(
-            HttpClient.HttpClient,
-            HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
-          ),
-        );
+      Effect.suspend(() =>
+        client.enrollOwn(deviceId, {
+          name: DARWIN_HOST.deviceName(),
+          platform: DARWIN_HOST.platform,
+          // Note that a Mac's luke-host runs on Apple silicon alone (`DARWIN_HOST.arches`).
+          arch: DEVICE_ARCH.ARM64,
+        }),
+      ).pipe(
+        Effect.updateService(
+          HttpClient.HttpClient,
+          HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
+        ),
+      );
 
     /**
      * The sequence: the Mac enrolled under the account's device id, its
