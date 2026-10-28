@@ -28,7 +28,13 @@ export interface HostRelease {
  * The release the install script installs; none until the first is
  * published, and the script served meanwhile says there is none yet.
  */
-export const HOST_RELEASE: HostRelease | undefined = undefined;
+export const HOST_RELEASE: HostRelease | undefined = {
+  VERSION: "0.1.0",
+  SHA256: {
+    x64: "ec50beda036fc04757c40eb83de2cea09b357713e957cf90629e9f8e52cd2ce3",
+    arm64: "796e6c5a12338f290cc10504ec954f020ec85d46279f6c058481795387b7baa2",
+  },
+};
 
 /** The release's tag, apart from the desktop's `v<version>`. */
 export function hostReleaseTag(version: string): string {
