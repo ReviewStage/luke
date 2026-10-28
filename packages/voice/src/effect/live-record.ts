@@ -7,7 +7,7 @@
  * looks, not what it finds.
  *
  * `liveRecordLayer` is how a caller that built its record imperatively hands it
- * over: `compose-host.ts` builds the plain one where the brain composer
+ * over: `compose-host.ts` builds the plain one where the agent composer
  * stands and provides it to `compose-live.ts`, and `apps/web`'s hosted
  * exchange provides the one it built beside the service.
  */

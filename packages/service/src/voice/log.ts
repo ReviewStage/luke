@@ -17,7 +17,7 @@ export const LOG_EVENT = {
   /** A fresh connection's sideband stands again on a session created earlier. */
   SESSION_ATTACHED: "session-attached",
   USAGE_RECORDED: "usage-recorded",
-  /** The hosted exchange stands on the session: the record and the brain run here for it. */
+  /** The hosted exchange stands on the session: the record and the agent run here for it. */
   EXCHANGE_ATTACHED: "exchange-attached",
   /** The composition offered an exchange and it could not stand on the session; the session is refused rather than run with no one to answer. */
   EXCHANGE_FAILED: "exchange-failed",

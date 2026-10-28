@@ -4,8 +4,8 @@ import type { Effect } from "effect";
 
 /**
  * The one door the live session service reaches Luke's judgment through. It
- * is transport-neutral on purpose: ids and plain data cross it, never a brain
- * class, so the in-process agent that answers it today and a hosted brain
+ * is transport-neutral on purpose: ids and plain data cross it, never an agent
+ * class, so the in-process agent that answers it today and a hosted agent
  * reached over HTTP tomorrow are two implementations of one contract, and
  * the service that speaks for the developer's coding agents moves between
  * them without changing. Every ask that crosses it is a spoken one, minted
@@ -13,8 +13,8 @@ import type { Effect } from "effect";
  * the voice model's delegation ids, as the delegation guide says to.
  */
 
-/** The run seams the service consumes, named one by one; a newer brain may fire kinds this build does not read. */
-export const LIVE_BRAIN_RUN_EVENT = {
+/** The run seams the service consumes, named one by one; a newer agent may fire kinds this build does not read. */
+export const LIVE_AGENT_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   QUESTION_QUEUED: "question_queued",
   QUESTION_WITHDRAWN: "question_withdrawn",
@@ -26,13 +26,13 @@ export const LIVE_BRAIN_RUN_EVENT = {
   /**
    * What the run is doing now, told each time it changes: the command or the
    * tool of the call still pending, or nothing once none is. It is the live
-   * brain's own and no seam of the turn-event stream, since it is shown on
+   * agent's own and no seam of the turn-event stream, since it is shown on
    * the developer's own Mac and spoken by nobody.
    */
   ACTIVITY: "activity",
   /**
    * More of the run's calls settled since it was last told: how many have
-   * settled in all, and the kind of step the latest was, in the brain's
+   * settled in all, and the kind of step the latest was, in the agent's
    * slow-step vocabulary or nothing where it is none of them. It carries
    * neither a call's input nor its output, so the service words it from the
    * build.
@@ -48,7 +48,7 @@ export const LIVE_BRAIN_RUN_EVENT = {
 } as const;
 
 /** How a run ended, as the service tells a reply from a refusal. */
-export const LIVE_BRAIN_RUN_END = {
+export const LIVE_AGENT_RUN_END = {
   /** The run produced its reply; whatever sentences it had were streamed. */
   COMPLETED: "completed",
   /** The developer, or a drain, stopped it before a reply formed. */
@@ -57,65 +57,65 @@ export const LIVE_BRAIN_RUN_END = {
   FAILED: "failed",
 } as const;
 
-export type LiveBrainRunEnd = (typeof LIVE_BRAIN_RUN_END)[keyof typeof LIVE_BRAIN_RUN_END];
+export type LiveAgentRunEnd = (typeof LIVE_AGENT_RUN_END)[keyof typeof LIVE_AGENT_RUN_END];
 
-export type LiveBrainRunEvent =
+export type LiveAgentRunEvent =
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.SLOW_STEP;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.SLOW_STEP;
       readonly runId: string;
-      /** Which kind of slow step began, in the brain's own vocabulary; the service words it. */
+      /** Which kind of slow step began, in the agent's own vocabulary; the service words it. */
       readonly step: string;
     }
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.QUESTION_QUEUED;
       readonly runId: string;
-      /** A question the brain queued for the developer, and the answer it recommends. */
+      /** A question the agent queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
     }
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.QUESTION_WITHDRAWN;
       readonly runId: string;
-      /** The words of a queued question the brain took back, so the voice is never handed it. */
+      /** The words of a queued question the agent took back, so the voice is never handed it. */
       readonly question: string;
     }
-  // Code of the task's repository the brain put on screen, with its
+  // Code of the task's repository the agent put on screen, with its
   // lines, for Luke's next words, under the call and turn that showed it.
   | ({
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
     } & TaskShownCode)
-  // The developer said they are done and the brain asked to end
+  // The developer said they are done and the agent asked to end
   // the call; the service decides whether this run may still end it.
-  | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
-  | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
+  | { readonly kind: typeof LIVE_AGENT_RUN_EVENT.CALL_ENDING; readonly runId: string }
+  | { readonly kind: typeof LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE;
       readonly runId: string;
       readonly sentence: string;
     }
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ENDED;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.ENDED;
       readonly runId: string;
-      readonly end: LiveBrainRunEnd;
+      readonly end: LiveAgentRunEnd;
     }
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIVITY;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.ACTIVITY;
       readonly runId: string;
       /** The pending call's command, or its tool's name where it runs none; absent while no call is pending. */
       readonly action: string | undefined;
     }
-  | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.WOKEN; readonly runId: string }
+  | { readonly kind: typeof LIVE_AGENT_RUN_EVENT.WOKEN; readonly runId: string }
   | {
-      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.STEP_SETTLED;
+      readonly kind: typeof LIVE_AGENT_RUN_EVENT.STEP_SETTLED;
       readonly runId: string;
-      /** Which kind of step settled latest, in the brain's own vocabulary; absent for a step of no named kind. */
+      /** Which kind of step settled latest, in the agent's own vocabulary; absent for a step of no named kind. */
       readonly step: string | undefined;
       /** How many of the run's steps have settled so far. */
       readonly settled: number;
     };
 
-export interface LiveBrainAsk {
+export interface LiveAgentAsk {
   /** The delegation's id, as the session minted it: the one id the submission and the developer's recorded line share, so a retry finds the same run and a record can tie the line to the run's turn. */
   submissionId: string;
   /** The role-labelled transcript span the delegation is about, the developer's latest line marked as the ask. */
@@ -124,37 +124,37 @@ export interface LiveBrainAsk {
   sessionId: string;
   /** The ask's revision in that session's order of delegations: a higher one supersedes a lower. */
   revision: number;
-  /** Whether the developer hears the reply: not for their last line handed over as the call ends, which the brain answers as a line it reads rather than says. */
+  /** Whether the developer hears the reply: not for their last line handed over as the call ends, which the agent answers as a line it reads rather than says. */
   heard: boolean;
 }
 
-export const LIVE_BRAIN_SUBMISSION = {
+export const LIVE_AGENT_SUBMISSION = {
   ACCEPTED: "accepted",
   REFUSED: "refused",
 } as const;
 
-export type LiveBrainSubmission =
-  | { outcome: typeof LIVE_BRAIN_SUBMISSION.ACCEPTED; runId: string }
+export type LiveAgentSubmission =
+  | { outcome: typeof LIVE_AGENT_SUBMISSION.ACCEPTED; runId: string }
   | {
-      outcome: typeof LIVE_BRAIN_SUBMISSION.REFUSED;
-      /** The standing sentence the refusal is spoken as, fixed by the brain and never composed with the ask. */
+      outcome: typeof LIVE_AGENT_SUBMISSION.REFUSED;
+      /** The standing sentence the refusal is spoken as, fixed by the agent and never composed with the ask. */
       refusal: string;
     };
 
-/** What asking the brain to cancel a run came to: cancelled, nothing left to cancel, or a cancel the backend did not take. */
-export const LIVE_BRAIN_CANCEL = {
+/** What asking the agent to cancel a run came to: cancelled, nothing left to cancel, or a cancel the backend did not take. */
+export const LIVE_AGENT_CANCEL = {
   /** The backend took the cancel: the run stops, or will never start its work. */
   CANCELLED: "cancelled",
-  /** The run had already ended, or the brain holds nothing under its id. */
+  /** The run had already ended, or the agent holds nothing under its id. */
   NOT_RUNNING: "not_running",
   /** The backend could not be reached or refused the cancel; the run may still be under way. */
   FAILED: "failed",
 } as const;
 
-export type LiveBrainCancel = (typeof LIVE_BRAIN_CANCEL)[keyof typeof LIVE_BRAIN_CANCEL];
+export type LiveAgentCancel = (typeof LIVE_AGENT_CANCEL)[keyof typeof LIVE_AGENT_CANCEL];
 
-/** One run a re-attached connection takes up again, as the brain's record holds it. */
-export interface LiveBrainRecoveredRun {
+/** One run a re-attached connection takes up again, as the agent's record holds it. */
+export interface LiveAgentRecoveredRun {
   readonly runId: string;
   /**
    * The delegation the run answers, still open in the session the run was
@@ -176,9 +176,9 @@ export interface LiveBrainRecoveredRun {
  * and the follow that tells them from where the last telling stopped, which
  * the caller runs once it can hear them.
  */
-export interface LiveBrainRecovery {
+export interface LiveAgentRecovery {
   readonly revision: number;
-  readonly runs: readonly LiveBrainRecoveredRun[];
+  readonly runs: readonly LiveAgentRecoveredRun[];
   readonly follow: Effect.Effect<void>;
 }
 
@@ -187,11 +187,11 @@ export interface LiveBrainRecovery {
  * sets the backend exploring, once; a call back instead joins whatever work
  * earlier calls left under way, which goes on whether or not a call stands,
  * and hears what Luke said meanwhile that nobody heard. Every run here answers
- * no delegation of this call: the service stands each as a run the brain
+ * no delegation of this call: the service stands each as a run the agent
  * opened of its own, so none ends the call and the developer's next ask
  * supersedes them.
  */
-export interface LiveBrainJoin {
+export interface LiveAgentJoin {
   /** Whether the call joins earlier calls' work rather than being the plan's first. */
   readonly joined: boolean;
   /** The runs to hear from here: the exploring a first call set off, or the work earlier calls left running. */
@@ -199,7 +199,7 @@ export interface LiveBrainJoin {
   /** What Luke said since the developer last heard him, bounded and newest last; none where nothing was missed. */
   readonly missed: string | undefined;
   /** The questions Luke queued meanwhile and has not taken back, oldest first, for the voice to ask in turn. */
-  readonly questions: readonly LiveBrainQuestion[];
+  readonly questions: readonly LiveAgentQuestion[];
   /**
    * Counts what the join handed over as heard, so no later call hands it
    * again, then tells the runs from there; run once the catch-up and every
@@ -210,41 +210,41 @@ export interface LiveBrainJoin {
 }
 
 /** A question the planning model queued for the developer, and the answer it recommends. */
-export interface LiveBrainQuestion {
+export interface LiveAgentQuestion {
   readonly question: string;
   readonly recommendation: string;
 }
 
-export interface LiveBrain {
+export interface LiveAgent {
   /**
    * Submits a spoken ask under the spoken origin. An ask that arrives while
-   * a run is under way is the brain's to queue behind it or fold with
+   * a run is under way is the agent's to queue behind it or fold with
    * others waiting; the answer names a run of the ask's own, and where asks
    * share one backend turn, the newest of them is the run that carries the
    * turn's words, since the service speaks the newest request's reply alone.
    */
-  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission>;
+  submitAsk(ask: LiveAgentAsk): Effect.Effect<LiveAgentSubmission>;
   /**
    * A fresh call starting: on the plan's first call the backend starts
    * exploring before the developer has asked anything, so what it finds is
    * already in hand when they do; on a call back it takes up the work earlier
    * calls left under way rather than asking anything again. See
-   * `LiveBrainJoin`.
+   * `LiveAgentJoin`.
    */
-  join(sessionId: string): Effect.Effect<LiveBrainJoin>;
+  join(sessionId: string): Effect.Effect<LiveAgentJoin>;
   /**
    * Asks the backend to cancel one run, answering only once the backend has
    * said whether it took the cancel, so nothing is told of a cancel that did
    * not happen. The run still ends through its own seam.
    */
-  cancelRun(runId: string): Effect.Effect<LiveBrainCancel>;
+  cancelRun(runId: string): Effect.Effect<LiveAgentCancel>;
   /**
    * The runs an earlier connection to the session accepted and did not tell
-   * to their end, read back from the brain's record. Each is told again only
+   * to their end, read back from the agent's record. Each is told again only
    * from the event after the last one told, so nothing is said twice; what
    * was told just before a connection was lost may be said never.
    */
-  recoverRuns(sessionId: string): Effect.Effect<LiveBrainRecovery>;
-  /** Hears the run seams for every run the brain holds; the service reads the kinds it knows by name. */
-  onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void;
+  recoverRuns(sessionId: string): Effect.Effect<LiveAgentRecovery>;
+  /** Hears the run seams for every run the agent holds; the service reads the kinds it knows by name. */
+  onRunEvent(listener: (event: LiveAgentRunEvent) => void): () => void;
 }

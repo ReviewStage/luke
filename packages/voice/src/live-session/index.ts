@@ -5,21 +5,21 @@ export {
   type SidebandCloseResult,
 } from "./graceful-close.js";
 export {
-  LIVE_BRAIN_CANCEL,
-  LIVE_BRAIN_RUN_END,
-  LIVE_BRAIN_RUN_EVENT,
-  LIVE_BRAIN_SUBMISSION,
-  type LiveBrain,
-  type LiveBrainAsk,
-  type LiveBrainCancel,
-  type LiveBrainJoin,
-  type LiveBrainQuestion,
-  type LiveBrainRecoveredRun,
-  type LiveBrainRecovery,
-  type LiveBrainRunEnd,
-  type LiveBrainRunEvent,
-  type LiveBrainSubmission,
-} from "./live-brain.js";
+  LIVE_AGENT_CANCEL,
+  LIVE_AGENT_RUN_END,
+  LIVE_AGENT_RUN_EVENT,
+  LIVE_AGENT_SUBMISSION,
+  type LiveAgent,
+  type LiveAgentAsk,
+  type LiveAgentCancel,
+  type LiveAgentJoin,
+  type LiveAgentQuestion,
+  type LiveAgentRecoveredRun,
+  type LiveAgentRecovery,
+  type LiveAgentRunEnd,
+  type LiveAgentRunEvent,
+  type LiveAgentSubmission,
+} from "./live-agent.js";
 export type { LiveRecord, SpokenAskAttach } from "./live-record.js";
 export {
   AVATAR_START_BOUND,

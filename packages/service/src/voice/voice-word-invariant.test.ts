@@ -26,16 +26,16 @@ import {
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
 } from "@luke/live";
-import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
+import { liveAgentLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
-  LIVE_BRAIN_CANCEL,
-  LIVE_BRAIN_SUBMISSION,
-  type LiveBrain,
-  type LiveBrainAsk,
-  type LiveBrainCancel,
-  type LiveBrainJoin,
-  type LiveBrainRecovery,
-  type LiveBrainSubmission,
+  LIVE_AGENT_CANCEL,
+  LIVE_AGENT_SUBMISSION,
+  type LiveAgent,
+  type LiveAgentAsk,
+  type LiveAgentCancel,
+  type LiveAgentJoin,
+  type LiveAgentRecovery,
+  type LiveAgentSubmission,
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
 } from "@luke/voice/live-session";
@@ -80,8 +80,8 @@ import { observedSideband } from "./live-sideband.js";
  * transcript — driven through the live session service as the voice
  * service composes it: the service's own ledger groups the fragments and
  * decides the attach, the hosted record is the seam, the voice writer reads
- * the words back from the segments on record, and the brain stands up the
- * ask's turn in the store as the hosted brain does, all on the real
+ * the words back from the segments on record, and the agent stands up the
+ * ask's turn in the store as the hosted agent does, all on the real
  * migrations in PGlite. The service keeps time on the ambient `TestClock`,
  * so the debounce is advanced rather than waited out, and every write takes
  * the one `SqlClient` the suite's runtime holds.
@@ -143,13 +143,13 @@ async function target(): Promise<VoiceTarget> {
 }
 
 /**
- * A brain that takes every ask and answers none, but leaves the ask's turn
- * on record as the hosted brain does before the service attaches: the ask
+ * An agent that takes every ask and answers none, but leaves the ask's turn
+ * on record as the hosted agent does before the service attaches: the ask
  * row under the delegation's id, the turn's own row started, and the ask
  * bound to it, so the attach that follows finds the turn and takes the rows
  * into it.
  */
-class TurnOpeningBrain implements LiveBrain {
+class TurnOpeningAgent implements LiveAgent {
   /** The turn each delegation's ask was bound to, by the delegation's id. */
   readonly turns = new Map<string, string>();
   readonly #conversation: ConversationTarget;
@@ -158,7 +158,7 @@ class TurnOpeningBrain implements LiveBrain {
     this.#conversation = conversation;
   }
 
-  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
+  submitAsk(ask: LiveAgentAsk): Effect.Effect<LiveAgentSubmission> {
     return Effect.gen({ self: this }, function* () {
       const turnId = randomUUID();
       const recorded = yield* asks.record({
@@ -184,7 +184,7 @@ class TurnOpeningBrain implements LiveBrain {
         }),
       );
       this.turns.set(ask.submissionId, turnId);
-      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: recorded.id };
+      return { outcome: LIVE_AGENT_SUBMISSION.ACCEPTED, runId: recorded.id };
     }).pipe(
       Effect.provideService(SqlClient.SqlClient, sqlClient),
       Effect.provideService(Database, drizzleDatabase),
@@ -193,7 +193,7 @@ class TurnOpeningBrain implements LiveBrain {
   }
 
   /** The backend is not set exploring here, nor any earlier work taken up: the words on record are the developer's asks alone. */
-  join(): Effect.Effect<LiveBrainJoin> {
+  join(): Effect.Effect<LiveAgentJoin> {
     return Effect.succeed({
       joined: false,
       runs: [],
@@ -203,11 +203,11 @@ class TurnOpeningBrain implements LiveBrain {
     });
   }
 
-  cancelRun(): Effect.Effect<LiveBrainCancel> {
-    return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
+  cancelRun(): Effect.Effect<LiveAgentCancel> {
+    return Effect.succeed(LIVE_AGENT_CANCEL.NOT_RUNNING);
   }
 
-  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+  recoverRuns(): Effect.Effect<LiveAgentRecovery> {
     return Effect.succeed({ revision: 0, runs: [], follow: Effect.void });
   }
 
@@ -419,7 +419,7 @@ interface RunningFixture {
   readonly voiceSessionId: string;
   readonly socket: FakeLiveSocket;
   readonly service: LiveSessionService;
-  readonly brain: TurnOpeningBrain;
+  readonly agent: TurnOpeningAgent;
   /** The session's stream as the record observes it, so a failed write fails the test rather than vanishing. */
   readonly observed: Promise<unknown>[];
   /** Waits out every write the record has been handed so far. */
@@ -431,7 +431,7 @@ interface RunningFixture {
 /**
  * The service over the hosted record, composed as the voice service composes
  * it: the record observes the sideband ahead of the service, the writer
- * reads the ambient client, and the brain leaves each ask's turn on record.
+ * reads the ambient client, and the agent leaves each ask's turn on record.
  */
 function stand() {
   return Effect.gen(function* () {
@@ -441,7 +441,7 @@ function stand() {
     );
     const voiceSessionId = Schema.decodeUnknownSync(VoiceSessionIdRowSchema)(sessionRow).id;
     const record = yield* hostedLiveRecord({ writer, target: live });
-    const brain = new TurnOpeningBrain(live.conversation);
+    const agent = new TurnOpeningAgent(live.conversation);
     const socket = new FakeLiveSocket();
     // The session acknowledges every thinking append at once, as the real one
     // does for an append that speaks nothing; the record observes and ignores it.
@@ -459,7 +459,7 @@ function stand() {
         hasTask: true,
         report: () => undefined,
       }),
-      Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+      Layer.mergeAll(liveAgentLayer(agent), liveRecordLayer(record)),
     );
     const adopted = yield* service.adoptSession({
       sessionId: live.liveSessionId,
@@ -478,7 +478,7 @@ function stand() {
       voiceSessionId,
       socket,
       service,
-      brain,
+      agent,
       observed,
       settle: () =>
         Effect.gen(function* () {
@@ -607,8 +607,8 @@ for (const gapMs of GAP_VALUES_MS) {
         const developer = rows.filter((row) => spokenBy(row, TRANSCRIPT_SPEAKER.USER));
         let previousEndMs = 0;
         for (const delegation of delegationsOf(steps)) {
-          const turnId = running.brain.turns.get(delegation.id);
-          assert.ok(turnId, `${delegation.id} was asked of the brain`);
+          const turnId = running.agent.turns.get(delegation.id);
+          assert.ok(turnId, `${delegation.id} was asked of the agent`);
           const expected = developer.filter((row) => {
             const span = decodeSpokenRowMetadata(row.metadata);
             return span.from_ms > previousEndMs && span.from_ms <= delegation.offsetMs;

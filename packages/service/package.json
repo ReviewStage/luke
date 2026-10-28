@@ -247,7 +247,7 @@
     "./voice/exchange-attachment": "./src/voice/exchange-attachment.js",
     "./voice/frames": "./src/voice/frames.js",
     "./voice/keyframe": "./src/voice/keyframe.js",
-    "./voice/live-brain": "./src/voice/live-brain.js",
+    "./voice/live-agent": "./src/voice/live-agent.js",
     "./voice/live-exchange": "./src/voice/live-exchange.js",
     "./voice/live-record": "./src/voice/live-record.js",
     "./voice/live-sideband": "./src/voice/live-sideband.js",

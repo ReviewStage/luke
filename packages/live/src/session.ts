@@ -67,7 +67,7 @@ interface LiveSessionOptions {
 /**
  * The session document a WebRTC session is created with: the model, the
  * call's instructions, the startup history where there is one, the
- * client's delegation, because the brain is the backend and nothing
+ * client's delegation, because the agent is the backend and nothing
  * else may act, no storage, the voice, and the renderer's data channel
  * restricted to the events named, so an untrusted window cannot append to the
  * model or start anything. This model has no tools, no speed, and no

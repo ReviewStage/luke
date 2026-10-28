@@ -13,24 +13,24 @@ import {
 import type { WireRecord } from "@luke/wire";
 import { Deferred, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { liveBrainLayer } from "../effect/live-brain.js";
+import { liveAgentLayer } from "../effect/live-agent.js";
 import { liveRecordLayer } from "../effect/live-record.js";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import {
-  LIVE_BRAIN_CANCEL,
-  LIVE_BRAIN_RUN_END,
-  LIVE_BRAIN_RUN_EVENT,
-  LIVE_BRAIN_SUBMISSION,
-  type LiveBrain,
-  type LiveBrainAsk,
-  type LiveBrainCancel,
-  type LiveBrainJoin,
-  type LiveBrainRecoveredRun,
-  type LiveBrainRecovery,
-  type LiveBrainRunEvent,
-  type LiveBrainSubmission,
-} from "./live-brain.js";
+  LIVE_AGENT_CANCEL,
+  LIVE_AGENT_RUN_END,
+  LIVE_AGENT_RUN_EVENT,
+  LIVE_AGENT_SUBMISSION,
+  type LiveAgent,
+  type LiveAgentAsk,
+  type LiveAgentCancel,
+  type LiveAgentJoin,
+  type LiveAgentRecoveredRun,
+  type LiveAgentRecovery,
+  type LiveAgentRunEvent,
+  type LiveAgentSubmission,
+} from "./live-agent.js";
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert, TypedRowWrite } from "./live-record.js";
 import {
   LiveSessionService,
@@ -160,25 +160,25 @@ class FakeSideband implements LiveSideband {
 /** A recovery as the fake answers it: the session's newest revision, the runs taken up, and what their follow tells at once. */
 interface ScriptedRecovery {
   readonly revision: number;
-  readonly runs: readonly LiveBrainRecoveredRun[];
-  readonly told: readonly LiveBrainRunEvent[];
+  readonly runs: readonly LiveAgentRecoveredRun[];
+  readonly told: readonly LiveAgentRunEvent[];
 }
 
 /** A join as the fake answers it: what the call finds, and the events its follow tells the moment it runs. */
 interface ScriptedJoin {
-  readonly join: Omit<LiveBrainJoin, "follow">;
-  readonly told: readonly LiveBrainRunEvent[];
+  readonly join: Omit<LiveAgentJoin, "follow">;
+  readonly told: readonly LiveAgentRunEvent[];
 }
 
-class FakeBrain implements LiveBrain {
-  readonly asks: LiveBrainAsk[] = [];
+class FakeAgent implements LiveAgent {
+  readonly asks: LiveAgentAsk[] = [];
   refuse: string | undefined;
-  /** While set, each ask is taken at once and answered only when this settles, as a brain across the network answers. */
+  /** While set, each ask is taken at once and answered only when this settles, as an agent across the network answers. */
   answerWhen: Deferred.Deferred<void> | undefined;
   /** Every run the service asked to cancel, in order. */
   readonly cancels: string[] = [];
   /** What the backend says of a cancel, answered only once `cancelWhen` settles where it is set. */
-  cancel: LiveBrainCancel = LIVE_BRAIN_CANCEL.CANCELLED;
+  cancel: LiveAgentCancel = LIVE_AGENT_CANCEL.CANCELLED;
   cancelWhen: Deferred.Deferred<void> | undefined;
   /** What a re-attached session takes up, and the events its follow tells the moment it runs; none by default. */
   recovery: ScriptedRecovery = {
@@ -191,27 +191,27 @@ class FakeBrain implements LiveBrain {
     join: { joined: false, runs: [], missed: undefined, questions: [] },
     told: [],
   };
-  readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  readonly #listeners = new Set<(event: LiveAgentRunEvent) => void>();
   #runs = 0;
 
-  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
+  submitAsk(ask: LiveAgentAsk): Effect.Effect<LiveAgentSubmission> {
     return Effect.gen({ self: this }, function* () {
       this.asks.push(ask);
       if (this.answerWhen !== undefined) yield* Deferred.await(this.answerWhen);
       if (this.refuse !== undefined) {
-        return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: this.refuse };
+        return { outcome: LIVE_AGENT_SUBMISSION.REFUSED, refusal: this.refuse };
       }
       this.#runs += 1;
-      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+      return { outcome: LIVE_AGENT_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
     });
   }
 
-  /** While set, a join answers only once this settles, as a brain reading its store does. */
+  /** While set, a join answers only once this settles, as an agent reading its store does. */
   joinWhen: Deferred.Deferred<void> | undefined;
   /** How many joins had their follow run, which is when what they handed over counts heard. */
   followed = 0;
 
-  join(): Effect.Effect<LiveBrainJoin> {
+  join(): Effect.Effect<LiveAgentJoin> {
     return Effect.gen({ self: this }, function* () {
       if (this.joinWhen !== undefined) yield* Deferred.await(this.joinWhen);
       return {
@@ -224,7 +224,7 @@ class FakeBrain implements LiveBrain {
     });
   }
 
-  cancelRun(runId: string): Effect.Effect<LiveBrainCancel> {
+  cancelRun(runId: string): Effect.Effect<LiveAgentCancel> {
     return Effect.gen({ self: this }, function* () {
       this.cancels.push(runId);
       if (this.cancelWhen !== undefined) yield* Deferred.await(this.cancelWhen);
@@ -232,7 +232,7 @@ class FakeBrain implements LiveBrain {
     });
   }
 
-  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+  recoverRuns(): Effect.Effect<LiveAgentRecovery> {
     return Effect.sync(() => {
       const { revision, runs, told } = this.recovery;
       return {
@@ -245,14 +245,14 @@ class FakeBrain implements LiveBrain {
     });
   }
 
-  onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {
+  onRunEvent(listener: (event: LiveAgentRunEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
     };
   }
 
-  fire(event: LiveBrainRunEvent): void {
+  fire(event: LiveAgentRunEvent): void {
     for (const listener of [...this.#listeners]) listener(event);
   }
 }
@@ -354,7 +354,7 @@ function settle() {
 }
 
 interface Fixture {
-  brain: FakeBrain;
+  agent: FakeAgent;
   record: FakeRecord;
   /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
@@ -373,7 +373,7 @@ interface Fixture {
   open: () => Effect.Effect<FakeSideband>;
 }
 
-function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, never, Scope.Scope> {
+function fixture(agent: FakeAgent = new FakeAgent()): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
@@ -395,10 +395,10 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         },
         onTrace: (entry) => traces.push(entry),
       }),
-      Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+      Layer.mergeAll(liveAgentLayer(agent), liveRecordLayer(record)),
     );
     return {
-      brain,
+      agent,
       record,
       sidebands,
       reports,
@@ -442,8 +442,8 @@ it.effect(
       sideband.delegation("item_1", 2500);
       sideband.delegation("item_1", 2500);
       yield* settle();
-      assert.equal(f.brain.asks.length, 1);
-      assert.deepEqual(f.brain.asks[0]?.submissionId, "item_1");
+      assert.equal(f.agent.asks.length, 1);
+      assert.deepEqual(f.agent.asks[0]?.submissionId, "item_1");
       // The delegation flushed both rows as they stood before the ask was composed on them, and the
       // ask's row was written once more as it stood at the attach, ahead of the attach itself.
       assert.deepEqual(spans(f.record.rows), [
@@ -508,10 +508,10 @@ it.effect(
       sideband.input("What changed?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.agent.fire({ kind: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
       const sentences = ["One.", "Two.", "Three."];
       for (const sentence of sentences) {
-        f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence });
+        f.agent.fire({ kind: LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence });
       }
       for (let index = 0; index < sentences.length; index += 1) {
         yield* settle();
@@ -524,18 +524,18 @@ it.effect(
         ),
         sentences,
       );
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+      f.agent.fire({
+        kind: LIVE_AGENT_RUN_EVENT.ENDED,
         runId: "run-1",
-        end: LIVE_BRAIN_RUN_END.COMPLETED,
+        end: LIVE_AGENT_RUN_END.COMPLETED,
       });
       yield* advanceClock(1000);
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+      f.agent.fire({
+        kind: LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE,
         runId: "run-1",
         sentence: "Late.",
       });
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.agent.fire({ kind: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, sentences.length);
     }),
@@ -561,8 +561,8 @@ function askedRun() {
   });
 }
 
-function sentence(runId: string, words: string): LiveBrainRunEvent {
-  return { kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: words };
+function sentence(runId: string, words: string): LiveAgentRunEvent {
+  return { kind: LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE, runId, sentence: words };
 }
 
 it.effect(
@@ -570,9 +570,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { f, sideband } = yield* askedRun();
-      f.brain.fire(sentence("run-1", "One."));
-      f.brain.fire(sentence("run-1", "Two."));
-      f.brain.fire(sentence("run-1", "Three."));
+      f.agent.fire(sentence("run-1", "One."));
+      f.agent.fire(sentence("run-1", "Two."));
+      f.agent.fire(sentence("run-1", "Three."));
       yield* settle();
       assert.deepEqual(said(sideband), ["One.", "Two.", "Three."]);
       // The third is taken first and the second refused: only the second is sent again, under a fresh id.
@@ -599,8 +599,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { f, sideband } = yield* askedRun();
-      f.brain.fire(sentence("run-1", "Refused."));
-      f.brain.fire(sentence("run-1", "Unanswered."));
+      f.agent.fire(sentence("run-1", "Refused."));
+      f.agent.fire(sentence("run-1", "Unanswered."));
       yield* settle();
       const refuse = (index: number) =>
         sideband.receive({
@@ -633,13 +633,13 @@ it.effect(
       const { f, sideband } = yield* askedRun();
       const slow = yield* Deferred.make<void>();
       sideband.sendWhen = slow;
-      f.brain.fire(sentence("run-1", "First."));
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+      f.agent.fire(sentence("run-1", "First."));
+      f.agent.fire({
+        kind: LIVE_AGENT_RUN_EVENT.SLOW_STEP,
         runId: "run-1",
         step: "repository_read",
       });
-      f.brain.fire(sentence("run-1", "Second."));
+      f.agent.fire(sentence("run-1", "Second."));
       yield* settle();
       assert.equal(sideband.sent.length, 0);
       yield* Deferred.succeed(slow, undefined);
@@ -658,8 +658,8 @@ it.effect(
       const { f, sideband } = yield* askedRun();
       const slow = yield* Deferred.make<void>();
       sideband.sendWhen = slow;
-      f.brain.fire(sentence("run-1", "Stale one."));
-      f.brain.fire(sentence("run-1", "Stale two."));
+      f.agent.fire(sentence("run-1", "Stale one."));
+      f.agent.fire(sentence("run-1", "Stale two."));
       yield* settle();
       assert.ok(f.service.stopSpeaking());
       yield* Deferred.succeed(slow, undefined);
@@ -684,13 +684,13 @@ it.effect(
       sideband.input("What changed?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+      f.agent.fire({
+        kind: LIVE_AGENT_RUN_EVENT.QUESTION_QUEUED,
         runId: "run-1",
         question: "Which repo?",
         recommendation: "The web app.",
       });
-      f.brain.fire(sentence("run-1", "Invites expire after seven days."));
+      f.agent.fire(sentence("run-1", "Invites expire after seven days."));
       yield* settle();
       assert.equal(f.record.attached.length, 0);
       assert.deepEqual(said(sideband), [
@@ -708,16 +708,16 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { f, sideband } = yield* askedRun();
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: "woken-1" });
-      f.brain.fire(sentence("woken-1", "The repository has an invites module."));
+      f.agent.fire({ kind: LIVE_AGENT_RUN_EVENT.WOKEN, runId: "woken-1" });
+      f.agent.fire(sentence("woken-1", "The repository has an invites module."));
       yield* settle();
       assert.deepEqual(said(sideband), ["The repository has an invites module."]);
       sideband.input("And emails?", 1000, 1600);
       sideband.delegation("item_2", 1700);
       yield* settle();
-      f.brain.fire(sentence("woken-1", "Stale finding."));
-      f.brain.fire(sentence("run-1", "Superseded reply."));
-      f.brain.fire(sentence("run-2", "Current reply."));
+      f.agent.fire(sentence("woken-1", "Stale finding."));
+      f.agent.fire(sentence("run-1", "Superseded reply."));
+      f.agent.fire(sentence("run-2", "Current reply."));
       yield* settle();
       assert.deepEqual(said(sideband), ["The repository has an invites module.", "Current reply."]);
     }),
@@ -728,12 +728,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { f, sideband } = yield* askedRun();
-      f.brain.fire(sentence("run-1", "Halfway there."));
+      f.agent.fire(sentence("run-1", "Halfway there."));
       yield* settle();
       sideband.closedBy("remote_hangup", 12);
       yield* settle();
       assert.equal(f.service.sessionStands(), false);
-      assert.deepEqual(f.brain.cancels, []);
+      assert.deepEqual(f.agent.cancels, []);
     }),
 );
 
@@ -748,8 +748,8 @@ it.effect(
   "a call back hears what Luke said while nobody was on the call as a short catch-up, then the run still under way from its follow, and the old run never ends the new call",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.joining = {
+      const agent = new FakeAgent();
+      agent.joining = {
         join: {
           joined: true,
           runs: ["earlier-run"],
@@ -759,15 +759,15 @@ it.effect(
         // The run finishes as the call joins it, and its end of the call was the last call's goodbye.
         told: [
           sentence("earlier-run", "The resend button is wired too."),
-          { kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "earlier-run" },
+          { kind: LIVE_AGENT_RUN_EVENT.CALL_ENDING, runId: "earlier-run" },
           {
-            kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+            kind: LIVE_AGENT_RUN_EVENT.ENDED,
             runId: "earlier-run",
-            end: LIVE_BRAIN_RUN_END.COMPLETED,
+            end: LIVE_AGENT_RUN_END.COMPLETED,
           },
         ],
       };
-      const f = yield* fixture(brain);
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       assert.deepEqual(said(sideband), [
@@ -775,9 +775,9 @@ it.effect(
         "The resend button is wired too.",
       ]);
       assert.equal(f.endings.count, 0);
-      // Joining asks the brain nothing: no delegation is composed and nothing is cancelled.
-      assert.deepEqual(f.brain.asks, []);
-      assert.deepEqual(f.brain.cancels, []);
+      // Joining asks the agent nothing: no delegation is composed and nothing is cancelled.
+      assert.deepEqual(f.agent.asks, []);
+      assert.deepEqual(f.agent.cancels, []);
     }),
 );
 
@@ -785,12 +785,12 @@ it.effect(
   "a call back whose earlier work is still under way with nothing new yet is told so quietly, and the developer's ask then supersedes it",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.joining = {
+      const agent = new FakeAgent();
+      agent.joining = {
         join: { joined: true, runs: ["earlier-run"], missed: undefined, questions: [] },
         told: [],
       };
-      const f = yield* fixture(brain);
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       assert.deepEqual(said(sideband), []);
@@ -800,23 +800,23 @@ it.effect(
       sideband.input("How's it going?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      f.brain.fire(sentence("earlier-run", "Old finding."));
-      f.brain.fire(sentence("run-1", "Current reply."));
+      f.agent.fire(sentence("earlier-run", "Old finding."));
+      f.agent.fire(sentence("run-1", "Current reply."));
       yield* settle();
       assert.deepEqual(said(sideband), ["Current reply."]);
     }),
 );
 
 it.effect(
-  "a plan's first call says no catch-up: its exploring is heard as a run of the brain's own",
+  "a plan's first call says no catch-up: its exploring is heard as a run of the agent's own",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.joining = {
+      const agent = new FakeAgent();
+      agent.joining = {
         join: { joined: false, runs: ["explore-1"], missed: undefined, questions: [] },
         told: [sentence("explore-1", "This is the web app.")],
       };
-      const f = yield* fixture(brain);
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       assert.deepEqual(said(sideband), ["This is the web app."]);
@@ -828,8 +828,8 @@ it.effect(
   "a call back asks the questions Luke queued while no call was up, after its catch-up, one at a time",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.joining = {
+      const agent = new FakeAgent();
+      agent.joining = {
         join: {
           joined: true,
           runs: [],
@@ -841,14 +841,14 @@ it.effect(
         },
         told: [],
       };
-      const f = yield* fixture(brain);
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       assert.deepEqual(said(sideband), [
         "While the developer was away, your backend kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days.",
         "Ask the developer this next, once they have answered anything you have already asked: Which email provider? Recommended answer: Postmark.",
       ]);
-      assert.equal(brain.followed, 1);
+      assert.equal(agent.followed, 1);
     }),
 );
 
@@ -856,21 +856,21 @@ it.effect(
   "a call that ends while it is still joining hands nothing over and counts nothing heard, so the next call is caught up instead",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.joining = {
+      const agent = new FakeAgent();
+      agent.joining = {
         join: { joined: true, runs: ["earlier-run"], missed: "Unheard.", questions: [] },
         told: [],
       };
-      brain.joinWhen = yield* Deferred.make<void>();
-      const f = yield* fixture(brain);
+      agent.joinWhen = yield* Deferred.make<void>();
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       sideband.closedBy("remote_hangup", 3);
       yield* settle();
-      yield* Deferred.succeed(brain.joinWhen, undefined);
+      yield* Deferred.succeed(agent.joinWhen, undefined);
       yield* settle();
       assert.deepEqual(said(sideband), []);
-      assert.equal(brain.followed, 0);
+      assert.equal(agent.followed, 0);
     }),
 );
 
@@ -878,30 +878,30 @@ it.effect(
   "an ask the developer makes while the call is still joining supersedes the earlier work: nothing of it is said, stood, or counted heard",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.joining = {
+      const agent = new FakeAgent();
+      agent.joining = {
         join: { joined: true, runs: ["earlier-run"], missed: "Stale finding.", questions: [] },
         told: [],
       };
-      brain.joinWhen = yield* Deferred.make<void>();
-      const f = yield* fixture(brain);
+      agent.joinWhen = yield* Deferred.make<void>();
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       sideband.input("Check the email path instead.", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      yield* Deferred.succeed(brain.joinWhen, undefined);
+      yield* Deferred.succeed(agent.joinWhen, undefined);
       yield* settle();
-      f.brain.fire(sentence("earlier-run", "Old reply."));
-      f.brain.fire(sentence("run-1", "Current reply."));
+      f.agent.fire(sentence("earlier-run", "Old reply."));
+      f.agent.fire(sentence("run-1", "Current reply."));
       yield* settle();
       assert.deepEqual(said(sideband), ["Current reply."]);
-      assert.equal(brain.followed, 0);
+      assert.equal(agent.followed, 0);
     }),
 );
 
 it.effect(
-  "a correction the developer made just before hanging up, which no ask carried, reaches the brain as the call ends and is attached to its lines",
+  "a correction the developer made just before hanging up, which no ask carried, reaches the agent as the call ends and is attached to its lines",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -917,13 +917,13 @@ it.effect(
       sideband.closedBy("close_requested", 4);
       yield* Fiber.join(ending);
 
-      assert.equal(f.brain.asks.length, 2);
-      const last = f.brain.asks[1];
+      assert.equal(f.agent.asks.length, 2);
+      const last = f.agent.asks[1];
       assert.ok(last?.question.endsWith("Actually, invites should expire after three days."));
       assert.equal(last?.sessionId, "sess-1");
-      // Nobody hears the brain's reply to it, as the call's own ask was heard.
+      // Nobody hears the agent's reply to it, as the call's own ask was heard.
       assert.deepEqual(
-        f.brain.asks.map((ask) => ask.heard),
+        f.agent.asks.map((ask) => ask.heard),
         [true, false],
       );
       assert.equal(f.record.attached.at(-1)?.delegationId, last?.submissionId);
@@ -939,12 +939,12 @@ it.effect("a call whose every word an ask carried asks nothing more as it ends",
     yield* settle();
     sideband.closedBy("close_requested", 4);
     yield* Fiber.join(ending);
-    assert.equal(f.brain.asks.length, 1);
+    assert.equal(f.agent.asks.length, 1);
   }),
 );
 
 it.effect(
-  "a correction that joins a line an ask already carried reaches the brain once as the call ends, and only its new words are the line",
+  "a correction that joins a line an ask already carried reaches the agent once as the call ends, and only its new words are the line",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -961,8 +961,8 @@ it.effect(
       sideband.closedBy("close_requested", 4);
       yield* Fiber.join(ending);
 
-      assert.equal(f.brain.asks.length, 2);
-      const last = f.brain.asks[1];
+      assert.equal(f.agent.asks.length, 2);
+      const last = f.agent.asks[1];
       assert.ok(last?.question.endsWith("Their line: No, three days."));
       assert.equal(last?.sessionId, "sess-1");
       // The row stays the first ask's: the hang-up's ask has no row of its own to attach.
@@ -974,12 +974,12 @@ it.effect(
 );
 
 it.effect(
-  "words that land on an ask's line while the brain is being asked are that ask's, and the hang-up asks nothing more",
+  "words that land on an ask's line while the agent is being asked are that ask's, and the hang-up asks nothing more",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.answerWhen = yield* Deferred.make<void>();
-      const f = yield* fixture(brain);
+      const agent = new FakeAgent();
+      agent.answerWhen = yield* Deferred.make<void>();
+      const f = yield* fixture(agent);
       const sideband = yield* f.open();
       yield* settle();
       sideband.input("Make invites expire", 0, 800);
@@ -988,18 +988,18 @@ it.effect(
       // The API delivers a delegation ahead of the deltas it is about.
       sideband.input(" after three days.", 800, 1_400);
       yield* settle();
-      yield* Deferred.succeed(brain.answerWhen, undefined);
+      yield* Deferred.succeed(agent.answerWhen, undefined);
       yield* settle();
       const ending = yield* Effect.forkChild(f.service.endSession(), { startImmediately: true });
       yield* settle();
       sideband.closedBy("close_requested", 4);
       yield* Fiber.join(ending);
-      assert.equal(f.brain.asks.length, 1);
+      assert.equal(f.agent.asks.length, 1);
     }),
 );
 
 it.effect(
-  "a correction stamped into a line asked before a later ask still reaches the brain as the call ends",
+  "a correction stamped into a line asked before a later ask still reaches the agent as the call ends",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1019,8 +1019,8 @@ it.effect(
       sideband.closedBy("close_requested", 4);
       yield* Fiber.join(ending);
 
-      assert.equal(f.brain.asks.length, 3);
-      const last = f.brain.asks[2];
+      assert.equal(f.agent.asks.length, 3);
+      const last = f.agent.asks[2];
       assert.ok(last?.question.endsWith("Their line: No, three days."));
       assert.ok(
         last?.question.includes("Developer: Make invites expire after two days. No, three days."),
@@ -1038,8 +1038,8 @@ it.effect(
       sideband.input("Make it three days.", 0, 900);
       sideband.closedBy("expired", 4);
       yield* settle();
-      assert.equal(f.brain.asks.length, 1);
-      assert.ok(f.brain.asks[0]?.question.endsWith("Make it three days."));
+      assert.equal(f.agent.asks.length, 1);
+      assert.ok(f.agent.asks[0]?.question.endsWith("Make it three days."));
 
       const detached = yield* fixture();
       const held = yield* detached.open();
@@ -1047,7 +1047,7 @@ it.effect(
       held.input("Make it five days.", 0, 900);
       yield* detached.service.release();
       yield* settle();
-      assert.deepEqual(detached.brain.asks, []);
+      assert.deepEqual(detached.agent.asks, []);
 
       // A socket gone with no close of the session's own, as the relay drops a detached device's.
       const dropped = yield* fixture();
@@ -1056,7 +1056,7 @@ it.effect(
       lost.input("Make it four days.", 0, 900);
       lost.dropConnection();
       yield* settle();
-      assert.deepEqual(dropped.brain.asks, []);
+      assert.deepEqual(dropped.agent.asks, []);
     }),
 );
 
@@ -1082,8 +1082,8 @@ it.effect(
       assert.deepEqual(f.record.typed, [
         { rowId: "line-1", voiceSessionId: "sess-1", text: line, atMs: 1400 },
       ]);
-      assert.equal(f.brain.asks.length, 1);
-      const ask = f.brain.asks[0];
+      assert.equal(f.agent.asks.length, 1);
+      const ask = f.agent.asks[0];
       assert.ok(ask);
       assert.notEqual(ask.question, line);
       assert.ok(ask.question.endsWith(line));
@@ -1105,7 +1105,7 @@ it.effect(
         ),
       );
 
-      f.brain.fire(sentence("run-1", "Switched to the fixture branch."));
+      f.agent.fire(sentence("run-1", "Switched to the fixture branch."));
       yield* settle();
       const spoken = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.deepEqual(said(sideband), ["Switched to the fixture branch."]);
@@ -1121,11 +1121,11 @@ it.effect(
       assert.ok(f.service.typeLine("Never mind, do the other one.", "line-1"));
       yield* settle();
       assert.deepEqual(
-        f.brain.asks.map((ask) => ask.revision),
+        f.agent.asks.map((ask) => ask.revision),
         [1, 2],
       );
-      f.brain.fire(sentence("run-1", "Stale answer."));
-      f.brain.fire(sentence("run-2", "Doing the other one."));
+      f.agent.fire(sentence("run-1", "Stale answer."));
+      f.agent.fire(sentence("run-2", "Doing the other one."));
       yield* settle();
       assert.deepEqual(said(sideband), ["Doing the other one."]);
 
@@ -1133,11 +1133,11 @@ it.effect(
       sideband.delegation("item_2", 2700);
       yield* settle();
       yield* settle();
-      assert.equal(f.brain.asks[2]?.revision, 3);
+      assert.equal(f.agent.asks[2]?.revision, 3);
       // The typed line is no row of the ledger's, so the spoken ask after it never carries it again.
-      assert.equal(f.brain.asks[2]?.question.includes("the other one"), false);
+      assert.equal(f.agent.asks[2]?.question.includes("the other one"), false);
       assert.deepEqual(f.record.typed.length, 1);
-      f.brain.fire(sentence("run-2", "Still doing it."));
+      f.agent.fire(sentence("run-2", "Still doing it."));
       yield* settle();
       assert.deepEqual(said(sideband), ["Doing the other one."]);
     }),
@@ -1148,7 +1148,7 @@ it.effect("a line typed while no session has started is taken by nothing", () =>
     const f = yield* fixture();
     assert.equal(f.service.typeLine("Hello?", "line-1"), false);
     yield* settle();
-    assert.deepEqual(f.brain.asks, []);
+    assert.deepEqual(f.agent.asks, []);
     assert.deepEqual(f.record.typed, []);
   }),
 );
@@ -1157,15 +1157,15 @@ it.effect(
   "a run a typed line asked for, taken up again on a re-attached connection, speaks session-wide rather than under a delegation the session never made",
   () =>
     Effect.gen(function* () {
-      const brain = new FakeBrain();
-      brain.recovery = {
+      const agent = new FakeAgent();
+      agent.recovery = {
         revision: 2,
         runs: [
           { runId: "run-typed", delegationId: null, revision: 2, stopped: false, stale: false },
         ],
         told: [sentence("run-typed", "Here is what I found.")],
       };
-      const f = yield* fixture(brain);
+      const f = yield* fixture(agent);
       const sideband = new FakeSideband();
       f.sidebands.push(sideband);
       assert.ok(
@@ -1183,7 +1183,7 @@ it.effect(
 );
 
 it.effect(
-  "a typed line sent again under its send's id, as a Retry after a lost answer sends it, is written and asked once, unless the brain refused it",
+  "a typed line sent again under its send's id, as a Retry after a lost answer sends it, is written and asked once, unless the agent refused it",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1192,20 +1192,20 @@ it.effect(
       assert.ok(f.service.typeLine("Use the fixture branch.", "line-1"));
       assert.ok(f.service.typeLine("Use the fixture branch.", "line-1"));
       yield* settle();
-      assert.equal(f.brain.asks.length, 1);
+      assert.equal(f.agent.asks.length, 1);
       assert.equal(f.record.typed.length, 1);
       assert.ok(f.service.typeLine("Use the fixture branch.", "line-2"));
       yield* settle();
-      assert.equal(f.brain.asks.length, 2);
-      // A line the brain refused was never asked, so its Retry asks it again.
-      f.brain.refuse = "Luke can't take that right now.";
+      assert.equal(f.agent.asks.length, 2);
+      // A line the agent refused was never asked, so its Retry asks it again.
+      f.agent.refuse = "Luke can't take that right now.";
       assert.ok(f.service.typeLine("Try again.", "line-3"));
       yield* settle();
-      f.brain.refuse = undefined;
+      f.agent.refuse = undefined;
       assert.ok(f.service.typeLine("Try again.", "line-3"));
       yield* settle();
       assert.deepEqual(
-        f.brain.asks.map((ask) => ask.submissionId),
+        f.agent.asks.map((ask) => ask.submissionId),
         ["line-1", "line-2", "line-3", "line-3"],
       );
     }),
@@ -1224,7 +1224,7 @@ it.effect(
       yield* settle();
       sideband.closedBy("close_requested", 3);
       yield* settle();
-      assert.equal(f.brain.asks.length, 1);
-      assert.ok(f.brain.asks[0]?.question.includes("Developer: Check the tests."));
+      assert.equal(f.agent.asks.length, 1);
+      assert.ok(f.agent.asks[0]?.question.includes("Developer: Check the tests."));
     }),
 );

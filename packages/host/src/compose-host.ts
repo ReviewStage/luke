@@ -141,7 +141,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings, openSocket: openVoiceSocket });
-    // No brain runs on this Mac: the exchange is the service's, and Luke
+    // No agent runs on this Mac: the exchange is the service's, and Luke
     // speaks only on a call the developer opened into an agent.
     // The tasks composer is built after the live one and ends its calls, so
     // the live composer reads the agent a call goes into, and hands the

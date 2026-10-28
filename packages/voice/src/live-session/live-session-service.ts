@@ -36,7 +36,7 @@ import {
   Scope,
   Stream,
 } from "effect";
-import { LiveBrainTag } from "../effect/live-brain.js";
+import { LiveAgentTag } from "../effect/live-agent.js";
 import { LiveRecordTag } from "../effect/live-record.js";
 import type { LiveSessionOpened } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
@@ -47,14 +47,14 @@ import {
   type SidebandCloseResult,
 } from "./graceful-close.js";
 import {
-  LIVE_BRAIN_CANCEL,
-  LIVE_BRAIN_RUN_END,
-  LIVE_BRAIN_RUN_EVENT,
-  LIVE_BRAIN_SUBMISSION,
-  type LiveBrain,
-  type LiveBrainRunEnd,
-  type LiveBrainRunEvent,
-} from "./live-brain.js";
+  LIVE_AGENT_CANCEL,
+  LIVE_AGENT_RUN_END,
+  LIVE_AGENT_RUN_EVENT,
+  LIVE_AGENT_SUBMISSION,
+  type LiveAgent,
+  type LiveAgentRunEnd,
+  type LiveAgentRunEvent,
+} from "./live-agent.js";
 import type { LiveRecord } from "./live-record.js";
 
 /**
@@ -62,9 +62,9 @@ import type { LiveRecord } from "./live-record.js";
  * on a session another party created and offered it for adoption; it is
  * fed every append the trusted side makes, each put on the wire in order and
  * tracked against its own acknowledgment, none waiting on another's;
- * it hands each delegation to the brain as a spoken ask and streams the reply
+ * it hands each delegation to the agent as a spoken ask and streams the reply
  * back as commentary a finished sentence at a time while the run goes on,
- * the moment the brain tells each (the brain tells a sentence only once every
+ * the moment the agent tells each (the agent tells a sentence only once every
  * action the run journaled ahead of it has settled), the
  * reply of the newest ask alone, since a later delegation supersedes what
  * the earlier one asked — and nothing is said of the ask's mere acceptance,
@@ -77,11 +77,11 @@ import type { LiveRecord } from "./live-record.js";
  * decision, one owner per action as the server-controls guide has it. The
  * service is transport-neutral on purpose — whoever holds the sideband
  * composes it, which since E5-3 is the hosted voice service alone, standing
- * it on the session the desktop's holder created — so the brain is reached only through `LiveBrain`, the
+ * it on the session the desktop's holder created — so the agent is reached only through `LiveAgent`, the
  * record only through `LiveRecord`, and the session only through the
  * `LiveSideband` seam. It is built by `make` in the
  * `Scope` its composition opened and runs for that scope: the verbs a caller
- * waits on are effects it yields, the brain's and the record's own effects
+ * waits on are effects it yields, the agent's and the record's own effects
  * are yielded where a promise was awaited, a standing session stands in a
  * scope of its own that one fiber both reads the sideband on and releases,
  * and what a timer or a run listener begins
@@ -100,12 +100,12 @@ const EXCHANGE_FINALIZE_MS = 250;
 
 /** What is said aloud of a run that ended without a reply, fixed by the build and never composed with the ask. */
 const RUN_END_NOTE = {
-  [LIVE_BRAIN_RUN_END.CANCELLED]: "That ask was stopped before I finished it.",
-  [LIVE_BRAIN_RUN_END.FAILED]: "I couldn't finish that ask.",
-} as const satisfies Record<Exclude<LiveBrainRunEnd, typeof LIVE_BRAIN_RUN_END.COMPLETED>, string>;
+  [LIVE_AGENT_RUN_END.CANCELLED]: "That ask was stopped before I finished it.",
+  [LIVE_AGENT_RUN_END.FAILED]: "I couldn't finish that ask.",
+} as const satisfies Record<Exclude<LiveAgentRunEnd, typeof LIVE_AGENT_RUN_END.COMPLETED>, string>;
 
 /**
- * What the voice is told, silently, once the brain has confirmed that a run
+ * What the voice is told, silently, once the agent has confirmed that a run
  * the stop key blocked was cancelled: the delegation guide has a cancellation
  * confirmed before it is told, and the stop instruction has the voice wait
  * for the developer, so this is context for its next reply and never speech.
@@ -124,7 +124,7 @@ function missedWorkNote(missed: string, working: boolean): string {
 }
 
 /**
- * How the developer's words no ask carried are handed to the brain as the
+ * How the developer's words no ask carried are handed to the agent as the
  * call ends: nothing Luke answers is heard, and what they settle is still
  * the plan's where the agent is on a task, or the agent's own to carry out
  * where it is on none, since only an agent on a task has a plan to write.
@@ -178,7 +178,7 @@ const SETTLED_STEP_GENERAL_NOTE = "Your backend finished a step";
 /**
  * How often a running ask's settled steps reach the voice as quiet progress:
  * no sooner than `GAP_MS` after the exchange's last thinking note, and at most
- * `PER_EXCHANGE` times, so a brain call that reads the repository for ten
+ * `PER_EXCHANGE` times, so an agent call that reads the repository for ten
  * minutes leaves the voice a handful of facts rather than one per command.
  * A step settled inside the gap is counted in the next note the run earns.
  */
@@ -194,7 +194,7 @@ function progressNote(step: string | undefined, settled: number): string {
 }
 
 /**
- * A question the brain queued, as the voice is handed it: spoken
+ * A question the agent queued, as the voice is handed it: spoken
  * commentary, as the delegation guide has a result the voice should say.
  * The service hands one at a time, so the note asks for this one alone.
  */
@@ -211,7 +211,7 @@ function codePlace(ref: CodeRef): string {
 }
 
 /**
- * Code the brain put on the developer's screen, as the voice is
+ * Code the agent put on the developer's screen, as the voice is
  * handed it: context it keeps without saying, so Luke can point at a line
  * by its number the way a person sharing a screen would.
  */
@@ -221,7 +221,7 @@ function codeOnScreenNote(ref: CodeRef): string {
 
 /**
  * How long after its delegation a run may still end the call. The voice
- * says its goodbye and delegates in the same breath, so the brain's
+ * says its goodbye and delegates in the same breath, so the agent's
  * `end_call` lands while the goodbye plays; one that comes later than this
  * answers a goodbye the developer has had time to talk past, and the call
  * stays up rather than hanging up on whatever came since.
@@ -232,7 +232,7 @@ const END_CALL_BOUNDS = {
 
 /**
  * What the session traces of the hand-offs a call turns on: each delegation
- * the voice made, whether the brain took it, and why a run's end of the call
+ * the voice made, whether the agent took it, and why a run's end of the call
  * was not passed on. Note that an entry carries a revision, a target, or a
  * fixed reason and never an id or a word, so a log that keeps every line says
  * which hand-off happened and nothing of what was said; a call that stays up
@@ -247,11 +247,11 @@ const LIVE_SESSION_TRACE = {
 
 /** Why a run's end of the call was not passed on; see `#endCall`. */
 const END_CALL_REFUSAL = {
-  /** The run answers no delegation: the brain opened it of its own. */
+  /** The run answers no delegation: the agent opened it of its own. */
   UNASKED: "unasked",
   /** A later delegation or the stop key silenced the run. */
   SILENCED: "silenced",
-  /** A later delegation stands, even one the brain has not yet taken. */
+  /** A later delegation stands, even one the agent has not yet taken. */
   SUPERSEDED: "superseded",
   /** The end came past `END_CALL_BOUNDS` of its delegation. */
   PAST_BOUND: "past_bound",
@@ -306,12 +306,12 @@ export interface LiveSessionServiceOptions {
   report: (message: string) => void;
   /** Whether the call's agent is on a task, whose plan the developer's last unheard line is written into. */
   hasTask: boolean;
-  /** What the standing session's voice and brain are doing, told whole on a change alone. */
+  /** What the standing session's voice and agent are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
-  /** Code the brain named is to go on the developer's screen now, as Luke starts to speak. */
+  /** Code the agent named is to go on the developer's screen now, as Luke starts to speak. */
   onCode?: (shown: TaskShownCode) => void;
   /**
-   * The developer said they are done and the brain asked to end
+   * The developer said they are done and the agent asked to end
    * the call: the peer hangs up once Luke's goodbye has played, through the
    * developer's own hang-up. Told at most once per run.
    */
@@ -322,15 +322,15 @@ export interface LiveSessionServiceOptions {
 
 /**
  * What the standing session is doing beside its live status. The voice is in
- * one of its two waits: handing off from the delegation until the brain takes
+ * one of its two waits: handing off from the delegation until the agent takes
  * the ask or refuses it, and about to answer from words queued for Luke until
- * his next spoken fragment. The brain stands while an exchange of the
+ * his next spoken fragment. The agent stands while an exchange of the
  * session is open, with the command or tool of the call it has pending. Both
  * are absent once the session ends.
  */
 export interface LiveSessionStatus {
   readonly voice: VoicePhase | undefined;
-  readonly brain: { readonly action: string | undefined } | undefined;
+  readonly agent: { readonly action: string | undefined } | undefined;
 }
 
 /**
@@ -346,7 +346,7 @@ interface RetainedDelegation {
   offsetMs: number;
 }
 
-/** A question the brain queued, waiting in its session until the voice is handed it. */
+/** A question the agent queued, waiting in its session until the voice is handed it. */
 interface HeldQuestion {
   readonly question: string;
   readonly recommendation: string;
@@ -373,7 +373,7 @@ interface StandingSession {
   closing: Deferred.Deferred<void> | undefined;
   /**
    * Whether the session's end hands the developer's words no ask carried to
-   * the brain; not where it is let go of for its peer to attach to again.
+   * the agent; not where it is let go of for its peer to attach to again.
    */
   handsOver: boolean;
   micLive: boolean;
@@ -400,12 +400,12 @@ interface StandingSession {
    * How much of each asked row's text its ask carried, as the row stood once
    * the ask was handed over: a row's text only grows by appending, so the
    * words it gains after that mark are new, and the call's end hands them on
-   * though the row is an ask's. A row of an ask still with the brain has no
+   * though the row is an ask's. A row of an ask still with the agent has no
    * mark yet, and that ask takes whatever lands on it meanwhile.
    */
   readonly askedText: Map<string, number>;
   /**
-   * The asks whose brain call is still out, by delegation: each keeps the span
+   * The asks whose agent call is still out, by delegation: each keeps the span
    * it was composed over and the rows it has claimed, so a row a late delta
    * opens by its offset is claimed for it, by the next delegation's compose or
    * by its own attach, whichever comes first, and never by the next delegation.
@@ -414,7 +414,7 @@ interface StandingSession {
   /** The voice's wait, where it is in one; see `LiveSessionStatus`. */
   voicePhase: VoicePhase | undefined;
   /**
-   * Code the brain named, held until Luke next starts to say words
+   * Code the agent named, held until Luke next starts to say words
    * queued for him, so it goes on screen as he talks about it; the newest
    * replaces any still held.
    */
@@ -422,7 +422,7 @@ interface StandingSession {
     | { readonly shown: TaskShownCode; readonly delegationId: LiveDelegationId }
     | undefined;
   /**
-   * The questions the brain queued that the voice has not been
+   * The questions the agent queued that the voice has not been
    * handed yet, oldest first, and whether the voice holds one the developer
    * has not answered. Note that the voice is handed one at a time and the
    * next once the developer delegates again, because a voice handed the
@@ -455,11 +455,11 @@ interface StandingSession {
 }
 
 /**
- * One spoken exchange with the brain: the delegation it answers, the run
+ * One spoken exchange with the agent: the delegation it answers, the run
  * that carries it, and how much of it has been said. Each delegation is an
  * exchange of its own, a revision of the developer's request: one arriving
  * while an earlier exchange is under way silences the earlier one, whose run
- * the brain finishes and whose reply is never spoken, so only the newest
+ * the agent finishes and whose reply is never spoken, so only the newest
  * request's result is said and it is said under its own delegation id, as
  * the delegation guide has outdated results ignored. The questions a
  * silenced run queues are still handed on, because they are the task's next
@@ -467,15 +467,15 @@ interface StandingSession {
  */
 interface Exchange {
   readonly runId: string;
-  /** The delegation the run answers; none for a run the brain opened of its own, which speaks session-wide. */
+  /** The delegation the run answers; none for a run the agent opened of its own, which speaks session-wide. */
   readonly delegationId: LiveDelegationId;
-  /** Whether the brain opened the run of its own: it silences nothing, ends no call, and says no note of a run that did not complete. */
+  /** Whether the agent opened the run of its own: it silences nothing, ends no call, and says no note of a run that did not complete. */
   readonly woken: boolean;
   /** Where the delegation came in the session's order, so an older ask accepted late silences nothing newer. */
   readonly revision: number;
   /** Whether a newer delegation or the stop key has silenced the reply; see the interface. */
   silenced: boolean;
-  /** Whether the brain has been asked to cancel the run, so the stop key asks once. */
+  /** Whether the agent has been asked to cancel the run, so the stop key asks once. */
   cancelAsked: boolean;
   /** When the exchange was asked, by the session's clock, which bounds how late its run may still end the call. */
   readonly askedAt: number;
@@ -487,10 +487,10 @@ interface Exchange {
   /** How many progress notes the exchange has written, and when it last wrote any thinking note. */
   progressNotes: number;
   lastNoteAt: number | undefined;
-  /** What the brain last said its run is doing, cleared when a run ends. */
+  /** What the agent last said its run is doing, cleared when a run ends. */
   action: string | undefined;
   finalize: SessionDelay | undefined;
-  end: LiveBrainRunEnd | undefined;
+  end: LiveAgentRunEnd | undefined;
 }
 
 function newExchange(
@@ -549,7 +549,7 @@ function askRowsOf(
 }
 
 /**
- * The context the brain reads, bounded as the rows are: nothing begun after
+ * The context the agent reads, bounded as the rows are: nothing begun after
  * the offset, so a row reserved for the next delegation is not read in this
  * one; or, where no row is this delegation's, nothing begun after the ask it
  * is told of all the same.
@@ -584,7 +584,7 @@ export class LiveSessionService {
   readonly #tasks: SerialQueue;
   #stopped = false;
   /** What `onStatus` was last told, so it hears a change and never a repeat. */
-  #status: LiveSessionStatus = { voice: undefined, brain: undefined };
+  #status: LiveSessionStatus = { voice: undefined, agent: undefined };
   /**
    * The release still running for the session last declared over. A
    * tear-down clears `#standing` where it is decided and releases a turn
@@ -613,25 +613,25 @@ export class LiveSessionService {
    */
   readonly #sessions: Scope.Scope;
 
-  /** The brain this session delegates to and the record it writes through, read from the context it was built in. */
-  readonly #brain: LiveBrain;
+  /** The agent this session delegates to and the record it writes through, read from the context it was built in. */
+  readonly #agent: LiveAgent;
   readonly #record: LiveRecord;
 
   private constructor(
     options: LiveSessionServiceOptions,
-    collaborators: { readonly brain: LiveBrain; readonly record: LiveRecord },
+    collaborators: { readonly agent: LiveAgent; readonly record: LiveRecord },
     running: { readonly fibers: FiberSet.FiberSet<void, unknown>; readonly tasks: SerialQueue },
     clock: Clock.Clock,
     sessions: Scope.Scope,
   ) {
     this.#options = options;
-    this.#brain = collaborators.brain;
+    this.#agent = collaborators.agent;
     this.#record = collaborators.record;
     this.#fibers = running.fibers;
     this.#tasks = running.tasks;
     this.#clock = clock;
     this.#sessions = sessions;
-    this.#stopRunEvents = this.#brain.onRunEvent((event) => this.#onRunEvent(event));
+    this.#stopRunEvents = this.#agent.onRunEvent((event) => this.#onRunEvent(event));
   }
 
   /**
@@ -648,14 +648,14 @@ export class LiveSessionService {
    */
   static make(
     options: LiveSessionServiceOptions,
-  ): Effect.Effect<LiveSessionService, never, Scope.Scope | LiveBrainTag | LiveRecordTag> {
+  ): Effect.Effect<LiveSessionService, never, Scope.Scope | LiveAgentTag | LiveRecordTag> {
     return Effect.gen(function* () {
       const fibers = yield* FiberSet.make<void>();
       const tasks = yield* serialQueue({
         onDefect: (cause) =>
           Effect.logError(`a live session task could not be started: ${causeKind(cause)}`),
       });
-      const collaborators = { brain: yield* LiveBrainTag, record: yield* LiveRecordTag };
+      const collaborators = { agent: yield* LiveAgentTag, record: yield* LiveRecordTag };
       const scope = yield* Effect.scope;
       return new LiveSessionService(
         options,
@@ -757,12 +757,12 @@ export class LiveSessionService {
   }
 
   /**
-   * A fresh session starting, as the brain finds the plan: on its first call
+   * A fresh session starting, as the agent finds the plan: on its first call
    * the backend is set exploring the moment the session starts, rather than
    * at the developer's first words; on a call back the work earlier calls
    * left under way is taken up instead, since it went on with no call
    * standing, and the voice is handed what Luke said meanwhile to catch the
-   * developer up on. Note that every run stands as one the brain opened of
+   * developer up on. Note that every run stands as one the agent opened of
    * its own, because it answers no delegation of this call: its reply waits
    * for no asked run, it never ends the call, and the developer's next ask
    * silences it. Each stands before its follow runs, so a run that ends as
@@ -772,7 +772,7 @@ export class LiveSessionService {
     this.#start(
       Effect.gen({ self: this }, function* () {
         const revision = session.revisions;
-        const join = yield* this.#brain.join(session.sessionId);
+        const join = yield* this.#agent.join(session.sessionId);
         // A developer who has asked something since the join began is answered by that ask, which
         // reads the plan's history itself: nothing joined stands, nothing is caught up on and
         // nothing counted heard, so the next call is handed it all again.
@@ -793,18 +793,18 @@ export class LiveSessionService {
 
   /**
    * A session already started may be one an earlier connection held and
-   * lost, with runs the brain accepted for it still under way or ended and
+   * lost, with runs the agent accepted for it still under way or ended and
    * not yet told. Each comes back as the exchange it was, under its own
    * delegation and revision, so the newest request's reply is spoken once
    * on this connection and an older one stays superseded; one the developer
    * stopped, or one that ended too long ago to be news, comes back silenced,
    * so its exchange still settles and says nothing. The session's revisions
-   * go on from the newest the brain recorded, so a delegation heard from
+   * go on from the newest the agent recorded, so a delegation heard from
    * here supersedes every run taken up.
    */
   #recover(session: StandingSession): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const recovery = yield* this.#brain.recoverRuns(session.sessionId);
+      const recovery = yield* this.#agent.recoverRuns(session.sessionId);
       session.revisions = Math.max(session.revisions, recovery.revision);
       for (const run of recovery.runs) {
         // A run a typed line asked for answers no delegation, and speaks session-wide.
@@ -874,7 +874,7 @@ export class LiveSessionService {
   }
 
   /**
-   * The developer's words no ask carried, handed to the brain as the call
+   * The developer's words no ask carried, handed to the agent as the call
    * ends. Note that nothing reaches the plan but through an ask, so a
    * correction said just before the hang-up, or one the voice answered from
    * the conversation without delegating, would otherwise be lost. Nobody on
@@ -918,7 +918,7 @@ export class LiveSessionService {
       );
       session.revisions += 1;
       const submissionId = this.#options.createId();
-      const submission = yield* this.#brain.submitAsk({
+      const submission = yield* this.#agent.submitAsk({
         submissionId,
         question: [
           renderAskContext({ turns, ask: context.ask }),
@@ -928,7 +928,7 @@ export class LiveSessionService {
         revision: session.revisions,
         heard: false,
       });
-      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED || rows.length === 0) return;
+      if (submission.outcome === LIVE_AGENT_SUBMISSION.REFUSED || rows.length === 0) return;
       yield* this.#attachAsk(
         session,
         submissionId,
@@ -1044,7 +1044,7 @@ export class LiveSessionService {
         });
         if (!written) this.#reportUnwritten();
         // The line's id is the submission's, so the ask's turn takes the row in by it.
-        const submission = yield* this.#brain.submitAsk({
+        const submission = yield* this.#agent.submitAsk({
           submissionId: lineId,
           question,
           sessionId: session.sessionId,
@@ -1053,7 +1053,7 @@ export class LiveSessionService {
         });
         const rowIds = rows.map((row) => row.rowId);
         this.#markAsked(session, rowIds);
-        if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+        if (submission.outcome === LIVE_AGENT_SUBMISSION.REFUSED) {
           // A refused line was never asked, so a Retry of it asks it again.
           session.typedLines.delete(lineId);
           this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: asked.revision });
@@ -1397,7 +1397,7 @@ export class LiveSessionService {
     open.rows.push(...late);
   }
 
-  /** Each row named is carried as it stands now: only words it gains from here are new to the brain. */
+  /** Each row named is carried as it stands now: only words it gains from here are new to the agent. */
   #markAsked(session: StandingSession, rowIds: readonly string[]): void {
     for (const rowId of rowIds) {
       const row = session.ledger.row(rowId);
@@ -1421,7 +1421,7 @@ export class LiveSessionService {
    * The ask's rows given their delegation, each handed over as the ledger
    * holds it now, not as it stood when the delegation arrived: the API
    * delivers a delegation ahead of the transcript deltas it is about, so the
-   * ask's last fragment may land while the brain is being asked, and the
+   * ask's last fragment may land while the agent is being asked, and the
    * record writes each row as handed before it attaches. A row's own debounce
    * may write it again after; the record grows it in place either way.
    */
@@ -1491,19 +1491,19 @@ export class LiveSessionService {
    * span it moves the session past — is decided the
    * instant the delegation arrives, because a second delegation or a late
    * fragment in the same tick must find the claim already made. The rows are
-   * the ledger's, by the rule `askRowsOf` states; the question the brain is
+   * the ledger's, by the rule `askRowsOf` states; the question the agent is
    * handed names the latest of them as the developer's ask, as it did when
    * an ask was one row, over the whole context since the previous one.
    */
   #compose(session: StandingSession, delegationId: string, offsetMs: number): Effect.Effect<void> {
-    // An ask still with the brain claims first whatever opened by its offset since, so this
+    // An ask still with the agent claims first whatever opened by its offset since, so this
     // delegation is about what is left and never about a row containing the earlier offset.
     for (const open of session.openAsks.values()) this.#claimLate(session, open);
     const sinceMs = session.lastDelegationOffsetMs;
     const context = session.ledger.askContext(sinceMs);
     const rows = askRowsOf(context, session.askedRows, offsetMs);
     // No row is this delegation's where every developer row since is an ask's already, or begun
-    // after the offset: the brain is asked about the latest all the same, since the model waits on
+    // after the offset: the agent is asked about the latest all the same, since the model waits on
     // the delegation, and nothing is attached.
     const ask = rows[rows.length - 1] ?? context.ask;
     if (!ask) {
@@ -1521,7 +1521,7 @@ export class LiveSessionService {
     const open: OpenAsk = { sinceMs, offsetMs, rows: [...rows] };
     session.openAsks.set(delegationId, open);
     // The ask's place among the session's revisions, and the stops it was delegated under, are
-    // taken as it arrives: the brain may accept an older ask after a newer one or after a stop.
+    // taken as it arrives: the agent may accept an older ask after a newer one or after a stop.
     session.revisions += 1;
     const asked = { revision: session.revisions, stops: session.stops, at: this.#now() };
     const question = [
@@ -1531,7 +1531,7 @@ export class LiveSessionService {
     return Effect.gen({ self: this }, function* () {
       // The delegation's id is the submission's: the record gives the ask's rows
       // that id, so a record that learns the ask's turn can attach the rows to it.
-      const submission = yield* this.#brain.submitAsk({
+      const submission = yield* this.#agent.submitAsk({
         submissionId: delegationId,
         question,
         sessionId: session.sessionId,
@@ -1540,12 +1540,12 @@ export class LiveSessionService {
       });
       // The rule is applied once more over the same span before the attach: the
       // API delivers a delegation ahead of the deltas it is about, and one that
-      // landed while the brain was being asked may have opened a row of its own
+      // landed while the agent was being asked may have opened a row of its own
       // that starts by the offset, which is this delegation's and no one else's.
       this.#claimLate(session, open);
       session.openAsks.delete(delegationId);
       // What the ask carried is its rows as they stand now, a follow-up's row among them: the words
-      // that landed while the brain was being asked are the ask's, and only later ones are new.
+      // that landed while the agent was being asked are the ask's, and only later ones are new.
       this.#markAsked(session, [
         ...open.rows.map((row) => row.rowId),
         ...(followUp ? [ask.rowId] : []),
@@ -1553,7 +1553,7 @@ export class LiveSessionService {
       const rowIds = [...open.rows]
         .sort((left, right) => left.startMs - right.startMs)
         .map((row) => row.rowId);
-      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+      if (submission.outcome === LIVE_AGENT_SUBMISSION.REFUSED) {
         this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: asked.revision });
         if (rowIds.length > 0) yield* this.#attachAsk(session, delegationId, rowIds);
         this.#speakInto(session, delegationId, submission.refusal);
@@ -1568,13 +1568,13 @@ export class LiveSessionService {
       // are the factual ones a slow step actually begun, or a step actually
       // settled, writes. An attach that lands nothing (a follow-up with no row
       // of its own, a repeat, or a store failure, which `#attachAsk` reports)
-      // changes nothing here: the ask is with the brain either way, and the
+      // changes nothing here: the ask is with the agent either way, and the
       // developer is told nothing of the record.
       this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_SENT, revision: asked.revision });
       const exchange = this.#registerExchange(session, submission.runId, delegationId, asked);
       // The delegation is the developer's answer to the question the voice held, if any.
       session.holdingQuestion = false;
-      // The next question goes to the voice now, not after the brain has thought about the answer.
+      // The next question goes to the voice now, not after the agent has thought about the answer.
       if (!exchange.silenced) this.#handQuestion(session, this.#delegationOf(exchange));
       if (rowIds.length > 0) yield* this.#attachAsk(session, delegationId, rowIds);
     });
@@ -1593,7 +1593,7 @@ export class LiveSessionService {
     delegationId: LiveDelegationId,
     asked: { readonly revision: number; readonly stops: number; readonly at: number },
   ): Exchange {
-    // The brain has the ask, so the hand-off is over; words already queued for Luke are still owed.
+    // The agent has the ask, so the hand-off is over; words already queued for Luke are still owed.
     if (session.voicePhase === VOICE_PHASE.HANDING_OFF) session.voicePhase = undefined;
     const exchange = newExchange(runId, delegationId, asked.revision, session.sessionId, asked.at);
     for (const held of this.#exchanges.values()) {
@@ -1614,21 +1614,21 @@ export class LiveSessionService {
 
   /**
    * What the stop key does to one exchange: it is silenced, and a run still
-   * under way is cancelled through the brain, the voice told silently once
-   * the brain confirms it, so nothing says a cancel happened that did not.
+   * under way is cancelled through the agent, the voice told silently once
+   * the agent confirms it, so nothing says a cancel happened that did not.
    */
   #block(session: StandingSession, exchange: Exchange): void {
     this.#silence(exchange);
     if (exchange.end !== undefined || exchange.cancelAsked) return;
     exchange.cancelAsked = true;
     this.#start(
-      Effect.flatMap(this.#brain.cancelRun(exchange.runId), (cancel) =>
+      Effect.flatMap(this.#agent.cancelRun(exchange.runId), (cancel) =>
         Effect.sync(() => {
-          if (cancel === LIVE_BRAIN_CANCEL.FAILED) {
+          if (cancel === LIVE_AGENT_CANCEL.FAILED) {
             this.#options.report("A stopped ask's run could not be cancelled");
             return;
           }
-          if (cancel !== LIVE_BRAIN_CANCEL.CANCELLED || this.#sessionOf(exchange) !== session) {
+          if (cancel !== LIVE_AGENT_CANCEL.CANCELLED || this.#sessionOf(exchange) !== session) {
             return;
           }
           this.#append(
@@ -1648,9 +1648,9 @@ export class LiveSessionService {
 
   /**
    * Tells `onStatus` what the standing session is doing. Note that we derive
-   * the brain from `#exchanges` rather than counting opens and closes,
+   * the agent from `#exchanges` rather than counting opens and closes,
    * because an exchange of a session already over is still held until its
-   * runs end, and it must not stand as the next session's brain.
+   * runs end, and it must not stand as the next session's agent.
    */
   #reportStatus(): void {
     const session = this.#standing?.ended === false ? this.#standing : undefined;
@@ -1658,13 +1658,13 @@ export class LiveSessionService {
       session && [...this.#exchanges.values()].find((held) => held.sessionId === session.sessionId);
     const status: LiveSessionStatus = {
       voice: session?.voicePhase,
-      brain: exchange === undefined ? undefined : { action: exchange.action },
+      agent: exchange === undefined ? undefined : { action: exchange.action },
     };
     const last = this.#status;
     if (
       status.voice === last.voice &&
-      (status.brain === undefined) === (last.brain === undefined) &&
-      status.brain?.action === last.brain?.action
+      (status.agent === undefined) === (last.agent === undefined) &&
+      status.agent?.action === last.agent?.action
     ) {
       return;
     }
@@ -1673,7 +1673,7 @@ export class LiveSessionService {
   }
 
   /**
-   * Stands an exchange for a run the brain opened of its own: no delegation,
+   * Stands an exchange for a run the agent opened of its own: no delegation,
    * so it speaks session-wide, at the session's current revision, so the
    * developer's next ask silences it as it would any older one. Note that it
    * silences nothing itself, because it answers no request of the
@@ -1689,64 +1689,64 @@ export class LiveSessionService {
     this.#reportStatus();
   }
 
-  #onRunEvent(event: LiveBrainRunEvent): void {
-    if (event.kind === LIVE_BRAIN_RUN_EVENT.WOKEN) {
+  #onRunEvent(event: LiveAgentRunEvent): void {
+    if (event.kind === LIVE_AGENT_RUN_EVENT.WOKEN) {
       this.#registerWoken(event.runId);
       return;
     }
     const exchange = this.#exchanges.get(event.runId);
     if (!exchange) return;
     switch (event.kind) {
-      case LIVE_BRAIN_RUN_EVENT.SLOW_STEP: {
+      case LIVE_AGENT_RUN_EVENT.SLOW_STEP: {
         if (exchange.slowStepTold || exchange.silenced) return;
         exchange.slowStepTold = true;
         this.#think(exchange, SLOW_STEP_NOTE.get(event.step) ?? SLOW_STEP_GENERAL_NOTE);
         return;
       }
-      case LIVE_BRAIN_RUN_EVENT.STEP_SETTLED:
+      case LIVE_AGENT_RUN_EVENT.STEP_SETTLED:
         if (!this.#progressDue(exchange)) return;
         exchange.progressNotes += 1;
         this.#think(exchange, progressNote(event.step, event.settled));
         return;
       // A queued question is no action's result, so it waits on no settle, and it is the task's next
       // question rather than the reply, so a silenced run still queues it.
-      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
+      case LIVE_AGENT_RUN_EVENT.QUESTION_QUEUED: {
         const session = this.#sessionOf(exchange);
         if (!session) return;
         session.questions.push({ question: event.question, recommendation: event.recommendation });
         if (!session.holdingQuestion) this.#handQuestion(session, this.#delegationOf(exchange));
         return;
       }
-      case LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN: {
+      case LIVE_AGENT_RUN_EVENT.QUESTION_WITHDRAWN: {
         const session = this.#sessionOf(exchange);
         if (session)
           session.questions = session.questions.filter((held) => held.question !== event.question);
         return;
       }
-      case LIVE_BRAIN_RUN_EVENT.CALL_ENDING:
+      case LIVE_AGENT_RUN_EVENT.CALL_ENDING:
         this.#endCall(exchange);
         return;
       // Code is held for the words it belongs to, which start with Luke's next answer.
-      case LIVE_BRAIN_RUN_EVENT.CODE_SHOWN: {
+      case LIVE_AGENT_RUN_EVENT.CODE_SHOWN: {
         const session = this.#sessionOf(exchange);
         const { kind: _kind, runId: _runId, ...shown } = event;
         if (session) session.pendingCode = { shown, delegationId: this.#delegationOf(exchange) };
         return;
       }
       // Note that a sentence is spoken as it is told, with no settle of the
-      // service's own to wait for, because the brain tells none ahead of the
+      // service's own to wait for, because the agent tells none ahead of the
       // results of the actions journaled before it: the settled mark it tells
       // first is that ordering's, already kept, and a second gate here only
       // held replies back. Nor does a woken run's reply wait for an asked run
       // to end: the developer's next ask silences it as it would any older one.
-      case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE:
+      case LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE:
         this.#speakSentence(exchange, event.sentence);
         return;
-      case LIVE_BRAIN_RUN_EVENT.ACTIVITY:
+      case LIVE_AGENT_RUN_EVENT.ACTIVITY:
         exchange.action = event.action;
         this.#reportStatus();
         return;
-      case LIVE_BRAIN_RUN_EVENT.ENDED:
+      case LIVE_AGENT_RUN_EVENT.ENDED:
         if (exchange.end !== undefined) return;
         exchange.action = undefined;
         exchange.end = event.end;
@@ -1761,11 +1761,11 @@ export class LiveSessionService {
 
   /**
    * A run's ask to end the call, passed to the peer once: only for a run the
-   * developer asked, still the newest delegation, even one the brain has not
+   * developer asked, still the newest delegation, even one the agent has not
    * yet taken, and not stopped, and inside
    * `END_CALL_BOUNDS` of its delegation. A run silenced by a later
    * delegation or the stop key answers a goodbye the developer has since
-   * talked past, and a run the brain opened of its own answers no goodbye
+   * talked past, and a run the agent opened of its own answers no goodbye
    * at all, so either leaves the call up. Note that we silence the run once
    * its end is passed on, because Luke is already saying goodbye and
    * whatever the run returns after would be said over the hang-up.
@@ -1788,7 +1788,7 @@ export class LiveSessionService {
   #endCallRefusal(exchange: Exchange, session: StandingSession): EndCallRefusal | undefined {
     if (exchange.woken) return END_CALL_REFUSAL.UNASKED;
     if (exchange.silenced) return END_CALL_REFUSAL.SILENCED;
-    // A later delegation still on its way to the brain has not silenced this run yet, but it counts.
+    // A later delegation still on its way to the agent has not silenced this run yet, but it counts.
     if (exchange.revision < session.revisions) return END_CALL_REFUSAL.SUPERSEDED;
     if (this.#now() - exchange.askedAt > END_CALL_BOUNDS.WITHIN_MS) {
       return END_CALL_REFUSAL.PAST_BOUND;
@@ -1830,11 +1830,11 @@ export class LiveSessionService {
     if (
       !exchange.woken &&
       exchange.end !== undefined &&
-      exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED
+      exchange.end !== LIVE_AGENT_RUN_END.COMPLETED
     ) {
       this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
-    // Told after the note is queued, so the brain gives way to Luke about to say it in one change.
+    // Told after the note is queued, so the agent gives way to Luke about to say it in one change.
     this.#reportStatus();
   }
 
@@ -2010,7 +2010,7 @@ export class LiveSessionService {
    * standing under it. Then what the end owes and nothing inside it waits
    * on: every row with a write still put off written as it stands, so a
    * socket closing mid-sentence leaves the words said so far on the row, and
-   * then the words no ask carried handed to the brain (`#askUnheard`).
+   * then the words no ask carried handed to the agent (`#askUnheard`).
    */
   #release(session: StandingSession): Effect.Effect<void> {
     return Effect.andThen(
@@ -2026,7 +2026,7 @@ export class LiveSessionService {
           // Every end but a let-go hands on what no ask carried, once the session has said its
           // last, however the end came: the developer's hang-up, the idle close, the session's own
           // `session.closed`, or the socket gone. The service's stop waits on this release, so the
-          // brain is still standing when it runs.
+          // agent is still standing when it runs.
           session.handsOver ? this.#askUnheard(session) : Effect.void,
         );
       }),
