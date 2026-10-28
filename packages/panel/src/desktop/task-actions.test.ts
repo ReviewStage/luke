@@ -538,7 +538,7 @@ test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to de
   assert.equal(container.querySelector(".side-panel-bar"), null, "the panel is shut");
 
   act(() => {
-    assert.ok(runAppCommand(APP_COMMAND.DELETE_TASK), "⌘⌫ is offered");
+    assert.ok(runAppCommand(APP_COMMAND.DELETE), "⌘⌫ is offered");
   });
   assert.equal(asking(), true, "⌘⌫ asks first");
   assert.match(dialog()?.textContent ?? "", /Teammate invitations/u);
@@ -856,12 +856,16 @@ test("Mark done marks a task with agents done at once, from its row's check and 
 /** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
 const CHIP_ITEMS = ["Mark done", "Cancel task", "Change repository"];
 
-test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, which act on the open task, and leaves Mark done, Cancel task, and Change repository to the plan's chips, which the open task's row keeps; another task's menu prints no chord, and Open on GitHub wears the GitHub mark", () => {
+test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Mark done, Cancel task, and Change repository to the plan's chips, which the open task's row keeps; another task's row prints only U and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
   openMenu(mountPlanTab(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⇧⌘C"],
+    ["Copy plan", "⌥⌘C"],
+    ["Version history", "⌥⇧⌘H"],
+    ["Mark as unread", "U"],
+    ["Pin", "P"],
+    ["Open on GitHub", "⇧⌘O"],
     ["Permanently delete", "⌘⌫"],
   ]);
   const offered = menuItems().map(itemLabel);
@@ -892,8 +896,12 @@ test("the Plan tab's ⋯ prints the chords of Copy plan and Permanently delete, 
   // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
   assert.deepEqual(
     itemChords(),
-    [["Show details", "⌥↓"]],
-    "no chord acts on a task that is not open",
+    [
+      ["Mark as unread", "U"],
+      ["Pin", "P"],
+      ["Show details", "⌥↓"],
+    ],
+    "no chord but the focused row's letters acts on a task that is not open",
   );
 });
 

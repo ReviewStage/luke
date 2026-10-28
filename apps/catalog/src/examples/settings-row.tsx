@@ -280,7 +280,7 @@ function ListRows(): React.JSX.Element {
   const commands = [
     APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE],
     APP_SHORTCUTS[APP_COMMAND.FIND_PREVIOUS],
-    APP_SHORTCUTS[APP_COMMAND.DELETE_TASK],
+    APP_SHORTCUTS[APP_COMMAND.DELETE],
   ];
   return (
     <SettingsSection title="General">

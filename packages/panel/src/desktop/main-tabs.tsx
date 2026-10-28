@@ -21,7 +21,7 @@ import {
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useRef } from "react";
-import { useAppCommand } from "../app-commands.js";
+import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -36,6 +36,7 @@ import type { AgentFork } from "../tasks/fork-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
+import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
@@ -188,6 +189,7 @@ export function AgentMenuTab({
   look,
   doors,
   shown,
+  keys,
   terminals,
   slot,
   onShown,
@@ -197,6 +199,8 @@ export function AgentMenuTab({
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
+  /** Whether the strip drawing the tab offers its keys, which the chosen agent's copies and delete answer while it does. */
+  keys: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
   slot: HTMLElement | null | undefined;
@@ -209,6 +213,24 @@ export function AgentMenuTab({
     terminals,
     onDeleted: doors.onClose,
   });
+  // The chosen agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫ while the column has the keys, over the open task's plan and its delete.
+  const { onCopy, deletion } = actions.doors;
+  const focused = keys && doors.chosen;
+  useAppCommand(
+    APP_COMMAND.COPY_CONTENT,
+    focused && onCopy !== undefined ? () => onCopy(TRANSCRIPT_COPY.CONCISE) : undefined,
+    FOCUSED_OFFER,
+  );
+  useAppCommand(
+    APP_COMMAND.COPY_FULL_TRANSCRIPT,
+    focused && onCopy !== undefined ? () => onCopy(TRANSCRIPT_COPY.FULL) : undefined,
+    FOCUSED_OFFER,
+  );
+  useAppCommand(
+    APP_COMMAND.DELETE,
+    focused && deletion !== undefined && deletion.disabled !== true ? deletion.onSelect : undefined,
+    FOCUSED_OFFER,
+  );
   const whole: TabDoors = { ...doors, ...actions.doors };
   return (
     <>
@@ -492,8 +514,23 @@ export function MainTabStrip({
   const strip = own;
   useStripLooks(LOOK_STRIP.COLUMN, task.id, strip);
   const copyLink = useCopyLinkItem();
+  // Close others closes every tab but `entry` that closes, then shows it; none where no other tab closes.
+  const closeOthersOf = (entry: DrawnTab): (() => void) | undefined => {
+    const others = strip.flatMap((other) =>
+      other === entry || other.close === undefined ? [] : [other.close],
+    );
+    if (others.length === 0) return undefined;
+    return () => {
+      for (const close of others) close();
+      main.onChoose(entry.tab);
+    };
+  };
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
+  useAppCommand(
+    APP_COMMAND.CLOSE_OTHER_TABS,
+    keys && chosen !== undefined ? closeOthersOf(chosen) : undefined,
+  );
   const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
     const pinned = pinnedOf(tab);
     return {
@@ -507,22 +544,13 @@ export function MainTabStrip({
       entry.agent === undefined
         ? undefined
         : { kind: LINK_PLACE.AGENT, planId: task.id, agentId: entry.agent.id };
-    const others = strip.flatMap((other) =>
-      other === entry || other.close === undefined ? [] : [other.close],
-    );
     const { agent } = entry;
     const pinTab: ColumnPinnableTab | undefined =
       agent === undefined ? undefined : { agent: agent.id };
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
-      onCloseOthers:
-        others.length === 0
-          ? undefined
-          : () => {
-              for (const close of others) close();
-              main.onChoose(entry.tab);
-            },
+      onCloseOthers: closeOthersOf(entry),
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
@@ -553,6 +581,7 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
+              keys={keys}
               terminals={{ onOpenTerminal }}
               slot={slot}
               onShown={onShown}

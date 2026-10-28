@@ -3,10 +3,11 @@
 import assert from "node:assert/strict";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { Dialog } from "@luke/ui";
-import { act, createElement, Fragment, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
+import { useFocusedRowKeys } from "./desktop/task-actions.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 
 /**
@@ -114,4 +115,66 @@ test("J runs the Inbox's command, and nothing while the press is typing into a f
   pressJ(document.body);
   pressJ(document.querySelector("textarea") ?? assert.fail("the field"));
   assert.deepEqual(moves, ["inbox"]);
+});
+
+/** What the open thing offers on U and P, each press recorded: a plan's, say. */
+function OpenThing({ presses }: { presses: string[] }): null {
+  useAppCommand(APP_COMMAND.TOGGLE_READ, () => presses.push("open read"));
+  useAppCommand(APP_COMMAND.PIN, () => presses.push("open pin"));
+  return null;
+}
+
+/** A sidebar row that takes the keyboard, offering U and P while it holds it. */
+function FocusableRow({ presses }: { presses: string[] }): ReactElement {
+  const row = useRef<HTMLDivElement | null>(null);
+  useFocusedRowKeys(
+    row,
+    () => presses.push("row read"),
+    () => presses.push("row pin"),
+  );
+  return createElement("div", { ref: row, tabIndex: 0, "aria-label": "Row" });
+}
+
+/** The keymap with the open thing, mounted anew under `opened`, beside a focusable row. */
+function RowWindow({ presses, opened }: { presses: string[]; opened: number }): ReactElement {
+  useAppKeymap(true);
+  return createElement(
+    Fragment,
+    null,
+    createElement(OpenThing, { key: opened, presses }),
+    createElement(FocusableRow, { presses }),
+  );
+}
+
+/** Presses a letter alone where the keyboard is. */
+function pressLetter(key: "u" | "p"): void {
+  const target = document.activeElement ?? document.body;
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key, code: `Key${key.toUpperCase()}`, bubbles: true }),
+    );
+  });
+}
+
+test("U and P act on the focused sidebar row over the open thing, even once the open thing offers them again after it, and on the open thing once the row lets the keyboard go", () => {
+  const presses: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const draw = (opened: number) =>
+    act(() => root.render(createElement(RowWindow, { presses, opened })));
+  draw(0);
+  pressLetter("u");
+  assert.deepEqual(presses.splice(0), ["open read"]);
+
+  const row = document.querySelector<HTMLElement>('[aria-label="Row"]') ?? assert.fail("the row");
+  act(() => row.focus());
+  // The open thing mounting again makes its offers the newest, which must not take the letters from the row.
+  draw(1);
+  pressLetter("u");
+  pressLetter("p");
+  assert.deepEqual(presses.splice(0), ["row read", "row pin"]);
+
+  act(() => row.blur());
+  pressLetter("p");
+  assert.deepEqual(presses.splice(0), ["open pin"]);
 });
