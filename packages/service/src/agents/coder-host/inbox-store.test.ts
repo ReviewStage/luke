@@ -1778,7 +1778,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
     );
 
   it.effect(
-    "a thread addressed to a member waits on them over the task's assignee, in its read, the account's stamps, and its channel's count, and on the assignee again once a post names nobody",
+    "a thread addressed to a member waits on them over the task's assignee, in its read, the account's stamps, and its channel's count, and on the assignee again once a post names nobody, its first ask still naming whom it was addressed to",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1802,9 +1802,15 @@ it.layer(getTestDB())("a thread's channel", (it) => {
 
         yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: teammate });
         const addressed = yield* standing;
-        yield* post(agent, SETTINGS);
+        const after = yield* post(agent, SETTINGS);
         const unaddressed = yield* standing;
 
+        const addressedOf = (status: string) =>
+          after.thread?.find((message) => message.ask?.status === status)?.addressedTo?.userId;
+        assert.deepEqual(
+          [addressedOf(INBOX_ASK_STATUS.REPLACED), addressedOf(INBOX_ASK_STATUS.OPEN)],
+          [teammate, undefined],
+        );
         assert.deepEqual(addressed, {
           waitsOn: teammate,
           teammateStamp: teammate,

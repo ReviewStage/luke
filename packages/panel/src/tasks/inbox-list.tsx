@@ -1,4 +1,4 @@
-import type { InboxPerson } from "@luke/features/inbox-wire";
+import { type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { readFailedWords, TERM } from "@luke/features/words";
 import {
@@ -121,7 +121,7 @@ import {
 } from "../desktop/phone-head.js";
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
-import { useMemberDirectory } from "../member-directory.js";
+import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TaskChipCard } from "./chip-cards.js";
@@ -136,6 +136,8 @@ import {
 import { NEW_THREAD } from "./inbox-compose.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
 import {
+  AddressedTo,
+  addressedWords,
   HolderGlyph,
   InboxItemCard,
   InboxItemEnd,
@@ -473,6 +475,8 @@ export function InboxItemRow({
   const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
   const preview = inboxPreview(item, nameOf, ticked);
+  const addressedTo = inboxAddressedTo(item);
+  const addressee = usePerson(addressedTo);
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
   // Note that U acts only on the chosen item, so only its row names the chord.
@@ -517,7 +521,14 @@ export function InboxItemRow({
           }
           lead={
             line && chip
-              ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) }
+              ? {
+                  icon: <HolderGlyph holder={holder} />,
+                  // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
+                  label:
+                    addressedTo === undefined
+                      ? holderName(holder)
+                      : `${holderName(holder)} · ${addressedWords(addressee)}`,
+                }
               : undefined
           }
           leadAt={LIST_ROW_LEAD.LINE}
@@ -534,7 +545,13 @@ export function InboxItemRow({
               open={open}
               face={face}
               standing={false}
-              before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+              before={
+                <>
+                  {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
+                  {/* Note that a row whose task line is not drawn says whom its thread is addressed to at its end instead. */}
+                  {line && chip ? null : <AddressedTo to={addressedTo} />}
+                </>
+              }
             />
           }
           metaAt={LIST_ROW_META.TITLE}

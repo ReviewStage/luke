@@ -327,6 +327,11 @@ function agentSaid(n: number, ago: number, text: string, ask?: InboxMessage["ask
   };
 }
 
+/** An agent's message as its post addressed it to a member by name. */
+function addressed(to: Person, message: InboxMessage): InboxMessage {
+  return { ...message, addressedTo: to };
+}
+
 function memberSaid(
   n: number,
   who: Person,
@@ -395,31 +400,37 @@ function seed(id: string): TaskSeed {
 const THREADS: ThreadSeed[] = [
   thread(
     1,
-    seed(TASK.SCHEMA),
+    seed(TASK.SEARCH),
     CHANNEL.SERVICE,
     "Thread search and Channels schema both change inbox-store.ts",
     [
-      agentSaid(
-        101,
-        2 * MINUTE,
-        [
-          "Charles's **Thread search** and this task both edit `postMessage` and `unreadFor` in [inbox-store.ts](https://github.com/ReviewStage/luke/blob/HEAD/packages/service/src/inbox/inbox-store.ts). The branches will conflict, and Thread search indexes the table Channels schema retires.",
-          "",
-          "Asking you both, since either task could wait.",
-        ].join("\n"),
-        {
-          type: INBOX_ASK.DECIDE,
-          options: [
-            { label: "Pause Thread search", detail: "It picks up on top of the new thread table." },
-            { label: "Land Thread search first", detail: "Channels schema rebases onto it." },
-            { label: "Carry on, rebase later" },
-          ],
-          recommended: "Pause Thread search",
-          ...OPEN,
-        },
+      addressed(
+        DEAN,
+        agentSaid(
+          101,
+          2 * MINUTE,
+          [
+            "This task and your **Channels schema** both edit `postMessage` and `unreadFor` in [inbox-store.ts](https://github.com/ReviewStage/luke/blob/HEAD/packages/service/src/inbox/inbox-store.ts). The branches will conflict, and Thread search indexes the table Channels schema retires.",
+            "",
+            "Asking you rather than Charles, since Channels schema is yours.",
+          ].join("\n"),
+          {
+            type: INBOX_ASK.DECIDE,
+            options: [
+              {
+                label: "Pause Thread search",
+                detail: "It picks up on top of the new thread table.",
+              },
+              { label: "Land Thread search first", detail: "Channels schema rebases onto it." },
+              { label: "Carry on, rebase later" },
+            ],
+            recommended: "Pause Thread search",
+            ...OPEN,
+          },
+        ),
       ),
     ],
-    { unread: true, needsReply: true },
+    { unread: true, needsReply: true, waitsOn: DEAN, addressed: true },
   ),
   thread(
     2,
@@ -427,23 +438,26 @@ const THREADS: ThreadSeed[] = [
     CHANNEL.APP,
     "Drop the grid view on narrow windows?",
     [
-      agentSaid(
-        102,
-        4 * MINUTE,
-        "Below 720px the grid view puts one card per row, which is the list view with extra chrome. Keeping it means a second narrow layout to maintain.",
-        {
-          type: INBOX_ASK.DECIDE,
-          options: [
-            { label: "Drop it below 720px", detail: "Narrow windows fall back to the list." },
-            { label: "Keep it" },
-            { label: "Keep it, two columns at least" },
-          ],
-          recommended: "Drop it below 720px",
-          ...OPEN,
-        },
+      addressed(
+        CHARLES,
+        agentSaid(
+          102,
+          4 * MINUTE,
+          "Below 720px the grid view puts one card per row, which is the list view with extra chrome. Keeping it means a second narrow layout to maintain. Asking Charles, who built the grid view.",
+          {
+            type: INBOX_ASK.DECIDE,
+            options: [
+              { label: "Drop it below 720px", detail: "Narrow windows fall back to the list." },
+              { label: "Keep it" },
+              { label: "Keep it, two columns at least" },
+            ],
+            recommended: "Drop it below 720px",
+            ...OPEN,
+          },
+        ),
       ),
     ],
-    { unread: true },
+    { unread: true, waitsOn: CHARLES, addressed: true },
   ),
   thread(
     3,

@@ -1,0 +1,2 @@
+ALTER TABLE "inbox_message" ADD COLUMN "addressee_id" text;--> statement-breakpoint
+ALTER TABLE "inbox_message" ADD CONSTRAINT "inbox_message_addressee_id_user_id_fkey" FOREIGN KEY ("addressee_id") REFERENCES "user"("id") ON DELETE SET NULL;

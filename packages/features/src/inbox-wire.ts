@@ -781,6 +781,13 @@ export const inboxMessageSchema = EffectSchema.Struct({
   ask: EffectSchema.optionalKey(inboxReadAskSchema),
   /** The answer the message carries to an earlier message's ask; absent where it answers none. */
   answers: EffectSchema.optionalKey(inboxAnswersSchema),
+  /**
+   * The member an agent's message was addressed to, as its post named
+   * them; absent where it named none, on a member's message, on a message
+   * from before it was kept, once their account is gone, and from a service
+   * before it.
+   */
+  addressedTo: EffectSchema.optionalKey(memberRefSchema),
   createdAt: countedNumber,
 });
 
@@ -892,6 +899,11 @@ export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefi
  */
 export function inboxWaitsOn(item: InboxItem): InboxPerson | undefined {
   return item.waitsOn ?? item.startedBy;
+}
+
+/** The member an item's agent addressed it to by name (`addressed`), whom it waits on; none where it waits on whoever the service derives. */
+export function inboxAddressedTo(item: InboxItem): InboxPerson | undefined {
+  return item.addressed === true ? item.waitsOn : undefined;
 }
 
 /** Whether a thread still asks someone something: open, and holding an ask open, as the service's `ASKING` reads it. */

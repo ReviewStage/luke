@@ -12,6 +12,7 @@ import {
   type InboxItem,
   type InboxMessage,
   type InboxReadAsk,
+  inboxAddressedTo,
   inboxWaitsOn,
   openAskOf,
 } from "@luke/features/inbox-wire";
@@ -100,7 +101,7 @@ import { INBOX_VIEW_ITEMS } from "./inbox-columns.js";
 import { COMMENT, INBOX_THREAD, InboxComment } from "./inbox-comment.js";
 import type { FormTextDoors } from "./inbox-form-text.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
-import { HolderGlyph } from "./inbox-item-parts.js";
+import { AddressedTo, HolderGlyph } from "./inbox-item-parts.js";
 import {
   AgentName,
   type ItemAgent,
@@ -755,6 +756,10 @@ function ThreadMessage({
 }): React.JSX.Element {
   const writer = useMessageWriter(message, by);
   const answers = message.answers;
+  // Note that an open ask from before messages kept their own addressee is addressed as its thread is.
+  const addressedTo =
+    message.addressedTo ??
+    (message.ask?.status === INBOX_ASK_STATUS.OPEN ? inboxAddressedTo(item) : undefined);
   const answered = answers === undefined ? undefined : answeredAsk(thread, answers);
   return (
     <InboxComment
@@ -764,6 +769,7 @@ function ThreadMessage({
       nameRef={writer.nameRef}
       at={message.createdAt}
       now={now}
+      trailing={addressedTo === undefined ? undefined : <AddressedTo to={addressedTo} />}
     >
       {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
         <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
