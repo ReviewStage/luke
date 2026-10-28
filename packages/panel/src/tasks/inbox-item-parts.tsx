@@ -31,6 +31,7 @@ import {
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
+  HoverCardSkeleton,
   INLINE_REF_LOOK,
   InlineRef,
   STATUS_TONE,
@@ -61,7 +62,7 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
+import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { HOME_ROW_META } from "./home-row.js";
 import { fillInWords, WRITE_AN_ANSWER } from "./inbox-ask-words.js";
@@ -396,7 +397,7 @@ function HolderRef({
               automationId={automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
-              reading={<ChipCardSkeleton glyph={glyph} name={name} />}
+              reading={<HoverCardSkeleton glyph={glyph} name={name} />}
               fallback={fallback}
             />
           )

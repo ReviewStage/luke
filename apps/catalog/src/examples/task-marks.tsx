@@ -1,4 +1,4 @@
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskAgentsSummary } from "@luke/features/task-wire";
 import {
   AttentionMark,

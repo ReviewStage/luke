@@ -11,7 +11,7 @@ import {
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
@@ -90,7 +90,7 @@ it.layer(getTestDB())("an agent's own pages over HTTP", (it) => {
         const workspace = yield* openWorkspace(starter);
         yield* joinWorkspace(workspace, teammate);
         yield* openWorkspace(outsider);
-        const started = yield* createCodingAgent(starter, {
+        const started = yield* createAgent(starter, {
           taskId: null,
           organizationId: workspace,
           planSnapshot: null,

@@ -1,24 +1,24 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentListAnswer,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentReviewOptionsAnswerView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentChangesAnswerView,
+  type AgentDefaultAnswer,
+  type AgentListAnswer,
+  type AgentModelsAnswer,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPullRequestViewedAnswerView,
+  type AgentReviewOptionsAnswerView,
+} from "@luke/features/agent-view";
 import {
+  type AgentAttachment,
+  type AgentChangesPeople,
+  type AgentOrigin,
+  type AgentPullRequest,
+  type AgentSummary,
   CONTEXT_WINDOW,
-  type CodingAgentAttachment,
-  type CodingAgentChangesPeople,
-  type CodingAgentOrigin,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type {
   CatalogModel,
@@ -180,7 +180,7 @@ const MODELS_READ_BOUND_MS = 15_000;
 interface StartedWords {
   readonly key: string;
   readonly prompt: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
 }
 
 /** The line an agent was started on, by the agent. */
@@ -192,7 +192,7 @@ interface OpeningLine {
 /** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
 export interface HeldPeople {
   readonly url: string;
-  readonly people: CodingAgentChangesPeople;
+  readonly people: AgentChangesPeople;
 }
 
 /** Everything the "+" menu, the tabs, and the agent tab draw and press. */
@@ -200,15 +200,15 @@ export interface CodingAgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
   me: string | undefined;
   /** The open task's agents in the order started, an archived one left out, or nothing before the first read lands. */
-  agents: readonly CodingAgentSummary[] | undefined;
+  agents: readonly AgentSummary[] | undefined;
   /** The open task's archived agents in the order started, or nothing before the first read lands. */
-  archived: readonly CodingAgentSummary[] | undefined;
+  archived: readonly AgentSummary[] | undefined;
   /** The workspace the one agent read as its page belongs to; none on a task, where the task says it, and before the page's read lands. */
   workspaceId?: string | undefined;
   /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
   agentRepository?: string | undefined;
   /** The automation's run that started the one agent read as its page; none on a plan, for an agent started by hand, and before the page's read lands. */
-  origin?: CodingAgentOrigin | undefined;
+  origin?: AgentOrigin | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
   /** Every agent of the task by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
@@ -230,7 +230,7 @@ export interface CodingAgentsControl {
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
-  readDefault: () => Promise<CodingAgentDefaultAnswer>;
+  readDefault: () => Promise<AgentDefaultAnswer>;
   /** The open task's draft agent; nothing while it has none. */
   draft: AgentDraft | undefined;
   /** Opens a draft agent on the open task, or answers the one it has, by its key. */
@@ -252,7 +252,7 @@ export interface CodingAgentsControl {
   onContinueDraft: (
     sourceId: string,
     words: string,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
   ) => string;
   /** Lets the open task's draft's fork go, leaving an ordinary draft with its words and chips. */
   onDropFork: () => void;
@@ -273,12 +273,12 @@ export interface CodingAgentsControl {
    * as that task's whole list until the list is read, which is read again,
    * and its words are its first line until its transcript reads one back.
    */
-  onTaskStarted: (taskId: string, agent: CodingAgentSummary, words: StartedWords) => void;
+  onTaskStarted: (taskId: string, agent: AgentSummary, words: StartedWords) => void;
   /** The first line of the agent New task last started, drawn as the developer's until its transcript reads a line of theirs back (`unreadOpeningLine`). */
   opening: OpeningLine | undefined;
   /** Changes the open task's draft's files from those it holds as the change lands. */
   onDraftAttachments: (
-    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+    next: (held: readonly AgentAttachment[]) => readonly AgentAttachment[],
   ) => void;
   /**
    * Lets the draft go; nothing was started, so nothing is left behind. One
@@ -297,7 +297,7 @@ export interface CodingAgentsControl {
     draftId: string,
     prompt: string,
     choice: ModelChoice | undefined,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /**
@@ -312,7 +312,7 @@ export interface CodingAgentsControl {
     fork: AgentFork,
     words: string,
     choice: ModelChoice | undefined,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
   /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
@@ -334,7 +334,7 @@ export interface CodingAgentsControl {
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
   /** Takes one agent back to just before one of the developer's lines, stopping it first, and takes the agent as the service answers it. */
-  onRewind: (agentId: string, messageId: string) => Promise<CodingAgentAgentAnswer>;
+  onRewind: (agentId: string, messageId: string) => Promise<AgentAgentAnswer>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
@@ -364,7 +364,7 @@ export interface CodingAgentsControl {
    */
   onDelete: (agentId: string) => Promise<ActionResult>;
   /** Reads the task's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
-  readAgent: (agentId: string) => Promise<CodingAgentSummary | undefined>;
+  readAgent: (agentId: string) => Promise<AgentSummary | undefined>;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
@@ -376,13 +376,13 @@ export interface CodingAgentsControl {
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
   readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
-  pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
+  pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as `readNumberedPullRequest` last read it. */
-  numberedPullRequests: ByPullRequestTab<CodingAgentPullRequest>;
+  numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
   /** One read of the pull request of an agent's repository by its number, its answer kept in `numberedPullRequests`; whether it named one. */
   readNumberedPullRequest: (agentId: string, number: number) => Promise<boolean>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
-  readChanges: (agentId: string, number?: number) => Promise<CodingAgentChangesAnswerView>;
+  readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
    * One read of a pull request's chapters, as its Chapters tab asks it: the
    * agent's own pull request, or the one of its repository by the number
@@ -403,24 +403,21 @@ export interface CodingAgentsControl {
   readOverviewPullRequest: (
     agentId: string,
     number?: number,
-  ) => Promise<CodingAgentOverviewPullRequestAnswerView>;
+  ) => Promise<AgentOverviewPullRequestAnswerView>;
   /** One read of what the reviewer and label pickers of an agent's Pull request tab offer. */
-  readReviewOptions: (agentId: string) => Promise<CodingAgentReviewOptionsAnswerView>;
+  readReviewOptions: (agentId: string) => Promise<AgentReviewOptionsAnswerView>;
   /** One read of the checks on an agent's pull request's head, as its overview draws them. */
-  readOverviewChecks: (
-    agentId: string,
-    number?: number,
-  ) => Promise<CodingAgentOverviewChecksAnswerView>;
+  readOverviewChecks: (agentId: string, number?: number) => Promise<AgentOverviewChecksAnswerView>;
   /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
   readOverviewConversation: (
     agentId: string,
     number?: number,
-  ) => Promise<CodingAgentOverviewConversationAnswerView>;
+  ) => Promise<AgentOverviewConversationAnswerView>;
   /** One read of which of an agent's pull request's files the member marked viewed on GitHub, on their own GitHub sign-in. */
   readPullRequestViewed: (
     agentId: string,
     number?: number,
-  ) => Promise<CodingAgentPullRequestViewedAnswerView>;
+  ) => Promise<AgentPullRequestViewedAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
@@ -447,7 +444,7 @@ export interface CodingAgentsControl {
 export interface AgentDraft {
   readonly id: string;
   readonly prompt: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
@@ -481,7 +478,7 @@ function taskDraft(
 interface HandedDraft {
   readonly id: string;
   readonly prompt: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly refused: Failure;
 }
@@ -559,7 +556,7 @@ interface PendingStart {
 export type AgentContinuer = (
   agentId: string,
   note?: string,
-  attachments?: readonly CodingAgentAttachment[],
+  attachments?: readonly AgentAttachment[],
 ) => Promise<Failure | undefined>;
 
 /** A continue on its way or asked again: the task or the page's agent it was pressed on, the key the press minted, and the note and files it carried. */
@@ -567,14 +564,11 @@ interface PendingContinue {
   on: string;
   key: string;
   note: string | undefined;
-  attachments: readonly CodingAgentAttachment[];
+  attachments: readonly AgentAttachment[];
 }
 
 /** Whether two presses carry the same files, the same ones in the same order. */
-function sameFiles(
-  a: readonly CodingAgentAttachment[],
-  b: readonly CodingAgentAttachment[],
-): boolean {
+function sameFiles(a: readonly AgentAttachment[], b: readonly AgentAttachment[]): boolean {
   return a.length === b.length && a.every((file, index) => file === b[index]);
 }
 
@@ -585,10 +579,10 @@ function startReason(taskId: string | undefined, repository: string | null): str
 }
 
 /** A list as read: the plan's agents, or the one agent read as its page, with its workspace, its repository, and the run that started it. */
-type PageList = CodingAgentListAnswer & {
+type PageList = AgentListAnswer & {
   readonly workspaceId?: string;
   readonly repository?: string;
-  readonly origin?: CodingAgentOrigin;
+  readonly origin?: AgentOrigin;
 };
 
 /**
@@ -626,7 +620,7 @@ function listRead(
 export function readAgentById(
   act: ActHandle["act"],
   agentId: string,
-): Promise<CodingAgentSummary | undefined> {
+): Promise<AgentSummary | undefined> {
   return listRead(act, undefined, agentId).then(
     (answer) => ("failure" in answer ? undefined : answer.agents[0]),
     () => undefined,
@@ -646,9 +640,9 @@ function heardOf(heard: Map<string, HeardOfAgent>, agentId: string, said: HeardO
 
 /** The list's agents with what their pages said before it was read laid over them. */
 function withHeard(
-  agents: readonly CodingAgentSummary[],
+  agents: readonly AgentSummary[],
   heard: ReadonlyMap<string, HeardOfAgent>,
-): readonly CodingAgentSummary[] {
+): readonly AgentSummary[] {
   let laid = agents;
   for (const [agentId, { run, title }] of heard) {
     if (run !== undefined) laid = withAgentRun(laid, agentId, run);
@@ -712,7 +706,7 @@ export interface PendingAgents {
 }
 
 /** What a name or archive given here is laid over and waits on: an agent as any list holds it. */
-type NamedAgent = Pick<CodingAgentSummary, "id" | "title" | "archivedAt">;
+type NamedAgent = Pick<AgentSummary, "id" | "title" | "archivedAt">;
 
 /** No name given here and waiting on a view. */
 const NO_PENDING_TITLES: PendingValues<string, string | null> = new Map();
@@ -782,7 +776,7 @@ export function useCodingAgents(input: {
    * followed live carries them; none where it is not followed, or does not
    * list the open task.
    */
-  listedAgents?: readonly CodingAgentSummary[] | undefined;
+  listedAgents?: readonly AgentSummary[] | undefined;
   /**
    * The agents another list draws from this control's presses, as the
    * sidebar's agents with no task are, which a name or archive given here
@@ -813,12 +807,12 @@ export function useCodingAgents(input: {
   const [list, setList] = useState<{
     taskId: string | undefined;
     agentId: string | undefined;
-    agents: readonly CodingAgentSummary[] | undefined;
+    agents: readonly AgentSummary[] | undefined;
     failed: boolean;
     missing?: boolean;
     workspaceId?: string | undefined;
     repository?: string | undefined;
-    origin?: CodingAgentOrigin | undefined;
+    origin?: AgentOrigin | undefined;
   }>({ taskId: undefined, agentId: undefined, agents: undefined, failed: false });
   const listOf = taskId === undefined ? agentId : undefined;
   const ours = (was: { taskId: string | undefined; agentId: string | undefined }) =>
@@ -846,7 +840,7 @@ export function useCodingAgents(input: {
   const [reads, setReads] = useState(0);
   // The agent New task last started, its task, and the line it was started on.
   const [started, setStarted] = useState<
-    { taskId: string; agent: CodingAgentSummary; line: SentLine } | undefined
+    { taskId: string; agent: AgentSummary; line: SentLine } | undefined
   >(undefined);
   const pending = useRef<PendingStart | undefined>(undefined);
   // The Start out now on a task, whose tab stands under its key until it answers.
@@ -855,7 +849,7 @@ export function useCodingAgents(input: {
   );
   // The agents Starts made on a task whose list was not read as they landed, which stand among its agents until the list is.
   const [unlisted, setUnlisted] = useState<
-    { taskId: string; agents: readonly CodingAgentSummary[] } | undefined
+    { taskId: string; agents: readonly AgentSummary[] } | undefined
   >(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
   const continues = useRef(new Map<string, PendingContinue>());
@@ -967,7 +961,7 @@ export function useCodingAgents(input: {
                 agentId: listOf,
                 agents: ours(was) ? was.agents : undefined,
                 failed: true,
-                missing: answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+                missing: answer.failure === AGENT_CALL_FAILURE.NOT_FOUND,
                 workspaceId: ours(was) ? was.workspaceId : undefined,
                 repository: ours(was) ? was.repository : undefined,
                 origin: ours(was) ? was.origin : undefined,
@@ -1024,7 +1018,7 @@ export function useCodingAgents(input: {
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsRead({ state: MODELS_READ.READING, generation });
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
-      (answer: CodingAgentModelsAnswer) => {
+      (answer: AgentModelsAnswer) => {
         if ("failure" in answer) return settle(MODELS_READ.FAILED);
         setModels(answer.models);
         setMacs(answer.macs ?? []);
@@ -1036,15 +1030,15 @@ export function useCodingAgents(input: {
   }, [act]);
 
   const readDefault = useCallback(
-    (): Promise<CodingAgentDefaultAnswer> =>
+    (): Promise<AgentDefaultAnswer> =>
       act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).catch(
-        (): CodingAgentDefaultAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+        (): AgentDefaultAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
       ),
     [act],
   );
 
   /** The list with an agent started on the task joined to it, where it is that task's and read. */
-  const joined = (on: string, agent: CodingAgentSummary) =>
+  const joined = (on: string, agent: AgentSummary) =>
     setList((was) =>
       was.taskId === on && was.agents !== undefined
         ? {
@@ -1060,12 +1054,12 @@ export function useCodingAgents(input: {
   const askStart = (
     on: string,
     asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
-  ): Promise<CodingAgentAgentAnswer> => {
+  ): Promise<AgentAgentAnswer> => {
     setStarting(true);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
     return act(ACT_KIND.CODING_AGENTS_START, { ...where, ...asked })
-      .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
+      .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         setStarting(false);
         return answer;
@@ -1080,7 +1074,7 @@ export function useCodingAgents(input: {
    * a read already standing is joined the agent at once and one still out
    * may answer from before the Start.
    */
-  const landed = (on: string, agent: CodingAgentSummary) => {
+  const landed = (on: string, agent: AgentSummary) => {
     if ((latest.current.taskId ?? latest.current.agentId) !== on) return;
     joined(on, agent);
     latest.current.onStarted(agent.id);
@@ -1113,7 +1107,7 @@ export function useCodingAgents(input: {
     setPressed((was) => (was?.starting.key === key ? undefined : was));
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
-      if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
+      if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
       return startFailureNote(answer, taskId, input.device);
     }
     pending.current = undefined;
@@ -1144,7 +1138,7 @@ export function useCodingAgents(input: {
     });
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
-      if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) {
+      if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
         continues.current.delete(sourceId);
       }
       if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) failed(START_FAILED_AWAY);
@@ -1239,7 +1233,7 @@ export function useCodingAgents(input: {
   const onContinueDraft = (
     sourceId: string,
     words: string,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
   ): string => {
     const joins = draft?.fork?.agentId === sourceId && draft.fork.messageId === undefined;
     const adds = words.trim() !== "" || attachments.length > 0;
@@ -1318,7 +1312,7 @@ export function useCodingAgents(input: {
   // answers, and the list read as it opens holds the agent already. A list
   // not yet read for the task is the agent alone until it is, so its tab
   // draws at once rather than after the read.
-  const onTaskStarted = (on: string, agent: CodingAgentSummary, words: StartedWords) => {
+  const onTaskStarted = (on: string, agent: AgentSummary, words: StartedWords) => {
     setStarted({ taskId: on, agent, line: openingLineOf(words) });
     if (latest.current.taskId !== on) return;
     joined(on, agent);
@@ -1328,7 +1322,7 @@ export function useCodingAgents(input: {
   // Note that the files are changed from the draft as it stands when the
   // change lands, because a file's read lands after the render that began it.
   const onDraftAttachments = (
-    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+    next: (held: readonly AgentAttachment[]) => readonly AgentAttachment[],
   ) => writeWords((was) => ({ ...was, attachments: next(was.attachments) }));
 
   // Note that a draft holding words or files is let go at once, as every
@@ -1389,7 +1383,7 @@ export function useCodingAgents(input: {
     draftId: string,
     prompt: string,
     choice: ModelChoice | undefined,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
   ): Promise<Failure | undefined> => {
     if (taskId === undefined || repository === null)
@@ -1414,7 +1408,7 @@ export function useCodingAgents(input: {
     fork: AgentFork,
     words: string,
     choice: ModelChoice | undefined,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
   ): Promise<Failure | undefined> => {
     if (startsOn === undefined || !startsFrom)
@@ -1451,11 +1445,11 @@ export function useCodingAgents(input: {
   };
 
   const onRewind = useCallback(
-    async (agentId: string, messageId: string): Promise<CodingAgentAgentAnswer> => {
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_REWIND, {
+    async (agentId: string, messageId: string): Promise<AgentAgentAnswer> => {
+      const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_REWIND, {
         agentId,
         messageId,
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>
           was.agents === undefined
@@ -1472,12 +1466,12 @@ export function useCodingAgents(input: {
     async (agentId, text, clientKey, attachments) => {
       // Note that a message that opens the agent's sandbox anew while its image is prepared is
       // taken at once, its relaunch waiting on the image in the service, so it is asked once.
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
+      const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
         agentId,
         text,
         clientKey,
         ...(attachments.length === 0 ? undefined : { attachments }),
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>
           was.agents === undefined
@@ -1498,10 +1492,10 @@ export function useCodingAgents(input: {
     async (agentId, choice) => {
       const change = (chooses.current.get(agentId) ?? 0) + 1;
       chooses.current.set(agentId, change);
-      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
+      const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
         agentId,
         ...choiceRequest(choice),
-      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer) && chooses.current.get(agentId) === change) {
         setList((was) =>
           was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
@@ -1525,11 +1519,11 @@ export function useCodingAgents(input: {
       const change = (before?.count ?? 0) + 1;
       const sent = (before?.sent ?? Promise.resolve()).then(() =>
         act(ACT_KIND.CODING_AGENTS_SERVERS, { agentId, disabledServers }).catch(
-          (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+          (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
         ),
       );
       switches.current.set(agentId, { count: change, sent });
-      const answer: CodingAgentAgentAnswer = await sent;
+      const answer: AgentAgentAnswer = await sent;
       if (switches.current.get(agentId)?.count !== change) return answer;
       if ("failure" in answer) {
         failed(SERVERS_FAILED);
@@ -1558,10 +1552,10 @@ export function useCodingAgents(input: {
     renames.current.set(agentId, rename);
     const asked = pendingValue(titles.get(agentId), title, viewedAgent(agentId)?.title, sameTitle);
     setTitles((was) => new Map(was).set(agentId, asked));
-    const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
+    const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
       agentId,
       title,
-    }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
     const newest = renames.current.get(agentId) === rename;
     if ("failure" in answer) {
       setTitles((was) => pendingWithout(was, agentId, asked));
@@ -1591,14 +1585,14 @@ export function useCodingAgents(input: {
       sameArchive,
     );
     if (drawn === ARCHIVE_DRAWN.AT_ONCE) setArchives((was) => new Map(was).set(agentId, asked));
-    const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
+    const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
       agentId,
       archived,
-    }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
     const words = archiveWords(archived);
     if ("failure" in answer) {
       setArchives((was) => pendingWithout(was, agentId, asked));
-      const notReady = answer.failure === CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
+      const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: notReady ? ARCHIVE_NOT_READY : words.refused,
@@ -1616,10 +1610,10 @@ export function useCodingAgents(input: {
 
   const onDelete = async (agentId: string): Promise<ActionResult> => {
     const answer = await act(ACT_KIND.CODING_AGENTS_DELETE, { agentId }).catch(() => ({
-      failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      failure: AGENT_CALL_FAILURE.UNANSWERED,
     }));
     if ("failure" in answer) {
-      const notReady = answer.failure === CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
+      const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
@@ -1639,7 +1633,7 @@ export function useCodingAgents(input: {
   };
 
   const readAgent = useCallback(
-    async (named: string): Promise<CodingAgentSummary | undefined> => {
+    async (named: string): Promise<AgentSummary | undefined> => {
       if (taskId === undefined && agentId === undefined) return undefined;
       const answer = await listRead(act, taskId, agentId).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return undefined;
@@ -1704,7 +1698,7 @@ export function useCodingAgents(input: {
   // published. Each read of one is numbered, so only the latest one's answer
   // is kept, and an older read landing late never takes back a newer one.
   const [numberedPullRequests, setNumberedPullRequests] = useState<
-    ByPullRequestTab<CodingAgentPullRequest>
+    ByPullRequestTab<AgentPullRequest>
   >(() => new Map());
   const numberedAsks = useRef(new Map<string, Map<number, number>>());
   const readNumberedPullRequest = useCallback<CodingAgentsControl["readNumberedPullRequest"]>(

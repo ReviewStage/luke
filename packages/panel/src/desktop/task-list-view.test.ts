@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -142,7 +142,7 @@ function oneOff(
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     startedBy: { userId: starter, name: starter === DEAN ? "Dean Stratakos" : "Charles Pan" },
     automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",

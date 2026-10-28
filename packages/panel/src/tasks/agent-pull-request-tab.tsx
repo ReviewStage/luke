@@ -1,20 +1,17 @@
 import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-} from "@luke/features/coding-agent-view";
-import {
+  AGENT_STATUS,
+  type AgentOverviewChecks,
+  type AgentOverviewConversation,
+  type AgentOverviewPullRequest,
+  type AgentPullRequest,
   CHANGES_BOUNDS,
   CHECK_STATE,
   CHECK_SUMMARY,
   type CheckState,
   type CheckSummary,
-  CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
-  type CodingAgentOverviewChecks,
-  type CodingAgentOverviewConversation,
-  type CodingAgentOverviewPullRequest,
-  type CodingAgentPullRequest,
   type ConversationEntry,
   DEPLOYMENT_STATE,
   type DeploymentState,
@@ -26,7 +23,7 @@ import {
   REVIEW_STATE,
   type ReactionGroup,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   LINK_PLACE,
   type LinkPlace,
@@ -407,7 +404,7 @@ function threadLines(
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Where one of the overview's reads stands, as its section draws it: on its way, failed, answering that there is no pull request, or landed. */
 const PART = {
@@ -427,7 +424,7 @@ type Part<A> =
 interface PartRead<A> {
   readonly answer:
     | { readonly pullRequest: A | null }
-    | { readonly failure: CodingAgentCallFailure }
+    | { readonly failure: AgentCallFailure }
     | undefined;
   readonly out: boolean;
   readonly ask: () => void;
@@ -529,7 +526,7 @@ function pullRequestActions(url: string, reading: boolean, onRefresh: () => void
 }
 
 /** What the header draws of the pull request from the first frame: its mark's three, and its page. */
-type HeaderPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
+type HeaderPullRequest = Pick<AgentPullRequest, "number" | "state" | "checks" | "url">;
 
 /** The checks as one word, as the pull request's mark wears it: a failure beats a wait beats a pass. */
 function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
@@ -548,9 +545,9 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
  * None while neither has been read.
  */
 function headerPullRequestOf(
-  pullRequest: CodingAgentOverviewPullRequest | undefined,
-  checks: CodingAgentOverviewChecks | undefined,
-  published: CodingAgentPullRequest | undefined,
+  pullRequest: AgentOverviewPullRequest | undefined,
+  checks: AgentOverviewChecks | undefined,
+  published: AgentPullRequest | undefined,
 ): HeaderPullRequest | undefined {
   const held = pullRequest ?? published;
   if (held === undefined) return undefined;
@@ -573,7 +570,7 @@ function headerPullRequestOf(
  * land, those it asks stand asked.
  */
 function reviewersOf(
-  requested: readonly CodingAgentOverviewPullRequest["requested"][number][],
+  requested: readonly AgentOverviewPullRequest["requested"][number][],
   standings: readonly PullRequestReviewer[],
   author: string | undefined,
 ): readonly PullRequestReviewer[] {
@@ -1529,9 +1526,9 @@ function EntryCard({
 
 /** The overview's three reads, each as it stands, with the door that asks each again. */
 interface OverviewParts {
-  readonly pullRequest: Part<CodingAgentOverviewPullRequest>;
-  readonly checks: Part<CodingAgentOverviewChecks>;
-  readonly conversation: Part<CodingAgentOverviewConversation>;
+  readonly pullRequest: Part<AgentOverviewPullRequest>;
+  readonly checks: Part<AgentOverviewChecks>;
+  readonly conversation: Part<AgentOverviewConversation>;
   readonly ask: {
     readonly pullRequest: () => void;
     readonly checks: () => void;
@@ -1666,7 +1663,7 @@ function Deployments({
 
 /** The head's deployments that serve an address now, the newest of each environment, as the header's Preview opens them. */
 function servingOf(
-  checks: CodingAgentOverviewChecks | undefined,
+  checks: AgentOverviewChecks | undefined,
 ): readonly (PullRequestDeployment & { readonly url: string })[] {
   return (checks?.deployments ?? []).filter(
     (deployment): deployment is PullRequestDeployment & { readonly url: string } =>
@@ -1676,7 +1673,7 @@ function servingOf(
 
 /** The header's Preview as items of a phone's ⋯: each deployment serving an address, named for its environment as Preview's menu names it, Preview said under it. */
 function previewActions(
-  checks: CodingAgentOverviewChecks | undefined,
+  checks: AgentOverviewChecks | undefined,
   openLink: (url: string) => void,
 ): MenuAction[] {
   return servingOf(checks).map((deployment) => ({
@@ -1729,7 +1726,7 @@ function PreviewControl({
   checks,
   shown,
 }: {
-  checks: CodingAgentOverviewChecks | undefined;
+  checks: AgentOverviewChecks | undefined;
   shown: boolean;
 }): React.JSX.Element | null {
   const openLink = useOpenLink();
@@ -1821,7 +1818,7 @@ function DescriptionPart({
   fold,
 }: {
   agentId: string;
-  part: Part<CodingAgentOverviewPullRequest>;
+  part: Part<AgentOverviewPullRequest>;
   /** Asks the pull request's read again, as an edit of the description does once GitHub answered it. */
   onRead: () => void;
   reactions: readonly ReactionGroup[] | undefined;
@@ -1957,7 +1954,7 @@ function HeaderTitle({
   title,
   writes,
 }: {
-  title: Pick<CodingAgentPullRequest, "title" | "number" | "url"> | undefined;
+  title: Pick<AgentPullRequest, "title" | "number" | "url"> | undefined;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   if (title === undefined) {
@@ -2045,7 +2042,7 @@ interface FilesCount {
  * counts at once, and one GitHub refuses counts again as it goes back.
  */
 function filesCountOf(
-  published: CodingAgentPullRequest | undefined,
+  published: AgentPullRequest | undefined,
   reads: ChangesReads,
 ): FilesCount | undefined {
   const changes = reads.pullRequest;
@@ -2076,7 +2073,7 @@ function filesCountOf(
 }
 
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
-function conversationCount(conversation: CodingAgentOverviewConversation): number {
+function conversationCount(conversation: AgentOverviewConversation): number {
   const threads = conversation.conversation.reduce(
     (sum, entry) => sum + (entry.threads?.length ?? 0),
     0,
@@ -2094,7 +2091,7 @@ function conversationCount(conversation: CodingAgentOverviewConversation): numbe
  */
 function tabsOf(
   parts: OverviewParts,
-  published: CodingAgentPullRequest | undefined,
+  published: AgentPullRequest | undefined,
   held: HeaderPullRequest | undefined,
   changes: ChangesReads,
   chapters: ChaptersRead,
@@ -2370,7 +2367,7 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
 
 /** Every review thread a read's conversation holds, in its order; none before a read lands or where it failed. */
 function reviewThreadsOf(
-  conversation: CodingAgentOverviewConversation | undefined,
+  conversation: AgentOverviewConversation | undefined,
 ): readonly ReviewThread[] {
   return conversation?.conversation.flatMap((entry) => entry.threads ?? []) ?? [];
 }
@@ -2417,7 +2414,7 @@ function useThreadJumps(input: {
   number: number | undefined;
   shown: boolean;
   threads: readonly ReviewThread[];
-  conversation: Part<CodingAgentOverviewConversation>;
+  conversation: Part<AgentOverviewConversation>;
   onView: (view: PullRequestView) => void;
 }) {
   const { agentId, number, shown, threads, conversation } = input;
@@ -2716,7 +2713,7 @@ function PullRequestTabBody({
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
   const status = agent?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
   const id = useId();
   // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
   const tabsFold =

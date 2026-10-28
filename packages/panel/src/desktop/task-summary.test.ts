@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS, type Task } from "@luke/features/task-wire";
@@ -51,19 +51,19 @@ import {
 
 const RUN_STARTED = 5_000;
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
   runStartedAt: RUN_STARTED,
 };
 
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: "https://github.com/acme/relay/pull/42",
@@ -87,7 +87,7 @@ const HELD: HeldTranscripts = {
             parts: [{ type: "text", text: "Writing the expiry tests." }],
           },
         ],
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         runStartedAt: RUN_STARTED,
         title: undefined,
         subagentTitles: new Map(),

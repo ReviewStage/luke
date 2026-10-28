@@ -14,12 +14,12 @@
 import { TURN_STATUS } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
-  CODING_AGENT_BOUNDS,
+  AGENT_BOUNDS,
   TURN_ENDING,
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import { catalogIdOf } from "./model-label.js";
 import { TURN_FAILURE } from "./turn-run/requests.js";
 
@@ -45,9 +45,7 @@ const decodeUsage = Schema.decodeUnknownOption(RecordedUsageSchema);
 
 /** A recorded name the wire carries: one it bounds, and nothing for an empty or overlong one. */
 function choiceOf(recorded: string | null): string | undefined {
-  return recorded === null ||
-    recorded === "" ||
-    recorded.length > CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS
+  return recorded === null || recorded === "" || recorded.length > AGENT_BOUNDS.MAX_CHOICE_CHARS
     ? undefined
     : recorded;
 }

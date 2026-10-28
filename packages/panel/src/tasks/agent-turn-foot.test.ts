@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -37,7 +37,7 @@ const TURN = "turn";
 
 const WORDS = "Fixed the tile.";
 
-function agentOf(status: CodingAgentStatus): CodingAgentSummary {
+function agentOf(status: AgentStatus): AgentSummary {
   return {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -47,19 +47,19 @@ function agentOf(status: CodingAgentStatus): CodingAgentSummary {
     createdAt: 1_000,
     status,
     turnId: null,
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
     startedBy: DEAN,
   };
 }
 
-const TASK: CodingAgentMessage = {
+const TASK: AgentTranscriptMessage = {
   id: "task",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Make the video tile look good at any width." }],
 };
 
 /** The agent's turn, saying its words, finished or still running. */
-function turn(finished: boolean): CodingAgentMessage {
+function turn(finished: boolean): AgentTranscriptMessage {
   return {
     id: TURN,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -79,13 +79,13 @@ afterEach(() => {
 });
 
 /** The agent's turn as the tab draws it, over a page of the task and that turn, for an agent of `status`. */
-async function drawnTurn(status: CodingAgentStatus): Promise<HTMLElement> {
+async function drawnTurn(status: AgentStatus): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
   });
-  const messages = [TASK, turn(status !== CODING_AGENT_STATUS.RUNNING)];
+  const messages = [TASK, turn(status !== AGENT_STATUS.RUNNING)];
   const control = codingAgentsControl({
     agents: [agentOf(status)],
     me: DEAN.userId,
@@ -137,13 +137,13 @@ function footOf(message: HTMLElement): readonly string[] {
 }
 
 test("a finished turn's Copy and Copy link stand on its last line, to the right of how long it worked", async () => {
-  const message = await drawnTurn(CODING_AGENT_STATUS.COMPLETED);
+  const message = await drawnTurn(AGENT_STATUS.COMPLETED);
 
   assert.deepEqual(footOf(message), ["Worked for 1m 18s", "Copy message", "Copy link"]);
 });
 
 test("a turn still running offers no Copy, its words not yet whole", async () => {
-  const message = await drawnTurn(CODING_AGENT_STATUS.RUNNING);
+  const message = await drawnTurn(AGENT_STATUS.RUNNING);
 
   assert.ok(message.textContent?.includes(WORDS), "the turn's words so far are drawn");
   assert.equal(message.querySelector('button[aria-label="Copy message"]'), null);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_MACHINE, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, type AgentSummary } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
@@ -53,7 +53,7 @@ async function settle(): Promise<void> {
 
 /** An agent's box drawn with `agent` while the presence read answers as `presence` does, and what the box then says. */
 async function placeOf(
-  agent: Pick<CodingAgentSummary, "mac" | "machine">,
+  agent: Pick<AgentSummary, "mac" | "machine">,
   presence: () => Promise<unknown>,
   experiments: readonly Experiment[] = [EXPERIMENT.LOCAL_AGENTS],
 ): Promise<string> {
@@ -75,7 +75,7 @@ async function placeOf(
 function labelWhile(presence: () => Promise<unknown>): Promise<string> {
   return placeOf(
     {
-      machine: CODING_AGENT_MACHINE.DEVICE,
+      machine: AGENT_MACHINE.DEVICE,
       mac: { name: "Charles's MacBook Air", seenAt: READ_SEEN_AT, deviceId: DEVICE },
     },
     presence,

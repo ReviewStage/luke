@@ -1,8 +1,8 @@
 import type { TaskSectionIcon } from "@luke/features/task-section-wire";
 import { index, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 import { task } from "./task.js";
 
 /**
@@ -88,7 +88,7 @@ export const agentSectionEntry = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     codingAgentId: uuid("coding_agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     sectionId: uuid("section_id")
       .notNull()
       .references(() => taskSection.id, { onDelete: "cascade" }),

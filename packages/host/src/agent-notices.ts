@@ -5,13 +5,13 @@ import type {
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
+import type { AgentAccountInboxAnswerView } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { Context, Effect, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
@@ -77,9 +77,9 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  */
 
 /** The statuses under which an agent may still write, which is when its task is watched. */
-const WRITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+const WRITING_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** How many pushes of the followed list in a row may leave out an agent only a Start answered before the ledger lets it go. */
@@ -158,7 +158,7 @@ export interface AgentNoticesDependencies {
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   /** What waits across the account, followed for as long as the stream is run: each answer the host tells as it moves. */
-  followAccountInbox: () => Stream.Stream<CodingAgentAccountInboxAnswerView>;
+  followAccountInbox: () => Stream.Stream<AgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
   /** Where each task's waiting items, and every task holding an item, are written, for the window's Inbox. */
@@ -168,15 +168,15 @@ export interface AgentNoticesDependencies {
 
 export interface AgentNotices {
   /** Agents as an answer carried them, on a plan or with none: a task's list, the plan list's agents with no plan, or the one a Start or a Stop answered. */
-  observeAgents(agents: readonly (CodingAgentSummary | TasklessAgent)[]): void;
+  observeAgents(agents: readonly (AgentSummary | TasklessAgent)[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
-  observeStatus(agentId: string, status: CodingAgentStatus): void;
+  observeStatus(agentId: string, status: AgentStatus): void;
   /** The agent as the answer to a message carried it: running, with a line awaiting the turn it opens. */
-  observeMessaged(agent: CodingAgentSummary): void;
+  observeMessaged(agent: AgentSummary): void;
   /** A task the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
   /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan, or one of a held plan the list no longer names, as one archived, is forgotten. */
-  observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
+  observeFollowed(agents: readonly AgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
   /** The developer marked the agent as read by hand: its unseen dot goes, whichever page shows. */
@@ -187,7 +187,7 @@ export interface AgentNotices {
 interface HeldAgent {
   /** The plan it works on; null for one an automation started with no plan. */
   taskId: string | null;
-  status: CodingAgentStatus;
+  status: AgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
   /** Whether that turn's reply is a member's operator's quiet reply alone, a heartbeat that found nothing, whose end leaves no dot. */
@@ -196,7 +196,7 @@ interface HeldAgent {
   pastTurns: ReadonlySet<string>;
 }
 
-function stillWriting(status: CodingAgentStatus): boolean {
+function stillWriting(status: AgentStatus): boolean {
   return WRITING_STATUSES.has(status);
 }
 
@@ -375,15 +375,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** A turn ended: dot its tab, unless the developer is looking at it. */
     function ended(agentId: string, agent: HeldAgent): void {
-      if (
-        agent.status !== CODING_AGENT_STATUS.COMPLETED &&
-        agent.status !== CODING_AGENT_STATUS.FAILED
-      ) {
+      if (agent.status !== AGENT_STATUS.COMPLETED && agent.status !== AGENT_STATUS.FAILED) {
         return;
       }
       if (focused && shownAgent === agentId) return;
       // A heartbeat that found nothing leaves its member nothing to read, so its end is no news.
-      if (agent.quietTurn === true && agent.status === CODING_AGENT_STATUS.COMPLETED) return;
+      if (agent.quietTurn === true && agent.status === AGENT_STATUS.COMPLETED) return;
       unseen.add(agentId);
       publishUnseen();
     }
@@ -475,7 +472,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
         // An answer that throws is reported rather than left to end the follow, which would never resume.
-        const look = (answer: CodingAgentAccountInboxAnswerView) =>
+        const look = (answer: AgentAccountInboxAnswerView) =>
           Effect.catchDefect(
             Effect.sync(() => {
               if (dependencies.signedInAs() !== reader || "failure" in answer) return;
@@ -513,7 +510,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           if (
             next.quietTurn === true &&
             was.quietTurn !== true &&
-            was.status === CODING_AGENT_STATUS.COMPLETED
+            was.status === AGENT_STATUS.COMPLETED
           ) {
             ledger.set(agentId, { ...was, quietTurn: true });
             seen(agentId);
@@ -550,7 +547,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** The agent as the ledger holds it, on a plan or with none. */
     function heldOf(
-      agent: Pick<CodingAgentSummary, "planId" | "status" | "turnId" | "quietTurn">,
+      agent: Pick<AgentSummary, "planId" | "status" | "turnId" | "quietTurn">,
     ): HeldAgent {
       return {
         taskId: agent.planId,

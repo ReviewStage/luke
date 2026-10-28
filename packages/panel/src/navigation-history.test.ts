@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -889,14 +889,14 @@ function listedTask(name: string, agentTitle?: string): TaskSummary {
     title: agentTitle,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
   };
   const agents = { total: 1, working: 0, agents: [line], pullRequestTotal: 0, pullRequests: [] };
   return { ...task, agents };
 }
 
 /** Agent A as the open task's agents read it, under `title`. */
-function openAgent(title: string): CodingAgentSummary {
+function openAgent(title: string): AgentSummary {
   return {
     id: AGENT_A.agent,
     planId: TASK_ID,
@@ -904,7 +904,7 @@ function openAgent(title: string): CodingAgentSummary {
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
 }

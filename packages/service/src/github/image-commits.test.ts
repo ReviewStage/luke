@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@luke/features/agent-wire";
 import { Effect, Option, Redacted } from "effect";
 import { githubReaching, type SentToGitHub } from "../testing/github-app-fake.js";
 import { imageCommits } from "./pull-requests.js";
@@ -24,8 +24,8 @@ const COMPARE = `/repos/acme/relay/compare/${BASE}...${HEAD}`;
 /** A changed file, modified unless told otherwise. */
 function changed(
   path: string,
-  status: CodingAgentChangedFile["status"] = CHANGED_FILE_STATUS.MODIFIED,
-): CodingAgentChangedFile {
+  status: AgentChangedFile["status"] = CHANGED_FILE_STATUS.MODIFIED,
+): AgentChangedFile {
   return {
     path,
     previousPath: null,
@@ -38,7 +38,7 @@ function changed(
 }
 
 /** The image commits for `files`, GitHub's compare answering as `compare` says, and every request it was sent. */
-const commitsOf = (files: readonly CodingAgentChangedFile[], compare: () => Response) =>
+const commitsOf = (files: readonly AgentChangedFile[], compare: () => Response) =>
   Effect.gen(function* () {
     const sent: SentToGitHub[] = [];
     const github = githubReaching([], undefined, undefined, (request) => {

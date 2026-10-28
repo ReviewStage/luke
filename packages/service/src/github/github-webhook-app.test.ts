@@ -6,19 +6,20 @@ import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@luke/database/github-installation-vocabulary";
-import { createAutomation, listAutomationRuns } from "@luke/database/models/automation-store";
 import {
-  type CodingAgent,
-  createCodingAgent,
-  listPublishedCodingAgents,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+  type Agent,
+  createAgent,
+  listPublishedAgents,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
+import { createAutomation, listAutomationRuns } from "@luke/database/models/automation-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { turns } from "@luke/database/schemas/storage";
 import { fakeWorkspaceSeams, getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
+import type { AgentPullRequest } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -31,7 +32,6 @@ import {
   type GitHubTriggerEvent,
   PULL_REQUEST_MOMENT,
 } from "@luke/features/automation-wire";
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@luke/wire";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
@@ -228,7 +228,7 @@ const openAgent = (pull: PullRequestFixture) =>
       yield* connectWorkspaceGitHub(task.workspaceId, installation),
       LINK_OUTCOME.LINKED,
     );
-    const started = yield* createCodingAgent(owner, {
+    const started = yield* createAgent(owner, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -237,20 +237,20 @@ const openAgent = (pull: PullRequestFixture) =>
       prompt: null,
       repository: RELAY_FULL_NAME,
     });
-    const agent: CodingAgent = Option.getOrElse(started, () =>
+    const agent: Agent = Option.getOrElse(started, () =>
       assert.fail("the start made no agent"),
     ).agent;
     const ref = `luke/teammate-invitations-${randomUUID()}`;
-    yield* updateCodingAgentBranch(owner, agent.id, ref);
+    yield* updateAgentBranch(owner, agent.id, ref);
     const github = githubReaching([installation], undefined, undefined, relayRepository(pull, ref));
     /** What the agent's row keeps of its pull request now. */
     const kept = (): Effect.Effect<
-      CodingAgentPullRequest | null | undefined,
+      AgentPullRequest | null | undefined,
       unknown,
       DatabaseServices
     > =>
       Effect.map(
-        listPublishedCodingAgents(owner, [task.id]),
+        listPublishedAgents(owner, [task.id]),
         (agents) => agents.find((each) => each.agent.id === agent.id)?.published,
       );
     return { github, kept, ref, owner, agent };

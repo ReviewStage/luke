@@ -1,4 +1,4 @@
-import type { TurnRecord } from "@luke/features/coding-agent-wire";
+import type { TurnRecord } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { callHeading, WORKED_SEPARATOR, workingTime } from "@luke/features/time-format";
 import { ANNOUNCE, cn, Shimmer, TIME_LOOK, Time, Tooltip, useAnnounce, useMinute } from "@luke/ui";

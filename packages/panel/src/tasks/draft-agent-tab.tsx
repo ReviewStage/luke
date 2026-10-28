@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { useSecond } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -183,7 +183,7 @@ export function DraftAgentTab({
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
         <AgentComposer
-          status={CODING_AGENT_STATUS.STARTING}
+          status={AGENT_STATUS.STARTING}
           sendsEmpty={fork !== undefined}
           composer={composer}
           model={

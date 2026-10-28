@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -82,14 +82,14 @@ function task(id: string, name: string, agentId: string) {
     repository: null,
     document: { body: `# ${name}`, assumptions: [] },
   };
-  const agent: CodingAgentSummary = {
+  const agent: AgentSummary = {
     id: agentId,
     planId: id,
     model: "openai/gpt-5.6-sol",
     effort: "high",
     title: `${name} agent`,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   return { plan: summary, agent };
@@ -936,7 +936,7 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
   assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
 
-  const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
+  const failed = { ...INVITES.agent, status: AGENT_STATUS.FAILED };
   const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);

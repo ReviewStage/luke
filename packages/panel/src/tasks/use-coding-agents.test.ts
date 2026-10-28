@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
@@ -32,14 +28,14 @@ import {
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const STARTED: CodingAgentSummary = {
+const STARTED: AgentSummary = {
   id: AGENT,
   planId: TASK,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: null,
   createdAt: 1,
-  status: CODING_AGENT_STATUS.STARTING,
+  status: AGENT_STATUS.STARTING,
   turnId: null,
 };
 
@@ -47,8 +43,8 @@ interface Standing {
   taskId: string | undefined;
   agentId?: string;
   repository: string | null;
-  listedAgents?: readonly CodingAgentSummary[];
-  viewedAgents?: readonly CodingAgentSummary[];
+  listedAgents?: readonly AgentSummary[];
+  viewedAgents?: readonly AgentSummary[];
 }
 
 /** Any kind the hook asks. */
@@ -192,7 +188,7 @@ test("the task's agents the followed list carries draw before its list is read, 
   const archived = {
     ...STARTED,
     id: "9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b",
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     archivedAt: 2,
   };
   const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [elsewhere, STARTED] });
@@ -229,7 +225,7 @@ test("a rename draws the new name at once, and the name it replaced comes back w
     ["Invite email subject"],
   );
 
-  renamed.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  renamed.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   assert.equal(await took, false);
   assert.deepEqual(
@@ -255,7 +251,7 @@ test("an archive moves the agent under Archived at once, and back among the stan
     [AGENT],
   );
 
-  archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  archived.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   assert.deepEqual(tab.control().agentIds, [AGENT]);
   assert.deepEqual(tab.control().archived, []);
@@ -275,7 +271,7 @@ test("an archive a dialog asked about waits on the answer, so the dialog still s
   await settle();
   assert.deepEqual(tab.control().agentIds, [AGENT], "the agent stands while the answer is out");
 
-  archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  archived.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   assert.equal((await result)?.status, ACTION_RESULT_STATUS.REJECTED);
   assert.deepEqual(tab.control().agentIds, [AGENT]);
@@ -305,8 +301,8 @@ test("a draft asks nothing of the service, one per plan, until its first message
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [STARTED] });
   tab.answer(
     ACT_KIND.CODING_AGENTS_START,
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-    { agent: { ...STARTED, brief: CODING_AGENT_BRIEF.PROMPT } },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: { ...STARTED, brief: AGENT_BRIEF.PROMPT } },
   );
   await tab.mount();
 
@@ -386,7 +382,7 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
     new Promise<WireBoundaryInput>((resolve) => {
       land = resolve;
     }),
-    { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+    { failure: AGENT_CALL_FAILURE.INVALID_CHOICE },
   );
   await tab.mount();
 
@@ -560,7 +556,7 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
 });
 
 test("with no plan open, the agent named is read as its page and held as a list of one, so its title from a transcript page moves it", async () => {
-  const taskless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.RUNNING };
+  const taskless = { ...STARTED, planId: null, status: AGENT_STATUS.RUNNING };
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
     agent: {
@@ -579,7 +575,7 @@ test("with no plan open, the agent named is read as its page and held as a list 
   );
   assert.deepEqual(
     tab.control().agents?.map((agent) => [agent.id, agent.planId, agent.status]),
-    [[AGENT, null, CODING_AGENT_STATUS.RUNNING]],
+    [[AGENT, null, AGENT_STATUS.RUNNING]],
   );
   act(() => tab.control().onTitle(AGENT, "Sweep the flaky tests"));
   assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
@@ -630,7 +626,7 @@ test("another agent named with no plan open holds nothing of the last, even wher
   });
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   tab.answer(ACT_KIND.CODING_AGENTS_PAGE, page(AGENT), {
-    failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
   });
   await tab.mount();
   assert.deepEqual(
@@ -645,7 +641,7 @@ test("another agent named with no plan open holds nothing of the last, even wher
 });
 
 test("on an agent's own page, its agent is continued and forked through the page's draft, each Start naming no task so the service puts it where that agent is, and the agent started opens; a fork let go there lets its draft go", async () => {
-  const taskless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.COMPLETED };
+  const taskless = { ...STARTED, planId: null, status: AGENT_STATUS.COMPLETED };
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
     agent: {
@@ -655,8 +651,8 @@ test("on an agent's own page, its agent is continued and forked through the page
       repository: "acme/relay",
     },
   });
-  const continued = { ...taskless, id: "continued-1", status: CODING_AGENT_STATUS.STARTING };
-  const forked = { ...taskless, id: "forked-1", status: CODING_AGENT_STATUS.STARTING };
+  const continued = { ...taskless, id: "continued-1", status: AGENT_STATUS.STARTING };
+  const forked = { ...taskless, id: "forked-1", status: AGENT_STATUS.STARTING };
   tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: continued }, { agent: forked });
   await tab.mount();
 
@@ -835,12 +831,12 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
   const FORKED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-  const source: CodingAgentSummary = {
+  const source: AgentSummary = {
     ...STARTED,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     disabledServers: [INTEGRATION_PROVIDER.LINEAR],
   };
-  const forked: CodingAgentSummary = {
+  const forked: AgentSummary = {
     ...STARTED,
     id: FORKED,
     from: { agentId: AGENT, messageId: MESSAGE, steps: 3, totalSteps: 5 },
@@ -849,7 +845,7 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [source] }, { agents: [source] });
   tab.answer(
     ACT_KIND.CODING_AGENTS_START,
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
     { agent: forked },
   );
   await tab.mount();
@@ -986,12 +982,12 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
 test("a continue opens the task's draft with the closed box's words and files after any it held, its chips on the source's servers, sends nothing, holds through a tab switch and a relaunch, and an empty send continues under the draft's key, asked again under the same one", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const CONTINUED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-  const source: CodingAgentSummary = {
+  const source: AgentSummary = {
     ...STARTED,
-    status: CODING_AGENT_STATUS.FAILED,
+    status: AGENT_STATUS.FAILED,
     disabledServers: [INTEGRATION_PROVIDER.LINEAR],
   };
-  const continued: CodingAgentSummary = {
+  const continued: AgentSummary = {
     ...STARTED,
     id: CONTINUED,
     from: { agentId: AGENT, steps: 3, totalSteps: 3 },
@@ -1031,7 +1027,7 @@ test("a continue opens the task's draft with the closed box's words and files af
   after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [source] }, { agents: [continued] });
   after.answer(
     ACT_KIND.CODING_AGENTS_START,
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
     { agent: continued },
   );
   await after.mount();
@@ -1096,7 +1092,7 @@ test("continuing an agent starts on the task from its whole transcript under the
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [continued] });
   tab.answer(
     ACT_KIND.CODING_AGENTS_START,
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
     { agent: continued },
   );
   await tab.mount();
@@ -1134,11 +1130,11 @@ test("a continue carries the developer's words and files as its note, other word
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   tab.answer(
     ACT_KIND.CODING_AGENTS_START,
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-    { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY },
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.AGENT_NOT_READY },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
   );
   await tab.mount();
   const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
@@ -1258,14 +1254,14 @@ test("what an agent's transcript said of it before its task's agents were read s
   assert.equal(tab.control().agents, undefined, "the agents are still being read");
 
   // The tab follows its agent from the id, so its page lands before the list does.
-  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onStatus(AGENT, { status: AGENT_STATUS.COMPLETED }));
   act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
-  answer({ agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }] });
+  answer({ agents: [{ ...STARTED, status: AGENT_STATUS.RUNNING }] });
   await settle();
 
   assert.deepEqual(
     tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
-    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+    [[AGENT, AGENT_STATUS.COMPLETED, "Invite expiry job"]],
   );
 });
 
@@ -1279,21 +1275,21 @@ test("what an agent's transcript said before its task's agents were read outlast
     }),
   );
   await tab.mount();
-  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  act(() => tab.control().onStatus(AGENT, { status: AGENT_STATUS.COMPLETED }));
   act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
-  fail({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  fail({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   assert.equal(tab.control().agents, undefined, "the read failed");
 
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, {
-    agents: [{ ...STARTED, status: CODING_AGENT_STATUS.RUNNING }],
+    agents: [{ ...STARTED, status: AGENT_STATUS.RUNNING }],
   });
   act(() => tab.control().onRetryList());
   await settle();
 
   assert.deepEqual(
     tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
-    [[AGENT, CODING_AGENT_STATUS.COMPLETED, "Invite expiry job"]],
+    [[AGENT, AGENT_STATUS.COMPLETED, "Invite expiry job"]],
   );
 });
 

@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -185,7 +185,7 @@ export function useDictation(input: {
     if (
       answer !== undefined &&
       "failure" in answer &&
-      answer.failure === CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING
+      answer.failure === AGENT_CALL_FAILURE.OPENAI_KEY_MISSING
     ) {
       return settle(DICTATION_NOTE.OPENAI_KEY_MISSING);
     }

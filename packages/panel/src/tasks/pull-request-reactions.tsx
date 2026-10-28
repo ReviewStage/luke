@@ -23,7 +23,7 @@
  * again, and where GitHub would not take it, why stands under the row.
  */
 
-import type { GitHubPerson, ReactionGroup } from "@luke/features/coding-agent-wire";
+import type { GitHubPerson, ReactionGroup } from "@luke/features/agent-wire";
 import { formatCount } from "@luke/features/number-format";
 import {
   PULL_REQUEST_ACTION,

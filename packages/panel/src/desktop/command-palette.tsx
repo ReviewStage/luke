@@ -55,8 +55,8 @@
  * each row's words instead.
  */
 
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import type { Channel } from "@luke/features/channel-wire";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";

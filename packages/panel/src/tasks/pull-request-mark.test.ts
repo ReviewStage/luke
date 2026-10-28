@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -23,22 +23,22 @@ import { ChangesCard } from "./changes-card.js";
  * reader who cannot see it hears.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite flow",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
 /** A pull request standing as `state`, its checks as `checks`. */
 function pullRequest(
-  state: CodingAgentPullRequest["state"],
-  checks: CodingAgentPullRequest["checks"],
-): CodingAgentPullRequest {
+  state: AgentPullRequest["state"],
+  checks: AgentPullRequest["checks"],
+): AgentPullRequest {
   return {
     number: 42,
     title: "Expire invitations",
@@ -52,7 +52,7 @@ function pullRequest(
 }
 
 /** Every place the window draws the pull request, each rendered on its own. */
-function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement> {
+function places(drawn: AgentPullRequest): ReadonlyMap<string, ReactElement> {
   const ignore = (): void => undefined;
   return new Map<string, ReactElement>([
     ["plan card", createElement(PullRequestLine, { pullRequest: drawn })],

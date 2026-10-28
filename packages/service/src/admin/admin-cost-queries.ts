@@ -12,8 +12,8 @@
  */
 
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { hostedUsage } from "@luke/database/schemas/usage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
@@ -180,7 +180,7 @@ const findDictationSeconds = SqlSchema.findAll({
 });
 
 /** When GitHub said the agent's pull request merged, in epoch milliseconds, as its row keeps it. */
-const MERGED_AT = sql<number>`(${codingAgent.published}->>'mergedAt')::bigint`;
+const MERGED_AT = sql<number>`(${agentTable.published}->>'mergedAt')::bigint`;
 
 const MERGED_DAY = utcDayOfEpochMs(MERGED_AT);
 
@@ -198,11 +198,11 @@ const findMergedPullRequests = SqlSchema.findAll({
   execute: (filter) =>
     Database.use((db) =>
       db
-        .select({ day: MERGED_DAY, userId: codingAgent.userId, merged: count() })
-        .from(codingAgent)
-        .innerJoin(user, eq(user.id, codingAgent.userId))
+        .select({ day: MERGED_DAY, userId: agentTable.userId, merged: count() })
+        .from(agentTable)
+        .innerJoin(user, eq(user.id, agentTable.userId))
         .where(and(gte(MERGED_AT, filter.fetchStart.getTime()), keptAccounts(filter)))
-        .groupBy(MERGED_DAY, codingAgent.userId),
+        .groupBy(MERGED_DAY, agentTable.userId),
     ),
 });
 

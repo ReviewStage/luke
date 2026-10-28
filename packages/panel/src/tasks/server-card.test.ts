@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -134,10 +134,7 @@ async function settle(): Promise<void> {
   });
 }
 
-function agentOf(
-  status: CodingAgentStatus,
-  disabledServers: readonly string[],
-): CodingAgentSummary {
+function agentOf(status: AgentStatus, disabledServers: readonly string[]): AgentSummary {
   return {
     id: AGENT_ID,
     planId: TASK_ID,
@@ -147,21 +144,21 @@ function agentOf(
     createdAt: 1_000,
     status,
     turnId: null,
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
     disabledServers,
   };
 }
 
-function line(id: string, text: string, arrivedIn?: CodingAgentMessage["arrivedIn"]) {
+function line(id: string, text: string, arrivedIn?: AgentTranscriptMessage["arrivedIn"]) {
   return {
     id,
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text }],
     ...(arrivedIn === undefined ? undefined : { arrivedIn }),
-  } satisfies CodingAgentMessage;
+  } satisfies AgentTranscriptMessage;
 }
 
-function journal(id: string, text: string): CodingAgentMessage {
+function journal(id: string, text: string): AgentTranscriptMessage {
   return {
     id,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -176,7 +173,7 @@ function journal(id: string, text: string): CodingAgentMessage {
  * opened the next turn naming Linear, and a line that reached that turn
  * while it ran naming one of its tools.
  */
-const TRANSCRIPT: readonly CodingAgentMessage[] = [
+const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
   line("task", "Triage the backlog."),
   journal("first", `I would look it up in ${SERVER}.`),
   line("opened", `Read it through ${SERVER}.`),
@@ -216,8 +213,8 @@ async function drawn(node: ReactNode): Promise<HTMLElement> {
 
 /** The agent's tab over one page of `messages`, its sends never answered. */
 function agentTab(
-  messages: readonly CodingAgentMessage[],
-  agent: CodingAgentSummary,
+  messages: readonly AgentTranscriptMessage[],
+  agent: AgentSummary,
 ): Promise<HTMLElement> {
   const control = codingAgentsControl({
     agents: [agent],
@@ -229,7 +226,7 @@ function agentTab(
         title: null,
       },
     ]),
-    onMessage: () => new Promise<CodingAgentAgentAnswer>(ignore),
+    onMessage: () => new Promise<AgentAgentAnswer>(ignore),
   });
   return drawn(
     createElement(AgentTab, {
@@ -272,7 +269,7 @@ function chipIn(container: HTMLElement, messageId: string): Element | null {
 }
 
 test("in an agent's tab with Linear off, a line that opened a turn hands it that turn alone, one that reached a turn under way the next, and the agent's own words say it is off", async () => {
-  const container = await agentTab(TRANSCRIPT, agentOf(CODING_AGENT_STATUS.COMPLETED, ["linear"]));
+  const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, ["linear"]));
 
   assert.deepEqual(await cardOf(chipIn(container, "opened")), {
     name: "Linear",
@@ -304,7 +301,7 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
 });
 
 test("in an agent's tab with Linear on, the line's card says it is on and the message names it", async () => {
-  const container = await agentTab(TRANSCRIPT, agentOf(CODING_AGENT_STATUS.COMPLETED, []));
+  const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, []));
 
   const opened = await cardOf(chipIn(container, "opened"));
 
@@ -315,7 +312,7 @@ test("in an agent's tab with Linear on, the line's card says it is on and the me
 test("a line sent while a turn runs, not yet read back, hands Linear to the next turn, as the box says a send now would", async () => {
   const container = await agentTab(
     TRANSCRIPT.slice(0, 2),
-    agentOf(CODING_AGENT_STATUS.RUNNING, ["linear"]),
+    agentOf(AGENT_STATUS.RUNNING, ["linear"]),
   );
 
   typeInComposer(container, "Use @Lin");
@@ -334,7 +331,7 @@ test("a line sent while a turn runs, not yet read back, hands Linear to the next
 test("in the box of an agent at rest, Linear off, a send hands it the turn the send opens alone", async () => {
   const container = await agentTab(
     TRANSCRIPT.slice(0, 2),
-    agentOf(CODING_AGENT_STATUS.COMPLETED, ["linear"]),
+    agentOf(AGENT_STATUS.COMPLETED, ["linear"]),
   );
 
   typeInComposer(container, "Use @Lin");
@@ -348,7 +345,7 @@ test("in the box of an agent at rest, Linear off, a send hands it the turn the s
 
 test("a server not connected says so, with no switch and no tools, a tool's mention listing none it was written with", async () => {
   linear = INTEGRATION_STATUS.DISCONNECTED;
-  const container = await agentTab(TRANSCRIPT, agentOf(CODING_AGENT_STATUS.COMPLETED, []));
+  const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, []));
 
   assert.deepEqual(await cardOf(chipIn(container, "opened")), {
     name: "Linear",
@@ -363,7 +360,7 @@ test("a server not connected says so, with no switch and no tools, a tool's ment
 
 test("a server whose sign-in expired is handed all the same, its card saying a call to it asks for it to be reconnected", async () => {
   linear = INTEGRATION_STATUS.EXPIRED;
-  const container = await agentTab(TRANSCRIPT, agentOf(CODING_AGENT_STATUS.COMPLETED, []));
+  const container = await agentTab(TRANSCRIPT, agentOf(AGENT_STATUS.COMPLETED, []));
 
   const opened = await cardOf(chipIn(container, "opened"));
 

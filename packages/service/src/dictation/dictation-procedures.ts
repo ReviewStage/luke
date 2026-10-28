@@ -22,7 +22,7 @@
 
 import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
 import { spendDictationMeter } from "@luke/database/models/quota";
-import { base64Bytes } from "@luke/features/coding-agent-wire";
+import { base64Bytes } from "@luke/features/agent-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { middlewareGen } from "@orpc/experimental-effect";

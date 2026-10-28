@@ -1,9 +1,9 @@
 import {
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_BOUNDS,
+  type AgentAttachment,
   base64Bytes,
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { useRef, useState } from "react";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { ATTACH_TAKES, type AttachTakes, base64Of } from "./tasks/attached-files.js";
@@ -57,25 +57,25 @@ function spellsText(bytes: Uint8Array): boolean {
 }
 
 /** One file read: what the message carries of it, or why it cannot come. */
-type FileRead = { readonly attachment: CodingAgentAttachment } | { readonly refusal: string };
+type FileRead = { readonly attachment: AgentAttachment } | { readonly refusal: string };
 
 /** One file read into what a message carries, or why it cannot come. */
 async function attachmentOf(file: File): Promise<FileRead> {
   // Note that the name needs no bound of its own here, because macOS bounds a file's name inside the wire's.
   const { name } = file;
   if (file.type.startsWith("image/")) {
-    const image = await encodeImage(file, CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES);
+    const image = await encodeImage(file, AGENT_BOUNDS.MAX_IMAGE_BYTES);
     // Note that a re-encoded image keeps the name it was picked under, which is the one its chip says.
     if (image === undefined) return { refusal: REFUSAL.UNREADABLE(name) };
     return { attachment: { name, mediaType: image.mediaType, data: image.base64 } };
   }
-  const pdf = file.type === CODING_AGENT_ATTACHMENT_TYPE.PDF || name.toLowerCase().endsWith(".pdf");
-  const bound = pdf ? CODING_AGENT_BOUNDS.MAX_PDF_BYTES : CODING_AGENT_BOUNDS.MAX_TEXT_BYTES;
+  const pdf = file.type === AGENT_ATTACHMENT_TYPE.PDF || name.toLowerCase().endsWith(".pdf");
+  const bound = pdf ? AGENT_BOUNDS.MAX_PDF_BYTES : AGENT_BOUNDS.MAX_TEXT_BYTES;
   if (file.size > bound) return { refusal: REFUSAL.TOO_LARGE(name) };
   const bytes = new Uint8Array(await file.arrayBuffer().catch(() => new ArrayBuffer(0)));
   if (bytes.length === 0) return { refusal: REFUSAL.EMPTY(name) };
   if (!pdf && !spellsText(bytes)) return { refusal: REFUSAL.KIND(name) };
-  const mediaType = pdf ? CODING_AGENT_ATTACHMENT_TYPE.PDF : CODING_AGENT_ATTACHMENT_TYPE.TEXT;
+  const mediaType = pdf ? AGENT_ATTACHMENT_TYPE.PDF : AGENT_ATTACHMENT_TYPE.TEXT;
   return { attachment: { name, mediaType, data: base64Of(bytes) } };
 }
 
@@ -99,7 +99,7 @@ function filesTaken(
 
 /** Files read: what the message may carry of them, in order, and why the first that cannot come did not. */
 interface FilesRead {
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly refusal: string | undefined;
 }
 
@@ -110,11 +110,11 @@ interface FilesRead {
  * box holds by then (`withFiles`).
  */
 async function readFiles(files: readonly File[]): Promise<FilesRead> {
-  const attachments: CodingAgentAttachment[] = [];
+  const attachments: AgentAttachment[] = [];
   let refusal: string | undefined;
   for (const file of files) {
-    if (attachments.length >= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) {
-      refusal ??= REFUSAL.FULL(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS);
+    if (attachments.length >= AGENT_BOUNDS.MAX_ATTACHMENTS) {
+      refusal ??= REFUSAL.FULL(AGENT_BOUNDS.MAX_ATTACHMENTS);
       break;
     }
     const read = await attachmentOf(file);
@@ -131,9 +131,9 @@ async function readFiles(files: readonly File[]): Promise<FilesRead> {
  * the first file the bounds left out.
  */
 function withFiles(
-  held: readonly CodingAgentAttachment[],
+  held: readonly AgentAttachment[],
   read: FilesRead,
-  most: number = CODING_AGENT_BOUNDS.MAX_ATTACHMENTS,
+  most: number = AGENT_BOUNDS.MAX_ATTACHMENTS,
 ): FilesRead {
   const attachments = [...held];
   let refusal = read.refusal;
@@ -146,7 +146,7 @@ function withFiles(
       (sum, each) => sum + base64Bytes(each.data),
       base64Bytes(attachment.data),
     );
-    if (total > CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) {
+    if (total > AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) {
       refusal ??= REFUSAL.TOO_MUCH;
       continue;
     }
@@ -157,10 +157,8 @@ function withFiles(
 
 /** Where a box keeps its files: the files as it draws them, and a change handed what it holds as the change lands. */
 interface AttachedFilesHolder {
-  readonly attachments: readonly CodingAgentAttachment[];
-  readonly update: (
-    next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
-  ) => void;
+  readonly attachments: readonly AgentAttachment[];
+  readonly update: (next: (was: readonly AgentAttachment[]) => readonly AgentAttachment[]) => void;
 }
 
 /** What a box takes and where its files and its note go. */
@@ -179,7 +177,7 @@ export interface AttachedFilesOptions {
 
 /** The files a box holds and the ways it takes more and lets them go. */
 export interface AttachedFiles {
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   /** Whether files handed to the box are still being read, which a send waits on. */
   readonly reading: boolean;
   /** Takes files picked or handed to the box, in order. */
@@ -188,16 +186,16 @@ export interface AttachedFiles {
   readonly paste: (files: readonly File[]) => boolean;
   readonly remove: (index: number) => void;
   /** The files the box holds this moment, for a callback that outlives the render it was made in. */
-  readonly now: () => readonly CodingAgentAttachment[];
+  readonly now: () => readonly AgentAttachment[];
   /** Sets the files the box holds outright, as a send empties it and a send that failed puts them back. */
-  readonly set: (attachments: readonly CodingAgentAttachment[]) => void;
+  readonly set: (attachments: readonly AgentAttachment[]) => void;
   /** The drop target the box's card spreads, and whether files are over it. */
   readonly drop: FileDrop;
 }
 
 /** The files a box holds, read as they are handed to it on the terms `options` sets. */
 export function useAttachedFiles(options: AttachedFilesOptions): AttachedFiles {
-  const [own, setOwn] = useState<readonly CodingAgentAttachment[]>([]);
+  const [own, setOwn] = useState<readonly AgentAttachment[]>([]);
   // The files held as of the last change, which a read landing late is taken after.
   const ownNow = useRef(own);
   const ownHolder: AttachedFilesHolder = {
@@ -215,7 +213,7 @@ export function useAttachedFiles(options: AttachedFilesOptions): AttachedFiles {
   const [reading, setReading] = useState(0);
 
   const take = (refused: string | undefined, read: FilesRead) => {
-    const { most = CODING_AGENT_BOUNDS.MAX_ATTACHMENTS, onRefusal } = latest.current;
+    const { most = AGENT_BOUNDS.MAX_ATTACHMENTS, onRefusal } = latest.current;
     const taken = withFiles(heldNow(), read, most);
     holderNow().update((now) => withFiles(now, read, most).attachments);
     onRefusal(refused ?? taken.refusal);

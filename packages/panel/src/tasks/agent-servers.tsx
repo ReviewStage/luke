@@ -392,10 +392,10 @@ const RowHighlight = createContext<(() => void) | undefined>(undefined);
  * row's `RowHintOptions` hand it (`RowHint`). Note that it rides the row's
  * hint slot, the one door to its press's pointer handlers.
  */
-const PointerHighlight: ListRowHint = ({ label, children }) => {
+const PointerHighlight: ListRowHint = ({ label, row, children }) => {
   const highlight = useContext(RowHighlight);
   return (
-    <RowHint label={label}>
+    <RowHint label={label} row={row}>
       {cloneElement(children, {
         onPointerEnter: (event) => {
           children.props.onPointerEnter?.(event);
@@ -708,7 +708,7 @@ function ServersPopover({
         key={input.key}
         value={index < 0 || index === at ? undefined : () => setHighlight(index)}
       >
-        <RowHintOptions card={input.card} cardBeside>
+        <RowHintOptions card={input.card}>
           <ListRow
             id={index < 0 ? undefined : `${rowsId}-${index}`}
             leading={<ProviderMark provider={input.row.provider} size={PROVIDER_MARK_SIZE.ICON} />}

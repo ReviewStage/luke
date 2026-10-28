@@ -41,12 +41,12 @@
 
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import {
-  type CodingAgent,
+  type Agent,
   reserveTurnPlanNotes,
   settleTurnPlanNotes,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
+import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
@@ -434,7 +434,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind" | "machine">;
+export type LukeMcpOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "machine">;
 
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
@@ -444,9 +444,9 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any" }),
-  ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
-  ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
-  ...machineToolsOf({ machine: CODING_AGENT_MACHINE.VERCEL }),
+  ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
+  ...kindToolsOf({ kind: AGENT_KIND.CODER }),
+  ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
 ]);
 
 /**

@@ -21,8 +21,8 @@ import type {
   AdminAccountSupport,
   AdminAccountWorkspace,
 } from "@luke/features/admin-answer-wire";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { AGENT_STATUS_WORDS } from "@luke/features/automation-list-model";
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatInstant } from "@luke/features/time-format";

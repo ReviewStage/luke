@@ -38,7 +38,7 @@
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import { readNativeRunStanding } from "@luke/database/models/coding-agent-store";
+import { readNativeRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";

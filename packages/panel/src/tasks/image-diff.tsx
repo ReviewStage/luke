@@ -1,4 +1,4 @@
-import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   CHOICE_BAR_LOOK,
@@ -259,7 +259,7 @@ function BothSides({
 }
 
 /** What of a changed image is drawn: both sides, one, or neither, by what became of it and which commits the service named. */
-function sidesOf(file: CodingAgentChangedFile, sides: ImageSides) {
+function sidesOf(file: AgentChangedFile, sides: ImageSides) {
   const { repository, headSha, baseSha } = sides;
   const before =
     file.status === CHANGED_FILE_STATUS.ADDED || baseSha === undefined
@@ -273,7 +273,7 @@ function sidesOf(file: CodingAgentChangedFile, sides: ImageSides) {
 }
 
 /** Whether a changed image can be drawn at all: the commit of a side it has is known. */
-export function imageDrawable(file: CodingAgentChangedFile, sides: ImageSides): boolean {
+export function imageDrawable(file: AgentChangedFile, sides: ImageSides): boolean {
   const { before, after } = sidesOf(file, sides);
   return file.status === CHANGED_FILE_STATUS.DELETED ? before !== undefined : after !== undefined;
 }
@@ -289,7 +289,7 @@ function ImageSidesNear({
   comparison,
   onComparison,
 }: {
-  file: CodingAgentChangedFile;
+  file: AgentChangedFile;
   sides: ImageSides;
   comparison: Comparison;
   onComparison: (comparison: Comparison) => void;
@@ -347,7 +347,7 @@ export function ImageDiff({
   file,
   sides,
 }: {
-  file: CodingAgentChangedFile;
+  file: AgentChangedFile;
   sides: ImageSides;
 }): React.JSX.Element {
   const [comparison, setComparison] = useState(FIRST_COMPARISON);

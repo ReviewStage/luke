@@ -38,9 +38,9 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { member } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { agentVisibleTo, reachableTask } from "./workspace-store.js";
@@ -146,7 +146,7 @@ function shown(text: string): string {
 function taskOfConversation(conversationId: string) {
   return sql<
     string | null
-  >`(select ${codingAgent.taskId} from ${codingAgent} where ${codingAgent.conversationId} = ${conversationId})`;
+  >`(select ${agentTable.taskId} from ${agentTable} where ${agentTable.conversationId} = ${conversationId})`;
 }
 
 /**
@@ -155,9 +155,7 @@ function taskOfConversation(conversationId: string) {
  * agent's own row.
  */
 function agentOfPlace(place: BrowserTabsPlace): SQL {
-  return "taskId" in place
-    ? eq(codingAgent.taskId, place.taskId)
-    : eq(codingAgent.id, place.agentId);
+  return "taskId" in place ? eq(agentTable.taskId, place.taskId) : eq(agentTable.id, place.agentId);
 }
 
 /**
@@ -171,12 +169,12 @@ function reachedTabs(userId: string, place: BrowserTabsPlace, tabId?: string) {
     db
       .select({
         ...tabColumns,
-        agentId: codingAgent.id,
-        agentUserId: codingAgent.userId,
-        agentGithubAccess: codingAgent.githubAccess,
+        agentId: agentTable.id,
+        agentUserId: agentTable.userId,
+        agentGithubAccess: agentTable.githubAccess,
       })
       .from(agentBrowserTab)
-      .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
+      .innerJoin(agentTable, eq(agentTable.conversationId, agentBrowserTab.conversationId))
       .where(
         and(
           agentOfPlace(place),
@@ -218,9 +216,9 @@ const findReachableAgent = SqlSchema.findAll({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId))),
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentVisibleTo(userId))),
     ),
 });
 
@@ -676,7 +674,7 @@ export function browserTabsLiveStatement(
         liveSelection(
           {
             id: agentBrowserTab.id,
-            agentId: codingAgent.id,
+            agentId: agentTable.id,
             address: agentBrowserTab.address,
             title: agentBrowserTab.title,
             openedBy: agentBrowserTab.openedBy,
@@ -698,10 +696,10 @@ export function browserTabsLiveStatement(
       )
       .from(agentBrowserTab)
       // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
-      .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
+      .innerJoin(agentTable, eq(agentTable.conversationId, agentBrowserTab.conversationId))
       .innerJoin(
         member,
-        and(eq(member.organizationId, codingAgent.organizationId), eq(member.userId, userId)),
+        and(eq(member.organizationId, agentTable.organizationId), eq(member.userId, userId)),
       )
       .where(and(agentOfPlace(place), agentVisibleTo(userId))),
   );

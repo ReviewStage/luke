@@ -1,7 +1,7 @@
-import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "./coding-agent-wire.js";
+import { AGENT_FAILURE, type AgentFailure } from "./agent-wire.js";
 
 /**
- * coding-agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
+ * agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
  *
  * A failed agent's end line says it after "Failed", and an automation's run
  * whose agent failed says it after "Failed", so the two read one table. A failure the window has no words for says nothing more. A
@@ -17,28 +17,28 @@ import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "./coding-agent-wi
 
 /** Why a turn failed, by the service's one word for it; nothing for a reason with no words. */
 const AGENT_FAILURE_WORDS = {
-  [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
-  [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
-  [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
-  [CODING_AGENT_FAILURE.ABANDONED]: "it ran out of time",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]: "your API key was refused or cannot be read",
-  [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started",
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
+  [AGENT_FAILURE.MODEL]: "the model call failed",
+  [AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
+  [AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
+  [AGENT_FAILURE.ABANDONED]: "it ran out of time",
+  [AGENT_FAILURE.PROVIDER_KEY]: "your API key was refused or cannot be read",
+  [AGENT_FAILURE.NOT_STARTED]: "the agent never started",
+  [AGENT_FAILURE.FAST_ON_OWN_KEY]:
     "Fast isn't available on your own API key; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
+  [AGENT_FAILURE.FAST_NOT_ENABLED]:
     "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
-  [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and cannot be reached again",
-  [CODING_AGENT_FAILURE.OTHER]: undefined,
-} as const satisfies Record<CodingAgentFailure, string | undefined>;
+  [AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
+  [AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and cannot be reached again",
+  [AGENT_FAILURE.OTHER]: undefined,
+} as const satisfies Record<AgentFailure, string | undefined>;
 
 /** What a failure that only a new agent mends adds after its words. */
 const RESTART_ADVICE = "start a new one";
 
 /** The failures only a new agent mends. */
-const MENDED_BY_NEW_AGENT: ReadonlySet<CodingAgentFailure> = new Set([
-  CODING_AGENT_FAILURE.NOT_STARTED,
-  CODING_AGENT_FAILURE.SESSION_ENDED,
+const MENDED_BY_NEW_AGENT: ReadonlySet<AgentFailure> = new Set([
+  AGENT_FAILURE.NOT_STARTED,
+  AGENT_FAILURE.SESSION_ENDED,
 ]);
 
 /**
@@ -58,14 +58,14 @@ export function ranDirectlyWords(folder: string, starter: string | undefined): s
  * way to mend, so the words name whose key it was and leave the way out.
  */
 export function agentFailureWords(
-  failure: CodingAgentFailure,
+  failure: AgentFailure,
   holder: string | undefined,
   continuable = false,
 ): string | undefined {
-  if (holder !== undefined && failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
+  if (holder !== undefined && failure === AGENT_FAILURE.PROVIDER_KEY) {
     return `${holder}'s API key was refused or cannot be read`;
   }
-  if (holder !== undefined && failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
+  if (holder !== undefined && failure === AGENT_FAILURE.FAST_ON_OWN_KEY) {
     return `Fast isn't available on ${holder}'s own API key; choose the model with Fast off`;
   }
   const words = AGENT_FAILURE_WORDS[failure];

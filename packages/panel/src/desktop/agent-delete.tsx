@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   CONFIRM_LOSS,
@@ -52,7 +52,7 @@ export interface AgentDelete {
  * The question goes with the surface it was asked on.
  */
 export function useAgentDelete(
-  agent: Pick<CodingAgentSummary, "id" | "title" | "automationName" | "model" | "archivedAt">,
+  agent: Pick<AgentSummary, "id" | "title" | "automationName" | "model" | "archivedAt">,
   agents: Pick<CodingAgentsControl, "onDelete" | "models">,
   input: { readonly shown: boolean; readonly onDeleted?: (() => void) | undefined },
 ): AgentDelete {

@@ -5,7 +5,7 @@
  * its runner ended the launch, so its sandbox stopped, and named each wakeup
  * with the instant it comes due (`@luke/agent-runner/protocol`'s
  * `RUNNER_RELEASE`), which the events route kept
- * (`@luke/database/models/coding-agent-wakeups`). Once a wakeup is due, the
+ * (`@luke/database/models/agent-wakeups`). Once a wakeup is due, the
  * sweep hands its prompt to the agent as a message from Luke, the one way a
  * message reaches an agent (`steerCodingAgent`), which relaunches the CLI on
  * the session it resumes, as the wakeup would have started a turn in the
@@ -20,13 +20,13 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
-  type ClaimedCodingAgentWakeup,
-  claimDueCodingAgentWakeups,
-  codingAgentWakeupStands,
-  deleteCodingAgentWakeup,
-} from "@luke/database/models/coding-agent-wakeups";
+  agentWakeupStands,
+  type ClaimedAgentWakeup,
+  claimDueAgentWakeups,
+  deleteAgentWakeup,
+} from "@luke/database/models/agent-wakeups";
 import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
@@ -53,7 +53,7 @@ export interface NativeWakeupSweepOutcome {
 }
 
 /** The key a wakeup's message is sent under, so a delivery repeated is told once. */
-function wakeupKey(wakeup: ClaimedCodingAgentWakeup): string {
+function wakeupKey(wakeup: ClaimedAgentWakeup): string {
   return `native-wakeup:${wakeup.id}`;
 }
 
@@ -63,12 +63,12 @@ function wakeupKey(wakeup: ClaimedCodingAgentWakeup): string {
  * since the claim is not sent, and deleted once the send landed; one whose
  * send failed stands for its next delivery.
  */
-const deliver = (eveFor: EveForAccount, wakeup: ClaimedCodingAgentWakeup) =>
+const deliver = (eveFor: EveForAccount, wakeup: ClaimedAgentWakeup) =>
   Effect.gen(function* () {
-    const agent = yield* readCodingAgent(wakeup.userId, wakeup.agentId);
+    const agent = yield* readAgent(wakeup.userId, wakeup.agentId);
     // An agent gone since is no one's to tell, and its wakeups went with it.
     if (Option.isNone(agent)) return true;
-    if (!(yield* codingAgentWakeupStands(wakeup.id))) return true;
+    if (!(yield* agentWakeupStands(wakeup.id))) return true;
     const eve = yield* eveFor(wakeup.userId);
     yield* steerCodingAgent(
       eve,
@@ -82,7 +82,7 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedCodingAgentWakeup) =>
         metadata: LUKE_LINE_METADATA,
       },
     );
-    yield* deleteCodingAgentWakeup(wakeup.id);
+    yield* deleteAgentWakeup(wakeup.id);
     return true;
   }).pipe(
     // The failure's kind alone: nothing of the prompt or the agent rides the line.
@@ -110,7 +110,7 @@ export const sweepNativeWakeups = /* @__PURE__ */ Effect.fn("web/sweepNativeWake
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   const claimed = yield* Effect.result(
-    claimDueCodingAgentWakeups(
+    claimDueAgentWakeups(
       now,
       new Date(now.getTime() + Duration.toMillis(NATIVE_WAKEUP_SWEEP.RETRY)),
       NATIVE_WAKEUP_SWEEP.MAX_DELIVERIES,

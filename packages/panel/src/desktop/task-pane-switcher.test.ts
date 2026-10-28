@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -46,14 +46,14 @@ const TASK: Task = {
 };
 
 /** An agent of the task, whose tab the column shows on the Agents view. */
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 

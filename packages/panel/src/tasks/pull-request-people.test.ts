@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_AUTHOR,
+  AGENT_STATUS,
+  type AgentChangesPeople,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_AUTHOR,
-  CODING_AGENT_STATUS,
-  type CodingAgentChangesPeople,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Tooltip } from "@luke/ui";
@@ -45,14 +45,14 @@ const CHARLES: WorkspaceMember = {
 };
 const WORKSPACE = { id: "workspace-acme", memberCount: 2 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -61,7 +61,7 @@ const CHARLES_ON_GITHUB = { login: "charlespan", bot: false, userId: CHARLES.use
 const OCTOCAT = { login: "octocat", bot: false };
 const DEVIN = { login: "devin-ai-integration[bot]", bot: true };
 
-const PEOPLE: CodingAgentChangesPeople = {
+const PEOPLE: AgentChangesPeople = {
   author: LUKE_BOT,
   reviewers: [
     { by: CHARLES_ON_GITHUB, state: REVIEW_STATE.APPROVED },
@@ -122,7 +122,7 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
 }
 
 /** The plan's agents, the one whose pull request it is among them, its changes naming the people given. */
-function controlNaming(people: CodingAgentChangesPeople) {
+function controlNaming(people: AgentChangesPeople) {
   return codingAgentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -202,7 +202,7 @@ test("a Changes card says who opened the pull request and its reviewers by where
 });
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
-  const opener = async (people: CodingAgentChangesPeople) => {
+  const opener = async (people: AgentChangesPeople) => {
     const card = await draw(
       createElement(ChangesCard, {
         subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
@@ -224,9 +224,9 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
 
   assert.deepEqual(
     [
-      await opener({ author: CHARLES_ON_GITHUB, writtenAs: CODING_AGENT_AUTHOR.DEVELOPER }),
-      await opener({ author: LUKE_BOT, writtenAs: CODING_AGENT_AUTHOR.APP_UNLINKED }),
-      await opener({ author: LUKE_BOT, writtenAs: CODING_AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: CHARLES_ON_GITHUB, writtenAs: AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.APP_UNLINKED }),
+      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.DEVELOPER }),
     ],
     [
       ["Charles Pan", false],
@@ -238,7 +238,7 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
 
 test("a Changes card says who opened the pull request and its reviewers once its tab has read them, and neither before", async () => {
   const subject = agentSubject(control, AGENT.id, NOTHING_HELD, false);
-  const card = (people: CodingAgentChangesPeople | undefined) =>
+  const card = (people: AgentChangesPeople | undefined) =>
     draw(
       createElement(ChangesCard, {
         subject,

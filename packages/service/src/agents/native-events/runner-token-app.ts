@@ -42,18 +42,18 @@ import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
-  type CodingAgent,
+  type Agent,
   hasRepository,
-  readCodingAgent,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
-} from "@luke/database/models/coding-agent-store";
+  readAgent,
+  readAgentHeaderOfConversation,
+  readAgentRouting,
+} from "@luke/database/models/agent-store";
 import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
 import { deviceLayout } from "@luke/database/models/device-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { DEVICE_ISOLATION, deviceAgentLaunchPayloadSchema } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@luke/features/host-wire";
@@ -149,7 +149,7 @@ const askedAgent = /* @__PURE__ */ Effect.fn("web/askedAgent")(function* (userId
   const body = yield* parseJsonBytes(yield* readBodyBytesEffect(HOST_GITHUB_TOKEN_MAX_BODY_BYTES));
   const asked = decodeGithubTokenRequest(body);
   if (Option.isNone(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return yield* hostedStoreOrUnavailable(readCodingAgent(userId, asked.value.agentId));
+  return yield* hostedStoreOrUnavailable(readAgent(userId, asked.value.agentId));
 });
 
 /**
@@ -159,7 +159,7 @@ const askedAgent = /* @__PURE__ */ Effect.fn("web/askedAgent")(function* (userId
  */
 const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(function* (
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   brake: RateBrake,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
@@ -212,7 +212,7 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   // Note that a teammate's agent the member reaches in a shared workspace is refused, as is one in the cloud.
   const agent = Option.filter(
     found,
-    (row) => row.userId === userId && row.machine === CODING_AGENT_MACHINE.DEVICE,
+    (row) => row.userId === userId && row.machine === AGENT_MACHINE.DEVICE,
   );
   const deviceId = Option.getOrUndefined(
     Option.flatMap(agent, (row) => Option.fromNullishOr(row.deviceId)),
@@ -255,12 +255,10 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   }
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(
-    readCodingAgentHeaderOfConversation(target.userId, target.conversationId),
+    readAgentHeaderOfConversation(target.userId, target.conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const routing = yield* hostedStoreOrUnavailable(
-    readCodingAgentRouting(target.userId, agent.value.id),
-  );
+  const routing = yield* hostedStoreOrUnavailable(readAgentRouting(target.userId, agent.value.id));
   // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
   // started on the plan, or a local one started on its Mac's own sign-in whose running launch
   // turned to the plan as that Mac was signed out of Codex (`codex-sessions.ts`'s `savedPayer`),
@@ -272,8 +270,8 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
     ),
   );
   const onPlan =
-    payer === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
-    (payer === CODING_AGENT_PAYER.MAC_SIGN_IN &&
+    payer === AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
+    (payer === AGENT_PAYER.MAC_SIGN_IN &&
       !(yield* launchedOnMacLogin(target.userId, agent.value.id)));
   if (!onPlan) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (!(yield* brake.check(agent.value.id))) {

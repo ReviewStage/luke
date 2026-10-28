@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
@@ -12,12 +12,12 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace, STORE_TEST_DATABASE_ENVIRONMENT } from "../../testing/index.js";
-import { deleteCodingAgent, recordCodingAgentPublished } from "../coding-agent-store.js";
+import { deleteAgent, recordAgentPublished } from "../agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { createTask, finishTaskWork } from "../task-store.js";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -275,7 +275,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           organizationId: workspace,
         });
         const agentId = randomUUID();
-        yield* db.insert(codingAgent).values({
+        yield* db.insert(agentTable).values({
           id: agentId,
           organizationId: workspace,
           userId: target.userId,
@@ -287,7 +287,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           repositories: ["acme/api"],
           idempotencyKey: randomUUID(),
         });
-        yield* recordCodingAgentPublished(target.userId, agentId, {
+        yield* recordAgentPublished(target.userId, agentId, {
           number: 42,
           title: "Teammate invitations",
           url: "https://github.com/acme/api/pull/42",
@@ -335,7 +335,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const db = yield* Database;
         const workspace = yield* openWorkspace(target.userId);
         const agentId = randomUUID();
-        yield* db.insert(codingAgent).values({
+        yield* db.insert(agentTable).values({
           id: agentId,
           organizationId: workspace,
           userId: target.userId,
@@ -367,7 +367,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         yield* untilBegan(held.began, sending);
         const deleted = yield* Effect.exit(
           onAnother(
-            deleteCodingAgent(target.userId, agentId, {
+            deleteAgent(target.userId, agentId, {
               standsStopped: stoppedUnlessAwaiting,
               beforeDelete: () => Effect.void,
             }),
@@ -379,9 +379,9 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         assert.ok(Exit.isFailure(deleted));
         assert.equal(
           (yield* db
-            .select({ id: codingAgent.id })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, agentId))).length,
+            .select({ id: agentTable.id })
+            .from(agentTable)
+            .where(eq(agentTable.id, agentId))).length,
           1,
         );
       }),

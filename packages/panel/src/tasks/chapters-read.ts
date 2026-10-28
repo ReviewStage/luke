@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -47,7 +47,7 @@ export function useChaptersRead(
   shown: boolean,
 ): ChaptersRead {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
   const number = usePullRequestNumber();
   const read = useAgentRead(
     agentId,

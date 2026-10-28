@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_TODO_STATUS,
-  type CodingAgentMessage,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_TODO_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { dockedTodos, newestTodos, taskTodos } from "./agent-todos.js";
@@ -16,7 +13,7 @@ import { dockedTodos, newestTodos, taskTodos } from "./agent-todos.js";
  * them. Synthetic words.
  */
 
-const { PENDING, IN_PROGRESS, DONE } = CODING_AGENT_TODO_STATUS;
+const { PENDING, IN_PROGRESS, DONE } = AGENT_TODO_STATUS;
 
 /** One stored part of a task call: answered with the CLI's words where given, still running where not, and failed where `failed`. */
 function call(
@@ -36,7 +33,7 @@ function call(
   };
 }
 
-function turn(id: string, parts: readonly WireRecord[]): CodingAgentMessage {
+function turn(id: string, parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id, role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 

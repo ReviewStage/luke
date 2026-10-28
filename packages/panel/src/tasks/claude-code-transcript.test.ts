@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_PAYER, type CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { AGENT_PAYER, type AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,7 +46,7 @@ function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRe
 
 /** The parts drawn as one turn of the agent's, every target a row opens recorded, and its to-do lists placed as the tab places them where asked. */
 function drawn(part: WireRecord | readonly WireRecord[], todos = false) {
-  const message: CodingAgentMessage = {
+  const message: AgentTranscriptMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: Array.isArray(part) ? part : [part],
@@ -362,15 +362,15 @@ test("an agent paid for by a plan says the plan where an agent on a key says dol
   const usage = { inputTokens: 1_200_000, outputTokens: 30_000, costUsd: 2.41 };
   assert.equal(agentUsageLine(usage), "This agent: 1.2M tokens · $2.41");
   assert.equal(
-    agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.API_KEY }),
+    agentUsageLine({ ...usage, payer: AGENT_PAYER.API_KEY }),
     "This agent: 1.2M tokens · $2.41",
   );
   assert.equal(
-    agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION }),
+    agentUsageLine({ ...usage, payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION }),
     "This agent: 1.2M tokens · Claude subscription",
   );
   assert.equal(
-    agentUsageLine({ ...usage, payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION }),
+    agentUsageLine({ ...usage, payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION }),
     "This agent: 1.2M tokens · ChatGPT subscription",
   );
 });
