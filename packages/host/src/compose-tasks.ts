@@ -510,11 +510,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** The view with no activity and no pages read or told, as a task left behind leaves it. */
-  function withoutActivity({
-    activity: _activity,
-    pages: _pages,
-    ...rest
-  }: TasksView): TasksView {
+  function withoutActivity({ activity: _activity, pages: _pages, ...rest }: TasksView): TasksView {
     return rest;
   }
 

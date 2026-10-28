@@ -82,8 +82,7 @@ export function usePanelArrivals(input: {
       visit.current = undefined;
       return;
     }
-    if (visit.current?.taskId !== taskId)
-      visit.current = { taskId, pages: undefined };
+    if (visit.current?.taskId !== taskId) visit.current = { taskId, pages: undefined };
     const seen = visit.current;
     const arrived: SidePanelTab[] = [];
     // A call's first read is what the task already held, and a call ended

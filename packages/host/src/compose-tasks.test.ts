@@ -1449,32 +1449,30 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a part of an open that answers after its document lands on its own",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const service = fakeService([invites]);
-      const funnel = {
-        id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
-        title: "Invite funnel",
-        version: 1,
-        at: 1,
-      };
-      service.pageLines[INVITES] = [funnel];
-      const pagesHeld = yield* Deferred.make<void>();
-      const readPages = service.readPages;
-      service.readPages = (place) => Effect.andThen(Deferred.await(pagesHeld), readPages(place));
-      const { last, openTask } = yield* subject(service);
+it.effect("a part of an open that answers after its document lands on its own", () =>
+  Effect.gen(function* () {
+    const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const service = fakeService([invites]);
+    const funnel = {
+      id: "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      title: "Invite funnel",
+      version: 1,
+      at: 1,
+    };
+    service.pageLines[INVITES] = [funnel];
+    const pagesHeld = yield* Deferred.make<void>();
+    const readPages = service.readPages;
+    service.readPages = (place) => Effect.andThen(Deferred.await(pagesHeld), readPages(place));
+    const { last, openTask } = yield* subject(service);
 
-      yield* openTask(INVITES);
-      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-      assert.equal(last()?.pages, undefined, "the pages are still out");
+    yield* openTask(INVITES);
+    assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+    assert.equal(last()?.pages, undefined, "the pages are still out");
 
-      yield* Deferred.succeed(pagesHeld, undefined);
-      for (let turn = 0; turn < 8; turn += 1) yield* Effect.yieldNow;
-      assert.deepEqual(last()?.pages, [funnel]);
-    }),
+    yield* Deferred.succeed(pagesHeld, undefined);
+    for (let turn = 0; turn < 8; turn += 1) yield* Effect.yieldNow;
+    assert.deepEqual(last()?.pages, [funnel]);
+  }),
 );
 
 it.effect(
