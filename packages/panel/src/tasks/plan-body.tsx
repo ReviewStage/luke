@@ -1161,7 +1161,6 @@ export const PlanBody = memo(function PlanBody({
   reader = NO_READER,
   agents,
   standing: taskStanding,
-  underTitle,
   head,
   titleActions = true,
 }: {
@@ -1188,8 +1187,6 @@ export const PlanBody = memo(function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws under its status and priority, over its byline, as its linked issues; nothing elsewhere. */
-  underTitle?: React.ReactNode;
   /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. */
   head?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
@@ -1569,7 +1566,6 @@ export const PlanBody = memo(function PlanBody({
                     devices={taskStanding.devices}
                   />
                 )}
-                {underTitle}
                 <PlanByline
                   task={task}
                   edit={edited}

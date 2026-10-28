@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { VOICE_FAILURE, VOICE_FAILURE_WORDS } from "@luke/features/words";
 import { LIVE_STATUS } from "@luke/live";
@@ -7,16 +7,12 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
-  agentPromptOf,
   CALL_LABEL,
-  ISSUE_MATCH_LIMIT,
-  linearIssuesAskOf,
   MICROPHONE_PRESS,
   markAsked,
   markedView,
   microphoneButton,
   NO_PENDING_STANDINGS,
-  offeredIssues,
   positionedView,
   renameAsked,
   SETTLED_STATUS,
@@ -31,7 +27,6 @@ import {
   standingView,
   standingWithout,
   TASK_MARK,
-  taskNameOfIssue,
   undoStillDue,
   unsettledPinPositions,
   withStanding,
@@ -201,60 +196,6 @@ function _onRepository(name: string, repository: string | null, updatedAt: numbe
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
 
-test("a plan started from a Linear issue is named by its title, cut to a name's bound, or by its key where the title is blank", () => {
-  const long = "x".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 20);
-
-  assert.equal(taskNameOfIssue({ identifier: "ENG-1", title: "  Ship it  " }), "Ship it");
-  assert.equal(
-    taskNameOfIssue({ identifier: "ENG-2", title: long }).length,
-    TASK_BOUNDS.MAX_NAME_CHARS,
-  );
-  assert.equal(taskNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
-});
-
-test("an agent New task starts is handed a mention of each issue picked, one to a line, then a blank line and the words; the issues alone with no words, and the words alone with no issue", () => {
-  const issue = {
-    identifier: "ENG-1",
-    title: " Fix [the] refresh ",
-    url: "https://linear.app/acme/issue/ENG-1/fix-the-refresh",
-  };
-
-  assert.equal(
-    agentPromptOf([issue], "  Reproduce it first.\n"),
-    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nReproduce it first.",
-  );
-  assert.equal(
-    agentPromptOf([issue], "   "),
-    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)",
-  );
-  assert.equal(
-    agentPromptOf([], " Make the sidebar keep its folds. "),
-    "Make the sidebar keep its folds.",
-  );
-  assert.equal(
-    agentPromptOf(
-      [{ identifier: "ACME-7", title: "Invites expire", url: "https://tryluke.dev/a(b)/issue/7" }],
-      "",
-    ),
-    "[@ACME-7 Invites expire](https://tryluke.dev/a%28b%29/issue/7)",
-    "one of the workspace's own issues is mentioned by its Luke link, its target kept one target",
-  );
-  assert.equal(
-    agentPromptOf(
-      [
-        {
-          identifier: "acme/relay#7",
-          title: "Invites expire",
-          url: "https://github.com/acme/relay/issues/7",
-        },
-        issue,
-      ],
-      "Both.",
-    ),
-    "[@acme/relay#7 Invites expire](https://github.com/acme/relay/issues/7)\n[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nBoth.",
-  );
-});
-
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {
   const task = {
     id: INVITES,
@@ -303,66 +244,6 @@ test("an unpin given here takes the pin's place with it, so a pin made again sta
   ).tasks[0];
   assert.equal(unpinned?.pinnedAt, undefined);
   assert.equal(unpinned?.pinPosition, undefined);
-});
-
-test("New task offers the Linear issues whose title or key holds every word typed, the key or number typed whole first, then word starts, then Linear's own order", () => {
-  const issues = [
-    { identifier: "ENG-9", title: "Handle 400 errors from Linear" },
-    { identifier: "ENG-12", title: "Restack the deploy queue" },
-    { identifier: "ENG-7", title: "Add support for stacked PRs" },
-    { identifier: "ENG-3", title: "Show the merge queue" },
-    { identifier: "OPS-40", title: "Rotate the deploy key" },
-  ];
-  const keys = (typed: string) => offeredIssues(issues, typed).map((issue) => issue.identifier);
-
-  assert.deepEqual(keys("stack"), ["ENG-7", "ENG-12"]);
-  assert.deepEqual(keys("DEPLOY q"), ["ENG-12"]);
-  assert.deepEqual(keys("40"), ["OPS-40", "ENG-9"]);
-  assert.deepEqual(keys("ops-40"), ["OPS-40"]);
-  assert.deepEqual(keys("refactor billing"), []);
-  assert.deepEqual(keys("   "), []);
-});
-
-test("New task also offers what Linear found for the words, after the listed issues that hold them, each issue once, and a pasted link's issue first", () => {
-  const listed = [
-    { identifier: "ENG-12", title: "Restack the deploy queue" },
-    { identifier: "ENG-3", title: "Show the merge queue" },
-  ];
-  const found = [
-    { identifier: "ENG-301", title: "Old: queue jumps on retry" },
-    { identifier: "ENG-12", title: "Restack the deploy queue" },
-    { identifier: "ENG-88", title: "Retries pile up" },
-  ];
-  const keys = (typed: string, answered: typeof found) =>
-    offeredIssues(listed, typed, answered).map((issue) => issue.identifier);
-
-  assert.deepEqual(keys("queue", found), ["ENG-12", "ENG-3", "ENG-301", "ENG-88"]);
-  assert.deepEqual(keys("queue", []), ["ENG-12", "ENG-3"]);
-  assert.deepEqual(
-    keys("https://linear.app/acme/issue/ENG-88/retries-pile-up", [
-      { identifier: "ENG-88", title: "Retries pile up" },
-    ]),
-    ["ENG-88"],
-  );
-});
-
-test("New task asks Linear for the one issue a key or link names, searches for any other words, and asks nothing for a blank name", () => {
-  assert.deepEqual(linearIssuesAskOf(" eng-42 "), { identifier: "ENG-42" });
-  assert.deepEqual(linearIssuesAskOf("https://linear.app/acme/issue/OPS-7/rotate"), {
-    identifier: "OPS-7",
-  });
-  assert.deepEqual(linearIssuesAskOf("  deploy queue "), { query: "deploy queue" });
-  assert.equal(linearIssuesAskOf("x".repeat(500))?.query?.length, 200);
-  assert.equal(linearIssuesAskOf("   "), undefined);
-});
-
-test("New task offers at most a handful of issues however many match", () => {
-  const issues = Array.from({ length: ISSUE_MATCH_LIMIT + 4 }, (_, index) => ({
-    identifier: `ENG-${index + 1}`,
-    title: `Task ${index + 1}`,
-  }));
-
-  assert.equal(offeredIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
 });
 
 /** A listed task at a status, or with none, as a service before statuses lists it. */

@@ -63,8 +63,7 @@ Claude Code, Codex, or any other agent.
   repositories of the GitHub account or organization the workspace connects.
 - **Integrations** reach Linear, Notion, Sentry, Slack, GitHub, Granola,
   Mercury, Neon, PostHog, Supabase, Vercel, Y Combinator, and Executor through
-  each service's own MCP server, for Luke and every agent. A task can start
-  from a Linear issue.
+  each service's own MCP server, for Luke and every agent.
 - **Skills** in the repository's `.agents/skills` or `.claude/skills` are
   offered to Luke and agents, and `/` in an agent's message box picks one.
 - **Run on this Mac** checks an agent's branch out in a local worktree with

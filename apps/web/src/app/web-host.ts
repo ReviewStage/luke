@@ -302,7 +302,6 @@ function portDependencies(
     // through the in-process bridge's own listeners, so its push stream is
     // never opened and this table stays empty.
     pushes: new WindowPushes(),
-    taskIssues: { host },
     thisMacHost: { host },
     settings: {
       host,

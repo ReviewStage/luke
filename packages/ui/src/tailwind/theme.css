@@ -648,10 +648,6 @@
   --color-badge-fill-edge: light-dark(var(--luke-badge-edge-light), var(--luke-badge-edge-dark));
   --color-badge-fill-words: light-dark(var(--luke-badge-words-light), var(--luke-badge-words-dark));
   --spacing-chip-inset: var(--luke-space-8);
-  /* A toolbar chip hung on its line's edge reaches out past it by its inset
-     and hairline, and may stand that much wider than its line. */
-  --spacing-chip-reach: calc(-1 * var(--luke-space-8) - 1px);
-  --spacing-chip-reach-most: calc(100% + var(--luke-space-8) + 1px);
   --spacing-chip-inset-wide: var(--luke-space-12);
   --spacing-chip-tight: var(--luke-space-4);
   --spacing-chip-compact: var(--luke-space-20);
@@ -1169,19 +1165,14 @@
   --tracking-busy: 1px; /* off-scale: a busy bar's dots */
   --spacing-shells-pane: min(208px, 40%); /* off-scale: the shells' list's width */
   /* The composer's popovers: the servers' list at most as tall as the window
-     leaves above the composer, a page's head at a pane bar's height, a
-     task's issue chip at a title's readable start, a 12px glyph, and the
-     context's parts in the chart's colours. */
+     leaves above the composer, a page's head at a pane bar's height, a 12px
+     glyph, and the context's parts in the chart's colours. */
   --spacing-servers-list: clamp(
     160px,
     var(--luke-stage-height) -
     320px,
     400px
   ); /* off-scale: a list a server's page tall */
-  --spacing-issue-chip: min(
-    100%,
-    360px
-  ); /* off-scale: a title's readable start, past which it is cut */
   --color-chart-1: var(--luke-color-chart-1);
   --color-chart-2: var(--luke-color-chart-2);
   --color-chart-3: var(--luke-color-chart-3);

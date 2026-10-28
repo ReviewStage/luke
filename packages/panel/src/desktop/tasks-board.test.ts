@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -11,7 +9,6 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -30,16 +27,8 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import {
-  type AnyAct,
-  FAKE_ANSWER,
-  type FakeActAnswer,
-  fakeActPort,
-  fakeActs,
-  fakeAppBridge,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -834,70 +823,6 @@ test("a card wears one icon for how its agents stand, an agent at work before th
   );
 });
 
-test("a card draws a tag for each issue its task links, oldest first, a GitHub issue of its own repository by its number and another's by its repository's name before it, and a press on a tag opens the issue", async () => {
-  const linked: TaskSummary = {
-    ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
-    issues: [
-      {
-        id: "00000000-0000-4000-8000-000000000001",
-        provider: TASK_ISSUE_PROVIDER.GITHUB,
-        key: "acme/web#312",
-        url: "https://github.com/acme/web/issues/312",
-        relation: TASK_ISSUE_RELATION.CLOSES,
-      },
-      {
-        id: "00000000-0000-4000-8000-000000000002",
-        provider: TASK_ISSUE_PROVIDER.LINEAR,
-        key: "ENG-455",
-        url: "https://linear.app/acme/issue/ENG-455",
-        relation: TASK_ISSUE_RELATION.CLOSES,
-      },
-      {
-        id: "00000000-0000-4000-8000-000000000003",
-        provider: TASK_ISSUE_PROVIDER.GITHUB,
-        key: "Acme/Auth#270",
-        url: "https://github.com/acme/auth/issues/270",
-        relation: TASK_ISSUE_RELATION.PART_OF,
-      },
-    ],
-  };
-  const board = await mountBoard([
-    linked,
-    task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
-  ]);
-
-  const tagsOf = (taskId: string) => [
-    ...board.querySelectorAll<HTMLAnchorElement>(`li[data-task-id="${taskId}"] a[data-task-tag]`),
-  ];
-  const tags = tagsOf("t-42");
-  assert.deepEqual(
-    tags.map((tag) => [tag.getAttribute("data-provider"), tag.textContent]),
-    [
-      [TASK_ISSUE_PROVIDER.GITHUB, "#312"],
-      [TASK_ISSUE_PROVIDER.LINEAR, "ENG-455"],
-      [TASK_ISSUE_PROVIDER.GITHUB, "Auth#270"],
-    ],
-  );
-  assert.deepEqual(
-    tags.map((tag) => tag.getAttribute("href")),
-    [
-      "https://github.com/acme/web/issues/312",
-      "https://linear.app/acme/issue/ENG-455",
-      "https://github.com/acme/auth/issues/270",
-    ],
-    "each tag is a link to its issue",
-  );
-  assert.ok(
-    tags.every((tag) => tag.querySelector("svg")),
-    "each tag wears its provider's mark",
-  );
-  assert.deepEqual(tagsOf("t-39"), [], "a task that links nothing draws no tags");
-
-  act(() => tags[1]?.click());
-  assert.deepEqual(pages, ["https://linear.app/acme/issue/ENG-455"]);
-  assert.deepEqual(opened, [], "a press on a tag opens the issue, not the task");
-});
-
 test("a card's assignee hangs the person's card", async () => {
   const board = await mountBoard([
     {
@@ -909,67 +834,4 @@ test("a card's assignee hangs the person's card", async () => {
   restOn(chipOf(board, "t-39", "Assignee"));
   const card = document.querySelector(".luke-tooltip-card [data-actor-card]");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
-});
-
-test("a tag hangs its issue's card, read as the card is drawn: its title, key and state under GitHub's mark for it, where the workspace's GitHub answers", async () => {
-  const github = { ...ACME, github: { login: "acme", active: true } };
-  const linked: TaskSummary = {
-    ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
-    issues: [
-      {
-        id: "00000000-0000-4000-8000-000000000001",
-        provider: TASK_ISSUE_PROVIDER.GITHUB,
-        key: "acme/web#312",
-        url: "https://github.com/acme/web/issues/312",
-        relation: TASK_ISSUE_RELATION.CLOSES,
-      },
-    ],
-  };
-  const asked: AnyAct[] = [];
-  const state = {
-    ...signedInAs({ id: DEAN, email: "dean@acme.dev", name: "Dean Stratakos" }),
-    tasks: { ...IDLE_TASKS_VIEW, tasks: [linked], workspaces: [github] },
-  };
-  fakeActs({
-    onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(state),
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      asked.push(request);
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: MEMBERS });
-      }
-      const issue = {
-        number: 312,
-        title: "Login fails on Safari 18",
-        url: "https://github.com/acme/web/issues/312",
-        state: ISSUE_STATE.NOT_PLANNED,
-      };
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: request.kind === ACT_KIND.TASKS_ISSUE ? issue : undefined,
-      });
-    },
-  });
-  const board = await mountBoard([linked]);
-  const issueReads = () => asked.filter((each) => each.kind === ACT_KIND.TASKS_ISSUE);
-
-  assert.deepEqual(
-    issueReads(),
-    [],
-    "a Board of tags asks its provider for none until a card is drawn",
-  );
-  restOn(board.querySelector("a[data-task-tag]") ?? assert.fail("the tag"));
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
-  const card = document.querySelector("[data-issue-card]");
-
-  assert.match(card?.textContent ?? "", /Login fails on Safari 18/);
-  assert.match(card?.textContent ?? "", /acme\/web#312 · Not planned/);
-  assert.match(card?.textContent ?? "", /Closes: Merging closes the issue/);
-  assert.equal(
-    card?.querySelector<SVGElement>("[data-issue-mark]")?.dataset.issueState,
-    ISSUE_STATE.NOT_PLANNED,
-  );
-  assert.equal(issueReads().length, 1);
 });

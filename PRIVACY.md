@@ -926,18 +926,12 @@ rather than under their account, and our service handles the token as it
 does an account's, sending it only to Linear. We keep the workspace
 connection's state, who last began its sign-in, when it last changed and last
 finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. While it is connected, every member
-of the workspace can list the issues that Linear account can see, private
-teams' issues included, and start a plan from one, and Luke's agents working
-on that workspace's plans and coding agents use this connection for Linear in
-place of a member's own, so what they change in Linear shows as made by the
-person who connected it. Starting a plan from an issue copies the issue's
-key, title, address, and description onto the plan, where it stays with the
-plan, is handed to the plan's coding agents with the task, and is
-deleted with the plan. Once you pause typing in New task's name field, what
-you typed is sent to Linear through this connection as a search, or, where it
-is an issue's key or a link to one, as a read of that one issue; neither what
-was sent nor what Linear answered is kept. Where a plan, a reply, or an Inbox item shows a link
+one-time value that matches its return. While it is connected, Luke's agents
+working on that workspace's plans and coding agents use this connection for
+Linear in place of a member's own, so what they change in Linear shows as made
+by the person who connected it. A plan started from an issue by an earlier
+version of Luke keeps the issue's key, title, address, and description, which
+are deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
 to a Linear issue, the app asks our service for that issue's key, title,
 state, and assignee's name, which it reads through this connection as you
 look and keeps nowhere; the app shows them on the link, and they go no
