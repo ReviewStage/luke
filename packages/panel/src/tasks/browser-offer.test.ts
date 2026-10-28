@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_MACHINE,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { BROWSER_TAB_OPEN_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -25,7 +29,8 @@ import { NO_LOOKS } from "./use-task-looks.js";
  * under Browser while the task has a coding agent, always in an agent's cloud browser: one agent's
  * at once, and with several, a submenu of whose, the one viewed first. A
  * pick lands on a draft, which opens nothing until its bar's Enter
- * (`cloud-browser-tab.test.ts`). With no agent, the "+" offers none. A synthetic plan and agents throughout.
+ * (`cloud-browser-tab.test.ts`). With no agent, or only one on a Mac, which
+ * runs no browser, the "+" offers none. A synthetic plan and agents throughout.
  */
 
 const TASK: Task = {
@@ -144,8 +149,12 @@ async function browserRows(): Promise<HTMLElement[]> {
   ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true);
 }
 
-test("on a task with no coding agent, the panel's + offers no Browser tab", async () => {
+test("on a task with no coding agent, or only one on a Mac, the panel's + offers no Browser tab", async () => {
   await mount();
+  assert.deepEqual(await browserRows(), []);
+
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  await mount([{ ...AGENT, machine: CODING_AGENT_MACHINE.DEVICE }]);
   assert.deepEqual(await browserRows(), []);
 });
 

@@ -3447,8 +3447,27 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
   assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });
 
-/** A registry whose atoms count on this clock, as the window's count on its own. */
+/** A follow the host holds open and never tells a change on. */
+const heldFollow = {
+  next: () => new Promise<never>(() => undefined),
+  return: async () => ({ done: true, value: undefined }) as const,
+  [Symbol.asyncIterator]() {
+    return heldFollow;
+  },
+  [Symbol.asyncDispose]: async () => undefined,
+};
+
+/**
+ * A registry whose atoms count on this clock, as the window's count on its
+ * own. Note that the task's cloud Browser tabs are answered as none and
+ * followed quietly, because a read refused is tried again on its beat, and a
+ * day passed on this clock would run every one of those beats.
+ */
 function registryOn(clock: Clock.Clock): AtomRegistry {
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [] }),
+    [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(heldFollow as never),
+  });
   return AtomRegistryModule.make({
     initialValues: [
       [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],

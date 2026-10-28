@@ -1,5 +1,6 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
+  CODING_AGENT_MACHINE,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
@@ -787,10 +788,12 @@ export function panelOffers(input: {
     const subject = agentSubject(agents, agentId, cards.held, false);
     return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
   };
+  // Note that an agent on a Mac is offered none, because only a cloud sandbox runs a browser.
   const cloudOffers: readonly CloudBrowserOffer[] =
     holder !== SIDE_PANEL_HOLDER.TASK
       ? []
-      : [...(agents.agents ?? [])]
+      : (agents.agents ?? [])
+          .filter((agent) => agent.machine !== CODING_AGENT_MACHINE.DEVICE)
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
