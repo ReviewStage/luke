@@ -12,6 +12,7 @@ import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountItems,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
@@ -43,8 +44,10 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import { AGENT_INBOX_ACT_KIND } from "@luke/host/contract";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
+import { AsyncIteratorClass } from "@orpc/client";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -65,6 +68,7 @@ import {
   type AnyAct,
   FAKE_ANSWER,
   type FakeActAnswer,
+  type FakeActPort,
   fakeActPort,
   fakeActPortCalls,
   fakeActs,
@@ -567,6 +571,34 @@ const MAIN_WAITING: readonly AppInboxTask[] = [
   { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
 ];
 
+/** The account's feed of every item, as the host streams it: each task's items whole, then nothing more until the window lets it go. */
+const ACCOUNT_FEED: Pick<
+  FakeActPort,
+  typeof AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW
+> = {
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+    let sent = false;
+    const closed = Promise.withResolvers<void>();
+    const next = async (): Promise<IteratorResult<CodingAgentAccountItems, undefined>> => {
+      if (sent) {
+        await closed.promise;
+        return { done: true, value: undefined };
+      }
+      sent = true;
+      const scopes = [...world.inboxes].map(([id, items]) => ({
+        scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+        items,
+      }));
+      return { done: false, value: { whole: true, scopes } };
+    };
+    return Promise.resolve(
+      new AsyncIteratorClass<CodingAgentAccountItems, undefined, void>(next, async () => {
+        closed.resolve();
+      }),
+    );
+  },
+};
+
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded, on nothing chosen or on `chosen`; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 export function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
@@ -583,6 +615,7 @@ export function mount(
     channels = false,
     chosen: firstChosen,
     windowRoot = false,
+    accountFeed = false,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -605,10 +638,16 @@ export function mount(
     chosen?: InboxChoice;
     /** Whether the Inbox stands under the window's root, holding the window's inboxes, and is drawn only while open, as the shell draws it. */
     windowRoot?: boolean;
+    /** Whether the account's feed of every item answers, pushing each task's items as the service answers a read of it. */
+    accountFeed?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
-  fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    ...world.main.procedures,
+    ...(accountFeed ? ACCOUNT_FEED : undefined),
+  });
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],

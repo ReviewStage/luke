@@ -3,6 +3,7 @@ import type { InboxItem } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { useMemo } from "react";
+import { useFedInboxes } from "./held-inboxes.js";
 import {
   agentGroups,
   type InboxGroup,
@@ -17,9 +18,11 @@ import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.
  *
  * The window's Inbox lists the items of every holder of one, settled as
  * well as waiting, and main's read of the account carries only what waits,
- * in brief. So each holder handed here, a task or an agent with no task, is
- * followed whole (`use-followed-inboxes.ts`), and its items are pushed to
- * the window as they change rather than read again. The holder whose item
+ * in brief. So a task the account's feed of whole items holds whole is
+ * drawn from it (`held-inboxes.tsx`), and each other holder handed here, a
+ * task or an agent with no task, is followed whole
+ * (`use-followed-inboxes.ts`), its items pushed to the window as they
+ * change rather than read again. The holder whose item
  * is chosen is followed by its own control besides (`use-task-inbox.ts`),
  * which answers and is drawn in this one's place, and the window's own
  * answers stand over every holder's push until it holds them
@@ -44,6 +47,8 @@ export interface InboxHolding {
    * `updatedAt` is of every item, as a task's is.
    */
   readonly listed?: readonly Pick<InboxItem, "id" | "updatedAt">[];
+  /** How many items main counts of it, where it counts them all, as a task's; absent where it does not, as an agent's. */
+  readonly count?: number;
 }
 
 /** One value for each kind of holder, a task's and an agent's apart, since each is keyed by its own id. */
@@ -67,10 +72,11 @@ export const NO_HOLDINGS: readonly InboxHolding[] = [];
 
 /** Each task main lists as holding items, as a holding to follow. */
 export function taskHoldings(holdings: readonly AppInboxTaskHolding[]): readonly InboxHolding[] {
-  return holdings.map(({ taskId, updatedAt }) => ({
+  return holdings.map(({ taskId, updatedAt, items }) => ({
     kind: INBOX_SCOPE_KIND.PLAN,
     id: taskId,
     updatedAt,
+    count: items,
   }));
 }
 
@@ -131,6 +137,26 @@ function idsOf(holdings: readonly InboxHolding[], kind: ScopeKind): readonly str
   return holdings.flatMap((holding) => (holding.kind === kind ? [holding.id] : []));
 }
 
+/**
+ * The tasks to follow on their own: each the account's feed holds in part,
+ * its settled items older than the feed's bound, or not at all, or every
+ * task while the feed is not answering. Note that a task the feed holds as
+ * many items of as main counts is drawn from the feed alone.
+ */
+function taskIdsToFollow(
+  holdings: readonly InboxHolding[],
+  fed: ReadonlyMap<string, readonly InboxItem[]> | undefined,
+): readonly string[] {
+  return holdings.flatMap((holding) => {
+    if (holding.kind !== INBOX_SCOPE_KIND.PLAN) return [];
+    const whole =
+      fed !== undefined &&
+      holding.count !== undefined &&
+      (fed.get(holding.id)?.length ?? 0) >= holding.count;
+    return whole ? [] : [holding.id];
+  });
+}
+
 /** Whether a push holds a holder as main says it now stands: each item it lists as new as main says, or, where it lists none, something as new as its latest. */
 function holdsAsMainSays(held: readonly InboxItem[], holding: InboxHolding): boolean {
   if (holding.listed === undefined) return newest(held) >= holding.updatedAt;
@@ -159,7 +185,8 @@ function currentOf(
 }
 
 export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderInboxItems {
-  const taskIds = useMemo(() => idsOf(holdings, INBOX_SCOPE_KIND.PLAN), [holdings]);
+  const fed = useFedInboxes(INBOX_SCOPE_KIND.PLAN);
+  const taskIds = useMemo(() => taskIdsToFollow(holdings, fed), [holdings, fed]);
   const agentIds = useMemo(() => idsOf(holdings, INBOX_SCOPE_KIND.AGENT), [holdings]);
   const tasks = useFollowedInboxes(INBOX_SCOPE_KIND.PLAN, taskIds, windowInboxFollower);
   const agents = useFollowedInboxes(INBOX_SCOPE_KIND.AGENT, agentIds, windowInboxFollower);

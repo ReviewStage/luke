@@ -10,18 +10,36 @@
  * the items as last pushed until its follow pushes anew. Another account, or
  * none, holds a new set, and lets go of every follow of the last.
  *
+ * The root also follows every item the account reaches, pushed by scope
+ * over one stream (`codingAgents.accountItemsFollow`), while it is signed
+ * in. A scope the feed holds is drawn from it, an inbox's own follow
+ * standing over it where one stands, since the feed leaves out settled
+ * items past its bound; once the feed is not answering, every inbox is
+ * drawn from its own follow again.
+ *
  * A surface that forgets an inbox once it lets go of it, and one drawn
  * outside a window's root, holds a set of its own instead, which lets each
  * follow go with its last reader (`use-followed-inboxes.ts`).
  */
 
 import type {
+  CodingAgentAccountItems,
   CodingAgentInboxChanged,
   CodingAgentInboxScope,
 } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { Duration, Effect } from "effect";
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { askAct } from "../act.js";
+import { streamFrom } from "../act-stream.js";
 import { rendererFork } from "../renderer-runtime.js";
 
 type ScopeKind = CodingAgentInboxScope["kind"];
@@ -43,11 +61,18 @@ interface HeldKind {
   readonly failed: ReadonlySet<string>;
 }
 
+/** Each scope's items as the account's feed last pushed them, by plan or agent. */
+type FedKind = ReadonlyMap<string, readonly InboxItem[]>;
+
 /** The inboxes a window or a surface holds, and their follows. */
 export interface HeldInboxes {
   readonly subscribe: (listener: () => void) => () => void;
-  /** The inboxes of `kind` as they stand, the same value until one of them changes. */
+  /** The inboxes of `kind` as they stand, an inbox's own follow over the account's feed, the same value until one of them changes. */
   readonly heldOf: (kind: ScopeKind) => HeldKind;
+  /** The scopes of `kind` the account's feed holds, none while it is not answering. */
+  readonly fedOf: (kind: ScopeKind) => FedKind | undefined;
+  /** Folds what the account's feed pushed into what is held. */
+  readonly feed: (pushed: CodingAgentAccountItems) => void;
   /** Holds an inbox's follow for one more surface, following it for the first; the release lets it go. */
   readonly hold: (kind: ScopeKind, id: string, follow: Follow) => () => void;
   /** Clears the inboxes of `kind` named, or every one, that could not be read, so their surfaces follow them again. */
@@ -64,10 +89,16 @@ interface Following {
 }
 
 const NOTHING_HELD: HeldKind = { items: new Map(), failed: new Set() };
+const NOTHING_FED: FedKind = new Map();
 
 /** The wait before a follow no surface holds is let go, as a fiber on the renderer's services; the stop cancels it. */
 function lingerOnRenderer(letGo: () => void): () => void {
   return rendererFork(Effect.andThen(Effect.sleep(LINGER), Effect.sync(letGo)));
+}
+
+/** A subscription to nothing, for a surface outside a window's root. */
+function subscribeNothing(): () => void {
+  return () => undefined;
 }
 
 /**
@@ -80,16 +111,38 @@ export function heldInboxes(options: {
   readonly forget: boolean;
 }): HeldInboxes {
   const { linger, forget } = options;
-  const held = new Map<ScopeKind, HeldKind>();
+  const followed = new Map<ScopeKind, HeldKind>();
+  // The account's feed by kind, none while it is not answering, and each kind's view over both.
+  let fed: Map<ScopeKind, FedKind> | undefined;
+  const merged = new Map<ScopeKind, HeldKind>();
   const following = new Map<ScopeKind, Map<string, Following>>();
   const listeners = new Set<() => void>();
-  const heldOf = (kind: ScopeKind) => held.get(kind) ?? NOTHING_HELD;
-  const store = (kind: ScopeKind, next: HeldKind) => {
-    held.set(kind, next);
+  const followedOf = (kind: ScopeKind) => followed.get(kind) ?? NOTHING_HELD;
+  const fedOf = (kind: ScopeKind) =>
+    fed === undefined ? undefined : (fed.get(kind) ?? NOTHING_FED);
+  const heldOf = (kind: ScopeKind) => {
+    const standing = merged.get(kind);
+    if (standing !== undefined) return standing;
+    const own = followedOf(kind);
+    const fromFeed = fedOf(kind);
+    // Note that an inbox's own follow stands over the feed, since it reads settled items the feed's bound leaves out.
+    const view =
+      fromFeed === undefined || fromFeed.size === 0
+        ? own
+        : { items: new Map([...fromFeed, ...own.items]), failed: own.failed };
+    merged.set(kind, view);
+    return view;
+  };
+  const told = () => {
     for (const listener of [...listeners]) listener();
   };
+  const store = (kind: ScopeKind, next: HeldKind) => {
+    followed.set(kind, next);
+    merged.delete(kind);
+    told();
+  };
   const heard = (kind: ScopeKind, id: string, inbox: Heard) => {
-    const was = heldOf(kind);
+    const was = followedOf(kind);
     const failed = new Set(was.failed);
     if ("failure" in inbox) {
       // Note that a follow that could not be read is stopped, so a hold after Try again follows it anew.
@@ -108,8 +161,9 @@ export function heldInboxes(options: {
     if (byId === undefined || standing === undefined || standing.holders > 0) return;
     standing.stop?.();
     byId.delete(id);
-    if (!forget) return;
-    const was = heldOf(kind);
+    // Note that an inbox the feed answers for gives its own follow's items up with it, so the feed's newer word is drawn.
+    if (!forget && fed === undefined) return;
+    const was = followedOf(kind);
     if (!was.items.has(id)) return;
     const items = new Map(was.items);
     items.delete(id);
@@ -120,7 +174,8 @@ export function heldInboxes(options: {
     if (standing === undefined) return;
     standing.holders -= 1;
     if (standing.holders > 0) return;
-    if (linger === undefined) letGo(kind, id);
+    // Note that an inbox the feed holds is let go at once, since the feed keeps it current with no follow of its own.
+    if (linger === undefined || fedOf(kind)?.has(id) === true) letGo(kind, id);
     else standing.lingering = linger(() => letGo(kind, id));
   };
   return {
@@ -145,8 +200,29 @@ export function heldInboxes(options: {
         release(kind, id);
       };
     },
+    fedOf,
+    feed: (pushed) => {
+      if ("failure" in pushed) {
+        fed = undefined;
+      } else {
+        const next = new Map<ScopeKind, Map<string, readonly InboxItem[]>>(
+          pushed.whole || fed === undefined
+            ? []
+            : [...fed].map(([kind, scopes]) => [kind, new Map(scopes)]),
+        );
+        for (const { scope, items } of pushed.scopes) {
+          const scopes = next.get(scope.kind) ?? new Map<string, readonly InboxItem[]>();
+          next.set(scope.kind, scopes);
+          if (items.length === 0) scopes.delete(scope.id);
+          else scopes.set(scope.id, items);
+        }
+        fed = next;
+      }
+      merged.clear();
+      told();
+    },
     retry: (kind, ids) => {
-      const was = heldOf(kind);
+      const was = followedOf(kind);
       const failed =
         ids === undefined
           ? new Set<string>()
@@ -172,6 +248,13 @@ export function useWindowHeldInboxes(): HeldInboxes | undefined {
   return useContext(HeldInboxesContext);
 }
 
+/** The scopes of `kind` the account's feed holds, none outside a window's root or while it is not answering. */
+export function useFedInboxes(kind: ScopeKind): FedKind | undefined {
+  const held = useWindowHeldInboxes();
+  const fedNow = () => held?.fedOf(kind);
+  return useSyncExternalStore(held?.subscribe ?? subscribeNothing, fedNow, fedNow);
+}
+
 /** Holds the window's inboxes for the account signed in, a new set for another account or none. */
 export function HeldInboxesProvider({
   account,
@@ -191,5 +274,13 @@ export function HeldInboxesProvider({
   }
   const { held } = standing;
   useEffect(() => () => held.letGoAll(), [held]);
+  // The account's every item, followed while it is signed in, a new stream for each account.
+  useEffect(() => {
+    if (account === undefined) return undefined;
+    return streamFrom(
+      () => askAct(ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW),
+      (pushed) => held.feed(pushed),
+    );
+  }, [held, account]);
   return <HeldInboxesContext.Provider value={held}>{children}</HeldInboxesContext.Provider>;
 }
