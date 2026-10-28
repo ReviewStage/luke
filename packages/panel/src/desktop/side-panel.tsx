@@ -310,6 +310,12 @@ function pagePlaceOf(holder: SidePanelHolder, id: string): PagePlace {
   return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
 }
 
+/** A repository as the panel reads it where it stands for no task: the workspace whose installation reaches it, and the repository, `owner/name`. */
+export interface PanelRepositoryPlace {
+  readonly workspaceId: string;
+  readonly repository: string;
+}
+
 /** No fixed kind, the same array every render. */
 const NO_KINDS: readonly FixedSidePanelTab[] = [];
 
@@ -1771,6 +1777,7 @@ function TabContent({
   tab,
   taskId,
   codeFilesRead,
+  repositoryPlace,
   pagePlace,
   repository,
   files,
@@ -1804,8 +1811,10 @@ function TabContent({
   pagePlace: PagePlace;
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
-  /** Whether a File tab reads the task's files: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
+  /** Whether a File tab reads the task's files: a task's panel's does, and a panel standing for no task does where it reads its repository by `repositoryPlace`. */
   codeFilesRead: boolean;
+  /** The workspace and repository a File tab reads through where the panel stands for no task; none where it stands for one. */
+  repositoryPlace: PanelRepositoryPlace | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
@@ -1963,9 +1972,19 @@ function TabContent({
           taskId={taskId}
           repository={repository}
           file={file}
-          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId, ...window })}
-          readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
-          readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
+          readFile={(window) =>
+            act(ACT_KIND.TASKS_FILE, { ...(repositoryPlace ?? { taskId }), ...window })
+          }
+          readFolder={(path) =>
+            act(ACT_KIND.TASKS_TREE, { ...(repositoryPlace ?? { planId: taskId }), path })
+          }
+          readWhole={() =>
+            act(ACT_KIND.TASKS_TREE, {
+              ...(repositoryPlace ?? { planId: taskId }),
+              path: "",
+              recursive: true,
+            })
+          }
           openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
@@ -2254,6 +2273,7 @@ export function SidePanel({
   holder,
   taskId,
   repository,
+  repositoryPlace,
   pages,
   agents,
   openAgents,
@@ -2279,6 +2299,8 @@ export function SidePanel({
   taskId: string;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
+  /** Where the panel stands for no task, an agent's page or an Inbox item of an agent on none: the workspace and repository its File tabs read through; none beside a task, or where no repository is known. */
+  repositoryPlace?: PanelRepositoryPlace | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   agents: CodingAgentsControl;
@@ -2663,7 +2685,8 @@ export function SidePanel({
               <TabContent
                 tab={tab}
                 taskId={taskId}
-                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
+                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
+                repositoryPlace={repositoryPlace}
                 pagePlace={pagePlaceOf(holder, taskId)}
                 repository={repository}
                 files={files}
