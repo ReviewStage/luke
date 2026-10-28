@@ -1,8 +1,9 @@
 /**
  * runner.ts -- one launch of a Luke agent: the bearer and the config line read, the harness the config names run (Claude Code here, Codex in `codex.ts`), and the launch's last event posted; for Claude Code, `query()` started in streaming input mode, Luke's lines fed to it, its messages posted out, and the launch ended when the agent's turn is.
  *
- * Two loops run side by side. The input loop reads Luke's stdin lines and
- * acts on each at once: a message joins the prompt stream, a stop calls
+ * Two loops run side by side. The input loop reads Luke's lines, from stdin
+ * or, where the config names the read, from Luke (`lines.ts`), and acts on
+ * each at once: a message joins the prompt stream, a stop calls
  * `interrupt()`, a model change calls `setModel()` or `applyFlagSettings()`.
  * It never waits on the session's output, so a stop reaches the CLI even
  * while a long foreground command holds the turn (P00 found exactly this).
@@ -62,6 +63,7 @@ import {
   type RunnerSelf,
   runsOnHost,
 } from "./launch.js";
+import { readLines } from "./lines.js";
 import { openMcpRelay } from "./mcp-relay.js";
 import { SANDBOX_TOOL_ENV, SHARED_FILES_DIRECTORY } from "./pins.js";
 import { ProcessTable } from "./processes.js";
@@ -701,6 +703,12 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     firstSequence: config.firstSequence,
     secrets,
   });
+  // A config that names the read has Luke's later lines read from Luke, beside any stdin still
+  // carries, into the same queue, so neither harness knows where a line came from.
+  if (config.linesUrl !== undefined) {
+    const read = { url: config.linesUrl, bearer, launch: config.firstSequence };
+    yield* Effect.forkScoped(readLines(read, lines));
+  }
   const context = { lines, env: input.env, bearer, sink, self: input.self };
   const outcome: LaunchOutcome =
     config.harness === RUNNER_HARNESS.CODEX

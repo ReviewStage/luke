@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { type FakeResponder, fakeHttpClientLayer } from "@luke/wire/testing";
 import {
   Cause,
   Clock,
@@ -39,6 +39,7 @@ import {
   RUNNER_ENV,
   RUNNER_EVENT,
   RUNNER_HEARTBEAT,
+  RUNNER_LINES,
   RUNNER_PLACE,
   RUNNER_RELEASE,
   RUNNER_WARM,
@@ -424,6 +425,52 @@ it.effect("a retire written behind a message is skipped, and the message's turn 
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.IDLED);
   }),
+);
+
+it.effect(
+  "takes Luke's lines from the read its config names, past its cursor, under its bearer",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const linesUrl = "https://luke.test/runner/lines";
+      const uuid = "00000000-0000-4000-8000-0000000000aa";
+      const reads: { launch: string | null; after: string | null; bearer: string | null }[] = [];
+      // The first read is answered the message; every later one is held until the launch lets it go.
+      const respond: FakeResponder = (url, init) => {
+        if (!url.startsWith(linesUrl)) return luke.respond(url, init);
+        const query = new URL(url).searchParams;
+        reads.push({
+          launch: query.get(RUNNER_LINES.QUERY.LAUNCH),
+          after: query.get(RUNNER_LINES.QUERY.AFTER),
+          bearer: new Headers(init.headers).get("authorization"),
+        });
+        if (reads.length > 1) {
+          return new Promise<Response>((_, reject) =>
+            init.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
+          );
+        }
+        const lines = [{ seq: 12, text: JSON.stringify({ ...FIRST_MESSAGE, uuid }) }];
+        return Response.json({ lines });
+      };
+      const { cli, write, run } = yield* launch(SHORT_TURN, {
+        ...luke,
+        layer: fakeHttpClientLayer(respond),
+      });
+      yield* write({ ...CONFIG, linesUrl });
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.deepEqual(reads, [
+        { launch: String(FIRST_SEQUENCE), after: "0", bearer: `Bearer ${BEARER}` },
+        { launch: String(FIRST_SEQUENCE), after: "12", bearer: `Bearer ${BEARER}` },
+      ]);
+      assert.equal(cli.prompts[0]?.uuid, uuid);
+      assert.ok(
+        luke.applied.some(
+          ({ message }) =>
+            "type" in message && message.type === RUNNER_EVENT.ACCEPTED && message.uuid === uuid,
+        ),
+      );
+    }),
 );
 
 it.effect("a warm launch nobody retires ends as idled at its cap", () =>
