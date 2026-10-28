@@ -8,6 +8,7 @@ import {
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentRouting,
+  taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import {
@@ -90,10 +91,10 @@ import { codingAgentStatusOf } from "./status.js";
  * a sign-in that lapsed is refused here rather than failing the turn's
  * first step; a GitHub that could not be asked refuses nothing, since an
  * outage or a rate limit says nothing of that standing. The caller is any
- * member who reaches the agent, on a task or none, which gates the send
- * (its task is read only for what the words mention of its plan), and
- * whose standing with GitHub is asked (the starter alone, for an agent on
- * its starter's own GitHub token), while the line
+ * member who reaches the agent and, for an agent on a task, its task too,
+ * which together gate the send, and whose standing with GitHub is asked
+ * (the starter alone, for an agent on its starter's own GitHub token),
+ * while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
  * A teammate's words, a member's other than the starter, are handed to eve
@@ -283,13 +284,15 @@ const settledEnded = (
 
 /**
  * Why the agent takes no message now, read again as the hand-over runs:
- * the agent archived or gone, its task's delete among what takes it away;
+ * its task out of the sender's reach, or the agent archived or gone;
  * nothing while it still takes one.
  */
 const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
 ) {
+  const tasks = agent.taskId === null ? undefined : yield* taskNamesOf(userId, [agent.taskId]);
+  if (agent.taskId !== null && tasks?.has(agent.taskId) !== true) return HOSTED_REFUSAL.NOT_FOUND;
   const now = yield* readCodingAgent(userId, agent.id);
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
@@ -340,7 +343,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
           sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
         ),
       ),
-      // The sender's reach of the agent gates the send, as the routing read holds; its task is read for what the words mention of the plan.
+      // The sender reaches the agent, as the routing read holds, and an agent on a task its task too, read as the sender.
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)
@@ -368,6 +371,8 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
   if (yield* Effect.fromResult(read.repeated)) return { outcome: STEER_OUTCOME.REPEATED };
   const held = yield* Effect.fromResult(read.task);
+  if (held !== undefined && Option.isNone(held))
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const task = held === undefined ? undefined : Option.getOrUndefined(held);
   // An archived agent names nothing.
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

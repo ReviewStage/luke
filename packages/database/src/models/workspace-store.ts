@@ -563,6 +563,22 @@ export function agentReachableBy(userId: string): SQL {
   return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)} and ${agentNoTeammatesOperator(userId)})`;
 }
 
+/**
+ * The condition that the account sees the coding agent row whole: it reaches
+ * the agent (`agentReachableBy`), and for an agent on a task that task too
+ * (`taskReachableBy`). Note that the task is asked as well, because a read of
+ * an agent by its id would otherwise skip the GitHub visibility of its task.
+ */
+export function agentVisibleTo(userId: string): SQL {
+  const taskReached = exists(
+    queryBuilder
+      .select({ one: task.id })
+      .from(task)
+      .where(and(eq(task.id, codingAgent.taskId), taskReachableBy(userId))),
+  );
+  return sql`(${agentReachableBy(userId)} and (${codingAgent.taskId} is null or ${taskReached}))`;
+}
+
 /** The condition that the coding agent row is no operator but the account's own: a coder, or an operator the account started. */
 export function agentNoTeammatesOperator(userId: string): SQL {
   return sql`(${codingAgent.kind} <> ${CODING_AGENT_KIND.OPERATOR} or ${eq(codingAgent.userId, userId)})`;

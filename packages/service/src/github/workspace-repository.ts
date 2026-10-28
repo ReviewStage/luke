@@ -23,9 +23,11 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  readVisibleAgentWorkspace,
+} from "@luke/database/models/coding-agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
-import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { Effect, Option, Result } from "effect";
@@ -54,17 +56,14 @@ export function taskWorkspace(
 
 /**
  * The workspace an agent's repository is reached through: its own, which
- * moves with its task (`task-store.ts`), where the account is a member of it
- * still; none otherwise.
+ * moves with its task (`task-store.ts`), read off its row where the account
+ * sees the agent whole, its task included (`agentVisibleTo`); none otherwise.
  */
 export function agentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "organizationId">,
+  agent: Pick<CodingAgent, "id">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
-  const { organizationId } = agent;
-  return Effect.map(isWorkspaceMember(userId, organizationId), (member) =>
-    member ? Option.some(organizationId) : Option.none(),
-  );
+  return readVisibleAgentWorkspace(userId, agent.id);
 }
 
 /** The member an agent's GitHub reads act as: its starter where it recorded the token's access, and none otherwise. */
