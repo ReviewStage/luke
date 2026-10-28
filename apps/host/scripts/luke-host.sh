@@ -60,4 +60,7 @@ if [ "${1:-}" = "uninstall" ]; then
   uninstall
   exit 0
 fi
+# Note that the runner is named as the release's own, since a Mac daemon's default is the desktop app's copy beside its release, which a tarball has no sibling for.
+LUKE_HOST_RUNNER_FOLDER="${LUKE_HOST_RUNNER_FOLDER:-$root/lib}"
+export LUKE_HOST_RUNNER_FOLDER
 exec "$root/node/bin/node" "$root/lib/luke-host.mjs" "$@"
