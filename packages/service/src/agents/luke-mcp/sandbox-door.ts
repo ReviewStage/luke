@@ -13,10 +13,6 @@
  * agent calling the tool runs in that place, so a place not up has nothing
  * to read from, and the read is unavailable.
  *
- * `show_code` runs its reads as commands rather than file reads, so the
- * same place is also handed as a repository's sandbox
- * (`../repository-shell.ts`): each command run there and waited on.
- *
  * Every door hands a file on as one stream, which the door's caller holds to
  * its own bound; the read stops one byte past the widest of those bounds, so
  * a file larger than any is refused as larger rather than read whole.
@@ -26,12 +22,7 @@ import { Effect, type Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import {
-  AgentMachine,
-  type AgentMachineService,
-  type RepositoryCommand,
-} from "../machine/agent-machine.js";
-import type { RepositorySandboxDoor } from "../repository-shell.js";
+import { AgentMachine, type AgentMachineService } from "../machine/agent-machine.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** The most of one file a door reads: past every bound a tool holds a file to, a page's HTML and a kept picture among them. */
@@ -42,10 +33,9 @@ export type SandboxDoorRunner<R = HttpClient.HttpClient> = <A, E>(
   effect: Effect.Effect<A, E, R>,
 ) => Promise<A>;
 
-/** The doors to the admitted agent's sandbox: one to read a file through, and one to run a command in. */
+/** The doors to the admitted agent's sandbox: one to read a file through. */
 export interface AgentSandboxDoors {
   readonly files: InboxSandboxDoor;
-  readonly repository: RepositorySandboxDoor;
 }
 
 /** Bytes as the one-chunk stream a door's caller reads. */
@@ -74,7 +64,7 @@ export function agentSandboxDoors<R>(
   return (admitted) => {
     const sessionId = admitted.runtimeSessionId;
     const unfound = () => Promise.reject(new SandboxUnavailable({}));
-    if (sessionId === undefined) return { files: unfound, repository: unfound };
+    if (sessionId === undefined) return { files: unfound };
     return {
       files: () =>
         Promise.resolve({
@@ -84,11 +74,6 @@ export function agentSandboxDoors<R>(
             );
             return bytes === undefined ? null : streamOf(bytes);
           },
-        }),
-      repository: () =>
-        Promise.resolve({
-          run: (command: RepositoryCommand) =>
-            ask((each) => each.runRepositoryCommand(sessionId, command)),
         }),
     };
   };

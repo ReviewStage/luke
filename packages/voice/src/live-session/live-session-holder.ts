@@ -2,7 +2,6 @@ import {
   type LiveSessionCreated,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import {
@@ -78,8 +77,6 @@ export interface LiveSessionHolderOptions {
    * so none outlives the call.
    */
   onTaskActivity?: (activity: TaskActivityFrame) => void;
-  /** Luke put code on screen on the standing task call, on the same terms as `onTaskActivity`. */
-  onTaskCode?: (code: TaskCodeFrame) => void;
   /** The call about the agent named, and its task where it has one, ended, so what it put on screen goes with it. */
   onTaskCallEnded?: (about: VoiceCallAbout) => void;
 }
@@ -352,7 +349,6 @@ export class LiveSessionHolder {
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onTaskActivity?.((activity) => this.#activity(session, activity));
-      opened.onTaskCode?.((code) => this.#code(session, code));
       opened.onTaskCallEnding?.((ending) => this.#ending(session, ending));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
@@ -581,12 +577,6 @@ export class LiveSessionHolder {
   #activity(session: HeldSession, activity: TaskActivityFrame): void {
     if (session.ended || !aboutSession(session, activity)) return;
     this.#options.onTaskActivity?.(activity);
-  }
-
-  /** Code Luke put on screen on the call about the task the session is bound to, passed on while the session stands. */
-  #code(session: HeldSession, code: TaskCodeFrame): void {
-    if (session.ended || !aboutSession(session, code)) return;
-    this.#options.onTaskCode?.(code);
   }
 
   /**

@@ -1634,8 +1634,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
 }
 
-/* An inline span of code, in a transcript, a pull request's description, or
-   a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
+/* An inline span of code, in a transcript, a to-do's step, a pull request's
+   description, or a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
    prose.css) in its padding, tint, face and size, and the corner role nearest
    its own, so code reads the same wherever words carry it. */
 .transcript-inline-code,
@@ -2003,9 +2003,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The composer answers its card's width, not the window's, so it holds in
    the main column and the side panel alike (`agent-composer.tsx`). The
    presses never give way, the model chip's words do first, and the ⋯
-   stands only once it has something to take in. */
+   stands only once it has something to take in. The card is a `luke-room`
+   too, so the badge saying where the agent runs gives up its words under
+   it (`agent-place.tsx`) rather than under a room around the box. */
 .agent-composer > form {
-  container: composer / inline-size;
+  container: composer luke-room / inline-size;
 }
 
 .agent-composer-actions > :is(.agent-servers, .agent-context) {

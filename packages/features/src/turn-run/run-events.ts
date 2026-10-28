@@ -40,8 +40,6 @@ export const RUN_EVENT = {
   QUESTION_QUEUED: "question_queued",
   /** A run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
   QUESTION_WITHDRAWN: "question_withdrawn",
-  /** A run put code of the task's repository on the developer's screen, with its lines; told once the call has read them, before the run ends. */
-  CODE_SHOWN: "code_shown",
   /** A run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
   CALL_ENDING: "call_ending",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
@@ -172,26 +170,6 @@ export type RunEventBody =
       readonly kind: typeof RUN_EVENT.QUESTION_WITHDRAWN;
       readonly runId: string;
       readonly question: string;
-    }
-  | {
-      readonly kind: typeof RUN_EVENT.CODE_SHOWN;
-      readonly runId: string;
-      /** The code as `task-wire.ts`'s `ShownCode` spells it, restated from when the run stream was a package that could not reach it. */
-      readonly code: {
-        readonly ref: {
-          readonly path: string;
-          readonly startLine?: number;
-          readonly endLine?: number;
-        };
-        /** The repository the lines were read from, `owner/name`. */
-        readonly repository: string;
-        /** The file's line the first carried line is. */
-        readonly firstLine: number;
-        readonly lineCount: number;
-        readonly lines: readonly string[];
-        /** What Luke said the lines are for. */
-        readonly note?: string;
-      };
     }
   | { readonly kind: typeof RUN_EVENT.CALL_ENDING; readonly runId: string }
   | { readonly kind: typeof RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }

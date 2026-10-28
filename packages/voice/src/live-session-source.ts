@@ -19,10 +19,8 @@ import {
   sessionCreatedFrameFromWire,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
-  taskCodeFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
@@ -160,8 +158,6 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * same terms as `reportActivity`.
    */
   onTaskActivity?(listener: (activity: TaskActivityFrame) => void): void;
-  /** Tells the listener each time Luke puts code on screen on a task call, on the same terms as `onTaskActivity`. */
-  onTaskCode?(listener: (code: TaskCodeFrame) => void): void;
   /** Tells the listener Luke is ending a task call once his goodbye has played, on the same terms as `onTaskActivity`. */
   onTaskCallEnding?(listener: (ending: TaskCallEndingFrame) => void): void;
 }
@@ -900,19 +896,15 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      // The service's own words, a call's activity and code, ride the
+      // The service's own words, a call's activity and its ending, ride the
       // same socket as the session's events and are taken off it here, before
       // the sideband's Live grammar would read them as nothing.
       const activityListeners = new Set<(activity: TaskActivityFrame) => void>();
-      const codeListeners = new Set<(code: TaskCodeFrame) => void>();
       const endingListeners = new Set<(ending: TaskCallEndingFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onTaskActivity: (activity) => {
             for (const listener of [...activityListeners]) listener(activity);
-          },
-          onTaskCode: (code) => {
-            for (const listener of [...codeListeners]) listener(code);
           },
           onTaskCallEnding: (ending) => {
             for (const listener of [...endingListeners]) listener(ending);
@@ -961,9 +953,6 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onTaskActivity: (listener) => {
           activityListeners.add(listener);
         },
-        onTaskCode: (listener) => {
-          codeListeners.add(listener);
-        },
         onTaskCallEnding: (listener) => {
           endingListeners.add(listener);
         },
@@ -980,15 +969,14 @@ const isServiceFrame = Schema.is(
   Schema.Struct({
     type: Schema.Literals([
       VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-      VOICE_SERVICE_FRAME.TASK_CODE,
       VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
     ]),
   }),
 );
 
 /**
- * The socket with the service's own frames, `plan.activity`,
- * `plan.code`, and `plan.call_ending`, taken off its arrivals and told to
+ * The socket with the service's own frames, `plan.activity` and
+ * `plan.call_ending`, taken off its arrivals and told to
  * their listeners, so the sideband over it reads only what the session said.
  * A frame is routed by the type it decodes to and then checked by that
  * type's own schema. The substring test ahead of the decode only keeps a transcript
@@ -1001,15 +989,12 @@ function withoutServiceFrames(
   socket: LiveSocket,
   listeners: {
     readonly onTaskActivity: (activity: TaskActivityFrame) => void;
-    readonly onTaskCode: (code: TaskCodeFrame) => void;
     readonly onTaskCallEnding: (ending: TaskCallEndingFrame) => void;
   },
 ): LiveSocket {
   const routes = {
     [VOICE_SERVICE_FRAME.TASK_ACTIVITY]: (value: UnparsedWireValue) =>
       told(taskActivityFrameFromWire(value), listeners.onTaskActivity),
-    [VOICE_SERVICE_FRAME.TASK_CODE]: (value: UnparsedWireValue) =>
-      told(taskCodeFrameFromWire(value), listeners.onTaskCode),
     [VOICE_SERVICE_FRAME.TASK_CALL_ENDING]: (value: UnparsedWireValue) =>
       told(taskCallEndingFrameFromWire(value), listeners.onTaskCallEnding),
   };

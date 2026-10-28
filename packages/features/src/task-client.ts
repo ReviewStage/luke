@@ -99,7 +99,6 @@ import {
   type StartCallFailure,
   TASK_CALL_FAILURE,
   type TaskCallFailure,
-  type TaskCodeAnswer,
   type TaskIssueCallFailure,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
@@ -593,13 +592,6 @@ export class HostedTaskClient {
       ),
       LIVE_REFUSALS,
     );
-  }
-
-  /** Every code the task's agents showed on it, oldest first; nothing where the service did not answer it. */
-  readCode(
-    taskId: string,
-  ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskFiles.code, { id: taskId }));
   }
 
   /**

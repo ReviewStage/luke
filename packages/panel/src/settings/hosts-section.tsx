@@ -53,6 +53,14 @@ import {
 } from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
+import {
+  ThisMacAct,
+  ThisMacDetail,
+  type ThisMacHost,
+  ThisMacHostRow,
+  ThisMacStateLine,
+  useThisMacHost,
+} from "./this-mac-host-row.js";
 
 /**
  * hosts-section.tsx -- Settings › Agents › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
@@ -66,6 +74,14 @@ import { MenuRow } from "./menu-row.js";
  * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
  * updated. Remove, behind the row's ⋯, refuses that machine at once, after
  * asking. Adding stays Linux-only and says so, since a Mac joins from its app.
+ *
+ * In the desktop app this Mac stands first, with where its `luke-host`
+ * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
+ * its own machine's row, matched by the device it is enrolled as, or, where
+ * the service lists no machine for it (removed, never enrolled, a turn-on
+ * that failed, or another account's), on a This Mac row of its own with
+ * Turn on again or Retry, so there is always a way back. A browser tab has
+ * no This Mac, so it draws neither.
  *
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
@@ -157,27 +173,31 @@ const REMOVE_BODY = {
   [DEVICE_PLATFORM.LINUX]:
     "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
   [DEVICE_PLATFORM.DARWIN]:
-    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, turn local agents on in the Luke app on it.",
+    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, choose Turn on again under This Mac in the Luke app on it.",
 } as const satisfies Record<DevicePlatform, string>;
 
-/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯. */
+/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
   now,
   installScriptUrl,
   onRemove,
+  thisMac,
 }: {
   host: Host;
   book: PresenceBook;
   now: number;
   installScriptUrl: string;
   onRemove: (id: string) => Promise<ActionResult>;
+  /** Where this Mac stands, on the row of the machine it is enrolled as alone. */
+  thisMac?: ThisMacHost | undefined;
 }): React.JSX.Element {
   const removing = useConfirmDialog({ subject: true, surfaceOpen: true }, () => onRemove(host.id));
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
+  const line = thisMac?.line ?? null;
   return (
     <>
       <MenuRow
@@ -192,22 +212,35 @@ function HostRow({
           },
         ]}
         row={{
-          label: host.name,
+          label: thisMac === undefined ? host.name : `${host.name} (this Mac)`,
           adornment: host.upgradeNeeded ? (
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
-          description:
-            host.upgradeNeeded && host.version !== null ? `${seen} · runs ${host.version}` : seen,
-          below: !host.upgradeNeeded ? undefined : platform === DEVICE_PLATFORM.DARWIN ? (
-            <Text>{WORDS.MAC_UPGRADE}</Text>
-          ) : (
-            <CodeCard
-              title={WORDS.UPGRADE_TITLE}
-              titleIs={CODE_CARD_TITLE.WORDS}
-              code={hostUpgradeCommand(installScriptUrl)}
-              copy={copyThroughShell}
-            />
+          description: (
+            <>
+              {host.upgradeNeeded && host.version !== null
+                ? `${seen} · runs ${host.version}`
+                : seen}
+              {line === null ? null : <ThisMacStateLine line={line} />}
+            </>
           ),
+          control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
+          below:
+            thisMac === undefined && !host.upgradeNeeded ? undefined : (
+              <>
+                {thisMac === undefined ? null : <ThisMacDetail />}
+                {!host.upgradeNeeded ? null : platform === DEVICE_PLATFORM.DARWIN ? (
+                  <Text>{WORDS.MAC_UPGRADE}</Text>
+                ) : (
+                  <CodeCard
+                    title={WORDS.UPGRADE_TITLE}
+                    titleIs={CODE_CARD_TITLE.WORDS}
+                    code={hostUpgradeCommand(installScriptUrl)}
+                    copy={copyThroughShell}
+                  />
+                )}
+              </>
+            ),
         }}
       />
       <ConfirmDialog
@@ -308,6 +341,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [adding, setAdding] = useState(false);
   const [addFailed, setAddFailed] = useState(false);
   const [shown, setShown] = useState<ShownToken | undefined>(undefined);
+  const thisMac = useThisMacHost(on && signedIn);
 
   // The page opening reads the hosts the service holds now, which a server may just have joined.
   useEffect(() => {
@@ -399,16 +433,16 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   }, [act, shown]);
 
   if (!on) return null;
+  const thisMacId = thisMac.standing?.deviceId;
+  const listedMac =
+    thisMacId === undefined ? undefined : hosts?.find((host) => host.id === thisMacId);
   return (
     <SettingsSection title={WORDS.TITLE}>
       {!signedIn ? (
         <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
       ) : hosts !== undefined && installScriptUrl !== undefined ? (
         <>
-          <SettingsRow
-            label={WORDS.ADD}
-            error={addFailed ? WORDS.ADD_FAILED : undefined}
-          >
+          <SettingsRow label={WORDS.ADD} error={addFailed ? WORDS.ADD_FAILED : undefined}>
             {() => (
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
@@ -420,16 +454,23 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
               </Button>
             )}
           </SettingsRow>
-          {hosts.map((host) => (
-              <HostRow
-                key={host.id}
-                host={host}
-                book={book}
-                now={now}
-                installScriptUrl={installScriptUrl}
-                onRemove={remove}
-              />
-            ))}
+          {listedMac === undefined && thisMac.line !== null ? (
+            <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
+          ) : null}
+          {(listedMac === undefined
+            ? hosts
+            : [listedMac, ...hosts.filter((host) => host !== listedMac)]
+          ).map((host) => (
+            <HostRow
+              key={host.id}
+              host={host}
+              book={book}
+              now={now}
+              installScriptUrl={installScriptUrl}
+              onRemove={remove}
+              thisMac={host === listedMac ? thisMac : undefined}
+            />
+          ))}
           {shown === undefined ? null : (
             <AddHostsDialog
               shown={shown}

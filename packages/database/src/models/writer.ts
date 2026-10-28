@@ -1875,7 +1875,6 @@ function consume(context: WriterContext, event: RunEvent): Write<StoreWriteResul
     case RUN_EVENT.SLOW_STEP:
     case RUN_EVENT.QUESTION_QUEUED:
     case RUN_EVENT.QUESTION_WITHDRAWN:
-    case RUN_EVENT.CODE_SHOWN:
     case RUN_EVENT.CALL_ENDING:
     case RUN_EVENT.ACTIONS_SETTLED:
     case RUN_EVENT.REPLY_SENTENCE:
