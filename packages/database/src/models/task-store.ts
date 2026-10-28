@@ -10,7 +10,6 @@ import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { agentName } from "@luke/features/model-label";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
@@ -60,7 +59,6 @@ import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
-import { readPlanTemplate } from "./account-store.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -68,7 +66,6 @@ import { type Device, devicesNamed } from "./device-store.js";
 import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
-import { readTemplateAt } from "./plan-template-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
 import {
   linkTaskIssue,
@@ -200,9 +197,8 @@ export const TASK_RUNS_IN_CLOUD: TaskRunsOnWrite = {
  * the repository it is about where one is chosen, the external issues it
  * links from the start, as the service read them, where any were picked. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
- * renamed. A plan started with `planning` false skips its planning phase and
- * starts empty rather than as the template. A brief is the developer's own
- * words about the task, kept as written; a blank one is none.
+ * renamed. A brief is the developer's own words about the task, kept as
+ * written; a blank one is none.
  */
 export interface NewTask {
   readonly organizationId: string;
@@ -211,7 +207,6 @@ export interface NewTask {
   /** How the repository was reached as it was named; the App's where none is named. */
   readonly githubAccess?: GitHubAccess;
   readonly issueLinks?: readonly NewTaskIssueLink[];
-  readonly planning?: boolean;
   readonly brief?: string;
   /** Where the task stands as it starts; to do where none is named. */
   readonly status?: TaskStatus;
@@ -505,11 +500,6 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
   };
 }
 
-/** The text the row's plan started as (`readStartedText`). */
-function startedText(row: TaskRow): TaskStoreEffect<string> {
-  return readStartedText(row.userId, row.createdAt.getTime());
-}
-
 /**
  * The row's plan, as the window and the model read it for `userId`, the
  * reader, whose own pin it carries: its text as the
@@ -533,7 +523,7 @@ function storedTaskOf(
       {
         pin: findPin({ userId, taskId: row.id }),
         names: readAccountNames(namedAccountsOf([row], devices)),
-        written: Effect.flatMap(readSectionWriters(row.id, startedText(row)), (sectionWriters) =>
+        written: Effect.flatMap(readSectionWriters(row.id), (sectionWriters) =>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
         lastRevision: readLastEdit(row.id),
@@ -992,35 +982,16 @@ const nameUntitled = SqlSchema.findOneOption({
 });
 
 /**
- * The text an account's plan started as at `createdAt`, epoch milliseconds:
- * a copy of the account's template as it stood then, as its history reads,
- * or the template it holds now where it has no history. A note reads it to
- * tell a section still holding only its template's guidance.
- */
-export function readStartedText(userId: string, createdAt: number): TaskStoreEffect<string> {
-  return Effect.gen(function* () {
-    const held = yield* readTemplateAt(userId, new Date(createdAt));
-    const template = Option.isSome(held) ? held.value : yield* readPlanTemplate(userId);
-    return template ?? DEFAULT_PLAN_TEMPLATE;
-  });
-}
-
-/**
  * Starts a task under the account, in the workspace it was handed, as one
- * document, a copy of the account's own template or the default where it
- * keeps none, or empty where it skips its planning phase, with the
- * repository it was handed, and the issues it was handed linked to it in
- * the same transaction; it stands first in the list. A plan handed no
- * name, or a blank one, starts as
- * `UNTITLED_PLAN_NAME`. Note that the template is copied, not referred to,
- * because an edit of the template must leave every plan started from it as
- * it stands.
+ * empty document, with the repository it was handed, and the issues it was
+ * handed linked to it in the same transaction; it stands first in the
+ * list. A plan handed no name, or a blank one, starts as
+ * `UNTITLED_PLAN_NAME`.
  */
-/** A started task's row as it is inserted: its name, or Untitled, its plan's text, the template where it plans, and its brief, or none for a blank one. */
+/** A started task's row as it is inserted: its name, or Untitled, its plan's empty text, and its brief, or none for a blank one. */
 const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
     const brief = started.brief?.trim() ?? "";
     return {
@@ -1032,7 +1003,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       machine: (started.runsOn ?? TASK_RUNS_IN_CLOUD).machine,
       deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
-      document: template ?? DEFAULT_PLAN_TEMPLATE,
+      document: "",
       brief: brief.length > 0 ? brief : null,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
@@ -1116,9 +1087,9 @@ export function createTaskCommitted(
 
 /**
  * Starts a task under the id its maker chose, as an agent's call makes one
- * under an id drawn from its own key, its plan's text the one given in the
- * template's place, where no task stands under that id yet; nothing where one
- * does, so the call run again, even at once, makes one task between them.
+ * under an id drawn from its own key, its plan's text the one given, where
+ * no task stands under that id yet; nothing where one does, so the call run
+ * again, even at once, makes one task between them.
  */
 export function createTaskOnce(
   userId: string,
@@ -1126,7 +1097,7 @@ export function createTaskOnce(
 ): Effect.Effect<Option.Option<Task>, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
   return Effect.gen(function* () {
     yield* assigneeAdmitted(started.assigneeId, started.organizationId);
-    const values = yield* insertOf(userId, { ...started, planning: false });
+    const values = yield* insertOf(userId, started);
     const row = yield* insertTaskOnce({ ...values, document: started.text });
     return yield* Effect.transposeOption(Option.map(row, (made) => taskOf(userId, made)));
   });

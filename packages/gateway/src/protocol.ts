@@ -353,16 +353,6 @@ export const GATEWAY_METHOD = {
   MEMORIES_READ: "memories.read",
   /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
   MEMORIES_FORGET: "memories.forget",
-  /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  /** A page of the account's plan template history, read from the service now, newest first; or why there is none. */
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  /** One revision of the account's plan template beside the one before it; or why there is none. */
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  /** One revision of the account's plan template put back as the template; the template as kept, or why it is unchanged. */
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**

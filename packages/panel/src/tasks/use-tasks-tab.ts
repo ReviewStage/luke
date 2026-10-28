@@ -2535,8 +2535,7 @@ export function useTasksTab(input: {
   // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
-  // names no planning, so the task opens on an empty plan rather than the
-  // template. New task starts the task
+  // names no planning, so the task opens on its empty plan. New task starts the task
   // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).

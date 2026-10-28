@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
@@ -296,17 +295,14 @@ it.layer(getTestDB())("an untitled plan's name", (it) => {
 });
 
 it.layer(getTestDB())("a plan's starting text", (it) => {
-  it.effect("a plan starts as the template, and one started without planning starts empty", () =>
+  it.effect("a plan starts empty", () =>
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const organizationId = yield* openWorkspace(owner);
-      const planned = yield* createTask(owner, { organizationId });
-      const unplanned = yield* createTask(owner, { organizationId, planning: false });
+      const started = yield* createTask(owner, { organizationId });
 
-      const opened = (taskId: string) =>
-        Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.task.document);
-      assert.equal((yield* opened(planned.id))?.body, DEFAULT_PLAN_TEMPLATE);
-      assert.deepEqual(yield* opened(unplanned.id), { body: "", assumptions: [] });
+      const read = yield* readTask(owner, started.id);
+      assert.deepEqual(Option.getOrUndefined(read)?.task.document, { body: "", assumptions: [] });
     }),
   );
 });
@@ -347,11 +343,6 @@ it.layer(getTestDB())("a plan's brief", (it) => {
         });
         const unbriefed = yield* createTask(owner, { organizationId });
         const blank = yield* createTask(owner, { organizationId, brief: "   " });
-        const unplanned = yield* createTask(owner, {
-          organizationId,
-          planning: false,
-          brief: "Fix the typo in the invite email.",
-        });
 
         const briefOf = (taskId: string) =>
           Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.brief);
@@ -361,7 +352,6 @@ it.layer(getTestDB())("a plan's brief", (it) => {
         );
         assert.equal(yield* briefOf(unbriefed.id), undefined);
         assert.equal(yield* briefOf(blank.id), undefined);
-        assert.equal(yield* briefOf(unplanned.id), "Fix the typo in the invite email.");
       }),
   );
 });

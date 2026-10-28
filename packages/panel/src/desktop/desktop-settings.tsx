@@ -37,7 +37,6 @@ import {
   useMenu,
   useRovingKeys,
 } from "@luke/ui";
-import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
@@ -52,8 +51,6 @@ import {
   settingsPageOf,
   shownSettingsPageGroups,
 } from "../settings/pages.js";
-import { TemplateVersionHistory } from "../settings/plan-template-history.js";
-import { PlanTemplatePage } from "../settings/plan-template-page.js";
 import { pageResetControl } from "../settings/reset.js";
 import {
   SettingsPanel,
@@ -230,11 +227,7 @@ function PageGroup({
  * title says where the page's settings are kept (`settingsPageKeep`): on this
  * Mac, in this browser on the web, or following the account or the workspace;
  * a row kept elsewhere says so under its own label. The Workspace page's title is
- * the listed workspace's name, since that is the workspace it shows. The
- * plan template is the one page drawn apart from the panel: it is a plan's
- * page, document and all
- * (`../settings/plan-template-page.tsx`), and its version history takes the
- * whole window as a plan's does, Back and Escape leaving it for the page.
+ * the listed workspace's name, since that is the workspace it shows.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -285,18 +278,14 @@ export function DesktopSettings({
   const [query, setQuery] = useState("");
   const [integrationsQuery, setIntegrationsQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
-  const [templateHistory, setTemplateHistory] = useState(false);
   const experiments = useExperimentChoices();
   // The pages, or the results of a search, are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
-  // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
-  if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
   // The Integrations page's search is the page's, so turning to another page leaves it.
   if (integrationsQuery !== "" && settings.view !== SETTINGS_VIEW.INTEGRATIONS) {
     setIntegrationsQuery("");
   }
-  // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
-  useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
   const shown = settingsPageOf(settings.view);
   // The workspace the tasks' sidebar lists, which heads the first group and is the one the Workspace page shows.
   const listed =
@@ -366,19 +355,6 @@ export function DesktopSettings({
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN &&
     !hidden.item;
 
-  // The template's version history takes the whole window as a plan's does, and leaves for the template,
-  // the call card at the foot of its versions as it was at the page list's.
-  if (templateHistory) {
-    return (
-      <TemplateVersionHistory
-        sidebar={sidebar}
-        room={room}
-        history={history}
-        account={settings.account}
-        onExit={() => setTemplateHistory(false)}
-      />
-    );
-  }
   return (
     <div
       ref={screen}
@@ -441,36 +417,22 @@ export function DesktopSettings({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
-      {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
-        <PlanTemplatePage
-          account={
-            settings.account.status === ACCOUNT_STATUS.SIGNED_IN
-              ? accountActor(settings.account)
-              : undefined
-          }
-          keep={keepLine}
+      <section className={`settings-page ${PLACE_PAGE}`} aria-label={title} hidden={hidden.item}>
+        {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
+        <SettingsPage
+          key={settings.view}
+          title={title}
+          description={keepLine}
+          actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
-          hidden={hidden.item}
-          onShowHistory={() => setTemplateHistory(true)}
-        />
-      ) : (
-        <section className={`settings-page ${PLACE_PAGE}`} aria-label={title} hidden={hidden.item}>
-          {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <SettingsPage
-            key={settings.view}
-            title={title}
-            description={keepLine}
-            actions={reset}
-            lead={onList === undefined ? undefined : <ListBack onList={onList} />}
-            look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}
-          >
-            <SettingsPanel
-              {...settings}
-              integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
-            />
-          </SettingsPage>
-        </section>
-      )}
+          look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}
+        >
+          <SettingsPanel
+            {...settings}
+            integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
+          />
+        </SettingsPage>
+      </section>
     </div>
   );
 }

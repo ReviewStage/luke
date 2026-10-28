@@ -99,9 +99,9 @@ const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
 /**
  * The reference journey's task partway through its conversation: the
  * context, the goal, an approach with the pending-membership design settled,
- * its interfaces, one alternative weighed, one hard part, an open question,
- * and its assumptions, with every other section still holding the default
- * template's guidance, as a draft shows it.
+ * its interfaces, one alternative weighed, one hard part, what it leaves
+ * out, its first test, an open question, and its assumptions, as a draft
+ * shows it.
  */
 const FIXTURE_SECTIONS = [
   "## Context",
@@ -128,9 +128,9 @@ const FIXTURE_SECTIONS = [
   "- A withdrawn or accepted invite link is opened again: the page reads " +
     '"This invite is no longer valid" and grants nothing.',
   "## Not doing",
-  "What is out of scope on purpose, and why.",
+  "- Inviting someone by a link anyone can open: every invite names one email address.",
   "## Testing",
-  'The cases that prove the change, each as "When …, then …" with an exact result, then the end-to-end check.',
+  "- When a member invites an address, then one email with a link reaches it.",
   "## Open questions",
   "- Who can withdraw an invite: the member who sent it, any admin, or both?",
   "## Assumptions",

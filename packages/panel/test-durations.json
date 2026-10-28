@@ -155,7 +155,6 @@
   "src/settings/links-section.test.ts": 339,
   "src/settings/memory-page.test.ts": 1678,
   "src/settings/pages.test.ts": 5,
-  "src/settings/plan-template-page.test.ts": 900,
   "src/settings/reset.test.ts": 378,
   "src/settings/sampled-choice-row.test.ts": 343,
   "src/settings/schema-rows.test.ts": 2244,

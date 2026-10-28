@@ -16,8 +16,8 @@ export const ACCOUNT_ACT_KIND = {
 } as const;
 
 /**
- * The account's own asks from Settings and a dictating box: its provider keys,
- * its plan template and that template's history, and a dictated clip's words.
+ * The account's own asks from Settings and a dictating box: its provider keys
+ * and a dictated clip's words.
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
@@ -50,18 +50,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_READ: "githubToken.read",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
    * the workspace Settings shows, shared by its members, read as the page

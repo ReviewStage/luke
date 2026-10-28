@@ -34,7 +34,7 @@ afterEach(() => {
 function openActPort(actor: ActSender): void {
   const noKeys = () => Effect.succeed({ keys: [] });
   const noToken = () => Effect.succeed({ token: null });
-  const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  const unanswered = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   const port = testActPort(
     accountAskProcedures({
       host: {
@@ -47,14 +47,9 @@ function openActPort(actor: ActSender): void {
         githubTokenRead: noToken,
         githubTokenSave: noToken,
         githubTokenRemove: noToken,
-        memoriesRead: notTemplated,
-        memoryForget: notTemplated,
-        planTemplateRead: notTemplated,
-        planTemplateWrite: notTemplated,
-        planTemplateRevisions: notTemplated,
-        planTemplateRevision: notTemplated,
-        planTemplateRestore: notTemplated,
-        dictationTranscribe: notTemplated,
+        memoriesRead: unanswered,
+        memoryForget: unanswered,
+        dictationTranscribe: unanswered,
       },
     }),
   );

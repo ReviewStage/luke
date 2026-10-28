@@ -363,7 +363,7 @@ export function VersionView({
   title?: string | undefined;
   /** The one unit of the version to draw, alone and without the task's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
-  /** The task the versions are of, which their mentions are read against; none for the account's template. */
+  /** The task the versions are of, which their mentions are read against; none while it is read. */
   task?: MentionedTask | undefined;
   /** What leads the bar, as the way back to the list where the version stands alone. */
   lead?: React.ReactNode;

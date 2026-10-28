@@ -175,8 +175,8 @@ agent's title, opening with the sending agent's title and id, and goes to
 the receiving agent's model provider as the rest of its conversation does,
 and an agent it starts runs as the member who started it, on that member's
 keys, and is told which agent started it. It stores
-under your account its name and its plan, one Markdown document, which begins as a copy of
-your plan template and is written by coding agents started on it and by
+under your account its name and its plan, one Markdown document, which begins empty
+and is written by coding agents started on it and by
 you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
 unsaved words stay in Luke's memory on your Mac, never on disk. Our service
@@ -259,16 +259,6 @@ open threads beside the plan, and a thread in which a member mentions one of
 them with @ is handed to that agent whole as a request; either way the comments' words
 and their writers' names go to that agent's model provider, as the plan does
 (see "Who we send it to").
-
-**Your plan template.** The template a new task's plan starts from is kept with your
-account preferences on our service, as you write it in Settings › Plan
-template (up to 20,000 characters; a built-in one until you do), sent as you
-pause typing. Our service keeps its history without limit, as it does a
-plan's: the template after each revision (your saves close together count as
-one), whether you wrote it or restored which earlier version, and when, so
-Settings can show and restore an earlier one. A new task's plan begins as a copy of
-it; no model reads the template itself. Deleting your account removes it and
-its history.
 
 **What Luke remembers.** Where its developer turned on the Memory
 experiment, as a coding agent works it may keep a fact or
@@ -1117,7 +1107,7 @@ are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
 the live view of its page; code drawn in a
-transcript; the API keys and Plan template pages of Settings; an automation's
+transcript; the API keys page of Settings; an automation's
 webhook secret, the one time it is shown; the admin page in the app, which
 only our maintainers can open and which names other people's accounts; and the cards
 that open over a row or a chip on hover, a page's preview among them. The
@@ -1636,7 +1626,7 @@ and error, performance, and agent reports by Sentry.
 - Delete your account from the Account section in Settings. This erases at
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
-  counts, preferences, and plan template with its history, your pinned
+  counts and preferences, your pinned
   repositories, your tasks with their history, whiteboards, pages, coding
   agents, inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the

@@ -59,7 +59,7 @@ export interface EditAgents {
 }
 
 /** Who reads a plan's edits, as a place hands them over: the members are the directory's. */
-export type TaskReader = Pick<EditReader, "readerId" | "owner">;
+export type TaskReader = Pick<EditReader, "readerId">;
 
 /**
  * What a place knows to name a plan's edits: who reads them, who last
@@ -257,8 +257,8 @@ function CallOwner({ edit, place }: { edit: PlanLastEdit; place: EditPlace }): R
  */
 export function useEditReader(reader: TaskReader): EditReader {
   const { members, former } = useMemberDirectory();
-  const { readerId, owner } = reader;
-  return useMemo(() => ({ readerId, owner, members, former }), [readerId, owner, members, former]);
+  const { readerId } = reader;
+  return useMemo(() => ({ readerId, members, former }), [readerId, members, former]);
 }
 
 /** Who last wrote each of `edits`, each once, in the order they stand, as a facepile draws them. */
