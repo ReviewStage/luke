@@ -1259,15 +1259,14 @@ body,
   }
 }
 
+/* The first heading stands level with the chevron, so its fold's hover ends
+   short of the chevron rather than running under it. */
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
-  > .section-heading,
-.task-summary-card-body > .task-summary-section:first-of-type > .section-heading {
-  display: flex;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  margin-bottom: 0;
+  .luke-group-header-head,
+.task-summary-card-body > .task-summary-section:first-of-type .luke-group-header-head {
+  margin-right: calc(var(--luke-control-height) + var(--luke-tight-gap));
 }
 
 .task-summary-archived-agent > .task-summary-row {
