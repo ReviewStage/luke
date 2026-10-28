@@ -224,7 +224,10 @@ test("a screen picked restores both its panes, the task opened once", async () =
 
   tab();
   letGo();
-  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: comments"]);
+  assert.deepEqual(told.shown, [
+    'column the task: {"agent":"x"}',
+    "panel beside the task: comments",
+  ]);
 });
 
 test("held, the cards show with the screen here first and dimmed; ⇧ steps back around, and Escape goes nowhere", async () => {
@@ -712,7 +715,10 @@ test("a screen picked past unsaved work is restored only once the leave is confi
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();
   asks[0]?.();
-  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: comments"]);
+  assert.deepEqual(told.shown, [
+    'column the task: {"agent":"x"}',
+    "panel beside the task: comments",
+  ]);
 });
 
 test("a narrow room's panel, which fills the window as it stands, is opened on the screen's tab and not toggled shut", async () => {
