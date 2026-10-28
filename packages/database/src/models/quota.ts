@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { hostedUsage, } from "../schemas/usage.js";
+import { hostedUsage } from "../schemas/usage.js";
 
 /** The UTC day a moment falls on, as the usage table's YYYY-MM-DD key. */
 export function utcDayKey(now: number): string {
@@ -113,4 +113,3 @@ export function spendDictationMeter(input: {
     seconds: input.seconds,
   });
 }
-

@@ -23,8 +23,8 @@ import type { Duplex } from "node:stream";
 import { Effect, FiberSet, type Scope } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
 import { CREDENTIAL_HEADER } from "../auth/session-credential.js";
-import { type VoiceSocket, voiceSocket } from "./socket.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
+import { type VoiceSocket, voiceSocket } from "./socket.js";
 
 /** The statuses an upgrade is refused with, before any socket stands. */
 export const RELAY_UPGRADE_STATUS = {

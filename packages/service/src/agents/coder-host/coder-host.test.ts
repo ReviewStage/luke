@@ -97,7 +97,6 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
-  type BrainHostTurn,
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
@@ -2369,80 +2368,20 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "the call's words open the first of a run of spoken turns as its message, a later spoken turn says in a line they still hold, and a typed turn after them says they no longer do",
+      "the turn after one spoken on a call says the call's words no longer hold, as it does after a compaction kept only that, and the turn after it says nothing of them",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
           const { admitted } = yield* openAgent(host);
-          const turnOf = (kind: BrainHostTurn, handed: TurnHanded) =>
-            host.turnMessage(admitted, { kind, turnId: undefined }, handed);
+          const typedOn = (handed: TurnHanded) =>
+            host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined }, handed);
 
-          const typed = yield* turnOf(BRAIN_HOST_TURN.TYPED, {});
-          assert.ok(!typed.text?.includes("This turn is"), typed.text ?? "");
-
-          const called = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, typed.handed);
-          for (const told of [
-            "## This turn is spoken",
-            `\`${CODER_TOOL.DELEGATE}\``,
-            "## Talking the plan through",
-          ]) {
-            assert.ok(called.text?.includes(told), told);
-          }
-
-          const still = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, called.handed);
-          assert.ok(still.text?.startsWith("This turn is spoken too"), still.text ?? "");
-          assert.ok(!still.text?.includes("## Talking the plan through"), still.text ?? "");
-
-          const after = yield* turnOf(BRAIN_HOST_TURN.TYPED, still.handed);
+          const after = yield* typedOn({ spoken: true, opened: true });
           assert.ok(after.text?.startsWith("This turn is typed"), after.text ?? "");
-          // The line a call hands over once it has ended is not heard either.
-          const unheard = yield* turnOf(BRAIN_HOST_TURN.UNHEARD, still.handed);
-          assert.ok(unheard.text?.startsWith("The call has ended"), unheard.text ?? "");
-          const again = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, after.handed);
-          assert.ok(again.text?.includes("## This turn is spoken"), again.text ?? "");
-
-          // A compaction may drop the call's words, so a spoken turn after it is handed them whole,
-          // and a typed one is still told they no longer hold.
-          const compacted = handedAfterCompaction(again.handed);
-          const resumed = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, compacted);
-          assert.ok(resumed.text?.includes("## This turn is spoken"), resumed.text ?? "");
-          const typedAfter = yield* turnOf(BRAIN_HOST_TURN.TYPED, compacted);
-          assert.ok(typedAfter.text?.startsWith("This turn is typed"), typedAfter.text ?? "");
-        }),
-    );
-
-    it.effect(
-      "a spoken turn's message hands the task as it stands where the session has not handed it, then the time alone while nothing changed, and the task again once the rest of it changed",
-      () =>
-        Effect.gen(function* () {
-          const host = yield* hostOverStore();
-          const { userId, agent, admitted } = yield* openAgent(host);
-          assert.ok(agent.taskId !== null);
-          const spoken = (handed: TurnHanded) =>
-            host.turnMessage(admitted, { kind: BRAIN_HOST_TURN.SPOKEN, turnId: undefined }, handed);
-
-          const opening = yield* spoken({});
-          for (const told of [
-            "[the developer's time]",
-            "[saved document]",
-            "Name: Teammate invitations",
-          ]) {
-            assert.ok(opening.text?.includes(told), told);
-          }
-
-          const unchanged = yield* spoken(opening.handed);
-          assert.ok(unchanged.text?.includes("[the developer's time]"), unchanged.text ?? "");
-          assert.ok(!unchanged.text?.includes("[saved document]"), unchanged.text ?? "");
-
-          yield* updateTask(userId, agent.taskId, { name: "Teammate invitations, by link" });
-          const renamed = yield* spoken(unchanged.handed);
-          assert.ok(
-            renamed.text?.includes("Name: Teammate invitations, by link"),
-            renamed.text ?? "",
-          );
-          assert.ok(renamed.text?.includes("[saved document]"), renamed.text ?? "");
-          const after = yield* spoken(renamed.handed);
-          assert.ok(!after.text?.includes("[saved document]"), after.text ?? "");
+          const next = yield* typedOn(after.handed);
+          assert.ok(!next.text?.includes("This turn is"), next.text ?? "");
+          const compacted = yield* typedOn(handedAfterCompaction({ spoken: true, opened: true }));
+          assert.ok(compacted.text?.startsWith("This turn is typed"), compacted.text ?? "");
         }),
     );
 

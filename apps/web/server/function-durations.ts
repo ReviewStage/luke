@@ -85,7 +85,9 @@ const GROUPS: readonly GroupDefinition[] = [
 ];
 
 /** The WebSocket services, each a function of its own: the terminal relay and the Browser tab's live view. */
-const STANDALONE_ROUTES: readonly string[] = [TERMINAL_RELAY.PATH, BROWSER_LIVE.PATH].map(routeKeyOf);
+const STANDALONE_ROUTES: readonly string[] = [TERMINAL_RELAY.PATH, BROWSER_LIVE.PATH].map(
+  routeKeyOf,
+);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:

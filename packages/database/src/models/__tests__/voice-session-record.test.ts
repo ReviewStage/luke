@@ -203,42 +203,36 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           earlier.map((line) => line.text),
           ["Ship the CSV first.", "Starting on it."],
         );
-
       }),
   );
 });
 
 it.layer(getTestDB())("a call into a member's operator", (it) => {
-  it.effect(
-    "the operator is held for a call by its member alone and by no teammate",
-    () =>
-      Effect.gen(function* () {
-        const member = yield* openAccount;
-        const teammate = yield* openAccount;
-        const { workspaceId } = yield* startTask(member, { name: "Billing export" });
-        yield* joinWorkspace(workspaceId, teammate);
-        const operator = Option.getOrThrow(
-          yield* createCodingAgent(member, {
-            taskId: null,
-            organizationId: workspaceId,
-            planSnapshot: null,
-            prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: null,
-          }),
-        ).agent;
+  it.effect("the operator is held for a call by its member alone and by no teammate", () =>
+    Effect.gen(function* () {
+      const member = yield* openAccount;
+      const teammate = yield* openAccount;
+      const { workspaceId } = yield* startTask(member, { name: "Billing export" });
+      yield* joinWorkspace(workspaceId, teammate);
+      const operator = Option.getOrThrow(
+        yield* createCodingAgent(member, {
+          taskId: null,
+          organizationId: workspaceId,
+          planSnapshot: null,
+          prompt: null,
+          kind: CODING_AGENT_KIND.OPERATOR,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: null,
+        }),
+      ).agent;
 
-        assert.equal(
-          (yield* record.heldAgent({ userId: member, agentId: operator.id }))?.agentId,
-          operator.id,
-        );
-        assert.equal(
-          yield* record.heldAgent({ userId: teammate, agentId: operator.id }),
-          undefined,
-        );
-      }),
+      assert.equal(
+        (yield* record.heldAgent({ userId: member, agentId: operator.id }))?.agentId,
+        operator.id,
+      );
+      assert.equal(yield* record.heldAgent({ userId: teammate, agentId: operator.id }), undefined);
+    }),
   );
 });

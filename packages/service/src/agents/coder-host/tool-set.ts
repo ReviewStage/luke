@@ -210,9 +210,7 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
  * its repository, its kind, or where it runs offers it, and `remember` and `recall` where
  * its starter has Memory on, the same rules eve's tool files read as each
  * turn starts (`apps/dev/host.ts`'s `offeredTaskTools`, `offeredRepositoryTools`,
- * `offeredKindTools`, and `memoryOffered`). Note that a call's voice is told
- * these (`../../voice/call-backend.ts`), so a tool the agent would only be
- * refused is never one the voice promises the developer.
+ * `offeredKindTools`, and `memoryOffered`).
  */
 export function offeredCoderTools(agent: CoderOfferedTo, memoryOn: boolean): readonly AgentTool[] {
   const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
