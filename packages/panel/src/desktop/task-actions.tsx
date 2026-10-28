@@ -40,7 +40,7 @@ import {
   type TaskMark,
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useContext, useMemo, useRef } from "react";
 import { ActorRef, AssigneeFaceHeard, AssigneeFaceMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import {
@@ -83,6 +83,7 @@ import {
   taskCardOf,
 } from "./task-card.js";
 import { taskSubject } from "./task-row-parts.js";
+import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -647,7 +648,10 @@ function SidebarTaskCard({
  * and Mark done stand in place of all of it while the row is hovered or
  * reached from the keyboard.
  * A press opens it, and its actions are one menu opened alike by the row's ⋯,
- * a right-click, and the menu key (`ListRow`'s `menu`). Renamed,
+ * a right-click, and the menu key (`ListRow`'s `menu`). Where the sidebar
+ * chooses rows, it is chosen as a Mac's sidebar list chooses one, by ⌘-click,
+ * ⇧-click, X, and ⌘A, filled and with no box, and chosen among several its
+ * menu acts on every task chosen (`ChosenTasksContext`). Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
  *
@@ -693,6 +697,7 @@ export function SidebarTask({
     unread,
   });
   const worn = rowFaceOf(task, useMemberDirectory(), faces);
+  const chosen = useContext(ChosenTasksContext)(task.id);
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -759,10 +764,13 @@ export function SidebarTask({
           disabled={actions.deletion.busy}
           hint={rename.editing ? undefined : { Hint: RowHint, label: task.name }}
           onPress={rename.editing ? undefined : onOpen}
+          selectKey={task.id}
           menu={
             rename.editing
               ? undefined
-              : { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer }
+              : chosen === undefined
+                ? { ...rowMenu("Task", actions.groups(), tasks.shown), footer: actions.footer }
+                : chosenRowMenu("Task", chosen, tasks.shown)
           }
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={

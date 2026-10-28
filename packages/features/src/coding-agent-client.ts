@@ -9,6 +9,7 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import {
@@ -1147,7 +1148,15 @@ export class HostedCodingAgentClient {
     HttpClient.HttpClient
   > {
     return Effect.catchIf(
-      askLive(this.#hosted.live.inbox, { [LIVE_USER_QUERY]: userId }, poll, after),
+      askLive(
+        this.#hosted.live.inbox,
+        {
+          [LIVE_USER_QUERY]: userId,
+          [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE,
+        },
+        poll,
+        after,
+      ),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

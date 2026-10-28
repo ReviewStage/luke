@@ -46,14 +46,19 @@ const QUERY_FLAG = EffectSchema.Literal(TASK_FILE_QUERY_FLAG);
 /** The plan the path names. */
 const taskInputSchema = EffectSchema.Struct({ id: EffectSchema.String });
 
-/** A window of one file of the plan's repository, as the File tab queries it. */
-const taskFileQuerySchema = EffectSchema.Struct({
-  ...taskInputSchema.fields,
+/** A window of one file, as the File tab queries it: the service reads it into the wire's own request. */
+export const taskFileQueryFields = {
   path: EffectSchema.optionalKey(EffectSchema.String),
   first: EffectSchema.optionalKey(EffectSchema.String),
   last: EffectSchema.optionalKey(EffectSchema.String),
   raw: EffectSchema.optionalKey(QUERY_FLAG),
   ref: EffectSchema.optionalKey(EffectSchema.String),
+};
+
+/** A window of one file of the plan's repository, as the File tab queries it. */
+const taskFileQuerySchema = EffectSchema.Struct({
+  ...taskInputSchema.fields,
+  ...taskFileQueryFields,
 });
 
 /** One folder of the plan's repository, as the File tab's tree queries it: the root where `path` is absent. */

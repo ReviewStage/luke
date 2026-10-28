@@ -256,8 +256,6 @@ import {
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksIssueParams,
-  type TasksLinearIssuesAnswer,
-  type TasksLinearIssuesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -326,7 +324,6 @@ import {
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
-  tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
   tasksPagesAnswerSchema,
@@ -620,14 +617,6 @@ export interface HostOperator {
   ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
   /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
   workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's Linear connection begun; Vercel Connect's sign-in address to open, or why there is none. */
-  workspaceLinearConnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** A workspace's Linear disconnected; the workspace as it then stands, or why it is not. */
-  workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** The Linear issues a workspace's connection reaches; or why there are none. */
-  workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it; or why there is no answer. */
   workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
@@ -1376,7 +1365,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     tasksFile: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_FILE, {
-          taskId: params.taskId,
+          ...("taskId" in params
+            ? { taskId: params.taskId }
+            : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           firstLine: params.firstLine,
           lastLine: params.lastLine,
@@ -1610,27 +1601,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
         }),
         answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLinearConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLinearDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLinearIssues: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES, {
-          workspaceId: params.workspaceId,
-          ...("query" in params ? { query: params.query } : undefined),
-          ...("identifier" in params ? { identifier: params.identifier } : undefined),
-        }),
-        answerOf(tasksLinearIssuesAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceSentry: (params) =>
       Effect.map(

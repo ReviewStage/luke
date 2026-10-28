@@ -10,8 +10,8 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
  * admin-workspaces.test.ts -- the Workspaces tab heads its table with the
- * shared workspaces' four counts, lists each workspace with its owner,
- * GitHub installation, and integrations, narrows the rows as a maintainer
+ * shared workspaces' four counts, lists each workspace with its owner and
+ * GitHub installation, narrows the rows as a maintainer
  * types, asks for every workspace once View options' "Shared only" is cleared, and opens a
  * row's owner on a press. The network, the HTTP boundary to Luke, is a fake
  * that answers every read with the list given and writes down what it was
@@ -33,10 +33,6 @@ const NORTHWIND: AdminWorkspaceRow = {
   },
   members: 9,
   installations: [{ login: "northwind", status: "active" }],
-  integrations: [
-    { provider: "linear", status: "connected" },
-    { provider: "notion", status: "expired" },
-  ],
   tasksWeek: 14,
   agentsWeek: 52,
   prsMergedWeek: 21,
@@ -50,7 +46,6 @@ const FELDSPAR: AdminWorkspaceRow = {
   owner: null,
   members: 3,
   installations: [{ login: "feldspar-io", status: "suspended" }],
-  integrations: [],
   tasksWeek: 1,
   agentsWeek: 0,
   prsMergedWeek: 0,
@@ -146,17 +141,14 @@ test("the tab heads its table with the shared workspaces' four counts", async ()
   expect(page.textContent).toContain("6 suspended");
 });
 
-test("a row names its workspace, owner, installation, and integrations", async () => {
+test("a row names its workspace, owner, and installation", async () => {
   const { page } = await openWorkspaces(workspaces());
 
   const [northwind, feldspar] = rows(page);
   expect(northwind).toContain("Northwind");
   expect(northwind).toContain("Grace Hopper");
   expect(northwind).toContain("northwindActive");
-  expect(northwind).toContain("Linear");
-  expect(northwind).toContain("Notion · Sign-in expired");
   expect(feldspar).toContain("feldspar-ioSuspended");
-  expect(feldspar).toContain("None");
 });
 
 test("typing narrows the loaded workspaces at once, and a miss says so", async () => {

@@ -24,7 +24,6 @@ import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   COMMENT_TOOL_REFUSAL,
@@ -309,12 +308,7 @@ export function runAgentTools(
 ): Effect.Effect<
   WireRecord,
   never,
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog
-  | WorkspaceLinearConnect
-  | SentryApp
+  DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | SentryApp
 > {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);

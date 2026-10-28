@@ -51,6 +51,7 @@ import {
   Tooltip,
   useMenu,
   useMinute,
+  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -982,10 +983,13 @@ function QuestionClose({
 function Subject({
   item,
   heading,
+  first,
 }: {
   item: InboxItem;
   /** Takes the title's heading, which the bar watches scroll away (`useHeadingAway`). */
   heading: (element: HTMLElement | null) => void;
+  /** Whether it is the page's first heading, as on a phone, whose bar names what holds the item and whose list is not drawn beside it. */
+  first: boolean;
 }): React.JSX.Element {
   return (
     <header
@@ -993,7 +997,7 @@ function Subject({
       {...{ [REPLY_SCOPE]: "" }}
     >
       <Text
-        as={TEXT_ELEMENT.H2}
+        as={first ? TEXT_ELEMENT.H1 : TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
         ref={heading}
         className="inbox-subject-title"
@@ -1174,34 +1178,13 @@ function Crumbs({
   /** Whether the heading has scrolled away, so the path names the item. */
   titleShown: boolean;
 }): React.JSX.Element {
-  const { name, agent } = by.subject;
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
-  const onOpenHolder = doors.onOpenHolder;
-  const task: Crumb | undefined =
-    holder.kind === INBOX_HOLDER.TASK
-      ? {
-          label: holder.task.name,
-          glyph: tabLook({
-            kind: TAB_KIND.PLAN,
-            name: holder.task.name,
-            status: holder.task.status,
-          }).icon,
-          hint: holder.task.name,
-          card: doors.taskCard,
-          onPress: () => onOpenHolder?.(),
-        }
-      : undefined;
+  // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
+  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
   const crumbs: Crumb[] = [
-    task ?? automation,
-    {
-      label: name,
-      glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
-      hint: name,
-      card: <AgentCard subject={by.subject} models={by.models} />,
-      onPress: () => by.onOpen(),
-      // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
-      fixed: titleShown,
-    },
+    taskCrumb(holder, doors) ?? (operator ? undefined : automation),
+    // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
+    agentCrumb(holder, by, titleShown),
     { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
   return (
@@ -1209,6 +1192,52 @@ function Crumbs({
       <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
+}
+
+/** The path's task crumb, wearing its plan's glyph and hanging its card, which opens the task; none for an item no task holds. */
+function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefined {
+  if (holder.kind !== INBOX_HOLDER.TASK) return undefined;
+  const { onOpenHolder } = doors;
+  return {
+    label: holder.task.name,
+    glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name, status: holder.task.status })
+      .icon,
+    hint: holder.task.name,
+    card: doors.taskCard,
+    onPress: () => onOpenHolder?.(),
+  };
+}
+
+/** The path's agent crumb, wearing its mark, or Luke's face for Luke's own, and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
+function agentCrumb(holder: InboxHolder, by: ItemAgent, fixed = false): Crumb {
+  const { name, agent } = by.subject;
+  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
+  return {
+    label: name,
+    glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+    hint: name,
+    card: <AgentCard subject={by.subject} models={by.models} />,
+    onPress: () => by.onOpen(),
+    fixed,
+  };
+}
+
+/**
+ * A phone's bar's name for the item: what holds it, its task as the wide
+ * path leads with it, or its agent where no task holds it, each crumb
+ * pressing where the wide path's does. Note that the bar never names the
+ * item's title, because the thread's heading right under it already does.
+ */
+function PhoneHolder({
+  holder,
+  by,
+  doors,
+}: {
+  holder: InboxHolder;
+  by: ItemAgent;
+  doors: InboxPaneDoors;
+}): React.JSX.Element {
+  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(holder, by)]} />;
 }
 
 /**
@@ -1258,7 +1287,7 @@ export function InboxPane({
   mentions?: TaskMentionsValue | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the item stands alone on a
-   * phone: the way back's glyph, the item's title centred, and one ⋯
+   * phone: the way back's glyph, what holds the item centred (`PhoneHolder`), and one ⋯
    * holding the pager, what the crumbs open, the panel, and the item's own
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
@@ -1276,6 +1305,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
+  // A phone heads the item with its own row, the item standing alone in the list's place.
+  const phoneHead = phone !== undefined && onBack !== undefined;
   // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
   const by: ItemAgent = {
@@ -1343,7 +1374,7 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      {phone !== undefined && onBack !== undefined ? (
+      {phoneHead ? (
         <PhoneHead
           place="inbox-item"
           start={
@@ -1353,7 +1384,7 @@ export function InboxPane({
               <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
-          title={cardTitle(item.title)}
+          title={<PhoneHolder holder={holder} by={by} doors={doors} />}
           end={
             <InboxItemMenu
               key={item.id}
@@ -1422,7 +1453,7 @@ export function InboxPane({
               images={control}
               code={doors.code}
             >
-              <Subject item={item} heading={setHeading} />
+              <Subject item={item} heading={setHeading} first={phoneHead} />
               <Stack
                 as={LAYOUT_ELEMENT.OL}
                 gap={GAP.NONE}

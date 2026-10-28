@@ -220,7 +220,8 @@ import { cardTitle } from "./tool-call-model.js";
  * none does. The head names the Inbox and, at its right, offers the view's
  * menu: first what the list holds, For you, the developer's own items they are
  * not done with, asks waiting on them and anything of theirs unread, a
- * settled thread its agent wrote on again among them, or All, every item,
+ * settled thread its agent wrote on again among them, and their updates on
+ * a task still under way, read or not, or All, every item,
  * the head naming All after the Inbox's name; then Group by, None, one
  * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
@@ -680,7 +681,7 @@ function HolderHeader({
     );
   }
   if (holder.automationId === null) {
-    return <GroupHeader glyph={<GLYPH.AUTOMATION />} label={holder.name} {...shared} />;
+    return <GroupHeader glyph={<HolderGlyph holder={holder} />} label={holder.name} {...shared} />;
   }
   const actor =
     known === undefined

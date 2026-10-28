@@ -25,7 +25,14 @@ import {
  * swaps the run for a longer or a shorter one rather than adding to it.
  * ⇧↑ and ⇧↓ grow or shrink that run a row at a time from the row holding
  * the focus, which they take on with them, and stop at either end rather
- * than wrapping. ⌘A chooses every row, and Esc, while any is chosen, none.
+ * than wrapping. X puts the row holding the focus in or takes it out, as
+ * Linear's lists do, and a row's box (`SelectBox`) does the same under the
+ * pointer. ⌘A chooses every row, and Esc, while any is chosen, none.
+ *
+ * Where the rows stand in several runs of their own, a board's columns, a
+ * ⇧-press reaches only across the run the row stands in (`selectionRun`),
+ * as Linear's board chooses a run within one column, since rows side by side
+ * hold no order between them.
  *
  * A list of the app's own, whose rows are no `ListRow`s, chooses them the
  * same way inside a `SelectionRegion`, each row's `CardPress` taking part
@@ -43,11 +50,13 @@ export interface ListSelection {
   readonly onChange: (selected: ReadonlySet<string>) => void;
 }
 
-/** What a row of a choosing `List` reads: whether it is chosen, and the door its press goes through. */
+/** What a row of a choosing `List` reads: whether it is chosen, and the doors its press and its box go through. */
 export interface ListSelecting {
   readonly selected: ReadonlySet<string>;
   /** Hears a press on the row keyed `key`; answers whether it chose rows, so the row's own press is not also made. */
   readonly press: (key: string, event: MouseEvent<HTMLElement>) => boolean;
+  /** Puts the row keyed `key` in or takes it out, as its box and X do, anchoring a run there. */
+  readonly toggle: (key: string) => void;
 }
 
 /** The selection of the `List` a row stands in, where that list chooses rows at all. */
@@ -62,9 +71,20 @@ const ROOT_ATTRIBUTE = "data-selection-root";
 /** What finds the box a row is chosen in. */
 const ROOT_SELECTOR = `[${ROOT_ATTRIBUTE}]`;
 
+/** The attribute a run of rows wears inside a box whose rows are chosen together, as a board's column does. */
+const RUN_ATTRIBUTE = "data-selection-run";
+
+/** What finds the run a row stands in. */
+const RUN_SELECTOR = `[${RUN_ATTRIBUTE}]`;
+
 /** What the box whose rows are chosen together wears. */
 export function selectionRoot(): { readonly "data-selection-root": "" } {
   return { [ROOT_ATTRIBUTE]: "" };
+}
+
+/** What a run of rows wears, a board's column, across which alone a ⇧-press reaches. */
+export function selectionRun(): { readonly "data-selection-run": "" } {
+  return { [RUN_ATTRIBUTE]: "" };
 }
 
 /** What a row's press wears in a list that chooses rows. */
@@ -94,6 +114,12 @@ function choosableOf(list: Element): Choosable[] {
       (press) => !press.matches(":disabled") && press.getAttribute("aria-disabled") !== "true",
     )
     .map((press) => ({ key: press.getAttribute(KEY_ATTRIBUTE) ?? "", press }));
+}
+
+/** The rows of `rows` that stand in the run `press` stands in, every one where the list draws no runs. */
+function inRunOf(rows: readonly Choosable[], press: Element): readonly Choosable[] {
+  const run = press.closest(RUN_SELECTOR);
+  return run === null ? rows : rows.filter((row) => row.press.closest(RUN_SELECTOR) === run);
 }
 
 /** Focuses the first available row of `box` that can be chosen, where a region of the app's own rows keeps no roving Tab stop; answers whether one took it. */
@@ -171,6 +197,18 @@ export function useListSelection(selection: ListSelection | undefined): {
     latest.current?.onChange(next);
   }, []);
 
+  const toggle = useCallback(
+    (key: string) => {
+      const current = latest.current;
+      if (current === undefined) return;
+      const next = new Set(current.selected);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      hand(next, { key, base: next, head: key, left: next });
+    },
+    [hand],
+  );
+
   const press = useCallback(
     (key: string, event: MouseEvent<HTMLElement>): boolean => {
       const current = latest.current;
@@ -180,21 +218,19 @@ export function useListSelection(selection: ListSelection | undefined): {
         const list = event.currentTarget.closest(ROOT_SELECTOR);
         if (list === null) return false;
         const from = standing(chosen) ?? { key, base: chosen, head: key, left: chosen };
-        const next = withRun(choosableOf(list), from.base, from.key, key);
+        const rows = inRunOf(choosableOf(list), event.currentTarget);
+        const next = withRun(rows, from.base, from.key, key);
         hand(next, { ...from, head: key, left: next });
         return true;
       }
       if (command(event)) {
-        const next = new Set(chosen);
-        if (next.has(key)) next.delete(key);
-        else next.add(key);
-        hand(next, { key, base: next, head: key, left: next });
+        toggle(key);
         return true;
       }
       anchor.current = { key, base: chosen, head: key, left: chosen };
       return false;
     },
-    [hand, standing],
+    [hand, standing, toggle],
   );
 
   const onKeyDown = useCallback(
@@ -215,11 +251,21 @@ export function useListSelection(selection: ListSelection | undefined): {
         hand(new Set(choosableOf(list).map((row) => row.key)), undefined);
         return true;
       }
+      const bare = !command(event) && !event.shiftKey && !event.altKey;
+      if (bare && event.key.toLowerCase() === "x") {
+        const row = choosableOf(list).find((each) => each.press === event.target);
+        if (row === undefined) return false;
+        event.preventDefault();
+        toggle(row.key);
+        return true;
+      }
       const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
       if (step === 0 || !event.shiftKey || command(event) || event.altKey) return false;
-      const rows = choosableOf(list);
-      const at = rows.findIndex((row) => row.press === event.target);
-      if (at < 0) return false;
+      const all = choosableOf(list);
+      const inHand = all.find((row) => row.press === event.target);
+      if (inHand === undefined) return false;
+      const rows = inRunOf(all, inHand.press);
+      const at = rows.indexOf(inHand);
       event.preventDefault();
       const here = rows[at]?.key ?? "";
       // Note that the run grows from the row in hand: one the focus walked to apart from the run starts a new one there.
@@ -235,13 +281,13 @@ export function useListSelection(selection: ListSelection | undefined): {
       to.press.focus();
       return true;
     },
-    [hand, standing],
+    [hand, standing, toggle],
   );
 
   const selected = selection?.selected;
   const selecting = useMemo(
-    () => (selected === undefined ? undefined : { selected, press }),
-    [selected, press],
+    () => (selected === undefined ? undefined : { selected, press, toggle }),
+    [selected, press, toggle],
   );
   return { selecting, onKeyDown };
 }

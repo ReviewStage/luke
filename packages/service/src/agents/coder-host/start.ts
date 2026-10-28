@@ -23,8 +23,8 @@ import {
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import {
-  AUTOMATION_LINE_METADATA,
   type AwaitingLineMetadata,
+  automationLineMetadata,
   type LineSender,
   storeWriter,
 } from "@luke/database/models/writer";
@@ -251,7 +251,7 @@ export type StartAsk = StartPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
-  /** The coding agent whose `start_agent` asks, which the first line names as its sender; none for a Start by a member or an automation. */
+  /** The coding agent whose `start_agent` asks, which the first line names as its sender and the agent's row keeps as its starter; none for a Start by a member or an automation. */
   readonly startedBy?: CodingAgent | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
@@ -865,7 +865,7 @@ function openingOf(
   if (automationOrigin !== undefined) {
     return {
       sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
-      metadata: AUTOMATION_LINE_METADATA,
+      metadata: automationLineMetadata(automationOrigin.firing),
     };
   }
   const sender: LineSender =
@@ -1101,6 +1101,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
+      startedByAgentId: ask.startedBy?.id,
       title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,

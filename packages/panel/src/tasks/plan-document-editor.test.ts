@@ -1168,6 +1168,34 @@ test("a click hands the editor the words it landed on, so the caret finds them h
   });
 });
 
+test("a click whose press selected words in a section hands the editor where they start and end, so it opens with them selected", () => {
+  const body = "## Goal\n\nShip it.\n\nShip the invite flow.\n";
+  const { container, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  const goal = block(container, "Goal");
+  window
+    .getSelection()
+    ?.setBaseAndExtent(wordsNode(goal, "Ship it."), 5, wordsNode(goal, "Ship the invite flow."), 8);
+
+  act(() => {
+    goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+  });
+
+  assert.deepEqual(open().placement, {
+    x: 60,
+    y: 310,
+    from: { section: 0, text: "Ship it.", occurrence: 0, offset: 5, code: false, top: 0 },
+    words: {
+      section: 0,
+      text: "Ship the invite flow.",
+      occurrence: 0,
+      offset: 8,
+      code: false,
+      top: 0,
+    },
+  });
+});
+
 test("the words a click opened the editor on stay under the finger, as it opens and as what it draws later changes its height, until the developer scrolls", () => {
   const { container } = mount();
   const goal = block(container, "Goal");

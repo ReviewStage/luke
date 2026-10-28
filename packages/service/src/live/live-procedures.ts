@@ -22,12 +22,13 @@
  * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
  * the same way, one statement a part that marks where it stands
  * (`task-record-live.ts`), after the task is read as the account, so one it
- * does not reach is not found, as its own read answers. `GET
- * /api/live/task-browser-tabs?id=` answers its Browser tabs as one
- * statement, the agent's pointer on each among them, so a window draws the
- * pointer moving within a moment of the agent's action; a takeover is
- * delivered as it stands and lapsed by the reader, since no statement reads
- * the clock.
+ * does not reach is not found, as its own read answers, woken by a write
+ * that names the task (`taskRecordLive`), as its pages and its history are.
+ * `GET /api/live/task-browser-tabs?id=` answers its Browser tabs as one
+ * statement, the agent's pointer on each among them, woken by a write that
+ * names the task, so a window draws the pointer moving within a moment of
+ * the agent's action; a takeover is delivered as it stands and lapsed by
+ * the reader, since no statement reads the clock.
  *
  * `GET /api/live/mac-commands?kinds=` answers the commands of those kinds
  * no Mac of the account has claimed, as one statement, for the Mac to claim
@@ -73,7 +74,6 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { readAutomation } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
@@ -84,6 +84,7 @@ import {
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -114,20 +115,22 @@ import {
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentInboxLive,
+  agentPagesLive,
   channelsLive,
   inboxLive,
   macCommandsLive,
   sidebarLive,
+  taskBrowserTabsLive,
+  taskHistoryLive,
   taskInboxLive,
+  taskPagesLive,
+  taskRecordLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
 } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
-import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
-import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { type LiveSealer, pollSealer } from "./poll-sealer.js";
 
 export interface LiveProcedureSeams {
@@ -289,7 +292,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(inboxLive, { userId: context.userId }, input);
+      return yield* liveQueryParts(
+        inboxLive,
+        { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
+        input,
+      );
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -330,48 +337,38 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskRecordLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskRecordLive, { userId: context.userId, taskId }, input);
     }),
     taskPages: signedIn.taskPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskPagesLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskPagesLive, { userId: context.userId, taskId }, input);
     }),
     agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = agentPagesLiveStatements(context.userId, agentId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
     }),
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskHistoryLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskHistoryLive, { userId: context.userId, taskId }, input);
     }),
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statement = taskBrowserTabsLiveStatement(context.userId, taskId);
-      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(
-        { tabs: statement.value },
+      return yield* liveQueryParts(
+        taskBrowserTabsLive,
+        { userId: context.userId, taskId },
         input,
-        NO_TOPICS,
         LIVE_POLL_HOLD.WATCHED_LOOK,
       );
     }),

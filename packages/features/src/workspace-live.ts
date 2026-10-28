@@ -55,8 +55,6 @@ const workspaceLiveRowSchema = EffectSchema.Struct({
   personal: EffectSchema.Boolean,
   /** The plugin's role text, which may list several roles comma-separated. */
   role: EffectSchema.String,
-  /** Whether its Linear connection stands; null where it holds none. */
-  linearActive: EffectSchema.NullOr(EffectSchema.Boolean),
   memberCount: countedNumber,
   photoVersion: EffectSchema.NullOr(EffectSchema.String),
   /** The reader's own sign-in picture on their own first workspace, else null. */
@@ -108,7 +106,6 @@ function workspaceOfLiveRow(
     role: roleOf(row.role),
     github: first === undefined ? null : { login: first.login, active: first.active },
     githubInstallations,
-    ...(row.linearActive === null ? undefined : { linear: { active: row.linearActive } }),
     memberCount: row.memberCount,
     ...(row.photoVersion === null ? undefined : { photoVersion: row.photoVersion }),
     ...(pictureUrl === undefined ? undefined : { pictureUrl }),

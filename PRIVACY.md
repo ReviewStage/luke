@@ -874,32 +874,6 @@ and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
 cannot be reached then, your account is deleted all the same and the grant
 stays until you revoke Luke in Linear's own settings.
 
-**Linear for a whole workspace, if an owner or admin connects it.** An owner
-or admin can also connect Linear once for everyone in a workspace, in Settings
-› Workspace › Integrations. That signs them in to Linear in their browser
-through Vercel Connect, which stores the Linear token under the workspace
-rather than under their account, and our service handles the token as it
-does an account's, sending it only to Linear. We keep the workspace
-connection's state, who last began its sign-in, when it last changed and last
-finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. While it is connected, Luke's agents
-working on that workspace's plans and coding agents use this connection for
-Linear in place of a member's own, so what they change in Linear shows as made
-by the person who connected it. A plan started from an issue by an earlier
-version of Luke keeps the issue's key, title, address, and description, which
-are deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
-to a Linear issue, the app asks our service for that issue's key, title,
-state, and assignee's name, which it reads through this connection as you
-look and keeps nowhere; the app shows them on the link, and they go no
-further. The connection read through is that of the workspace the words belong
-to: a
-plan's, or an Inbox item's own, its plan's or its agent's, never the
-workspace the Inbox happens to list; an item whose workspace is not known
-reads nothing.
-Disconnecting stops every read through it at once,
-removes the connection's record, and asks Vercel Connect to revoke the grant;
-what plans already copied of an issue stays with them.
-
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores
 Notion's token for your account, encrypted, and renews it. Our service

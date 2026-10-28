@@ -761,8 +761,7 @@ naming which account it is and the others, by their labels alone, each
 quoted as a string, asking the agent to ask which account before a write
 the developer has not pointed at one, and to say which it used; a
 developer with one account per provider is told the same bytes as before.
-A conversation whose workspace connected Linear for every member is handed
-Linear once, bare, on the workspace's grant. A coding agent and its worker
+A coding agent and its worker
 are handed every integration the developer has not switched off for that
 agent, the switches naming connections. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
@@ -965,20 +964,6 @@ short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
 runs every agent without that provider, and neither Settings nor the
 composer's MCP servers popover draws a row for it. Every token request is
 billed by Connect and rate-limited per team.
-
-**The workspace Linear connector.** A workspace's own Linear grant, which
-a link to a Linear issue reads it through, is held on a connector of its own, named by
-`LINEAR_WORKSPACE_CONNECTOR_UID`, set as the others are. The accounts'
-Linear connector (`LINEAR_CONNECTOR_UID`) signs in through Linear's MCP
-server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a
-401. So the workspace's must be Connect's own Linear connector
-(`vercel connect create linear`), whose Linear API OAuth tokens the GraphQL
-API takes, and Linear's MCP server takes too, for the agents a workspace's
-grant is handed to. Give it the `read` scope at least, and user subjects.
-Without the variable, no workspace can connect Linear. Since Linear's MCP
-server takes those tokens too, `LINEAR_CONNECTOR_UID` may name the same
-connector, which keeps Luke one app in Linear; its Linear app must be public
-for a workspace of any other Linear organization to sign in.
 
 **Slack's connector.** Slack's MCP server serves user tokens alone, and only
 ones issued by its own authorization server
