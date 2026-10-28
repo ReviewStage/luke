@@ -15,8 +15,10 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  * The head is the subject's glyph where it wears one, its name in the card's
  * one weight, wrapped to two lines, or on one line faded where it is cut
  * short as a tab's label is; under the name, a quieter line of what it runs
- * on or whose it is; and at the head's right its corner, muted: how long ago,
- * how it ended, or how many wait. Under the head stand its notes, read whole
+ * on, whose it is, or where it comes from; and at the head's right its
+ * corner, muted, which holds one short word and nothing else: the subject's
+ * age, how it ended, or how many wait. A role, an owner, or a source is no
+ * corner's; it joins the line under the name. Under the head stand its notes, read whole
  * and so wrapped to three lines, or one line faded at its end, and a rule
  * before what a card lists under it.
  *
@@ -140,9 +142,9 @@ export function HoverCardHead({
   name: ReactNode;
   /** Whether the name stands on one line, faded where it is cut short, rather than wrapping to two: a task standing in for a title. */
   oneLine?: boolean;
-  /** The quieter line under the name: what the subject runs on, whose it is, or when it ran. */
+  /** The quieter line under the name: what the subject runs on, whose it is, where it comes from, or when it ran. */
   sub?: ReactNode;
-  /** What stands muted at the head's right. */
+  /** What stands muted at the head's right, one short word: the subject's age, how it ended, or how many wait. */
   corner?: ReactNode;
 }): React.JSX.Element {
   const head = (

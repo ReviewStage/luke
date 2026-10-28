@@ -252,8 +252,8 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   assert.deepEqual(headOf(skill), {
     glyph: true,
     name: "/release",
-    sub: undefined,
-    corner: "Repository",
+    sub: "Repository skill",
+    corner: undefined,
   });
   assert.equal(
     skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,

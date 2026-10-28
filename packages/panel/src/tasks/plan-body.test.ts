@@ -296,7 +296,7 @@ test("a teammate's card says who they are and what they last changed in the plan
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="person"]'), "a person's card hangs");
-  assert.match(card.textContent ?? "", /Charles Pancharles@example\.comMember/u);
+  assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u);
   assert.match(card.textContent ?? "", /Edited Goal and Risks · now$/u);
 });
 
