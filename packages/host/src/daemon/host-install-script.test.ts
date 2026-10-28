@@ -130,6 +130,29 @@ describe("the host's install script", () => {
     });
   }
 
+  for (const [shell, arm64, expected] of [
+    ["a native shell on Apple silicon", "1", "arm64"],
+    ["a Rosetta shell on Apple silicon", "1", "arm64"],
+    ["an Intel Mac", "0", "x86_64"],
+  ] as const) {
+    it(`reads ${shell} as ${expected}`, () => {
+      const bin = folder();
+      const machine = shell.startsWith("a native") ? "arm64" : "x86_64";
+      writeFileSync(
+        join(bin, "uname"),
+        `#!/bin/sh\ncase "$1" in\n  -m) echo ${machine} ;;\n  *) echo Darwin ;;\nesac\n`,
+        { mode: 0o755 },
+      );
+      writeFileSync(join(bin, "sysctl"), `#!/bin/sh\necho ${arm64}\n`, { mode: 0o755 });
+      const answer = sh(["-c", `. "${SCRIPT}"; hardware_machine`], {
+        LUKE_HOST_INSTALL_LIBRARY: "1",
+        PATH: `${bin}:${process.env.PATH}`,
+      });
+      expect(answer.status).toBe(0);
+      expect(answer.stdout.trim()).toBe(expected);
+    });
+  }
+
   it("lets a Linux box that is not WSL through", () => {
     const answer = sh(
       [

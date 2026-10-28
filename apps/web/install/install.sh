@@ -78,6 +78,17 @@ fail() {
   exit 1
 }
 
+# The computer's own architecture. On a Mac it reads the hardware, so Apple
+# silicon is still arm64 from a shell running under Rosetta, where uname -m
+# says x86_64.
+hardware_machine() {
+  if [ "$(uname -s)" = "Darwin" ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = "1" ]; then
+    echo arm64
+  else
+    uname -m
+  fi
+}
+
 # Refuses a computer Luke host does not run on, as the script's first word on
 # it, before it changes anything: its kernel ($1), its machine ($2), and its
 # /proc/version ($3), which names Microsoft under WSL.
@@ -195,7 +206,7 @@ case "$ORIGIN" in
   https://*) ;;
   *) fail "--origin must be an https:// address, not $ORIGIN" ;;
 esac
-require_supported_os "$(uname -s)" "$(uname -m)" "$(cat /proc/version 2>/dev/null || true)"
+require_supported_os "$(uname -s)" "$(hardware_machine)" "$(cat /proc/version 2>/dev/null || true)"
 require_kvm
 [ "$(id -u)" -eq 0 ] || fail "Run it as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
 command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] || fail "Luke host needs systemd."
