@@ -1032,7 +1032,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
     ),
-    ["Inbox", INVITES.name, "Item actions"],
+    ["Inbox", INVITES.name, "Inbox item actions"],
     "one control a corner, the item's task between them",
   );
   assert.equal(
@@ -1048,7 +1048,7 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     "the thread's title is the page's one top heading",
   );
 
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Item actions"]')?.click());
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Inbox item actions"]')?.click());
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "the ⋯ opens");
   assert.match(menu.textContent ?? "", /\d of \d/, "it says where the item stands");
@@ -1056,8 +1056,8 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     (each) => each.textContent,
   );
   for (const offered of [
-    "Previous item",
-    "Next item",
+    "Previous inbox item",
+    "Next inbox item",
     "Open task",
     "Open agent",
     "Show panel",

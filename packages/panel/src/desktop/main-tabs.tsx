@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
-import { memo, useRef } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -170,8 +170,13 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, whose menu offers the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
-function AgentMenuTab({
+/**
+ * An agent's tab, whose menu offers the agent's own actions
+ * (`agent-actions.tsx`), renamed in place while its task is not archived:
+ * the task's column's, and the side panel's beside the Inbox, which hears
+ * the tab's whole doors (`onDoors`) for a phone's header to offer them.
+ */
+export function AgentMenuTab({
   agent,
   agents,
   look,
@@ -179,6 +184,7 @@ function AgentMenuTab({
   shown,
   terminals,
   slot,
+  onDoors,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -188,6 +194,8 @@ function AgentMenuTab({
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
   slot: HTMLElement | null | undefined;
+  /** Hears the tab's doors with the agent's own in them as each draw makes them, and none once the tab is gone. */
+  onDoors?: ((agentId: string, doors: TabDoors | undefined) => void) | undefined;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, {
     label: look.label,
@@ -195,11 +203,14 @@ function AgentMenuTab({
     terminals,
     onDeleted: doors.onClose,
   });
+  const whole: TabDoors = { ...doors, ...actions.doors };
+  useLayoutEffect(() => onDoors?.(agent.id, whole));
+  useLayoutEffect(() => () => onDoors?.(agent.id, undefined), [onDoors, agent.id]);
   return (
     <>
       <RenamableTab
         look={look}
-        doors={{ ...doors, ...actions.doors }}
+        doors={whole}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}

@@ -89,7 +89,7 @@ export interface TabPin {
 export interface TabDoors
   extends Pick<
     AgentMenuDoors,
-    "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "deletion" | "copyLink"
+    "onCopy" | "onRename" | "onOpenTerminal" | "onOpenInTask" | "archive" | "deletion" | "copyLink"
   > {
   /** Whether the tab is the one chosen, which ⌘W closes and ⌘J opens the terminal of. */
   chosen: boolean;
@@ -190,13 +190,15 @@ function tabActionGroups(doors: TabDoors): MenuEntry[][] {
  * which a taskless agent's row has, so it is left out of the menu's doors.
  */
 export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuEntry[][] {
-  const { onCopy, onRename, onOpenTerminal, archive, deletion, copyLink, chosen } = doors;
+  const { onCopy, onRename, onOpenTerminal, onOpenInTask, archive, deletion, copyLink, chosen } =
+    doors;
   return agentMenuGroups({
     chosen,
     copyLink,
     onCopy,
     onRename,
     onOpenTerminal,
+    onOpenInTask,
     archive,
     deletion,
   });

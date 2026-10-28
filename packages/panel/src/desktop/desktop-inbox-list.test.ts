@@ -1423,7 +1423,7 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
-test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U above Copy link", async () => {
+test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, after Copy link", async () => {
   world.listedWorkspace = ACME;
   const keys = standKeymap();
   const { page } = mount();
@@ -1441,14 +1441,14 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
   );
 
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Mark as read", "—", "Show details⌥↓", "—", "Copy link"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Show details⌥↓", "—", "Mark as read"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
   assert.deepEqual(rowMenu(page, "Alert at 80%?"), [
-    "Mark as unreadU",
-    "—",
     "Copy link",
+    "—",
+    "Mark as unreadU",
     "—",
     "Show details⌥↓",
     "—",

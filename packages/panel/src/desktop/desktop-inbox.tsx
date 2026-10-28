@@ -9,7 +9,8 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -23,6 +24,7 @@ import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/ta
 import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { useAct } from "../act.js";
+import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -82,7 +84,7 @@ import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
 import {
@@ -267,7 +269,7 @@ export function DesktopInbox({
     () => (shownChannelId === undefined ? undefined : () => look.current(shownChannelId)),
     [shownChannelId],
   );
-  // A row's ⋯ moves its thread to another open channel, which the channels' counts are read again for.
+  // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
   const move = useMoveThreadDialog({
     channels: channels.channels ?? NO_CHANNELS,
     threads: standing.flatMap(({ items }) => items),
@@ -424,6 +426,23 @@ export function DesktopInbox({
   });
   // A notice of the reader's own is acknowledged as it opens, on the same terms, once its holder's held read holds it.
   useNodOnOpen({ shown: opened, readerId: tasks.me, control: live });
+  // ⌘O opens what holds the keys in its full place: the agent the panel shows while it holds them, in its task; else the item shown, in its task, or on its agent's page where it has none.
+  const panelAgent =
+    sideFocused && sidePanel.tab !== undefined && isTranscriptTab(sidePanel.tab)
+      ? sidePanel.tab.transcript
+      : undefined;
+  const openInTask = (): (() => void) | undefined => {
+    if (!tasks.shown) return undefined;
+    if (panelAgent !== undefined && taskId !== undefined) {
+      return () => tasks.onShowAgent(taskId, panelAgent);
+    }
+    if (opened === undefined) return undefined;
+    const { holder, item } = opened;
+    return holder.kind === INBOX_HOLDER.TASK
+      ? () => tasks.onShowTask(holder.task.id)
+      : () => tasks.agentView.onOpen(item.agentId);
+  };
+  useAppCommand(APP_COMMAND.OPEN_IN_TASK, openInTask());
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
   const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({
@@ -534,6 +553,7 @@ export function DesktopInbox({
                 }),
                 onMark: markItem,
                 onClose: closeItem,
+                onMove: channelsOn ? askThreadMove : undefined,
               }}
             />
           </TaskMentions>
@@ -646,24 +666,27 @@ export function DesktopInbox({
               </div>
             </PageFind>
             {move.dialog}
+            {/* The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are. */}
             {drawing.panel ? (
-              <InboxSidePanel
-                tasks={tasks}
-                drawing={{ ...drawing, panel: drawing.panel }}
-                focused={sideFocused}
-                taskId={taskId}
-                panelFor={panelFor}
-                repository={chosenTask?.repository ?? agents.agentRepository ?? null}
-                pages={pages}
-                agents={named}
-                views={views}
-                mentions={mentions}
-                phone={
-                  room === SHELL_ROOM.NARROW && chosen !== undefined
-                    ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
-                    : undefined
-                }
-              />
+              <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+                <InboxSidePanel
+                  tasks={tasks}
+                  drawing={{ ...drawing, panel: drawing.panel }}
+                  focused={sideFocused}
+                  taskId={taskId}
+                  panelFor={panelFor}
+                  repository={chosenTask?.repository ?? agents.agentRepository ?? null}
+                  pages={pages}
+                  agents={named}
+                  views={views}
+                  mentions={mentions}
+                  phone={
+                    room === SHELL_ROOM.NARROW && chosen !== undefined
+                      ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                      : undefined
+                  }
+                />
+              </LinkWorkspaceProvider>
             ) : null}
           </div>
         </AutomationDirectory>
@@ -761,6 +784,7 @@ function InboxSidePanel({
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
+  const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.PAGE) return panel.onPreview({ page: target.page });
     if (target.kind === TOOL_TARGET.TASK) return tasks.onShowTask(target.task);
@@ -826,6 +850,17 @@ function InboxSidePanel({
       focused={focused}
       onOpenTarget={openTarget}
       transcript={taskId === undefined ? undefined : transcript}
+      transcriptDoors={
+        taskId === undefined
+          ? undefined
+          : {
+              // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
+              onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
+              onOpenTerminal: terminals
+                ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
+                : undefined,
+            }
+      }
       phone={phone}
     />
   );
