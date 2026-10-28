@@ -1166,7 +1166,7 @@ test("before the workspaces are read, placeholder sections stand in the page's s
   assert.deepEqual(sections, [
     [false, 1],
     [true, 1],
-    [true, 3],
+    [true, 2],
   ]);
 });
 
