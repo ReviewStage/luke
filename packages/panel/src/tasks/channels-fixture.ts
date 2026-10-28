@@ -864,7 +864,7 @@ THREADS.push(
 /** A settled thread in the archived #launch-site, which its card counts and dates its corner by. */
 THREADS.push(
   thread(
-    21,
+    23,
     seed(TASK.RELEASE),
     CHANNEL.LAUNCH_SITE,
     "Shipped: the launch site is live",

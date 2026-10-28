@@ -1020,7 +1020,7 @@ function heldStarts(): CodingAgentInboxStartParams[] {
   return sent;
 }
 
-test("on a phone an item is headed by its way back's glyph, its title centred, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
+test("on a phone an item is headed by its way back's glyph, its task centred, which opens it as its crumb does, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   layOut(page, 390);
@@ -1032,11 +1032,21 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
     ),
-    ["Inbox", "Item actions"],
-    "one control a corner",
+    ["Inbox", INVITES.name, "Item actions"],
+    "one control a corner, the item's task between them",
   );
-  assert.equal(head.querySelector("h1")?.textContent, "Expire after 7 days?");
-  assert.equal(page.querySelector('nav[aria-label="Path"]'), null, "no crumbs under it");
+  assert.equal(
+    head.querySelector(".luke-toolbar-heading")?.textContent,
+    INVITES.name,
+    "the bar names the item's task, not the title its thread is headed by under it",
+  );
+  assert.deepEqual(
+    [...page.querySelectorAll("h1")]
+      .filter((each) => each.closest("[hidden]") === null)
+      .map((each) => each.textContent),
+    ["Expire after 7 days?"],
+    "the thread's title is the page's one top heading",
+  );
 
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Item actions"]')?.click());
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
@@ -1064,6 +1074,11 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     [INVITES.id],
     "Open task opens the item's task, as its crumb did",
   );
+  const task = [...head.querySelectorAll("button")].find(
+    (each) => each.textContent?.trim() === INVITES.name,
+  );
+  act(() => task?.click());
+  assert.deepEqual(asked.shownTasks, [INVITES.id, INVITES.id], "the task's name opens it too");
 
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(columnsShown(page), ["list"], "the way back stands the list");
