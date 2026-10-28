@@ -213,7 +213,7 @@ export interface LocalAgentSandbox {
     LocalAgentSandboxUnavailable,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem
   >;
-  /** The agent's VM started where it was made already, for a command asked between its turns; whether it stands. */
+  /** The agent's VM started where it was made already, for a check of its folder between its turns; whether it stands. */
   readonly woken: (
     agentId: string,
   ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
@@ -294,8 +294,8 @@ export interface LocalAgentPlatformSeam {
   /**
    * The VM each agent runs in: `launch` starts the runner inside it, and the
    * follower makes, stops and deletes it around the runner, keeps the
-   * agent's GitHub token out of its folder, and runs a tool's commands in
-   * it rather than on the device.
+   * agent's GitHub token out of its folder, and checks the folder for
+   * unsaved work in it rather than on the device.
    */
   readonly sandbox: LocalAgentSandbox;
   /**

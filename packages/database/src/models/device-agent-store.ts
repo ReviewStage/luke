@@ -40,7 +40,20 @@ import {
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
 } from "@luke/features/device-agent-wire";
-import { and, arrayContains, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -102,9 +115,6 @@ export type DeviceAgentWaitingRequest = typeof WaitingRequestSchema.Type;
 const AnswerRowSchema = Schema.Struct({
   kind: RequestKindSchema,
   bytes: Schema.NullOr(Schema.Uint8Array),
-  exitCode: Schema.NullOr(Schema.Number),
-  stdout: Schema.NullOr(Schema.String),
-  stderr: Schema.NullOr(Schema.String),
 });
 
 const decodeAnswer = Schema.decodeUnknownEffect(deviceAgentAnswerSchema);
@@ -468,12 +478,18 @@ const insertRequest = SqlSchema.findAll({
     ),
 });
 
-/** A request waiting for the account's Mac given. */
+/**
+ * A request waiting for the account's Mac given, of a kind this build
+ * knows. Note that a row of a kind an earlier build queued and never
+ * withdrew is passed over rather than read, because one row the decode
+ * refuses would fail the Mac's whole read until the expiry took it.
+ */
 function requestWaiting(userId: string, deviceId: string) {
   return and(
     eq(deviceAgentRequest.userId, userId),
     eq(deviceAgentRequest.deviceId, deviceId),
     isNull(deviceAgentRequest.claimedAt),
+    inArray(deviceAgentRequest.kind, Object.values(DEVICE_AGENT_REQUEST_KIND)),
   );
 }
 
@@ -524,23 +540,12 @@ const writeAnswer = SqlSchema.findAll({
     Database.use((db) =>
       db
         .update(deviceAgentRequest)
-        .set(
-          answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-            ? { settledAt: now, bytes: answer.bytes }
-            : {
-                settledAt: now,
-                exitCode: answer.exitCode,
-                stdout: answer.stdout,
-                stderr: answer.stderr,
-              },
-        )
+        .set({ settledAt: now, bytes: answer.bytes })
         .where(
           and(
             eq(deviceAgentRequest.id, id),
             eq(deviceAgentRequest.userId, userId),
             eq(deviceAgentRequest.deviceId, deviceId),
-            // An answer of one kind never settles a request of the other.
-            eq(deviceAgentRequest.kind, answer.kind),
             isNotNull(deviceAgentRequest.claimedAt),
             isNull(deviceAgentRequest.settledAt),
           ),
@@ -558,9 +563,6 @@ const findAnswer = SqlSchema.findOneOption({
         .select({
           kind: deviceAgentRequest.kind,
           bytes: deviceAgentRequest.bytes,
-          exitCode: deviceAgentRequest.exitCode,
-          stdout: deviceAgentRequest.stdout,
-          stderr: deviceAgentRequest.stderr,
         })
         .from(deviceAgentRequest)
         .where(
@@ -932,9 +934,8 @@ export function claimDeviceAgentRequest(
 
 /**
  * Keeps the answer to a request the account's Mac claimed; false where that
- * Mac holds no such request claimed and unanswered, or the answer is of
- * the other kind. An answer past the bound fails its decode and writes
- * nothing.
+ * Mac holds no such request claimed and unanswered. An answer past the
+ * bound fails its decode and writes nothing.
  */
 export function answerDeviceAgentRequest(
   userId: string,
@@ -956,19 +957,7 @@ export function deviceAgentRequestAnswer(
     Option.match(row, {
       onNone: () => Effect.succeed(Option.none()),
       onSome: (answer) =>
-        Effect.map(
-          decodeAnswer(
-            answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-              ? { kind: answer.kind, bytes: answer.bytes }
-              : {
-                  kind: answer.kind,
-                  exitCode: answer.exitCode,
-                  stdout: answer.stdout,
-                  stderr: answer.stderr,
-                },
-          ),
-          Option.some,
-        ),
+        Effect.map(decodeAnswer({ kind: answer.kind, bytes: answer.bytes }), Option.some),
     }),
   );
 }

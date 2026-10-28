@@ -130,7 +130,6 @@ const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
 const BOARD = (taskId: string) => `${ONE_TASK(taskId)}/board`;
 const ISSUES = (taskId: string) => `${ONE_TASK(taskId)}/issues`;
 const ISSUE = (taskId: string, linkId: string) => `${ISSUES(taskId)}/${linkId}`;
-const CODE = (taskId: string) => `${ONE_TASK(taskId)}/code`;
 const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
 const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
 const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
@@ -782,12 +781,10 @@ it.layer(getTestDB())("the plan routes", (it) => {
         body: { plans: [], planlessAgents: [] },
       });
       assert.equal((yield* ask(request(ONE_TASK(taskId), owner))).status, HOSTED_HTTP_STATUS.OK);
-      assert.deepEqual(yield* ask(request(CODE(taskId), other)), notFound);
       // The reads that need only where the plan stands, not its document, refuse it as the open does, and a plan that is none alike.
       for (const id of [taskId, randomUUID()]) {
         const bearer = id === taskId ? other : owner;
         for (const read of [
-          request(CODE(id), bearer),
           request(ISSUES(id), bearer),
           request(FILE(id), bearer, { query: README_WINDOW }),
           request(TREE(id), bearer),
@@ -826,7 +823,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
         for (const read of [
-          request(CODE(taskId), owner),
           request(ISSUES(taskId), owner),
           request(FILE(taskId), owner, { query: README_WINDOW }),
           request(TREE(taskId), owner),
@@ -1924,7 +1920,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.deepEqual(
-          yield* ask(request(CODE("not-a-plan"), owner)),
+          yield* ask(request(TREE("not-a-plan"), owner)),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(

@@ -54,11 +54,10 @@ A reviewer can hold the build to these as easily as to the layout:
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
 - The work column is the agents'. Each agent started on the task stands in
-  a tab of its own, and any of them takes a call; everything else, the plan's document, the task's Inbox,
-  and the code its agents put on screen, stands
+  a tab of its own, and any of them takes a call; everything else, the plan's document and the task's Inbox, stands
   in a side panel ("Side panel" below) that the developer opens and closes.
-  A task opens with the panel shown on its plan; only first code or an Inbox
-  item not yet seen opens it on its own, and there are no second documents.
+  A task opens with the panel shown on its plan; only an Inbox item not yet
+  seen opens it on its own, and there are no second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 

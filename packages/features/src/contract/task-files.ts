@@ -1,5 +1,5 @@
 /**
- * task-files.ts -- what a plan's tabs read beside its text: the code Luke showed, its repository's files, folders and skills, the pages agents wrote, and a picture kept on it.
+ * task-files.ts -- what a plan's tabs read beside its text: its repository's files, folders and skills, the pages agents wrote, and a picture kept on it.
  *
  * Every procedure names its plan by the path's `{id}`. A File tab's window
  * and a tree's folder are queries, as the desktops already released send
@@ -31,7 +31,6 @@ import {
   taskSkillsQueryFields,
   taskTreeAnswerSchema,
 } from "../task-wire.js";
-import { taskCodeAnswerSchema } from "../tasks-view.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** An upload is one picture or video as a `data:` URL at the larger of their byte bounds, base64 being four characters for every three bytes, with room for its type and key. */
@@ -73,10 +72,6 @@ const pictureKeptSchema = EffectSchema.Struct({
 const TASK_PATH = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
 
 export const taskFilesContract = {
-  code: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/code` }))
-    .input(taskInputSchema)
-    .output(EffectSchema.flip(taskCodeAnswerSchema)),
   file: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/file` }))
     .input(taskFileQuerySchema)

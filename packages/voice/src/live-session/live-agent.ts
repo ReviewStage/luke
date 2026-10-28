@@ -1,4 +1,3 @@
-import type { TaskShownCode } from "@luke/features/tasks-view";
 import type { LiveDelegationId } from "@luke/live";
 import type { Effect } from "effect";
 
@@ -18,7 +17,6 @@ export const LIVE_AGENT_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   QUESTION_QUEUED: "question_queued",
   QUESTION_WITHDRAWN: "question_withdrawn",
-  CODE_SHOWN: "code_shown",
   CALL_ENDING: "call_ending",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
@@ -79,12 +77,6 @@ export type LiveAgentRunEvent =
       /** The words of a queued question the agent took back, so the voice is never handed it. */
       readonly question: string;
     }
-  // Code of the task's repository the agent put on screen, with its
-  // lines, for Luke's next words, under the call and turn that showed it.
-  | ({
-      readonly kind: typeof LIVE_AGENT_RUN_EVENT.CODE_SHOWN;
-      readonly runId: string;
-    } & TaskShownCode)
   // The developer said they are done and the agent asked to end
   // the call; the service decides whether this run may still end it.
   | { readonly kind: typeof LIVE_AGENT_RUN_EVENT.CALL_ENDING; readonly runId: string }
