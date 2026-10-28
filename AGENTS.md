@@ -1,7 +1,9 @@
 # Agent guide
 
-Luke is a macOS Electron app for working through a task by voice: the
-developer talks a task through with Luke, who writes its plan down as they go.
+Luke is a macOS Electron app, with a web app beside it, for working through a
+task with coding agents: the developer works a task through with them in typed
+conversations, and they write its plan down as they go and open its pull
+requests.
 
 ## Commands
 
