@@ -4,6 +4,7 @@ import {
   CHECK_SUMMARY,
   type CheckSummary,
   type GitHubPerson,
+  PULL_REQUEST_STATE,
   type PullRequestState,
   type ReviewState,
 } from "@luke/features/agent-wire";
@@ -84,6 +85,14 @@ const MOMENT_WORDS = {
   [PULL_REQUEST_MOMENT.CLOSED]: "closed ",
 } as const satisfies Record<PullRequestMoment, string>;
 
+/** The moment a pull request's state names: merged once merged, closed once closed, and opened while open or a draft. */
+const MOMENT_OF_STATE = {
+  [PULL_REQUEST_STATE.OPEN]: PULL_REQUEST_MOMENT.OPENED,
+  [PULL_REQUEST_STATE.DRAFT]: PULL_REQUEST_MOMENT.OPENED,
+  [PULL_REQUEST_STATE.MERGED]: PULL_REQUEST_MOMENT.MERGED,
+  [PULL_REQUEST_STATE.CLOSED]: PULL_REQUEST_MOMENT.CLOSED,
+} as const satisfies Record<PullRequestState, PullRequestMoment>;
+
 /** What parts the pieces of a card's line. */
 const SEPARATOR = " · ";
 
@@ -126,6 +135,22 @@ export function peopleOf(
   pullRequest: Pick<AgentPullRequest, "url">,
 ): AgentChangesPeople | undefined {
   return held?.url === pullRequest.url ? held.people : undefined;
+}
+
+/**
+ * The age the head's corner says: the pull request's latest moment, where
+ * that moment is the one its state names. Note that a service answering no
+ * time for a merge or a close falls back to when it was opened, and an
+ * opening age beside "Merged" or "Closed" would read as the age of the
+ * merge, so the corner says nothing then, and only the row naming who
+ * opened it says the opening age.
+ */
+function cornerAge(
+  pullRequest: CardedPullRequest,
+  when: StandingPullRequest["when"],
+): React.JSX.Element | undefined {
+  if (when === undefined || when.moment !== MOMENT_OF_STATE[pullRequest.state]) return undefined;
+  return <Time at={when.at} look={TIME_LOOK.SINCE} hint={false} />;
 }
 
 /** A pull request's key as its card's head says it: `owner/name#42` where its page names its repository, else `#42`. */
@@ -296,9 +321,7 @@ export function PullRequestCard({
         glyph={<PullRequestMark pullRequest={marked} />}
         name={pullRequest.title}
         sub={`${pullRequestKey(pullRequest)}${SEPARATOR}${pullRequestStateLabel(pullRequest)}`}
-        corner={
-          when === undefined ? undefined : <Time at={when.at} look={TIME_LOOK.SINCE} hint={false} />
-        }
+        corner={cornerAge(pullRequest, when)}
       />
       <SizeNote
         lines={lines}

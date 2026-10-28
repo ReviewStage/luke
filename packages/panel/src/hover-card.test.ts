@@ -16,6 +16,7 @@ import { subagentActor } from "./tasks/coding-agent-model.js";
 import { PullRequestCard } from "./tasks/pull-request-card.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
+import { PULL_REQUEST_MOMENT } from "./tasks/use-link-standing.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
@@ -272,6 +273,22 @@ test("a plan's, a skill's, an agent tab's, and a pull request's cards each name 
     skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,
     "Cut a release.",
   );
+});
+
+test("a pull request's corner says the age of the moment its state names, and nothing where the service answered only when a merged one was opened", () => {
+  vi.useFakeTimers({ now: STARTED_AT, toFake: ["Date"] });
+  const opened = { moment: PULL_REQUEST_MOMENT.OPENED, at: STARTED_AT - 5 * 86_400_000 };
+  const card = (state: (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE]) =>
+    headOf(
+      drawn(
+        createElement(PullRequestCard, {
+          pullRequest: { ...PULL_REQUEST, state, checks: undefined },
+          when: opened,
+        }),
+      ),
+    ).corner;
+  assert.equal(card(PULL_REQUEST_STATE.OPEN), "5d");
+  assert.equal(card(PULL_REQUEST_STATE.MERGED), undefined);
 });
 
 test("a plan's card says under its name when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
