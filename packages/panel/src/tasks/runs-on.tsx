@@ -15,11 +15,13 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  MENU_ROW_WHY,
   type MenuRow,
   POPOVER_ALIGN,
   POPOVER_WIDTH,
   STATUS_TONE,
   StatusDot,
+  type StatusTone,
   Tooltip,
   useSecond,
 } from "@luke/ui";
@@ -41,10 +43,11 @@ import { keptKey, useKept } from "../use-kept.js";
  * name under the glyph of its platform, a Mac or a Linux server, each saying
  * whether it is online, held against the window's own clock, or, online,
  * that it is still getting ready for local agents or couldn't set them up.
- * One that takes an agent ends in a dot rather than words, green while it
- * is online, since a device's name is long and the menu narrow, and words
- * beside it faded to their first letter; one that takes none says why in
- * words, dimmed. The menu stands at the regular width rather than a settings
+ * Every device ends in one dot rather than words, whose hint says them:
+ * green online, grey away, amber where its standing can't be checked, the
+ * working tone while it gets ready and red where it couldn't set up; one
+ * that takes no agent is dimmed and unpicked too. A column of dots keeps one
+ * edge where words beside them would not. The menu stands at the regular width rather than a settings
  * picker's narrow one, so a device's whole name fits. A
  * device offline or not ready is listed but not picked, since the service
  * refuses a task set to one that has not beat lately or is not set up yet.
@@ -113,7 +116,7 @@ const STANDING_WORDS = {
   [DEVICE_STANDING.CHECKING]: RUNS_ON_WORDS.CHECKING,
 } as const;
 
-/** The tone of each standing's dot: green online, the attention tone where it cannot be checked. */
+/** The tone of each standing's dot: green online, grey away or still being checked, the attention tone where it cannot be checked. */
 const STANDING_TONE = {
   [DEVICE_STANDING.ONLINE]: STATUS_TONE.COMPLETE,
   [DEVICE_STANDING.OFFLINE]: STATUS_TONE.NEUTRAL,
@@ -121,23 +124,38 @@ const STANDING_TONE = {
   [DEVICE_STANDING.CHECKING]: STATUS_TONE.NEUTRAL,
 } as const;
 
-/** Why a device offered takes no agent now: away, or still getting ready or not set up, whatever its standing; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
-function offerUnready(device: MacOffer, book: PresenceBook): string | undefined {
-  if (offerStanding(device, book) === DEVICE_STANDING.OFFLINE) return RUNS_ON_WORDS.OFFLINE;
+/** The tone of the dot of a device online but not ready: still getting ready is working, one that couldn't set up failed. */
+const SETUP_TONE = {
+  [DEVICE_SETUP.PREPARING]: STATUS_TONE.WORKING,
+  [DEVICE_SETUP.FAILED]: STATUS_TONE.DANGER,
+} as const;
+
+/** Why a device offered takes no agent now, and its dot's tone: away, or still getting ready or not set up, whatever its standing; none for one that takes an agent, and none for one whose standing cannot be told yet, which is not called away. */
+function offerUnready(
+  device: MacOffer,
+  book: PresenceBook,
+): { readonly words: string; readonly tone: StatusTone } | undefined {
+  if (offerStanding(device, book) === DEVICE_STANDING.OFFLINE)
+    return { words: RUNS_ON_WORDS.OFFLINE, tone: STANDING_TONE[DEVICE_STANDING.OFFLINE] };
   switch (device.setup) {
     case DEVICE_SETUP.PREPARING:
-      return RUNS_ON_WORDS.GETTING_READY;
+      return { words: RUNS_ON_WORDS.GETTING_READY, tone: SETUP_TONE[DEVICE_SETUP.PREPARING] };
     case DEVICE_SETUP.FAILED:
-      return RUNS_ON_WORDS.SETUP_FAILED;
+      return { words: RUNS_ON_WORDS.SETUP_FAILED, tone: SETUP_TONE[DEVICE_SETUP.FAILED] };
     case undefined:
       return undefined;
   }
 }
 
-/** What a device's row ends in: why it takes no agent, in words, else its standing's dot, which says its words on hover and to a reader. */
-function offerEnd(device: MacOffer, book: PresenceBook): Pick<MenuRow, "end" | "disabled"> {
+/** What a device's row ends in: one dot, its words on hover and to a reader, for every device alike, so the column keeps one edge; one that takes no agent is dimmed and unpicked too. */
+function offerEnd(device: MacOffer, book: PresenceBook): Pick<MenuRow, "end" | "disabled" | "why"> {
   const unready = offerUnready(device, book);
-  if (unready !== undefined) return { disabled: unready };
+  if (unready !== undefined)
+    return {
+      end: <StatusDot tone={unready.tone} label={unready.words} />,
+      disabled: unready.words,
+      why: MENU_ROW_WHY.MARK,
+    };
   const standing = offerStanding(device, book);
   return { end: <StatusDot tone={STANDING_TONE[standing]} label={STANDING_WORDS[standing]} /> };
 }
@@ -176,7 +194,7 @@ export function useNewTaskRunsOn(
 /** What New task's chip says of the device picked: its name while it takes an agent, and why it does not, or that its standing cannot be told, otherwise. */
 function offerStateWords(device: MacOffer, book: PresenceBook): string {
   const unready = offerUnready(device, book);
-  if (unready !== undefined) return `${device.name} · ${unready}`;
+  if (unready !== undefined) return `${device.name} · ${unready.words}`;
   const standing = offerStanding(device, book);
   return standing === DEVICE_STANDING.ONLINE
     ? device.name
