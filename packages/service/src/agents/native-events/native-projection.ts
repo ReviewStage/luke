@@ -1,4 +1,5 @@
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
+import { CLAUDE_CODE_UNRECORDED_TOOL } from "@luke/features/agent-tools";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
@@ -48,6 +49,9 @@ import {
  * (`runner-events-app.ts`), so a test reads what a stream amounts to
  * without a database.
  */
+
+/** The harness's own tools a call of which the record leaves out without reporting it. */
+const UNRECORDED_TOOLS: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_UNRECORDED_TOOL));
 
 /** A step's words: those it completed, those still forming, and how much of them the writer was told. */
 const DraftSchema = Schema.Struct({
@@ -348,7 +352,11 @@ class Fold {
 
   #toolStarted(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.TOOL_STARTED }>): void {
     if (!this.#context.registered(moment.name)) {
-      this.#context.report(`A call to ${moment.name} names no stored tool and is not recorded.`);
+      // Note that a call of the harness's own unrecorded tools is left out without a word,
+      // because every launch makes them and none is work a record could miss.
+      if (!UNRECORDED_TOOLS.has(moment.name)) {
+        this.#context.report(`A call to ${moment.name} names no stored tool and is not recorded.`);
+      }
       return;
     }
     const turn = this.#step(undefined);

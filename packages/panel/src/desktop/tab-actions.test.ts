@@ -369,7 +369,7 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub
   act(() => more?.click());
   const github = [
     ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
-  ].find((each) => each.textContent === "Open on GitHub");
+  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "Open on GitHub");
   assert.ok(github, "the ⋯ offers Open on GitHub");
   await act(async () => github.click());
   assert.deepEqual(opened, [PULL_REQUEST.url]);

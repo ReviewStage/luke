@@ -199,6 +199,15 @@ export const CLAUDE_CODE_TOOL = {
   SCHEDULE_WAKEUP: "ScheduleWakeup",
 } as const;
 
+/**
+ * Claude Code's own tools no transcript records, by their CLI names:
+ * `ToolSearch` loads a deferred tool's schema before its first call, which is
+ * the harness reading its own catalog rather than work of the agent's.
+ */
+export const CLAUDE_CODE_UNRECORDED_TOOL = {
+  TOOL_SEARCH: "ToolSearch",
+} as const;
+
 /** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_threads` is Luke's `read_threads`. */
 export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";
 

@@ -79,6 +79,7 @@
     "./schemas/automation": "./src/schemas/automation.js",
     "./schemas/channel": "./src/schemas/channel.js",
     "./schemas/agent": "./src/schemas/agent.js",
+    "./schemas/runner-line": "./src/schemas/runner-line.js",
     "./schemas/favorite": "./src/schemas/favorite.js",
     "./schemas/github-connect-intent": "./src/schemas/github-connect-intent.js",
     "./schemas/github-install-intent": "./src/schemas/github-install-intent.js",

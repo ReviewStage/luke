@@ -1,5 +1,5 @@
 import type { AgentStatus, AgentSummary } from "@luke/features/agent-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   IconButton,
   type MenuRow,
@@ -154,6 +154,17 @@ export type HandTabActions = (actions: TabActionGroups | undefined) => void;
  */
 export const HandTabActionsContext = createContext<HandTabActions | undefined>(undefined);
 
+/** The press of the action a tab's body hands up that runs `command`, as a Pull request tab's Open on GitHub runs ⇧⌘O; none where it hands none. */
+export function handedCommand(
+  groups: TabActionGroups,
+  command: KeyedCommand,
+): (() => void) | undefined {
+  for (const action of groups.flat()) {
+    if ("onSelect" in action && action.command === command) return action.onSelect;
+  }
+  return undefined;
+}
+
 /** The menu items a ⋯ drops for `groups`, an item opening a menu of the body's own opening it under `opener`. */
 export function tabActionItems(
   groups: readonly (readonly TabAction[])[],
@@ -199,7 +210,12 @@ function tabActionGroups(doors: TabDoors): MenuEntry[][] {
     [
       ...close,
       {
-        ...commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, () => doors.onCloseOthers?.(), false),
+        // ⌥⌘W closes the others of the tab chosen, so only its Close others says it.
+        ...commandAction(
+          PANEL_COMMAND.CLOSE_OTHER_TABS,
+          () => doors.onCloseOthers?.(),
+          doors.chosen,
+        ),
         disabled: doors.onCloseOthers === undefined,
       },
       ...pin,

@@ -1576,12 +1576,12 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order
   );
   assert.deepEqual(offered, [
     "Copy link",
-    "Copy concise transcript",
-    "Copy full transcript",
+    "Copy concise transcript⌥⌘C",
+    "Copy full transcript⌥⇧⌘C",
     "Rename",
     "Show terminal⌘J",
     "Archive",
-    "Permanently delete",
+    "Permanently delete⌘⌫",
   ]);
 });
 
@@ -1603,25 +1603,25 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   await settle();
   const offered = () =>
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
-  const pin = pageMenuItem(page, "Pin");
+  const pin = pageMenuItem(page, "PinP");
   act(() => pin.click());
   assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
 
-  const mark = pageMenuItem(page, "Mark as unread");
+  const mark = pageMenuItem(page, "Mark as unreadU");
   act(() => mark.click());
   assert.deepEqual(offered(), [], "the menu closed on the mark");
   act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
   assert.deepEqual(offered(), [
     "Copy link",
-    "Copy concise transcript",
-    "Copy full transcript",
+    "Copy concise transcript⌥⌘C",
+    "Copy full transcript⌥⇧⌘C",
     "Rename",
-    "Mark as read",
-    "Pin",
+    "Mark as readU",
+    "PinP",
     "Move to section",
     "Show terminal⌘J",
     "Archive",
-    "Permanently delete",
+    "Permanently delete⌘⌫",
   ]);
 });
 
@@ -1642,7 +1642,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Copy link", "Copy concise transcript", "Copy full transcript", "Show terminal⌘J"],
+    ["Copy link", "Copy concise transcript⌥⌘C", "Copy full transcript⌥⇧⌘C", "Show terminal⌘J"],
   );
 });
 
@@ -2302,7 +2302,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   const page = mount(tasksControl({ agentView }));
   await settle();
 
-  const remove = pageMenuItem(page, "Permanently delete");
+  const remove = pageMenuItem(page, "Permanently delete⌘⌫");
   act(() => remove.click());
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("it asks first");
@@ -2335,7 +2335,7 @@ test("a delete the service refused for an agent still starting says why in the d
   const page = mount(tasksControl({ agentView }));
   await settle();
 
-  const remove = pageMenuItem(page, "Permanently delete");
+  const remove = pageMenuItem(page, "Permanently delete⌘⌫");
   act(() => remove.click());
   await act(async () => dialogAnswer("Permanently delete").click());
   await settle();

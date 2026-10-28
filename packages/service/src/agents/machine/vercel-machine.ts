@@ -126,12 +126,22 @@ export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
-  /** The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what the launch was started with that a warm runner cannot take up later (`launchFingerprint`). */
+  /**
+   * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
+   * the launch was started with that a warm runner cannot take up later
+   * (`launchFingerprint`), then, for a launch that reads its lines from Luke,
+   * the mark again and `LINES_READ_MARK`. Note that a deployment from before
+   * the read reads the first two parts alone, so it takes such a launch for
+   * one whose stdin it writes, which its runner still reads.
+   */
   LAUNCH: "lukeRunnerLaunch",
 } as const;
 
-/** What parts a launch tag's first event number from its fingerprint. */
+/** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
 const LAUNCH_FINGERPRINT_MARK = "-";
+
+/** What a launch tag's last part reads for a launch that reads its lines from Luke. */
+const LINES_READ_MARK = "lines";
 
 /**
  * Where a message's files that the harness takes no block of are written
@@ -153,6 +163,7 @@ const SANDBOX_LAYOUT: MachineLayout = {
   writableRoots: [],
   signedIn: {},
   isolation: undefined,
+  linesRead: true,
 };
 
 /** What a sandbox Luke opens is named as, beside a fresh UUID; the sweep tells a native sandbox from eve's by it. */
@@ -267,14 +278,18 @@ export interface TaggedRunner {
   readonly fingerprint?: string;
 }
 
-/** The launch tag read: its first event number and its fingerprint where it has one; none where the tag is missing or unreadable. */
+/** The launch tag read: its first event number, its fingerprint where it has one, and whether it reads its lines; none where the tag is missing or unreadable. */
 function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
-  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+  const [sequence = "", fingerprint, read] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
     LAUNCH_FINGERPRINT_MARK,
   );
   const firstSequence = Number(sequence);
   if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }) };
+  return {
+    firstSequence,
+    ...(fingerprint === undefined ? {} : { fingerprint }),
+    ...(read === LINES_READ_MARK ? { linesRead: true } : {}),
+  };
 }
 
 /** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
@@ -289,11 +304,13 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   return { sandboxSessionId, commandId, ...launch };
 }
 
-/** The launch tag's value for the mark given. */
+/** The launch tag's value for the mark given. Note that a launch that reads its lines always has a fingerprint, since both came in after fingerprints, so its read mark never stands in a fingerprint's place. */
 function launchTagOf(mark: RunnerMark): string {
-  return mark.fingerprint === undefined
-    ? String(mark.firstSequence)
-    : [mark.firstSequence, mark.fingerprint].join(LAUNCH_FINGERPRINT_MARK);
+  if (mark.fingerprint === undefined) return String(mark.firstSequence);
+  const parts = [mark.firstSequence, mark.fingerprint];
+  return (mark.linesRead === true ? [...parts, LINES_READ_MARK] : parts).join(
+    LAUNCH_FINGERPRINT_MARK,
+  );
 }
 
 /** The tags a sandbox carries for the record given, beside its session's and its agent's. */

@@ -1998,18 +1998,22 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
 
         assert.deepEqual(Option.getOrThrow(beforeAnyTurn), {
           conversationId: claude.conversationId,
+          userId: starter,
           endedAt: null,
         });
         assert.deepEqual(Option.getOrThrow(ended), {
           conversationId: claude.conversationId,
+          userId: starter,
           endedAt: settledAt,
         });
         assert.deepEqual(Option.getOrThrow(cancelled), {
           conversationId: codex.conversationId,
+          userId: starter,
           endedAt: settledAt,
         });
         assert.deepEqual(Option.getOrThrow(running), {
           conversationId: claude.conversationId,
+          userId: starter,
           endedAt: null,
         });
         assert.ok(Option.isNone(yield* readNativeRunStanding(eve.id)));

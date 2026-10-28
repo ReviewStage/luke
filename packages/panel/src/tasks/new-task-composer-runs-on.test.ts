@@ -302,7 +302,6 @@ test("nothing starts before the card's own read of the devices lands, and one th
   pressInComposer(reading.container, "Enter", { metaKey: true });
   await settle();
   assert.deepEqual(reading.starts, []);
-  assert.match(reading.container.textContent ?? "", /Checking your devices/);
 
   const failed = await mount({ devices: [], reread: devicesWith(), reads: READS.FAIL });
   pressInComposer(failed.container, "Enter", { metaKey: true });
@@ -327,6 +326,5 @@ test("a member with no devices, opening the card again, is held only until its r
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
-  assert.doesNotMatch(container.textContent ?? "", /Checking your devices/);
   assert.deepEqual(starts, [undefined]);
 });

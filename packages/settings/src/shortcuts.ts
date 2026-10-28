@@ -1,12 +1,13 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape, the Inbox's J and K, the tab switcher's
+ * Every shortcut but Escape, the letters alone, the tab switcher's
  * ⌃Tab, and the ⌥↓ that opens a focused control's card holds Command, the way a
  * Mac app's own chords do, since Command chords belong to whichever app is
  * frontmost; in a browser on Windows or Linux, Command is pressed as Ctrl, as
- * every app there has it, and drawn so (`COMMAND_KEY`). J
- * and K are a letter alone, as Linear's and Superhuman's are, and R, which
+ * every app there has it, and drawn so (`COMMAND_KEY`). The Inbox's J
+ * and K are a letter alone, as Linear's and Superhuman's are, as are U, which
+ * marks a thing read or unread, P, which pins it, and R, which
  * replies to an agent's words selected as GitHub's R quotes them, answered
  * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
  * a chord that reaches it; the menu bar shows the chord beside the command's
@@ -29,12 +30,19 @@ import {
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
   NEW_TASK: "new-task",
-  COPY_PLAN: "copy-plan",
+  // Note that copying what the focused pane shows, a plan or an agent's concise transcript, keeps Copy plan's id, because it took Copy plan's place, so a menu bar built before it still reaches it.
+  COPY_CONTENT: "copy-plan",
+  COPY_FULL_TRANSCRIPT: "copy-full-transcript",
   COPY_LINK: "copy-link",
   COMMENT_ON_SELECTION: "comment-on-selection",
-  // Note that Mark done keeps Archive's id, because it took Archive's place and its chord, so the menu bar's item and any saved use of the id still reach it.
+  // Note that Mark done keeps Archive's id, because it took Archive's place, so the menu bar's item and any saved use of the id still reach it.
   MARK_TASK_DONE: "archive-plan",
-  DELETE_TASK: "delete-plan",
+  // Note that deleting the focused thing, a task or an agent, keeps the task's delete's id, on the same terms as Copy plan's.
+  DELETE: "delete-plan",
+  VERSION_HISTORY: "version-history",
+  OPEN_ON_GITHUB: "open-on-github",
+  TOGGLE_READ: "toggle-read",
+  PIN: "pin",
   OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
   NEXT_TASK: "next-plan",
@@ -57,6 +65,7 @@ export const APP_COMMAND = {
   MOVE_ROW_DOWN: "move-row-down",
   NEW_TAB: "new-tab",
   CLOSE_TAB: "close-tab",
+  CLOSE_OTHER_TABS: "close-other-tabs",
   REOPEN_CLOSED_TAB: "reopen-closed-tab",
   CLOSE_WINDOW: "close-window",
   SETTINGS: "settings",
@@ -71,7 +80,6 @@ export const APP_COMMAND = {
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
-  TOGGLE_INBOX_ITEM_READ: "toggle-inbox-item-read",
   REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
@@ -107,14 +115,16 @@ export const APP_COMMAND = {
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
 
 /**
- * The commands the menu bar alone offers, by the name it gives them: a
- * dialog reached now and then, or a new shell in an agent's sandbox, which
- * ⌘K and the panel's "+" reach too; none takes the window's keys.
+ * The commands the menu bar offers that no chord reaches, by the name it
+ * gives them: a dialog reached now and then, a new shell in an agent's
+ * sandbox, which ⌘K and the panel's "+" reach too, and Mark done, which ⌘K
+ * and the task's menus offer too; none takes the window's keys.
  */
 export const MENU_COMMAND_LABELS = {
   [APP_COMMAND.SEND_FEEDBACK]: "Send feedback",
   [APP_COMMAND.SUGGEST_FEATURE]: "Suggest a feature",
   [APP_COMMAND.NEW_TERMINAL]: "New terminal",
+  [APP_COMMAND.MARK_TASK_DONE]: "Mark done",
 } as const;
 
 export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
@@ -176,6 +186,7 @@ interface ShortcutKey {
 export const SHORTCUT_KEY = {
   N: { accelerator: "N", glyph: "N", key: "n", code: "KeyN" },
   O: { accelerator: "O", glyph: "O", key: "o", code: "KeyO" },
+  P: { accelerator: "P", glyph: "P", key: "p", code: "KeyP" },
   A: { accelerator: "A", glyph: "A", key: "a", code: "KeyA" },
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
   M: { accelerator: "M", glyph: "M", key: "m", code: "KeyM" },
@@ -410,19 +421,43 @@ export interface AppShortcut {
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_TASK]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
-  [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
-  // Note that ⇧⌘C, Linear's chord for a link, was Copy plan's first, so a link takes ⌥⌘C, where macOS copies a thing's address (Finder's Copy as Pathname).
-  [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, option: true } },
+  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the plan where the plan is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@luke/panel`).
+  [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, shift: true } },
+  [APP_COMMAND.COPY_CONTENT]: {
+    label: "Copy plan or transcript",
+    chord: { key: SHORTCUT_KEY.C, option: true },
+  },
+  // Note that the full transcript is the concise copy's chord with Shift, as VS Code's Copy Relative Path is its Copy Path's.
+  [APP_COMMAND.COPY_FULL_TRANSCRIPT]: {
+    label: "Copy full transcript",
+    chord: { key: SHORTCUT_KEY.C, option: true, shift: true },
+  },
   [APP_COMMAND.COMMENT_ON_SELECTION]: {
     label: "Comment on selection",
     chord: { key: SHORTCUT_KEY.M, option: true },
   },
-  [APP_COMMAND.MARK_TASK_DONE]: {
-    label: "Mark done",
-    chord: { key: SHORTCUT_KEY.A, shift: true },
+  // Note that U and P act on the focused sidebar row, and otherwise on what is open, answered only where the press is not typing, as the Inbox's U always has.
+  [APP_COMMAND.TOGGLE_READ]: {
+    label: "Mark as read or unread",
+    chord: { key: SHORTCUT_KEY.U, plain: true },
   },
-  [APP_COMMAND.DELETE_TASK]: {
-    label: "Permanently delete task",
+  [APP_COMMAND.PIN]: {
+    label: "Pin or unpin",
+    chord: { key: SHORTCUT_KEY.P, plain: true },
+  },
+  // Note that Version history takes ⌥⇧⌘H, as Google Docs has it.
+  [APP_COMMAND.VERSION_HISTORY]: {
+    label: "Version history",
+    chord: { key: SHORTCUT_KEY.H, option: true, shift: true },
+  },
+  // Note that Open on GitHub takes ⇧⌘O, beside the ⌘O that opens a thing here, because GitHub Desktop's own ⇧⌘G is Find previous.
+  [APP_COMMAND.OPEN_ON_GITHUB]: {
+    label: "Open on GitHub",
+    chord: { key: SHORTCUT_KEY.O, shift: true },
+  },
+  // Note that ⌘⌫ deletes the focused thing, a task or an agent, as Finder's does, and asks first as its menu item does.
+  [APP_COMMAND.DELETE]: {
+    label: "Permanently delete",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
   // Note that ⌘O opens the focused thing in its full place, as Mail and Finder open the selection: an agent beside the Inbox in its task, an Inbox item in its task or its agent's page.
@@ -514,6 +549,11 @@ export const APP_SHORTCUTS = {
   },
   [APP_COMMAND.NEW_TAB]: { label: "New tab", chord: { key: SHORTCUT_KEY.T } },
   [APP_COMMAND.CLOSE_TAB]: { label: "Close tab", chord: { key: SHORTCUT_KEY.W } },
+  // Note that Close other tabs takes ⌥⌘W, as Safari has it, since ⇧⌘W closes the window.
+  [APP_COMMAND.CLOSE_OTHER_TABS]: {
+    label: "Close other tabs",
+    chord: { key: SHORTCUT_KEY.W, option: true },
+  },
   [APP_COMMAND.REOPEN_CLOSED_TAB]: {
     label: "Reopen closed tab",
     chord: { key: SHORTCUT_KEY.T, shift: true },
@@ -556,10 +596,6 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.NEXT_INBOX_ITEM]: {
     label: "Next inbox item",
     chord: { key: SHORTCUT_KEY.J, plain: true },
-  },
-  [APP_COMMAND.TOGGLE_INBOX_ITEM_READ]: {
-    label: "Mark inbox item as read or unread",
-    chord: { key: SHORTCUT_KEY.U, plain: true },
   },
   [APP_COMMAND.REPLY_TO_SELECTION]: {
     label: "Reply to selection",
@@ -784,11 +820,15 @@ export const APP_SHORTCUT_GROUPS = [
     keys: [IN_CONTEXT_KEY.INBOX_OPTION],
     commands: [
       APP_COMMAND.NEW_TASK,
-      APP_COMMAND.COPY_PLAN,
       APP_COMMAND.COPY_LINK,
+      APP_COMMAND.COPY_CONTENT,
+      APP_COMMAND.COPY_FULL_TRANSCRIPT,
       APP_COMMAND.COMMENT_ON_SELECTION,
-      APP_COMMAND.MARK_TASK_DONE,
-      APP_COMMAND.DELETE_TASK,
+      APP_COMMAND.TOGGLE_READ,
+      APP_COMMAND.PIN,
+      APP_COMMAND.VERSION_HISTORY,
+      APP_COMMAND.OPEN_ON_GITHUB,
+      APP_COMMAND.DELETE,
       APP_COMMAND.OPEN_IN_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.ASK_LUKE,
@@ -797,7 +837,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
-      APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
       APP_COMMAND.REPLY_TO_SELECTION,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
@@ -821,6 +860,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_FULL_SCREEN,
       APP_COMMAND.NEW_TAB,
       APP_COMMAND.CLOSE_TAB,
+      APP_COMMAND.CLOSE_OTHER_TABS,
       APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
@@ -1086,7 +1126,7 @@ export interface WritingShortcut {
  * chords are TipTap's own, which are Google Docs' for the most part, with two
  * moved off the window's: Strikethrough takes ⇧⌘X, as Google Docs has it,
  * and Code block takes none rather
- * than ⌥⌘C, which is Copy link, since ``` makes one as quickly. Bold's ⌘B is
+ * than ⌥⌘C, which copies the plan or a transcript, since ``` makes one as quickly. Bold's ⌘B is
  * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
  * an editor stops the chords it answers on their way to the window's keymap
  * (`writing-keys.ts` in `@luke/panel`).

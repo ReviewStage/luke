@@ -1327,11 +1327,11 @@ const AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
  */
 const findNativeAgentConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ agentId: Schema.String }),
-  Result: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
-        .select({ conversationId: conversations.id })
+        .select({ conversationId: conversations.id, userId: agentTable.userId })
         .from(agentTable)
         .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
@@ -3293,6 +3293,8 @@ function newestTurnEndedAt(conversationId: string): AgentStoreEffect<Date | null
 export interface NativeRunStanding {
   /** The agent's conversation, which a Terminal's lease is held on. */
   readonly conversationId: string;
+  /** The agent's starter, whose account a line to its runner is queued under. */
+  readonly userId: string;
   /** When its newest turn ended; null while that turn is queued or running (a runner waiting on a wakeup among it), or before it has any turn. */
   readonly endedAt: Date | null;
 }
@@ -3312,8 +3314,12 @@ export function readNativeRunStanding(
     if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
     const found = yield* findNativeAgentConversation({ agentId });
     if (Option.isNone(found)) return Option.none();
-    const { conversationId } = found.value;
-    return Option.some({ conversationId, endedAt: yield* newestTurnEndedAt(conversationId) });
+    const { conversationId, userId } = found.value;
+    return Option.some({
+      conversationId,
+      userId,
+      endedAt: yield* newestTurnEndedAt(conversationId),
+    });
   });
 }
 

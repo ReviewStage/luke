@@ -676,7 +676,7 @@ function onTask(workspaces: TasksControl["workspaces"]): TasksControl {
   });
 }
 
-test("each step's address is the path of the link ⌥⌘C copies there", async () => {
+test("each step's address is the path of the link ⇧⌘C copies there", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const listed = { workspaces: [ACME], workspace: ACME };

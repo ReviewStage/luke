@@ -48,7 +48,7 @@ import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { copyLinkItem } from "../copy-link-item.js";
+import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { centreWithin } from "../scroll-within.js";
@@ -727,6 +727,7 @@ export function DesktopVersionHistory({
   const members = useWorkspaceMembers(subject.workspace);
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const linked = subject.task;
   const versionLinkItem = (revision: number): MenuAction | undefined =>
     linked === undefined
@@ -737,6 +738,7 @@ export function DesktopVersionHistory({
             { kind: LINK_PLACE.VERSION, planId: linked.taskId, revision },
             linked.place.workspace,
           ),
+          chord,
         );
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);

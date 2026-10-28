@@ -146,10 +146,9 @@ const BARE_WORDS: ComposerWords = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held: without a repository, or before the member's devices are read. */
+/** Why Start is held without a repository. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
-  READING_DEVICES: "Checking your devices…",
 } as const;
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
@@ -509,11 +508,6 @@ export function NewTaskComposer({
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {COMPOSER_WORDS.NEEDS_REPOSITORY}
-        </Text>
-      ) : null}
-      {devicesUnread && !devicesFailed ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {COMPOSER_WORDS.READING_DEVICES}
         </Text>
       ) : null}
     </div>

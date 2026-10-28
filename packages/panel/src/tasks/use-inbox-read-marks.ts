@@ -193,7 +193,7 @@ export function useReadOnOpen({
     if (isUnread(shown)) onMark(shown, false);
   }, [shown, onMark]);
   useAppCommand(
-    APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+    APP_COMMAND.TOGGLE_READ,
     active && chosen !== undefined ? () => onMark(chosen, !isUnread(chosen)) : undefined,
   );
 }

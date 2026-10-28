@@ -66,7 +66,12 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { copyLinkItem, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import {
+  copyLinkItem,
+  LinkWorkspaceProvider,
+  useChordLinks,
+  useCopyLinkItem,
+} from "../copy-link-item.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
@@ -334,6 +339,7 @@ function PersonActions({
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const menu = useMenu(tasks.shown);
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
@@ -348,7 +354,7 @@ function PersonActions({
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
   const showTasks = you ? "Show my tasks in the sidebar" : "Show their tasks in the sidebar";
   const copies = [
-    ...(link === undefined ? [] : [copyLinkItem(copy, link)]),
+    ...(link === undefined ? [] : [copyLinkItem(copy, link, chord)]),
     ...(email === undefined
       ? []
       : [{ label: "Copy email", icon: <MailIcon />, onSelect: () => copy(email, "Email copied") }]),

@@ -31,7 +31,7 @@ import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
-import { type RowMark, RowMarks } from "./task-actions.js";
+import { type RowMark, RowMarks, useFocusedRowKeys } from "./task-actions.js";
 import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
 
 /**
@@ -167,12 +167,18 @@ export function SidebarAgent({
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
   const pinned = agent.pinnedAt !== undefined;
+  useFocusedRowKeys(
+    item,
+    () => reads.mark(agent, !isUnread),
+    onPin === undefined ? undefined : () => onPin(!pinned),
+  );
   // The agent's menu over the doors a row has, its own read mark, pin, and section among them.
   const groups: MenuEntry[][] = agentMenuGroups({
     ...rowDoors(actions.doors),
     read: { unread: isUnread, onMark: (next) => reads.mark(agent, next) },
     agentPin: onPin === undefined ? undefined : { pinned, onToggle: () => onPin(!pinned) },
     section,
+    rowKeys: true,
   });
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const marks: RowMark[] = [
