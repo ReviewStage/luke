@@ -1,11 +1,11 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import {
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_MACHINE,
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentStatus,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -405,13 +405,13 @@ export const ADD_SECTION = {
 /** A coding agent whose cloud browser the "+" offers a new tab in: the agent, and whose browser it is as the tab will say. */
 interface CloudBrowserOffer {
   readonly agentId: string;
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly owner: CloudBrowserOwner;
 }
 
 /** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
 export interface TerminalOffer {
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly label: string;
   readonly showsOnChord: boolean;
 }
@@ -419,9 +419,9 @@ export interface TerminalOffer {
 /** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, and the pull request the tab draws. */
 export interface ChangesOffer {
   readonly agentId: string;
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly label: string;
-  readonly pullRequest: CodingAgentPullRequest;
+  readonly pullRequest: AgentPullRequest;
 }
 
 /** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
@@ -467,7 +467,7 @@ const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
  */
 function everyTaskAgent(
   agents: Pick<CodingAgentsControl, "agents" | "archived">,
-): readonly CodingAgentSummary[] {
+): readonly AgentSummary[] {
   const listed = agents.agents ?? [];
   // Note that an agent's own page lists its agent among `agents` archived or not, so each is taken once.
   const archived = (agents.archived ?? []).filter(
@@ -586,7 +586,7 @@ export interface PanelCards {
 
 /** An agent's tab card as a row of its browser hangs it, named as the row names the agent. */
 function agentRowCard(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   label: string,
   cards: PanelCards | undefined,
 ): React.ReactNode {
@@ -800,7 +800,7 @@ export function panelOffers(input: {
     holder !== SIDE_PANEL_HOLDER.TASK
       ? []
       : (agents.agents ?? [])
-          .filter((agent) => agent.machine !== CODING_AGENT_MACHINE.DEVICE)
+          .filter((agent) => agent.machine !== AGENT_MACHINE.DEVICE)
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
@@ -876,7 +876,7 @@ export interface DrawnTab {
   close: () => void;
   copy?: ((copy: TranscriptCopy) => void) | undefined;
   /** The agent a transcript's tab beside the Inbox shows, whose own menu its tab offers. */
-  agent?: CodingAgentSummary | undefined;
+  agent?: AgentSummary | undefined;
 }
 
 /**
@@ -1554,7 +1554,7 @@ interface DrawnSubagent {
  */
 function drawnSubagent(
   tab: SubagentStripTab,
-  status: CodingAgentStatus,
+  status: AgentStatus,
   held: HeldTranscripts,
 ): DrawnSubagent | undefined {
   const { delegation, subagent } = tab;
@@ -1582,7 +1582,7 @@ function drawnSubagents(
 ): readonly DrawnSubagent[] {
   return tabs.flatMap((tab): DrawnSubagent[] => {
     if (!drawsSubagent(tab, drawn)) return [];
-    const status = standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING;
+    const status = standings.get(tab.subagent) ?? AGENT_STATUS.RUNNING;
     const subagent = drawnSubagent(tab, status, held);
     return subagent === undefined ? [] : [subagent];
   });
@@ -1831,7 +1831,7 @@ function TabContent({
   /** What a worker's rows hang, its agent's cards (`taskCards`). */
   cards: TaskCards;
   /** A delegated worker's page said where it stands now. */
-  onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
+  onWorkerStatus: (callId: string, status: AgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: TabViews["onWorkerHeld"];
   /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
@@ -2020,7 +2020,7 @@ function TabContent({
           agentId={tab.delegation.agent}
           callId={tab.subagent}
           task={tab.delegation.task}
-          status={standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING}
+          status={standings.get(tab.subagent) ?? AGENT_STATUS.RUNNING}
           control={agents}
           shown={shown}
           onStatus={(status) => onWorkerStatus(tab.subagent, status)}

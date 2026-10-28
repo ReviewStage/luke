@@ -12,8 +12,8 @@ import { DateTime, Effect, Exit, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { MIGRATIONS_FOLDER } from "../../core/migrator.js";
 import { Database } from "../../core/query.js";
+import { createAgent } from "../../models/agent-store.js";
 import { createAutomation } from "../../models/automation-store.js";
-import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import {
   getTestDB,
@@ -87,7 +87,7 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
           }),
         );
         const started = Option.getOrThrow(
-          yield* createCodingAgent(userId, {
+          yield* createAgent(userId, {
             taskId,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",

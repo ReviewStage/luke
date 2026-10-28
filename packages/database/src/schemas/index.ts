@@ -1,15 +1,15 @@
 // Better Auth owns its generated schema; Luke-owned tables can join this
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./account-provider-key.js";
+export * from "./agent.js";
 export * from "./agent-browser-tab.js";
 export * from "./agent-pin.js";
+export * from "./agent-runner-lease.js";
+export * from "./agent-wakeup.js";
 export * from "./attachment.js";
 export * from "./auth.js";
 export * from "./automation.js";
 export * from "./channel.js";
-export * from "./coding-agent.js";
-export * from "./coding-agent-runner-lease.js";
-export * from "./coding-agent-wakeup.js";
 export * from "./device.js";
 export * from "./device-agent.js";
 export * from "./favorite.js";

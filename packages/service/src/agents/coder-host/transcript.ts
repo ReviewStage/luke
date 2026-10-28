@@ -1,8 +1,8 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
+  type Agent,
+  type AgentDelegation,
   awaitingLinesOf,
-  type CodingAgent,
-  type CodingAgentDelegation,
   delegationStartsOf,
   delegationsOf,
   delegationTitlesOf,
@@ -11,13 +11,13 @@ import {
   latestTurnsOf,
   linePlacesOf,
   lineSendersOf,
-  readCodingAgentContext,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
+  readAgentContext,
+  readAgentHeaderOfConversation,
+  readAgentRouting,
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import {
   type LatestTurn,
@@ -34,22 +34,22 @@ import {
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_CURSOR_START,
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentContext,
-  type CodingAgentDelegationStart,
-  type CodingAgentFailure,
-  type CodingAgentPayer,
-  type CodingAgentSender,
-  type CodingAgentStatus,
-  type CodingAgentSubagentStanding,
-  type CodingAgentSubagentTitle,
-  type CodingAgentUsage,
+  AGENT_BOUNDS,
+  AGENT_CURSOR_START,
+  AGENT_DELEGATE_TOOL,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentContext,
+  type AgentDelegationStart,
+  type AgentFailure,
+  type AgentPayer,
+  type AgentSender,
+  type AgentStatus,
+  type AgentSubagentStanding,
+  type AgentSubagentTitle,
+  type AgentUsage,
   type TurnRecord,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
@@ -135,15 +135,15 @@ export function cursorToWire(cursor: MessageCursor): string {
 }
 
 /** The cursor before every message, as the store reads it. */
-export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
+export const CURSOR_START: MessageCursor = cursorOfWire(AGENT_CURSOR_START);
 
-/** One row of the transcript as the route answers it: its message as the store holds it, for a turn's journal when the turn began and closed and what it ran on and spent, and for a developer's line what sent it, which is the wire's `CodingAgentMessage` once serialized. */
+/** One row of the transcript as the route answers it: its message as the store holds it, for a turn's journal when the turn began and closed and what it ran on and spent, and for a developer's line what sent it, which is the wire's `AgentTranscriptMessage` once serialized. */
 type TranscriptMessage = StoredUIMessage &
   TurnRecord & {
     readonly startedAt?: number;
     readonly finishedAt?: number;
     readonly clientId?: string;
-    readonly sentBy?: CodingAgentSender;
+    readonly sentBy?: AgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
   };
@@ -152,24 +152,24 @@ type TranscriptMessage = StoredUIMessage &
 export interface TranscriptPage {
   readonly messages: readonly TranscriptMessage[];
   readonly cursor: MessageCursor;
-  readonly status: CodingAgentStatus;
+  readonly status: AgentStatus;
   /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
   readonly runStartedAt?: number;
-  readonly failureReason?: CodingAgentFailure;
+  readonly failureReason?: AgentFailure;
   /** Where a failed agent that ran directly on its Mac left its work, which its Mac refused to start; absent for every other failure. */
   readonly ranDirectly?: { readonly folder: string };
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
-  readonly usage?: CodingAgentUsage;
+  readonly usage?: AgentUsage;
   /** Who pays for the agent, on its own transcript where its row records one; absent on a worker's. */
-  readonly payer?: CodingAgentPayer;
+  readonly payer?: AgentPayer;
   /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
-  readonly context?: CodingAgentContext;
+  readonly context?: AgentContext;
   /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
-  readonly delegations?: readonly CodingAgentDelegationStart[];
+  readonly delegations?: readonly AgentDelegationStart[];
   /** Every one of its workers titled so far, by the call that delegated it, on its own transcript; absent while none is and on a worker's. */
-  readonly subagentTitles?: readonly CodingAgentSubagentTitle[];
+  readonly subagentTitles?: readonly AgentSubagentTitle[];
   /** Where every one of its workers stands, read from the worker's own session, on its own transcript; absent while it has delegated nothing and on a worker's. */
-  readonly subagents?: readonly CodingAgentSubagentStanding[];
+  readonly subagents?: readonly AgentSubagentStanding[];
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -182,12 +182,12 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
 type NewestTurn = LatestTurn | undefined;
 
 /** The agent whose own transcript a page is, as its context is read: its row. */
-type OwnAgent = Pick<CodingAgent, "id">;
+type OwnAgent = Pick<Agent, "id">;
 
 /** The statuses a read waits through: more may still land. */
-const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+const WAITING_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** When an agent was started, and whether blank, which is what its status is read by beside its turns (`AgentStanding`). */
@@ -208,7 +208,7 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const awaitingLineAt = awaiting.get(target.conversationId);
     const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt, blank });
     const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
-    const failed = status === CODING_AGENT_STATUS.FAILED;
+    const failed = status === AGENT_STATUS.FAILED;
     const failureReason = failed ? codingAgentFailureOf(turn) : undefined;
     const folder = failed ? ranDirectlyFolderOf(turn) : undefined;
     const ranDirectly = folder === undefined ? undefined : { folder };
@@ -220,9 +220,9 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
 const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
     ? Effect.succeed(Option.none<HeldContext>())
-    : readCodingAgentContext(target.userId, own.id);
+    : readAgentContext(target.userId, own.id);
 
-type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readCodingAgentContext>>>;
+type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readAgentContext>>>;
 
 /** Whether the catalog lists a window for the model, one or two. */
 const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
@@ -291,18 +291,18 @@ const SENDER_NAME = {
  * build draws it as a sender it cannot place, under its name, and a newer
  * one as an agent.
  */
-function senderOf(sent: LineSent): CodingAgentSender {
+function senderOf(sent: LineSent): AgentSender {
   switch (sent.kind) {
     case MESSAGE_SENDER.MEMBER:
       return sent.member === undefined
-        ? { name: SENDER_NAME.FORMER_MEMBER, kind: CODING_AGENT_SENDER.FORMER }
-        : { ...sent.member, kind: CODING_AGENT_SENDER.MEMBER };
+        ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
+        : { ...sent.member, kind: AGENT_SENDER.MEMBER };
     case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE, kind: CODING_AGENT_SENDER.LUKE };
+      return { name: SENDER_NAME.LUKE, kind: AGENT_SENDER.LUKE };
     case MESSAGE_SENDER.AUTOMATION:
-      return { name: sent.name, kind: CODING_AGENT_SENDER.AUTOMATION };
+      return { name: sent.name, kind: AGENT_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:
-      return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
+      return { name: sent.login, kind: AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
       return {
         name: sent.name,
@@ -382,7 +382,7 @@ const delegationsUnderWay = (
   target: ConversationTarget,
   tools: ToolSet,
   turn: NewestTurn,
-): TranscriptEffect<readonly CodingAgentDelegationStart[]> =>
+): TranscriptEffect<readonly AgentDelegationStart[]> =>
   Effect.gen(function* () {
     if (turn === undefined) return [];
     const read = yield* readMessageByClientId(target.userId, target.conversationId, tools, turn.id);
@@ -391,8 +391,7 @@ const delegationsUnderWay = (
       .filter(isStoredToolPart)
       .filter(
         (part) =>
-          storedToolName(part) === CODING_AGENT_DELEGATE_TOOL &&
-          !isSettledToolPartState(part.state),
+          storedToolName(part) === AGENT_DELEGATE_TOOL && !isSettledToolPartState(part.state),
       )
       .map((part) => part.toolCallId);
     const children = calls.map((callId) => ({
@@ -419,7 +418,7 @@ const delegationsUnderWay = (
  */
 const subagentStandingsOf = (
   target: ConversationTarget,
-): TranscriptEffect<readonly CodingAgentSubagentStanding[]> =>
+): TranscriptEffect<readonly AgentSubagentStanding[]> =>
   Effect.gen(function* () {
     const delegations = yield* delegationsOf(target);
     if (delegations.length === 0) return [];
@@ -444,7 +443,7 @@ const subagentStandingsOf = (
 const payerOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
     ? Effect.succeed(null)
-    : Effect.map(readCodingAgentRouting(target.userId, own.id), (routing) =>
+    : Effect.map(readAgentRouting(target.userId, own.id), (routing) =>
         Option.isNone(routing) ? null : routing.value.payer,
       );
 
@@ -479,14 +478,14 @@ const withUsage = (
           delegations:
             own !== undefined && WAITING_STATUSES.has(page.status)
               ? delegationsUnderWay(target, tools, turn)
-              : Effect.succeed<readonly CodingAgentDelegationStart[]>([]),
+              : Effect.succeed<readonly AgentDelegationStart[]>([]),
           subagentTitles:
             own === undefined
-              ? Effect.succeed<readonly CodingAgentSubagentTitle[]>([])
+              ? Effect.succeed<readonly AgentSubagentTitle[]>([])
               : delegationTitlesOf(target),
           subagents:
             own === undefined
-              ? Effect.succeed<readonly CodingAgentSubagentStanding[]>([])
+              ? Effect.succeed<readonly AgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
         },
         { concurrency: CODER.READ_CONCURRENCY },
@@ -543,7 +542,7 @@ function pagePast(
           target.conversationId,
           tools,
           after,
-          CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+          AGENT_BOUNDS.MESSAGES_PAGE,
         ),
         standing: statusNow(target, agent),
       },
@@ -568,7 +567,7 @@ function pagePast(
 
 /** What a wait for a delegation's record answers: the record, or none, with whether the agent it was asked of still runs. */
 export type DelegationPast =
-  | { readonly delegation: CodingAgentDelegation }
+  | { readonly delegation: AgentDelegation }
   | { readonly delegation: undefined; readonly agentRuns: boolean };
 
 /** The delegation a call recorded as it stands now: the record, or none with whether the agent it was asked of still runs, which is when it may still land. */
@@ -626,7 +625,7 @@ function ownTitleWindow(
   since: Date,
 ): TranscriptEffect<Option.Option<Date>> {
   return Effect.gen(function* () {
-    const own = yield* readCodingAgentHeaderOfConversation(target.userId, target.conversationId);
+    const own = yield* readAgentHeaderOfConversation(target.userId, target.conversationId);
     if (Option.isNone(own) || own.value.title !== null) return Option.none();
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const newest = turns.get(target.conversationId);
@@ -818,7 +817,7 @@ const olderPageOf = (
     const records = read.value;
     const messages = yield* transcriptMessagesOf(target, records);
     const [oldest] = records;
-    return records.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE || oldest === undefined
+    return records.length < AGENT_BOUNDS.MESSAGES_PAGE || oldest === undefined
       ? { messages }
       : { messages, before: oldest.seq };
   });
@@ -847,7 +846,7 @@ export function transcriptNewest(
           target.conversationId,
           tools,
           cursor.seq + 1,
-          CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+          AGENT_BOUNDS.MESSAGES_PAGE,
         ),
         standing: statusNow(target, agent),
       },
@@ -882,7 +881,7 @@ export function transcriptBefore(
       target.conversationId,
       tools,
       before,
-      CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+      AGENT_BOUNDS.MESSAGES_PAGE,
     ),
     (read) => olderPageOf(target, read),
   );

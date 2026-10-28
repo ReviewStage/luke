@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
@@ -152,7 +152,7 @@ export interface VersionSubject {
   readonly versions: PlanHistoryControl;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
-  readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
+  readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
   readonly summary: (line: PlanRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */

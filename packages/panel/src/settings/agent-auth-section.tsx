@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import {
@@ -683,7 +683,7 @@ function ChatGptPanel({
     setError(undefined);
     setUnconfirmed(false);
     void act(ACT_KIND.CHATGPT_SIGN_IN)
-      .catch(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }) as const)
+      .catch(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }) as const)
       .then((outcome) => {
         setSigningIn(false);
         if ("cancelled" in outcome) return;

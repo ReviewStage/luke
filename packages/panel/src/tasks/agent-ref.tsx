@@ -1,11 +1,11 @@
-import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import {
-  CODING_AGENT_KIND,
-  type CodingAgentKind,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
+  AGENT_KIND,
+  type AgentKind,
+  type AgentStatus,
+  type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
@@ -71,7 +71,7 @@ export interface AgentSubject {
   /** The agent's tile, as every place naming an actor draws it (`actor-ref.tsx`). */
   readonly tile: Actor;
   readonly read: () => CardReading;
-  readonly agent?: CodingAgentSummary | undefined;
+  readonly agent?: AgentSummary | undefined;
 }
 
 /**
@@ -86,7 +86,7 @@ export interface AgentSubject {
  * when its newest run began, the latest moment its summary knows.
  */
 export function agentCardReading(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
@@ -112,7 +112,7 @@ export function agentCardReading(
           title: label,
           messages,
           brief: agent.brief,
-          quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
+          quiet: agent.kind === AGENT_KIND.OPERATOR,
         }),
       startedBy: teammateRef(agent.startedBy, agents.me),
       automationId: agent.automationId,
@@ -163,7 +163,7 @@ export function tasklessRowSubject(
   agents: Pick<CodingAgentsControl, "models" | "me" | "pullRequests">,
 ): AgentSubject {
   const { automationId, pullRequest, ...rest } = agent;
-  const summary: CodingAgentSummary = automationId === null ? rest : { ...rest, automationId };
+  const summary: AgentSummary = automationId === null ? rest : { ...rest, automationId };
   const name = agentName(summary, agents.models);
   const tile = agentActor(summary, name);
   const base = agentCardReading(summary, name, NOTHING_HELD, false, agents);
@@ -229,8 +229,8 @@ export function tasklessSubject(
 
 /** An agent as a line read beside its thread names it: its task's row, or its channel thread; where it stands, where the line says so. */
 export type AgentLine = ChannelThreadAgent & {
-  readonly kind?: CodingAgentKind | undefined;
-  readonly status?: CodingAgentStatus | undefined;
+  readonly kind?: AgentKind | undefined;
+  readonly status?: AgentStatus | undefined;
 };
 
 /**

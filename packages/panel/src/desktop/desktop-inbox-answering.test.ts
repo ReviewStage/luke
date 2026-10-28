@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnsweredView,
+  AGENT_CALL_FAILURE,
+  type AgentInboxAnsweredView,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -886,7 +886,7 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await settle();
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
 
-  await act(async () => answer({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   await settle();
   const pane = itemPane(page);
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
@@ -903,7 +903,7 @@ test("a nod on a notice the agent posted over first is not taken: the notice sta
   world.inboxes.set(BILLING.id, [notice, RETRY]);
   const { page } = mount();
   await settle();
-  const waiting: ((view: CodingAgentInboxAnsweredView) => void)[] = [];
+  const waiting: ((view: AgentInboxAnsweredView) => void)[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({

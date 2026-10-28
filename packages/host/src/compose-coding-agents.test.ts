@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
-import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/agent-view";
 import {
+  AGENT_BOUNDS,
+  AGENT_CURSOR_START,
+  AGENT_STATUS,
+  type AgentNewestAnswer,
+  type AgentPage,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_CURSOR_START,
-  CODING_AGENT_STATUS,
-  type CodingAgentNewestAnswer,
-  type CodingAgentPage,
-  type CodingAgentSummary,
   MERGE_STATE,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
 import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
 import {
@@ -62,19 +62,19 @@ const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: AGENT_ID,
   planId: TASK_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: null,
   createdAt: 1_800_000_000_000,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
 /** The agent as its own page reads it, with no task, as an automation's run leaves one. */
-const PAGE: CodingAgentPage = {
+const PAGE: AgentPage = {
   ...AGENT,
   planId: null,
   automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -224,7 +224,7 @@ const SAID = {
   messages: [
     { id: "m-1", role: "assistant" as const, parts: [{ type: "text" as const, text: "Hi" }] },
   ],
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   title: null,
 };
 
@@ -232,7 +232,7 @@ const SAID = {
 function fakeService() {
   const asked: string[] = [];
   let scope: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
-  let cursor = CODING_AGENT_CURSOR_START;
+  let cursor = AGENT_CURSOR_START;
   let transcript: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
   let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
   // Each live read's rows, polled; every followed scope's inbox reads the one script.
@@ -245,7 +245,7 @@ function fakeService() {
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
   let pageGate: Effect.Effect<void> = Effect.void;
   // The newest page, as the follow opens with it; none answers one with something on it.
-  let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
+  let newestPage: AgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
   let startTxid: string | undefined;
   let pinTxid: string | undefined;
@@ -256,8 +256,7 @@ function fakeService() {
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
     Effect.suspend((): ReturnType<CodingAgentClient["taskInboxLive"]> => {
-      if (scope === undefined)
-        return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      if (scope === undefined) return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       if (typeof scope === "object") return Effect.succeed(scope);
       return poll === true ? live.scope.poll(after) : Effect.succeed(live.scope.first());
     });
@@ -295,13 +294,13 @@ function fakeService() {
     start: (taskId, request) =>
       Effect.sync(() => {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
-        const agent = { ...AGENT, status: CODING_AGENT_STATUS.STARTING };
+        const agent = { ...AGENT, status: AGENT_STATUS.STARTING };
         return startTxid === undefined ? { agent } : { agent, txid: startTxid };
       }),
     startFrom: (request) =>
       Effect.sync(() => {
         asked.push(`start-from:${request.from?.agentId}:${request.idempotencyKey}`);
-        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
+        return { agent: { ...AGENT, status: AGENT_STATUS.STARTING } };
       }),
     messagesNow: (agentId, after, callId) =>
       Effect.andThen(
@@ -345,7 +344,7 @@ function fakeService() {
           asked.push(`transcript-live:${agentId}${callId === undefined ? "" : `:${callId}`}`);
         }
         if (transcript === undefined) {
-          return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+          return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
         }
         if (typeof transcript === "object") return Effect.succeed(transcript);
         return poll === true
@@ -378,7 +377,7 @@ function fakeService() {
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
-        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
+        return { agent: { ...AGENT, status: AGENT_STATUS.CANCELLED } };
       }),
     rewind: (agentId, messageId) =>
       Effect.sync(() => {
@@ -627,7 +626,7 @@ function fakeService() {
       Effect.suspend((): ReturnType<CodingAgentClient["accountInboxLive"]> => {
         if (poll !== true) asked.push(`account-inbox-live:${userId}`);
         if (accountLive === undefined) {
-          return Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+          return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
         }
         if (typeof accountLive === "object") return Effect.succeed(accountLive);
         return poll === true ? live.account.poll(after) : Effect.succeed(live.account.first());
@@ -652,7 +651,7 @@ function fakeService() {
       pageGate = gate;
     },
     /** The newest page the service answers. */
-    pageNewest: (page: CodingAgentNewestAnswer | { readonly failure: "unanswered" }) => {
+    pageNewest: (page: AgentNewestAnswer | { readonly failure: "unanswered" }) => {
       newestPage = page;
     },
     /** The transaction the service answers a sent message with. */
@@ -873,30 +872,30 @@ it.effect("each method asks the service once and answers what it said, whole", (
         taskId: TASK_ID,
         idempotencyKey: "press-1",
       }),
-      { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } },
+      { agent: { ...AGENT, status: AGENT_STATUS.STARTING } },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
         agentId: AGENT_ID,
-        after: CODING_AGENT_CURSOR_START,
+        after: AGENT_CURSOR_START,
       }),
       {
         messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
         cursor: "2:1",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         title: null,
       },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
         agentId: AGENT_ID,
-        after: CODING_AGENT_CURSOR_START,
+        after: AGENT_CURSOR_START,
         callId: "call-7",
       }),
       {
         messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
         cursor: "2:1",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         title: null,
       },
     );
@@ -931,7 +930,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
     );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
-      agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
+      agent: { ...AGENT, status: AGENT_STATUS.CANCELLED },
     });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
@@ -1129,8 +1128,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
       `start:${TASK_ID}:press-1:default`,
-      `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
-      `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+      `messages-now:${AGENT_ID}:${AGENT_CURSOR_START}`,
+      `worker-now:${AGENT_ID}:call-7:${AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
@@ -1177,11 +1176,11 @@ it.effect(
       const offline = yield* subject({ sendsNetwork: false });
 
       assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_MODELS), {
-        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
       assert.deepEqual(
         yield* offline.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID }),
-        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        { failure: AGENT_CALL_FAILURE.UNANSWERED },
       );
       assert.deepEqual(signedOut.asked, []);
       assert.deepEqual(offline.asked, []);
@@ -1210,7 +1209,7 @@ it.effect(
         }),
       );
 
-      assert.deepEqual(fromTaskless, { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } });
+      assert.deepEqual(fromTaskless, { agent: { ...AGENT, status: AGENT_STATUS.STARTING } });
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(asked, [
         `start-from:${AGENT_ID}:press-continue`,
@@ -1333,7 +1332,7 @@ function windowRow(seq: number, text: string) {
 /** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
 function pageNow(
   cursor: string,
-  options: { holds: boolean; text?: string; status?: typeof CODING_AGENT_STATUS.RUNNING },
+  options: { holds: boolean; text?: string; status?: typeof AGENT_STATUS.RUNNING },
 ): TranscriptNowAnswer {
   return {
     messages:
@@ -1341,7 +1340,7 @@ function pageNow(
         ? []
         : [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text: options.text }] }],
     cursor,
-    status: options.status ?? CODING_AGENT_STATUS.RUNNING,
+    status: options.status ?? AGENT_STATUS.RUNNING,
     title: "Invites",
     holds: options.holds,
   };
@@ -1350,15 +1349,15 @@ function pageNow(
 /** A page past a cursor as the window is told it: the service's word on whether it would have held left in the host, and whether it came back short of a page's most. */
 function windowPage(page: TranscriptNowAnswer) {
   const { holds: _holds, ...rest } = page;
-  return { ...rest, caughtUp: page.messages.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE };
+  return { ...rest, caughtUp: page.messages.length < AGENT_BOUNDS.MESSAGES_PAGE };
 }
 
 /** The newest page the service answers: one message, the cursor to follow on from, and where the older page is read below. */
-function newestPage(cursor: string, text: string, before?: string): CodingAgentNewestAnswer {
+function newestPage(cursor: string, text: string, before?: string): AgentNewestAnswer {
   return {
     messages: [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text }] }],
     cursor,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: "Invites",
     ...(before === undefined ? undefined : { before }),
   };
@@ -1427,7 +1426,7 @@ it.effect(
       yield* settled;
       assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(moved) });
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
-      assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`));
+      assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${AGENT_CURSOR_START}`));
 
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
       const toldBefore = pages().length;
@@ -1633,7 +1632,7 @@ it.effect(
       sealTranscript(LIVE_ANSWERED);
       const full: TranscriptNowAnswer = {
         ...pageNow("2:0", { holds: false }),
-        messages: Array.from({ length: CODING_AGENT_BOUNDS.MESSAGES_PAGE }, (_, index) => ({
+        messages: Array.from({ length: AGENT_BOUNDS.MESSAGES_PAGE }, (_, index) => ({
           id: `m-full-${index}`,
           role: "assistant" as const,
           parts: [{ type: "text" as const, text: `Step ${index}` }],
@@ -1674,7 +1673,7 @@ it.effect(
       assert.ok(seals > 1 && seals < 60, `read ${seals} times`);
       assert.deepEqual(pages().at(-1), {
         transcript: FOLLOWED,
-        page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        page: { failure: AGENT_CALL_FAILURE.UNANSWERED },
       });
       yield* TestClock.adjust("1 minute");
       yield* settled;
@@ -1695,7 +1694,7 @@ it.effect(
     Effect.gen(function* () {
       const { call, asked, pages, sealTranscript, pageNewest } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
-      pageNewest({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       yield* TestClock.adjust("1 minute");
@@ -1705,7 +1704,7 @@ it.effect(
       assert.ok(read > 1 && read < 60, `read the newest page ${read} times`);
       assert.deepEqual(pages().at(-1), {
         transcript: FOLLOWED,
-        page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        page: { failure: AGENT_CALL_FAILURE.UNANSWERED },
       });
       yield* TestClock.adjust("1 minute");
       yield* settled;
@@ -1782,20 +1781,20 @@ it.effect(
     Effect.gen(function* () {
       const worker = { ...FOLLOWED, callId: "call-7" };
       const refused = yield* subject();
-      refused.sealTranscript({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      refused.sealTranscript({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
       yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, worker);
       yield* settled;
       yield* TestClock.adjust("5 seconds");
       yield* settled;
       assert.deepEqual(refused.pages(), [
-        { transcript: worker, page: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+        { transcript: worker, page: { failure: AGENT_CALL_FAILURE.NOT_FOUND } },
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.deepEqual(signedOut.pages(), [
-        { transcript: FOLLOWED, page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+        { transcript: FOLLOWED, page: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
       assert.deepEqual(signedOut.asked, []);
 
@@ -1918,10 +1917,7 @@ it.effect(
       const { asked, pages } = harness;
       const fresh = newestPage("5:0", "Read afresh.", "41");
       harness.pageNewest(fresh);
-      harness.pageNow(
-        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-        pageNow("6:0", { holds: false }),
-      );
+      harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED }, pageNow("6:0", { holds: false }));
 
       const toldBefore = pages().length;
       const askedBefore = asked.length;
@@ -1952,8 +1948,8 @@ it.effect(
       const harness = yield* subject();
       yield* followedOnce(harness);
       const { pages } = harness;
-      harness.pageNow({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      harness.pageNewest({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+      harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       yield* TestClock.adjust("40 seconds");
@@ -2059,7 +2055,7 @@ it.effect(
           clientKey: "send-1",
         }),
         // Running, as a steer's answer is: the call asks the line a moment after the frame leaves.
-        { agent: { ...page, status: CODING_AGENT_STATUS.RUNNING } },
+        { agent: { ...page, status: AGENT_STATUS.RUNNING } },
       );
       assert.deepEqual(typed, [[AGENT_ID, "Use the fixture branch.", "send-1"]]);
       assert.deepEqual(asked, [`page:${AGENT_ID}`]);
@@ -2241,25 +2237,25 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const refused = yield* subject();
-      refused.sealScope({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      refused.sealScope({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
       yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(refused.told(), [
-        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+        { scope: AGENT_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.NOT_FOUND } },
       ]);
 
       const unsealed = yield* subject();
       yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(unsealed.told(), [
-        { scope: AGENT_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+        { scope: AGENT_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
       assert.deepEqual(signedOut.told(), [
-        { scope: PLAN_SCOPE, inbox: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+        { scope: PLAN_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
       ]);
       assert.deepEqual(signedOut.asked, []);
     }),
@@ -2365,9 +2361,7 @@ it.effect(
       nobody.sealAccount(LIVE_ANSWERED);
       yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
-      assert.deepEqual(nobody.accountInboxes(), [
-        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-      ]);
+      assert.deepEqual(nobody.accountInboxes(), [{ failure: AGENT_CALL_FAILURE.UNANSWERED }]);
       assert.deepEqual(nobody.asked, []);
 
       const { call, asked, sealAccount, accountInboxes } = yield* subject();
@@ -2395,7 +2389,7 @@ it.effect("a Start answers its agent before the task list carries the Start's tr
 
     assert.notEqual(starting.pollUnsafe(), undefined, "answered with the list still behind");
     assert.deepEqual(yield* Fiber.join(starting), {
-      agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING },
+      agent: { ...AGENT, status: AGENT_STATUS.STARTING },
       txid: "9104",
     });
   }),
@@ -2429,7 +2423,7 @@ it.effect(
         refused.map((refusal) => refusal._tag),
         ["InvalidParamsRefusal", "InvalidParamsRefusal"],
       );
-      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unanswered, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
       assert.deepEqual(signedOut.asked, []);
     }),

@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -41,7 +41,7 @@ import { cardTitle } from "./tool-call-model.js";
  */
 
 /** What a close the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /**
  * What the close is called in a menu and on a row's icon, which is its

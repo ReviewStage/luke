@@ -33,9 +33,9 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { member } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { agentReachableBy, reachableTask, taskReachableBy, taskSeenBy } from "./workspace-store.js";
@@ -140,7 +140,7 @@ function shown(text: string): string {
 function taskOfConversation(conversationId: string) {
   return sql<
     string | null
-  >`(select ${codingAgent.taskId} from ${codingAgent} where ${codingAgent.conversationId} = ${conversationId})`;
+  >`(select ${agentTable.taskId} from ${agentTable} where ${agentTable.conversationId} = ${conversationId})`;
 }
 
 /**
@@ -153,13 +153,13 @@ function reachedTabs(userId: string, taskId: string, tabId?: string) {
     db
       .select({
         ...tabColumns,
-        agentId: codingAgent.id,
-        agentUserId: codingAgent.userId,
-        agentGithubAccess: codingAgent.githubAccess,
+        agentId: agentTable.id,
+        agentUserId: agentTable.userId,
+        agentGithubAccess: agentTable.githubAccess,
       })
       .from(agentBrowserTab)
       .innerJoin(task, eq(task.id, agentBrowserTab.taskId))
-      .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
+      .innerJoin(agentTable, eq(agentTable.conversationId, agentBrowserTab.conversationId))
       .where(
         and(
           eq(agentBrowserTab.taskId, taskId),
@@ -640,7 +640,7 @@ export function taskBrowserTabsLiveStatement(
         liveSelection(
           {
             id: agentBrowserTab.id,
-            agentId: codingAgent.id,
+            agentId: agentTable.id,
             address: agentBrowserTab.address,
             title: agentBrowserTab.title,
             openedBy: agentBrowserTab.openedBy,
@@ -667,7 +667,7 @@ export function taskBrowserTabsLiveStatement(
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
       )
       // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
-      .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
+      .innerJoin(agentTable, eq(agentTable.conversationId, agentBrowserTab.conversationId))
       .where(and(eq(agentBrowserTab.taskId, taskId), taskSeenBy(userId), agentReachableBy(userId))),
   );
 }

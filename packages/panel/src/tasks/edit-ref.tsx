@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
 import { agoText } from "@luke/features/time-format";
 import { useMinute } from "@luke/ui";
@@ -71,10 +71,7 @@ export interface EditPlace {
 }
 
 /** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
-function agentOf(
-  edit: PlanLastEdit,
-  agents: EditAgents | undefined,
-): CodingAgentSummary | undefined {
+function agentOf(edit: PlanLastEdit, agents: EditAgents | undefined): AgentSummary | undefined {
   const { agentId } = edit;
   if (agentId === undefined || agents === undefined) return undefined;
   const { control } = agents;

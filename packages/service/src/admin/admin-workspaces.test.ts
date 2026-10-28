@@ -8,8 +8,8 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
+import { agentTable } from "@luke/database/schemas/agent";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { planRevision } from "@luke/database/schemas/plan-revision";
@@ -244,7 +244,7 @@ const insertAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       organizationId,
       userId,
       conversationId,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { user } from "@luke/database/schemas/auth";
@@ -166,7 +166,7 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         yield* joinWorkspace(task.workspaceId, teammate);
         const agentOn = (userId: string) =>
           Effect.map(
-            createCodingAgent(userId, {
+            createAgent(userId, {
               taskId: task.id,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",

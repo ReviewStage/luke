@@ -1,4 +1,4 @@
-import { base64Bytes } from "./coding-agent-wire.js";
+import { base64Bytes } from "./agent-wire.js";
 import { formatBytes } from "./number-format.js";
 
 /**

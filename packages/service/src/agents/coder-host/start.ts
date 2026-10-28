@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
-import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import {
-  type CodingAgent,
-  type CodingAgentPlace,
-  createCodingAgent,
-  discardCodingAgent,
+  type Agent,
+  type AgentPlace,
+  createAgent,
+  discardAgent,
   nativeRuntimesOfReached,
-  readCodingAgentByKey,
-  readCodingAgentContext,
-} from "@luke/database/models/coding-agent-store";
+  readAgentByKey,
+  readAgentContext,
+} from "@luke/database/models/agent-store";
+import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import { devicesNamed } from "@luke/database/models/device-store";
 import { hostRemoved } from "@luke/database/models/host-store";
 import { listAccountProviderKeyRows } from "@luke/database/models/provider-key-store";
@@ -28,10 +28,7 @@ import {
   type LineSender,
   storeWriter,
 } from "@luke/database/models/writer";
-import type {
-  StoredAutomationOrigin,
-  StoredStartedFrom,
-} from "@luke/database/schemas/coding-agent";
+import type { StoredAutomationOrigin, StoredStartedFrom } from "@luke/database/schemas/agent";
 import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
@@ -43,22 +40,22 @@ import {
   summaryBytes,
 } from "@luke/features/agent-replay";
 import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_BOUNDS,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentAttachment,
+  type AgentKind,
+  type AgentMachineKind,
+  type AgentStartFrom,
+  type AgentStartRequest,
+  type AgentSummary,
   CONTEXT_WINDOW,
-  type CodingAgentAttachment,
-  type CodingAgentKind,
-  type CodingAgentMachine,
-  type CodingAgentStartFrom,
-  type CodingAgentStartRequest,
-  type CodingAgentSummary,
   LOCAL_AGENT_REFUSAL,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { automationRun } from "@luke/features/model-label";
-import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
 import { bothInOrder, failureKind } from "@luke/runtime/effect";
@@ -207,7 +204,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * Start with no task still names a prompt, and a repository where it works
  * in one; one that names none works in none, as the operator does. The store
  * answers the operator already standing where there is one
- * (`createCodingAgent`), so a Start of it is an ensure.
+ * (`createAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. A choice an ask names
  * runs that one agent and is never kept as the account's default, which only
@@ -235,25 +232,25 @@ export type StartPlace = StartWhere & {
   /** Whose note it is; the developer's unless a coding agent started this one. */
   readonly noteHeading?: StartNoteHeading | undefined;
   /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
-  readonly from?: CodingAgentStartFrom | undefined;
+  readonly from?: AgentStartFrom | undefined;
   /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start, on a task or as the member's operator, names no prompt, note, or source. */
   readonly blank?: boolean | undefined;
   /** What the agent is: a coder unless named, or the member's operator, which only a blank Start with no task and no repository makes. */
-  readonly kind?: CodingAgentKind | undefined;
+  readonly kind?: AgentKind | undefined;
 };
 
 /** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks, with that run. */
 export type StartAsk = StartPlace & {
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
-  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly attachments?: readonly AgentAttachment[] | undefined;
   readonly disabledServers?: readonly string[] | undefined;
   /** The automation whose run starts the agent; none for a Start by hand. */
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
   /** The coding agent whose `start_agent` asks, which the first line names as its sender and the agent's row keeps as its starter; none for a Start by a member or an automation. */
-  readonly startedBy?: CodingAgent | undefined;
+  readonly startedBy?: Agent | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
   /** How the summary of the steps a replay cannot keep is written, for a Start from another agent; none leaves those steps out unsummarized. */
@@ -278,7 +275,7 @@ export interface StartReach {
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
 export interface CodingAgentStart {
-  readonly agent: CodingAgent;
+  readonly agent: Agent;
   readonly created: boolean;
   /** The transaction the agent's row was written in, where this Start wrote it. */
   readonly txid?: string;
@@ -338,7 +335,7 @@ const modelChoicesRead = /* @__PURE__ */ Effect.fnUntraced(function* (
     markedUnconnected(userId, offeredToAccount(read, fastOffer), keys),
   );
   const stored = preferences?.codingAgent;
-  return { choices: { offered, defaultChoice: stored ?? CODING_AGENT_DEFAULT_CHOICE }, keys };
+  return { choices: { offered, defaultChoice: stored ?? AGENT_DEFAULT_CHOICE }, keys };
 });
 
 /**
@@ -374,7 +371,7 @@ interface StartLanding {
   readonly repository: string | null;
   readonly task: Task | undefined;
   readonly mover: string | undefined;
-  readonly place: CodingAgentPlace;
+  readonly place: AgentPlace;
   /** What the new agent keeps of the agent it was started from; none for one started afresh. */
   readonly startedFrom: StoredStartedFrom | undefined;
 }
@@ -431,7 +428,7 @@ const startBranchOf = Effect.fnUntraced(function* (
 > {
   const branch = ask.branch ?? inherited ?? undefined;
   if (branch === undefined || landing.repository === null) return undefined;
-  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+  const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));
   if (Option.isSome(made)) return branch;
   const confirmed = confirmedBranch(landing.workspaceId, landing.repository, member, branch);
   if (ask.branch !== undefined) return yield* Effect.as(confirmed, branch);
@@ -482,7 +479,7 @@ const landingOf = Effect.fnUntraced(function* (
   landed: StoredTask | undefined,
 ): Effect.fn.Return<StartLanding, HostedRefusal, DatabaseServices> {
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
-  const operator = place.kind === CODING_AGENT_KIND.OPERATOR;
+  const operator = place.kind === AGENT_KIND.OPERATOR;
   // The operator is started one way alone, and no other Start is an operator's.
   if (operator && !operatorPlace(place, fitter)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -501,7 +498,7 @@ const landingOf = Effect.fnUntraced(function* (
           organizationId: place.organizationId,
           planSnapshot: null,
           prompt: null,
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
         },
         startedFrom: undefined,
       };
@@ -558,8 +555,8 @@ const landingOf = Effect.fnUntraced(function* (
 });
 
 /** How many of the note's files are text files, which eve is handed inlined, and how many images and PDFs. */
-function noteFilesOf(files: readonly CodingAgentAttachment[]): NoteFiles {
-  const text = files.filter((file) => file.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT).length;
+function noteFilesOf(files: readonly AgentAttachment[]): NoteFiles {
+  const text = files.filter((file) => file.mediaType === AGENT_ATTACHMENT_TYPE.TEXT).length;
   return { text, other: files.length - text };
 }
 
@@ -574,12 +571,9 @@ function utf8Bytes(text: string): number {
  * a step carried the work of the agent before it; nothing where none did or
  * none reads.
  */
-const measuredStepOf = Effect.fnUntraced(function* (
-  userId: string,
-  lineage: readonly CodingAgent[],
-) {
+const measuredStepOf = Effect.fnUntraced(function* (userId: string, lineage: readonly Agent[]) {
   for (const agent of lineage) {
-    const context = yield* readCodingAgentContext(userId, agent.id).pipe(
+    const context = yield* readAgentContext(userId, agent.id).pipe(
       Effect.orElseSucceed(() => Option.none()),
     );
     if (Option.isSome(context) && context.value.lastStep !== null) {
@@ -605,7 +599,7 @@ const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   from: StartFrom,
   choice: ModelChoice,
   summaryModel: SummaryModelOf | undefined,
-  files: readonly CodingAgentAttachment[],
+  files: readonly AgentAttachment[],
 ): Effect.fn.Return<ReplayFitter, never, DatabaseServices | ModelCatalog> {
   const catalog = yield* ModelCatalog;
   const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
@@ -688,7 +682,7 @@ const CONTINUED_SUFFIXES = /(?: \(continued\))+$/u;
 function continuedTitle(source: string | null): string | undefined {
   const base = (source ?? "").replace(CONTINUED_SUFFIXES, "").trim();
   if (base === "") return undefined;
-  const room = CODING_AGENT_BOUNDS.MAX_TITLE_CHARS - CONTINUED_SUFFIX.length;
+  const room = AGENT_BOUNDS.MAX_TITLE_CHARS - CONTINUED_SUFFIX.length;
   let kept = "";
   // Note that the title is cut by code point, so a cut never leaves half of a character.
   for (const char of base) {
@@ -711,7 +705,7 @@ const stoppedSource = (
     HostedRefusal,
     HttpClient.HttpClient | DatabaseServices
   >,
-  source: CodingAgent,
+  source: Agent,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
     Effect.catch((refusal) =>
@@ -721,7 +715,7 @@ const stoppedSource = (
 
 /** The place an agent stands in, which a Start from it puts the new agent in: its task, or its workspace and repository where it has none; none for an agent with neither, which no checkout could go on from. */
 export function placeOfAgent(
-  agent: Pick<CodingAgent, "taskId" | "organizationId" | "repository">,
+  agent: Pick<Agent, "taskId" | "organizationId" | "repository">,
 ): StartWhere | undefined {
   if (agent.taskId !== null) return { taskId: agent.taskId };
   if (agent.repository === null) return undefined;
@@ -739,7 +733,7 @@ function whereOf(place: StartWhere): StartWhere {
 /** Whether an agent a retry found under its key stands in the place asked, and the account still reaches that place. */
 const madeInPlace = Effect.fnUntraced(function* (
   userId: string,
-  made: CodingAgent,
+  made: Agent,
   place: StartWhere,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
   if (made.taskId !== place.taskId) return false;
@@ -762,10 +756,10 @@ const madeInPlace = Effect.fnUntraced(function* (
 export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   idempotencyKey: string,
-  from: Pick<CodingAgentStartFrom, "agentId" | "messageId">,
+  from: Pick<AgentStartFrom, "agentId" | "messageId">,
   place: StartWhere | undefined,
-): Effect.fn.Return<Option.Option<CodingAgent>, HostedRefusal, DatabaseServices> {
-  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
+): Effect.fn.Return<Option.Option<Agent>, HostedRefusal, DatabaseServices> {
+  const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, idempotencyKey));
   // Note that only the same Start is answered: the same source, forked at the same message or continued.
   const startedFrom = Option.isSome(made) ? made.value.startedFrom : null;
   if (
@@ -812,12 +806,12 @@ function startRuntimeOf(
   model: string,
   keys: AccountKeyRows,
   asked: {
-    readonly machine?: CodingAgentMachine | undefined;
+    readonly machine?: AgentMachineKind | undefined;
     readonly deviceId?: string | undefined;
   },
 ) {
   const chosen =
-    asked.machine === CODING_AGENT_MACHINE.DEVICE
+    asked.machine === AGENT_MACHINE.DEVICE
       ? localAgentRuntimeChoice(userId, model, asked.deviceId, keys)
       : agentRuntimeChoice(userId, model, keys);
   return Effect.catch(chosen, (failure) =>
@@ -835,7 +829,7 @@ function startRuntimeOf(
 function startMachineOf(
   userId: string,
   asked: {
-    readonly machine?: CodingAgentMachine | undefined;
+    readonly machine?: AgentMachineKind | undefined;
     readonly deviceId?: string | undefined;
   },
   runtime: ConversationRuntime,
@@ -854,11 +848,11 @@ function startMachineOf(
  * whose `start_agent` asked, or else by the member who started it.
  */
 function openingOf(
-  agent: CodingAgent,
+  agent: Agent,
   ask: Pick<StartAsk, "automationOrigin" | "startedBy">,
   brief: { readonly prompt: string | null },
   /** The agent it takes over from, continued or forked; none for a fresh Start. */
-  taken: { readonly source: CodingAgent; readonly continued: boolean } | undefined,
+  taken: { readonly source: Agent; readonly continued: boolean } | undefined,
 ): { readonly sender: LineSender; readonly metadata: AwaitingLineMetadata } {
   const { automationOrigin, startedBy } = ask;
   if (automationOrigin !== undefined) {
@@ -894,7 +888,7 @@ function openingOf(
  * standing, and the Start's own open is what hands it over.
  */
 const openingLine = (
-  agent: CodingAgent,
+  agent: Agent,
   text: string,
   files: readonly HandedFile[],
   mentioned: string | undefined,
@@ -925,11 +919,11 @@ const openingLine = (
 
 /** Where a Start's agent runs, as `machineOfStart` decides it: the machine and device it asks the runtime and machine choices for. */
 interface StartMachine {
-  readonly asked: { readonly machine: CodingAgentMachine; readonly deviceId?: string | undefined };
+  readonly asked: { readonly machine: AgentMachineKind; readonly deviceId?: string | undefined };
 }
 
 /** A Start's agent in a sandbox, the one place that needs no device. */
-const IN_THE_CLOUD: StartMachine = { asked: { machine: CODING_AGENT_MACHINE.VERCEL } };
+const IN_THE_CLOUD: StartMachine = { asked: { machine: AGENT_MACHINE.VERCEL } };
 
 /**
  * Where a new agent runs, one rule for every Start: where the agent it is
@@ -948,14 +942,14 @@ const IN_THE_CLOUD: StartMachine = { asked: { machine: CODING_AGENT_MACHINE.VERC
  */
 const machineOfStart = Effect.fnUntraced(function* (
   userId: string,
-  source: CodingAgent | undefined,
+  source: Agent | undefined,
   task: Task | undefined,
 ): Effect.fn.Return<StartMachine, HostedRefusal, DatabaseServices> {
   const fromSource = source !== undefined;
   const machine = fromSource
-    ? (source.machine ?? CODING_AGENT_MACHINE.VERCEL)
-    : (task?.runsOn?.machine ?? CODING_AGENT_MACHINE.VERCEL);
-  if (machine === CODING_AGENT_MACHINE.VERCEL) return IN_THE_CLOUD;
+    ? (source.machine ?? AGENT_MACHINE.VERCEL)
+    : (task?.runsOn?.machine ?? AGENT_MACHINE.VERCEL);
+  if (machine === AGENT_MACHINE.VERCEL) return IN_THE_CLOUD;
   const deviceId = fromSource ? source.deviceId : task?.runsOn?.deviceId;
   const device =
     deviceId === null || deviceId === undefined
@@ -978,7 +972,7 @@ const machineOfStart = Effect.fnUntraced(function* (
   if (yield* hostedStoreOrUnavailable(hostRemoved(userId, device.id))) {
     return yield* Effect.fail(HOSTED_REFUSAL.DEVICE_REMOVED);
   }
-  return { asked: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: device.id } };
+  return { asked: { machine: AGENT_MACHINE.DEVICE, deviceId: device.id } };
 });
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
@@ -994,7 +988,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // Note that a fresh Start's retry is answered with the agent its key made before where it runs is
   // decided, because its task may run elsewhere since, or its device be away, and the agent stands.
   if (ask.from === undefined) {
-    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));
     if (Option.isSome(made) && (yield* madeInPlace(userId, made.value, whereOf(ask)))) {
       return { agent: made.value, created: false };
     }
@@ -1005,7 +999,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     const made = yield* startedFromBefore(userId, ask.idempotencyKey, ask.from, ask);
     if (Option.isSome(made)) return { agent: made.value, created: false };
     // A key that already names the agent of another Start is refused, never answered with that agent.
-    const other = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    const other = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));
     if (Option.isSome(other)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   // A source is read against the place asked, and one that is not of it is refused, never dropped.
@@ -1095,7 +1089,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       ...brief,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
@@ -1155,7 +1149,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       ),
     ).pipe(
       Effect.tapError(() =>
-        Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
+        Effect.ignore(hostedStoreOrUnavailable(discardAgent(userId, agent.id))),
       ),
     );
     const opened = yield* sessions
@@ -1176,7 +1170,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         ),
       );
     if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-      yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
+      yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id));
       // An image still being prepared is answered by name, so the Start is made again under its key.
       return yield* Effect.fail(
         opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened),
@@ -1225,7 +1219,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
 
 /** A Start as a request reached the service, answered: the agent's summary, and whether this request made it or found it under its key. */
 export interface RequestedStart {
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly created: boolean;
   /** The transaction the agent's row was written in, where this request wrote it. */
   readonly txid?: string;
@@ -1250,7 +1244,7 @@ export interface RequestedStart {
  * else, a retry included, so a request refused once is refused every time.
  */
 export const requestedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Pick<CodingAgentStartRequest, "model" | "effort" | "contextWindow">,
+  request: Pick<AgentStartRequest, "model" | "effort" | "contextWindow">,
 ): Effect.fn.Return<ModelChoice | undefined, HostedRefusal> {
   const { model, effort, contextWindow } = request;
   if (
@@ -1272,7 +1266,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   >,
   userId: string,
   where: StartWhere,
-  request: CodingAgentStartRequest,
+  request: AgentStartRequest,
   summaryModel?: SummaryModelOf,
   reached?: StartReach,
   landed?: StoredTask,

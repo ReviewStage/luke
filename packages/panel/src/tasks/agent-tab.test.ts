@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentSubagentStanding,
+  type AgentSummary,
+  type AgentTranscriptMessage,
   agentMessageReplyLine,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSubagentStanding,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -64,15 +64,15 @@ function toolPart(tool: string, input: WireRecord, output?: WireRecord): WireRec
   };
 }
 
-function assistant(parts: readonly WireRecord[]): CodingAgentMessage {
+function assistant(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
 /** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say. */
 function drawn(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   moving = false,
-  standings?: ReadonlyMap<string, CodingAgentSubagentStanding>,
+  standings?: ReadonlyMap<string, AgentSubagentStanding>,
 ) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
@@ -334,7 +334,7 @@ function failureOn(line: Element | null | undefined) {
 const FAILURE_LINES: readonly {
   readonly name: string;
   readonly parts: readonly WireRecord[];
-  readonly standings?: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  readonly standings?: ReadonlyMap<string, AgentSubagentStanding>;
   readonly label: string | undefined;
 }[] = [
   {
@@ -383,7 +383,7 @@ const FAILURE_LINES: readonly {
         "call-delegate",
         {
           callId: "call-delegate",
-          status: CODING_AGENT_STATUS.FAILED,
+          status: AGENT_STATUS.FAILED,
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           startedAt: 1,
@@ -403,7 +403,7 @@ for (const { name, parts, standings, label } of FAILURE_LINES) {
 }
 
 /** An agent of the task's, as its list holds it. */
-function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
+function listedAgent(id: string, title: string, overrides: Partial<AgentSummary> = {}) {
   return {
     id,
     planId: "plan-1",
@@ -411,10 +411,10 @@ function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSu
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
     ...overrides,
-  } satisfies CodingAgentSummary;
+  } satisfies AgentSummary;
 }
 
 /** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
@@ -436,7 +436,7 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
     agents: [listedAgent("agent-7", "Invoice export")],
     archived: [
       listedAgent("agent-8", "Retry audit", {
-        status: CODING_AGENT_STATUS.CANCELLED,
+        status: AGENT_STATUS.CANCELLED,
         archivedAt: 2,
       }),
     ],
@@ -687,7 +687,7 @@ function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
           title: "Retry audit",
           model: "openai/gpt-6.1-sol",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: 1_000,
           automationId: null,
           workspaceId: "workspace-acme",
@@ -972,7 +972,7 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** A message another agent sent with `message_agent`, steered into the agent's turn as `agent-message.ts` writes it. */
-const AGENT_MESSAGE: CodingAgentMessage = {
+const AGENT_MESSAGE: AgentTranscriptMessage = {
   id: "message",
   role: MESSAGE_ROLE.USER,
   parts: [
@@ -990,7 +990,7 @@ const AGENT_MESSAGE: CodingAgentMessage = {
 };
 
 /** The message drawn in an agent's transcript, on the task's page where one is given. */
-function agentMessageDrawn(message: CodingAgentMessage, page?: TaskMentionsValue): HTMLElement {
+function agentMessageDrawn(message: AgentTranscriptMessage, page?: TaskMentionsValue): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

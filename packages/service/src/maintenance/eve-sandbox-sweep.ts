@@ -36,7 +36,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readEveRunStanding } from "@luke/database/models/coding-agent-store";
+import { readEveRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";

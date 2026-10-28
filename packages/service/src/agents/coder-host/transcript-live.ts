@@ -9,10 +9,10 @@ import { queryBuilder } from "@luke/database/core/query";
 import type { MessageCursor } from "@luke/database/models/message-reads";
 import { agentReachableBy } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { agentDelegationTable, agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
-import { CODING_AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/agent-wire";
 import { TRANSCRIPT_WINDOW } from "@luke/features/transcript-window";
 import {
   and,
@@ -91,7 +91,7 @@ const TURN_CHANGED = sql`greatest(
 /** The journal of the turn that took a developer's line in, which shares the turn's id as its client id. */
 const takingJournal = alias(messages, "taking_journal");
 /** The coding agent that sent a line, apart from the agent the statement's membership reads. */
-const sendingAgent = alias(codingAgent, "sending_agent");
+const sendingAgent = alias(agentTable, "sending_agent");
 
 /** The newest messages' own rows, by id, which the parts statement reads the parts of. */
 const windowMessage = alias(messages, "window_message");
@@ -163,7 +163,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL, past: MessageCu
     )
     .where(sql`not ${retired(sql`element.value`)}`)
     .as("part");
-  const cut = sql`coalesce(length(${element.words}) > ${CODING_AGENT_BOUNDS.MAX_PART_CHARS}, false)`;
+  const cut = sql`coalesce(length(${element.words}) > ${AGENT_BOUNDS.MAX_PART_CHARS}, false)`;
   const newest = queryBuilder
     .select({ id: windowMessage.id })
     .from(windowMessage)
@@ -314,12 +314,12 @@ export function agentFollowedBy(
 ): SQL {
   return exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
+      .select({ one: agentTable.id })
+      .from(agentTable)
       .where(
         and(
-          eq(codingAgent.conversationId, parentConversationId),
-          eq(codingAgent.userId, ownerId),
+          eq(agentTable.conversationId, parentConversationId),
+          eq(agentTable.userId, ownerId),
           agentReachableBy(readerId),
         ),
       ),
@@ -381,12 +381,12 @@ export function transcriptLiveStatements(
       ),
     );
   const agent = queryBuilder
-    .select(liveSelection({ id: codingAgent.id, title: codingAgent.title }))
-    .from(codingAgent)
+    .select(liveSelection({ id: agentTable.id, title: agentTable.title }))
+    .from(agentTable)
     .where(
       and(
-        eq(codingAgent.conversationId, parentConversationId),
-        eq(codingAgent.userId, userId),
+        eq(agentTable.conversationId, parentConversationId),
+        eq(agentTable.userId, userId),
         reached,
       ),
     );
@@ -395,14 +395,11 @@ export function transcriptLiveStatements(
       liveSelection({
         id: conversations.id,
         title: conversations.title,
-        callId: codingAgentDelegation.callId,
+        callId: agentDelegationTable.callId,
       }),
     )
     .from(conversations)
-    .leftJoin(
-      codingAgentDelegation,
-      eq(codingAgentDelegation.childConversationId, conversations.id),
-    )
+    .leftJoin(agentDelegationTable, eq(agentDelegationTable.childConversationId, conversations.id))
     .where(
       and(
         eq(conversations.parentConversationId, parentConversationId),

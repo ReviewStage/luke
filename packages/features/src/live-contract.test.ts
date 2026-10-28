@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { LIVE_VOICE } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { test } from "vitest";
-import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import { AGENT_BOUNDS } from "./agent-wire.js";
 import {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,
@@ -244,7 +244,7 @@ test("a line typed into the call is a report carrying its words, trimmed, and it
   assert.equal(
     sessionReportFrameFromWire({
       type: typed,
-      text: "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
+      text: "a".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
       clientKey,
     }),
     undefined,

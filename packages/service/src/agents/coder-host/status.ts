@@ -1,36 +1,36 @@
 import {
-  type CodingAgent,
-  type CodingAgentLatestTurn,
-  type CodingAgentLine,
-  type CodingAgentStartedFromIt,
-  codingAgentBriefOf,
-  codingAgentLineOf,
-} from "@luke/database/models/coding-agent-store";
+  type Agent,
+  type AgentLatestTurn,
+  type AgentLine,
+  type AgentStartedFromIt,
+  agentBriefOf,
+  agentLineOf,
+} from "@luke/database/models/agent-store";
 import type { Device } from "@luke/database/models/device-store";
-import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
+import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import {
-  codingAgentStatusAt,
+  agentStatusAt,
   type StatusTurn,
   lineAwaitsTurn as sharedLineAwaitsTurn,
   statusClockEdge as sharedStatusClockEdge,
   turnStoppable,
-} from "@luke/features/coding-agent-status";
+} from "@luke/features/agent-status";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_STATUS,
+  AGENT_BRIEF,
+  AGENT_FAILURE,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  AGENT_STATUS,
+  type AgentArchivedBy,
+  type AgentFailure,
+  type AgentOrigin,
+  type AgentPage,
+  type AgentStatus,
+  type AgentSummary,
   CONTEXT_WINDOW,
-  type CodingAgentArchivedBy,
-  type CodingAgentFailure,
-  type CodingAgentOrigin,
-  type CodingAgentPage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-  type NativeCodingAgentRuntime,
-} from "@luke/features/coding-agent-wire";
+  type NativeAgentRuntime,
+} from "@luke/features/agent-wire";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
@@ -80,13 +80,13 @@ export interface AgentStanding {
 }
 
 /** Whether an agent was started blank, as a full read or a list line says it. */
-export function startedBlank(agent: CodingAgent | Pick<CodingAgentLine, "brief">): boolean {
-  const brief = "brief" in agent ? agent.brief : codingAgentBriefOf(agent);
-  return brief === CODING_AGENT_BRIEF.BLANK;
+export function startedBlank(agent: Agent | Pick<AgentLine, "brief">): boolean {
+  const brief = "brief" in agent ? agent.brief : agentBriefOf(agent);
+  return brief === AGENT_BRIEF.BLANK;
 }
 
-/** What of the newest turn the shared rule reads (`@luke/features/coding-agent-status`), each instant in epoch milliseconds. */
-function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | undefined {
+/** What of the newest turn the shared rule reads (`@luke/features/agent-status`), each instant in epoch milliseconds. */
+function statusTurnOf(turn: AgentLatestTurn | undefined): StatusTurn | undefined {
   return turn === undefined
     ? undefined
     : {
@@ -101,7 +101,7 @@ function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | und
 
 /** Whether a line of the developer's awaits the turn it opens, which keeps the agent at work: what an archive or a Stop reads the agent idle by. */
 export function lineAwaitsTurn(
-  turn: CodingAgentLatestTurn | undefined,
+  turn: AgentLatestTurn | undefined,
   standing: Pick<AgentStanding, "now" | "awaitingLineAt">,
 ): boolean {
   return sharedLineAwaitsTurn(statusTurnOf(turn), {
@@ -118,10 +118,10 @@ export function lineAwaitsTurn(
  * as completed, however long ago it started: no first turn is on its way.
  */
 export function codingAgentStatusOf(
-  turn: CodingAgentLatestTurn | undefined,
+  turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
-): CodingAgentStatus {
-  return codingAgentStatusAt(statusTurnOf(turn), {
+): AgentStatus {
+  return agentStatusAt(statusTurnOf(turn), {
     createdAt: standing.createdAt.getTime(),
     now: standing.now,
     awaitingLineAt: standing.awaitingLineAt?.getTime(),
@@ -136,7 +136,7 @@ export function codingAgentStatusOf(
  * starting to failed. None where nothing but a row changing can move it.
  */
 export function statusClockEdge(
-  turn: CodingAgentLatestTurn | undefined,
+  turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
 ): number | undefined {
   return sharedStatusClockEdge(statusTurnOf(turn), {
@@ -160,9 +160,9 @@ const CONTEXT_OVERFLOW_WORDS: readonly string[] = [
 ];
 
 /** The host's refusal sentences, and a provider's words for a prompt past the window, a failed turn's detail may carry, by the word the wire says for each. */
-export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
+export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]])[] = [
   [
-    CODING_AGENT_FAILURE.GITHUB,
+    AGENT_FAILURE.GITHUB,
     [
       CODER_REFUSAL.NOT_REACHABLE,
       CODER_REFUSAL.GITHUB_UNAVAILABLE,
@@ -170,11 +170,11 @@ export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly str
       REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE,
     ],
   ],
-  [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW, CONTEXT_OVERFLOW_WORDS],
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY, [CODER_REFUSAL.FAST_ON_OWN_KEY]],
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED, [CODER_REFUSAL.FAST_NOT_ENABLED]],
+  [AGENT_FAILURE.CONTEXT_OVERFLOW, CONTEXT_OVERFLOW_WORDS],
+  [AGENT_FAILURE.FAST_ON_OWN_KEY, [CODER_REFUSAL.FAST_ON_OWN_KEY]],
+  [AGENT_FAILURE.FAST_NOT_ENABLED, [CODER_REFUSAL.FAST_NOT_ENABLED]],
   [
-    CODING_AGENT_FAILURE.PROVIDER_KEY,
+    AGENT_FAILURE.PROVIDER_KEY,
     [
       CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE,
       CODER_REFUSAL.ACCOUNT_KEY_REFUSED,
@@ -182,7 +182,7 @@ export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly str
     ],
   ],
   [
-    CODING_AGENT_FAILURE.SANDBOX,
+    AGENT_FAILURE.SANDBOX,
     [
       REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
       REPOSITORY_REFUSAL.NO_FIREWALL,
@@ -201,7 +201,7 @@ export const RAN_DIRECTLY_DETAIL =
 
 /** The folder an agent its Mac refused for having run directly on it left its work in, as its failed turn records it; nothing for any other turn. */
 export function ranDirectlyFolderOf(
-  turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): string | undefined {
   if (turn?.status !== TURN_STATUS.FAILED) return undefined;
   if (turn.failure !== TURN_FAILURE.SESSION_ENDED) return undefined;
@@ -213,31 +213,31 @@ export function ranDirectlyFolderOf(
 
 /** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */
 export function codingAgentFailureOf(
-  turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
-): CodingAgentFailure | undefined {
-  if (turn === undefined) return CODING_AGENT_FAILURE.NOT_STARTED;
+  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): AgentFailure | undefined {
+  if (turn === undefined) return AGENT_FAILURE.NOT_STARTED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure === TURN_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
+  if (turn.failure === TURN_FAILURE.ABANDONED) return AGENT_FAILURE.ABANDONED;
   if (turn.failure === TURN_FAILURE.SESSION_ENDED) {
-    return CODING_AGENT_FAILURE.SESSION_ENDED;
+    return AGENT_FAILURE.SESSION_ENDED;
   }
-  if (turn.failure !== TURN_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
+  if (turn.failure !== TURN_FAILURE.MODEL) return AGENT_FAILURE.OTHER;
   const detail = turn.failureDetail ?? "";
   const named = FAILURE_WORDS.find(([, words]) => words.some((word) => detail.includes(word)));
-  return named?.[0] ?? CODING_AGENT_FAILURE.MODEL;
+  return named?.[0] ?? AGENT_FAILURE.MODEL;
 }
 
 /** What an agent's status is read from: its newest turn, and when the newest line of the developer's awaiting its turn was written. */
 export interface AgentTurnStanding {
-  readonly turn: CodingAgentLatestTurn | undefined;
+  readonly turn: AgentLatestTurn | undefined;
   readonly awaitingLineAt: Date | undefined;
   /** The provider's own harness its conversation runs on; none on eve, and where the read named none. */
-  readonly runtime?: NativeCodingAgentRuntime | undefined;
+  readonly runtime?: NativeAgentRuntime | undefined;
 }
 
 /** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
 export function codingAgentRunStartedAt(
-  turn: CodingAgentLatestTurn | undefined,
+  turn: AgentLatestTurn | undefined,
   standing: AgentStanding,
 ): number | undefined {
   if (lineAwaitsTurn(turn, standing)) return undefined;
@@ -255,7 +255,7 @@ export function codingAgentRunStartedAt(
  * brackets them, and none is read apart.
  */
 export function codingAgentActivityAt(
-  turn: CodingAgentLatestTurn | undefined,
+  turn: AgentLatestTurn | undefined,
   standing: Pick<AgentStanding, "createdAt">,
 ): number {
   const begun = turn === undefined ? undefined : (turn.startedAt ?? turn.queuedAt);
@@ -267,10 +267,7 @@ export function codingAgentActivityAt(
 }
 
 /** Who archived an agent as its banner says it: the member, where their account stands, the agent acting for them, and why. */
-function archivedByOf(
-  archive: StoredArchive,
-  names: ReadonlyMap<string, string>,
-): CodingAgentArchivedBy {
+function archivedByOf(archive: StoredArchive, names: ReadonlyMap<string, string>): AgentArchivedBy {
   const member = names.get(archive.userId);
   return {
     by: archive.by,
@@ -288,10 +285,10 @@ const NO_MACS: ReadonlyMap<string, Device> = new Map();
 
 /** The Mac a local agent runs on as its summary names it, by its name and when it last beat; none for an agent in a sandbox or whose Mac was not read. */
 function macOf(
-  agent: Pick<CodingAgentLine, "machine" | "deviceId">,
+  agent: Pick<AgentLine, "machine" | "deviceId">,
   macs: ReadonlyMap<string, Device>,
-): CodingAgentSummary["mac"] {
-  if (agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null) return undefined;
+): AgentSummary["mac"] {
+  if (agent.machine !== AGENT_MACHINE.DEVICE || agent.deviceId == null) return undefined;
   const device = macs.get(agent.deviceId);
   return device === undefined
     ? undefined
@@ -300,25 +297,25 @@ function macOf(
 
 /** The Macs a read's local agents are pinned to, by id, which `devicesNamed` reads. */
 export function summaryDevices(
-  agents: readonly Pick<CodingAgentLine, "machine" | "deviceId">[],
+  agents: readonly Pick<AgentLine, "machine" | "deviceId">[],
 ): readonly string[] {
   return agents.flatMap((agent) =>
-    agent.machine === CODING_AGENT_MACHINE.DEVICE && agent.deviceId != null ? [agent.deviceId] : [],
+    agent.machine === AGENT_MACHINE.DEVICE && agent.deviceId != null ? [agent.deviceId] : [],
   );
 }
 
 /** What every read of one agent says of it but its task, its status read at `now`, the agents started from it where any was, and the Mac it runs on where `macs` holds it. */
 function summaryFields(
-  agent: CodingAgentLine,
+  agent: AgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
-  continuedBy: readonly CodingAgentStartedFromIt[],
+  continuedBy: readonly AgentStartedFromIt[],
   macs: ReadonlyMap<string, Device>,
-): Omit<CodingAgentSummary, "id" | "planId"> {
+): Omit<AgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
   const mac = macOf(agent, macs);
-  const summary: Omit<CodingAgentSummary, "id" | "planId"> = {
+  const summary: Omit<AgentSummary, "id" | "planId"> = {
     model: agent.model,
     effort: agent.effort,
     ...(agent.contextWindow === CONTEXT_WINDOW.STANDARD
@@ -327,9 +324,9 @@ function summaryFields(
     ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
     // Note that only an operator says its kind, so a coder's summary is as it was.
-    ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
+    ...(agent.kind === AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
     // Likewise only a local agent says where it runs, so a sandboxed agent's summary is as it was.
-    ...(agent.machine === CODING_AGENT_MACHINE.DEVICE ? { machine: agent.machine } : undefined),
+    ...(agent.machine === AGENT_MACHINE.DEVICE ? { machine: agent.machine } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {
@@ -368,7 +365,7 @@ function summaryFields(
     awaitingLineAt: standing.awaitingLineAt,
   });
   const stoppable =
-    summary.status !== CODING_AGENT_STATUS.RUNNING || turnStoppable(statusTurnOf(standing.turn));
+    summary.status !== AGENT_STATUS.RUNNING || turnStoppable(statusTurnOf(standing.turn));
   return {
     ...summary,
     ...(started === undefined ? undefined : { runStartedAt: started }),
@@ -384,14 +381,14 @@ function summaryFields(
  * agent runs on, where `macs` holds it.
  */
 export function codingAgentSummary(
-  agent: CodingAgent | CodingAgentLine,
+  agent: Agent | AgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
-  continuedBy: readonly CodingAgentStartedFromIt[] = [],
+  continuedBy: readonly AgentStartedFromIt[] = [],
   macs: ReadonlyMap<string, Device> = NO_MACS,
-): CodingAgentSummary {
-  const line = "brief" in agent ? agent : codingAgentLineOf(agent);
+): AgentSummary {
+  const line = "brief" in agent ? agent : agentLineOf(agent);
   return {
     id: line.id,
     planId: line.taskId,
@@ -405,10 +402,7 @@ export function codingAgentSummary(
  * member who asked for a run now, named by `names` where their account
  * stands.
  */
-function originOf(
-  origin: StoredAutomationOrigin,
-  names: ReadonlyMap<string, string>,
-): CodingAgentOrigin {
+function originOf(origin: StoredAutomationOrigin, names: ReadonlyMap<string, string>): AgentOrigin {
   const { firing } = origin;
   const subject =
     firing.kind === AUTOMATION_FIRING.GITHUB && firing.number !== undefined
@@ -435,13 +429,13 @@ function originOf(
 
 /** The accounts an agent's summary names: its starter, and the member it was archived by or for. */
 export function summaryAccounts(
-  agent: Pick<CodingAgentLine, "userId" | "archivedBy">,
+  agent: Pick<AgentLine, "userId" | "archivedBy">,
 ): readonly string[] {
   return agent.archivedBy === null ? [agent.userId] : [agent.userId, agent.archivedBy.userId];
 }
 
 /** The accounts an agent's page names: its summary's, and whoever asked for the run that started it. */
-export function pageAccounts(agent: CodingAgent): readonly string[] {
+export function pageAccounts(agent: Agent): readonly string[] {
   const firing = agent.automationOrigin?.firing;
   return firing?.kind === AUTOMATION_FIRING.MANUAL && firing.userId !== undefined
     ? [...summaryAccounts(agent), firing.userId]
@@ -450,17 +444,17 @@ export function pageAccounts(agent: CodingAgent): readonly string[] {
 
 /** One agent as its own page reads it, on a task or with none, its status read at `now`, with the agents started from it and the Mac it runs on. */
 export function codingAgentPage(
-  agent: CodingAgent,
+  agent: Agent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
-  continuedBy: readonly CodingAgentStartedFromIt[] = [],
+  continuedBy: readonly AgentStartedFromIt[] = [],
   macs: ReadonlyMap<string, Device> = NO_MACS,
-): CodingAgentPage {
+): AgentPage {
   return {
     id: agent.id,
     planId: agent.taskId,
-    ...summaryFields(codingAgentLineOf(agent), standing, now, names, continuedBy, macs),
+    ...summaryFields(agentLineOf(agent), standing, now, names, continuedBy, macs),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null
       ? undefined

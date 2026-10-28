@@ -9,7 +9,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgentHeaderOfConversation } from "@luke/database/models/coding-agent-store";
+import { readAgentHeaderOfConversation } from "@luke/database/models/agent-store";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { Effect, Option } from "effect";
@@ -56,7 +56,7 @@ export function runAgentInbox(
   call: InboxCall,
 ): Effect.Effect<ThreadToolResult, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* readCodingAgentHeaderOfConversation(
+    const found = yield* readAgentHeaderOfConversation(
       admitted.target.userId,
       admitted.target.conversationId,
     );
@@ -92,7 +92,7 @@ export function postThreadWords(
   admitted: AdmittedConversation,
 ): Effect.Effect<string, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* readCodingAgentHeaderOfConversation(
+    const found = yield* readAgentHeaderOfConversation(
       admitted.target.userId,
       admitted.target.conversationId,
     );

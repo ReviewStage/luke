@@ -18,8 +18,8 @@ import {
 } from "@luke/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { WORKSPACE_NAME } from "@luke/database/models/workspace-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { planRevision } from "@luke/database/schemas/plan-revision";
@@ -107,7 +107,7 @@ function tasksSince(since: Date): SQL<number> {
 
 /** The workspace's coding agents started since the instant. */
 function agentsSince(since: Date): SQL<number> {
-  return sql<number>`(select count(*)::int from ${codingAgent} where ${and(eq(codingAgent.organizationId, organization.id), gte(codingAgent.createdAt, since))})`;
+  return sql<number>`(select count(*)::int from ${agentTable} where ${and(eq(agentTable.organizationId, organization.id), gte(agentTable.createdAt, since))})`;
 }
 
 /** Revisions written on the workspace's plans since the instant, by a member, Luke, or an agent alike. */
@@ -121,7 +121,7 @@ function revisionsSince(since: Date): SQL<number> {
  * request, which counts once.
  */
 function prsMergedSince(sinceMs: number): SQL<number> {
-  return sql<number>`(select count(distinct ${codingAgent.published} ->> 'url')::int from ${codingAgent} where ${eq(codingAgent.organizationId, organization.id)} and (${codingAgent.published} ->> 'mergedAt')::numeric >= ${sinceMs})`;
+  return sql<number>`(select count(distinct ${agentTable.published} ->> 'url')::int from ${agentTable} where ${eq(agentTable.organizationId, organization.id)} and (${agentTable.published} ->> 'mergedAt')::numeric >= ${sinceMs})`;
 }
 
 /** Whether the workspace saw a task, an agent, or a plan revision since the instant. */

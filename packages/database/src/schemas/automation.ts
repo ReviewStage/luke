@@ -14,8 +14,8 @@ import {
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 import { task } from "./task.js";
 
 /**
@@ -74,7 +74,7 @@ export const automation = pgTable(
       .notNull()
       .default(AUTOMATION_TARGET.NEW_AGENT),
     /** The agent a run continues where `target_kind` is the same agent; null otherwise or once it is deleted. */
-    targetAgentId: uuid("target_agent_id").references(() => codingAgent.id, {
+    targetAgentId: uuid("target_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     archiveSuccessful: boolean("archive_successful").notNull().default(false),
@@ -124,7 +124,7 @@ export const automationRun = pgTable(
     /** Why it was skipped or failed; null while queued and once started. */
     reason: text("reason").$type<AutomationRunReason>(),
     /** The coding agent it started; null before, and where that agent is gone. */
-    codingAgentId: uuid("coding_agent_id").references(() => codingAgent.id, {
+    codingAgentId: uuid("coding_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     firedAt: timestamptz("fired_at").notNull(),
@@ -136,7 +136,7 @@ export const automationRun = pgTable(
      * run is recovered by that agent's line whatever the automation names
      * since; null for any other run, and once that agent is deleted.
      */
-    claimedAgentId: uuid("claimed_agent_id").references(() => codingAgent.id, {
+    claimedAgentId: uuid("claimed_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     /**

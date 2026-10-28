@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -9,7 +9,7 @@ import { voiceTranscriptSegments } from "../../schemas/voice.js";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, startTask } from "../../testing/index.js";
 import { VOICE_SEGMENT_ROLE } from "../../voice-vocabulary.js";
-import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
+import { archiveAgent, createAgent } from "../agent-store.js";
 import { voiceSessionRecord } from "../voice-session-record.js";
 
 /**
@@ -36,7 +36,7 @@ const openAccount = Effect.gen(function* () {
 /** An agent on the task, started blank under the account. */
 const startAgent = (userId: string, taskId: string, runtime?: ConversationRuntime) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       taskId,
       planSnapshot: null,
       prompt: null,
@@ -105,8 +105,8 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           agentId: agent.id,
           taskId: task.id,
           repository: null,
-          kind: CODING_AGENT_KIND.CODER,
-          machine: CODING_AGENT_MACHINE.VERCEL,
+          kind: AGENT_KIND.CODER,
+          machine: AGENT_MACHINE.VERCEL,
           archived: false,
           runtime: CONVERSATION_RUNTIME.EVE,
           conversation: { userId: starter, conversationId: agent.conversationId },
@@ -115,7 +115,7 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
         assert.deepEqual(yield* record.heldAgent({ userId: teammate, agentId: agent.id }), held);
         assert.equal(yield* record.heldAgent({ userId: stranger, agentId: agent.id }), undefined);
 
-        yield* archiveCodingAgent(starter, agent.id, true);
+        yield* archiveAgent(starter, agent.id, true);
         assert.equal(
           (yield* record.heldAgent({ userId: starter, agentId: agent.id }))?.archived,
           true,
@@ -155,7 +155,7 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
         const userId = yield* openAccount;
         const stranger = yield* openAccount;
         const { workspaceId } = yield* startTask(userId, { name: "Billing export" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: null,
           organizationId: workspaceId,
           planSnapshot: null,
@@ -215,12 +215,12 @@ it.layer(getTestDB())("a call into a member's operator", (it) => {
       const { workspaceId } = yield* startTask(member, { name: "Billing export" });
       yield* joinWorkspace(workspaceId, teammate);
       const operator = Option.getOrThrow(
-        yield* createCodingAgent(member, {
+        yield* createAgent(member, {
           taskId: null,
           organizationId: workspaceId,
           planSnapshot: null,
           prompt: null,
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",

@@ -10,7 +10,7 @@
  */
 
 import type { AdminPullRequest } from "@luke/features/admin-account-wire";
-import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/agent-wire";
 import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,

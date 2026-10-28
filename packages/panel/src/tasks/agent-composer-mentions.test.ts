@@ -2,17 +2,14 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type {
-  CodingAgentAgentAnswer,
-  CodingAgentWorkspaceListParams,
-} from "@luke/features/coding-agent-view";
+import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -142,7 +139,7 @@ function workspaceAgent(
   title: string,
   taskId: string | null,
   archivedAt?: number,
-): CodingAgentSummary {
+): AgentSummary {
   return {
     id,
     planId: taskId,
@@ -150,7 +147,7 @@ function workspaceAgent(
     effort: "high",
     title,
     createdAt: 1_000,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...(archivedAt === undefined ? undefined : { archivedAt }),
   };
@@ -173,16 +170,16 @@ const OLD_AGENT = workspaceAgent(
 const LEDGER = workspaceAgent("6f6f6f6f-0000-4000-8000-000000000000", "Old ledger", null);
 
 /** The newest agents the workspace's list answers, archived ones left out. */
-const NEWEST_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER];
+const NEWEST_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER];
 
 /** Every agent of the workspace, which a search finds among, archived ones included. */
-const WORKSPACE_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
+const WORKSPACE_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
 
 /** The newest agents the workspace's list answers now. */
-let newest: readonly CodingAgentSummary[] = NEWEST_AGENTS;
+let newest: readonly AgentSummary[] = NEWEST_AGENTS;
 
 /** The workspace's list as the service answers it: the newest, or those whose title or task's name holds the words, as the store finds them. */
-function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly CodingAgentSummary[] {
+function workspaceAnswer({ words }: AgentWorkspaceListParams): readonly AgentSummary[] {
   if (words === undefined) return newest;
   const lower = words.toLowerCase();
   return WORKSPACE_AGENTS.filter(
@@ -396,7 +393,7 @@ async function box(page: TaskMentionsValue | undefined, skills: SkillSource = no
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const { container, redraw } = drawing(createElement(Box, { sender, skills }), page);
   await settle();
@@ -946,7 +943,7 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const { container } = drawing(
     createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
@@ -1171,7 +1168,7 @@ it.effect(
 
 /** The box on the plan's page that reads its workspace's agents, among the workspace's members. */
 async function workspaceMemberBox() {
-  const sender: MessageSender = () => new Promise<CodingAgentAgentAnswer>(ignore);
+  const sender: MessageSender = () => new Promise<AgentAgentAnswer>(ignore);
   const { container } = drawing(
     amongMembers(
       createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
@@ -1186,7 +1183,7 @@ test("an @ row for an agent ends in its starter's face where a teammate started 
   newest = [
     {
       ...BILLING_AGENT,
-      status: CODING_AGENT_STATUS.FAILED,
+      status: AGENT_STATUS.FAILED,
       startedBy: { userId: DANA_ID, name: "Dana Reyes" },
     },
     { ...SWEEPER, startedBy: { userId: READER_ID, name: "Charles Pan" } },
@@ -1661,8 +1658,8 @@ test("typing a server's provider and a colon narrows the list to that server, it
 function pullRequest(
   number: number,
   title: string,
-  state: CodingAgentPullRequest["state"],
-): CodingAgentPullRequest {
+  state: AgentPullRequest["state"],
+): AgentPullRequest {
   return {
     number,
     title,
@@ -1778,7 +1775,7 @@ async function memberBox() {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const { container } = drawing(
     amongMembers(createElement(Box, { sender, skills: noSkills })),

@@ -15,7 +15,7 @@
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
  */
 
-import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
+import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { Effect, Layer, Option } from "effect";
@@ -57,7 +57,7 @@ export interface NativeAgentSessionsOptions {
  */
 const nativeCoderInstructions = (
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   harness: CoderHarness,
   place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "isolation" | "sharedFiles">,
 ) =>
@@ -81,7 +81,7 @@ const nativeCoderInstructions = (
   });
 
 /** The integrations an agent is handed as its launch starts, each an MCP server of its own at Luke, read as its starter's conversation reads them. */
-const nativeIntegrations = (userId: string, agent: CodingAgent, origin: string) =>
+const nativeIntegrations = (userId: string, agent: Agent, origin: string) =>
   Effect.map(
     nativeAgentConnections({
       caller: userId,

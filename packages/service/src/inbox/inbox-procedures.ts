@@ -16,12 +16,12 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgent } from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment } from "@luke/features/agent-wire";
 import {
   INBOX_ASK_STATUS,
   INBOX_CURSOR_START,
@@ -127,7 +127,7 @@ const productionTitleModel: InboxTitleModelOf = (userId, preferred) =>
 const retitled = (
   seams: InboxProcedureSeams,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   item: InboxItem,
   text: string,
 ) =>
@@ -204,13 +204,13 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   message: {
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
   },
   counted: Effect.Effect<void>,
 ) {
   const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
@@ -322,7 +322,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   sent: {
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
     readonly answers: InboxAnswers;
   },
 ) {
@@ -421,7 +421,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
     return { item: taken, taken: true, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
+    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
@@ -477,7 +477,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
   asked: {
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
     readonly answers?: InboxAnswers | undefined;
     readonly revision?: number | undefined;
   },
@@ -505,7 +505,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? withdrawInboxMessage(userId, itemId, clientKey)
       : Effect.void;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
+    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
@@ -543,13 +543,13 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly title: string;
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
     /** Whether the member wrote the subject, where none stands for its message's first line until it is titled. */
     readonly titled: boolean;
   },
 ) {
   const { agentId, title, text, clientKey, attachments } = asked;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (!controlsAgent(userId, agent.value)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const { userId: starterId, taskId } = agent.value;
@@ -626,7 +626,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }),
     agent: signedIn.agent.effect(function* ({ input, context }) {
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(readAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(agentInboxPast(context.userId, agent.value.id, after));

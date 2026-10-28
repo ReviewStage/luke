@@ -1,15 +1,15 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  type CodingAgentBrief,
-  type CodingAgentContext,
-  type CodingAgentPayer,
-  type CodingAgentPullRequestAnswer,
-  type CodingAgentStatus,
-  type CodingAgentUsage,
+  AGENT_BOUNDS,
+  AGENT_STATUS,
+  type AgentBrief,
+  type AgentContext,
+  type AgentPayer,
+  type AgentPullRequestAnswer,
+  type AgentStatus,
+  type AgentUsage,
   hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
@@ -392,7 +392,7 @@ function ComposerMore({
 export function AgentComposer({
   agentId,
   status,
-  stoppable = status === CODING_AGENT_STATUS.RUNNING,
+  stoppable = status === AGENT_STATUS.RUNNING,
   composer,
   model,
   models,
@@ -413,7 +413,7 @@ export function AgentComposer({
   sendsEmpty = false,
   closedRemedy,
   wording,
-  maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
+  maxLength = AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   tools,
   actions,
   beforeSend,
@@ -425,7 +425,7 @@ export function AgentComposer({
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
-  status: CodingAgentStatus;
+  status: AgentStatus;
   /** Whether Stop stands in Send's place while the box is empty: while the agent runs where unsaid, and only while a Stop has something to stop where the tab knows (`offersStop`). */
   stoppable?: boolean;
   composer: AgentComposerControl;
@@ -437,17 +437,17 @@ export function AgentComposer({
   modelsFailed: boolean;
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
-  usage: CodingAgentUsage | undefined;
+  usage: AgentUsage | undefined;
   /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
-  payer?: CodingAgentPayer | undefined;
+  payer?: AgentPayer | undefined;
   /** The MCP servers the agent is handed and their switches; none where the box offers none, as New task's does. */
   servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
-  context?: CodingAgentContext | undefined;
+  context?: AgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
-  brief?: CodingAgentBrief | undefined;
+  brief?: AgentBrief | undefined;
   /** What the agent published, once the service has said; nothing before. */
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
   /** Stops the agent; the promise settles once the service has answered. */
   onStop: () => Promise<void>;

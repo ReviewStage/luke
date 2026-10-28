@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository } from "@luke/database/models/coding-agent-store";
+import { hasRepository } from "@luke/database/models/agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
-import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { agentCallIdSchema } from "@luke/features/agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -87,7 +87,7 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<string, HostedRefusal> {
   const call = new URL(request.url).searchParams.get(QUERY.CALL) ?? "";
-  const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
+  const read = readEither(agentCallIdSchema)(unparsedWire(call));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });

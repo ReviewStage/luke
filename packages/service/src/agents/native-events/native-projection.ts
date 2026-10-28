@@ -166,7 +166,7 @@ export const NATIVE_WRITE = {
   COMPACTED: "compacted",
   /** Record how a turn found the plan that pays for the agent, on its row. */
   PLAN_STATUS: "plan_status",
-  /** Replace the wakeups Luke delivers to the agent once due (`coding-agent-wakeups.ts`). */
+  /** Replace the wakeups Luke delivers to the agent once due (`agent-wakeups.ts`). */
   WAKEUPS: "wakeups",
   /** Record what the newest model call read on the agent's row, which its context ring reads. */
   CONTEXT: "context",

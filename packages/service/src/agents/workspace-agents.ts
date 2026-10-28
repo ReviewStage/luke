@@ -1,10 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  listWorkspaceCodingAgents,
-  readCodingAgent,
+  type Agent,
+  listWorkspaceAgents,
+  readAgent,
   taskNamesOf,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { type UnparsedWireValue, wireUuidSchema } from "../core.js";
@@ -59,8 +59,8 @@ export interface AgentTask {
 
 /** A list of a workspace's agents, and the task each stands on. */
 export interface WorkspaceAgents {
-  readonly agents: readonly CodingAgent[];
-  readonly taskOf: (agent: CodingAgent) => AgentTask | null;
+  readonly agents: readonly Agent[];
+  readonly taskOf: (agent: Agent) => AgentTask | null;
 }
 
 /**
@@ -91,7 +91,7 @@ export const workspaceAgentsOf = (
   options: { readonly taskId?: string | undefined; readonly except?: string | undefined },
 ): Effect.Effect<WorkspaceAgents, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
-    const listed = yield* listWorkspaceCodingAgents(userId, workspaceId, {
+    const listed = yield* listWorkspaceAgents(userId, workspaceId, {
       ...(options.taskId === undefined ? undefined : { taskId: options.taskId }),
       includeArchived: true,
       limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
@@ -103,7 +103,7 @@ export const workspaceAgentsOf = (
       userId,
       agents.flatMap((agent) => agent.taskId ?? []),
     );
-    const taskOf = (agent: CodingAgent): AgentTask | null => {
+    const taskOf = (agent: Agent): AgentTask | null => {
       const named = agent.taskId === null ? undefined : names.get(agent.taskId);
       return agent.taskId === null || named === undefined ? null : { id: agent.taskId, ...named };
     };
@@ -115,15 +115,15 @@ export const workspaceAgent = (
   userId: string,
   workspaceId: string,
   agentId: string,
-): Effect.Effect<Option.Option<CodingAgent>, StoreFailure, DatabaseServices> =>
-  Effect.map(readCodingAgent(userId, agentId), (found) =>
+): Effect.Effect<Option.Option<Agent>, StoreFailure, DatabaseServices> =>
+  Effect.map(readAgent(userId, agentId), (found) =>
     Option.filter(found, (agent) => agent.organizationId === workspaceId),
   );
 
 /** The task one agent stands on, read as the account; null for an agent on none or on one the account cannot read. */
 export const agentTaskOf = (
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<AgentTask | null, StoreFailure, DatabaseServices> =>
   Effect.map(taskNamesOf(userId, agent.taskId === null ? [] : [agent.taskId]), (names) => {
     const named = agent.taskId === null ? undefined : names.get(agent.taskId);

@@ -1,4 +1,4 @@
-import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type TasklessAgent } from "@luke/features/agent-wire";
 import { automationRun } from "@luke/features/model-label";
 import {
   InlineEdit,
@@ -220,7 +220,7 @@ export function SidebarAgent({
               <InlineEdit
                 value={rename.asked ?? name}
                 label="Agent name"
-                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
                   endedByKey(edit.byKey);

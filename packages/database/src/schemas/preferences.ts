@@ -1,5 +1,5 @@
+import type { AgentMachineKind, ContextWindow } from "@luke/features/agent-wire";
 import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
-import type { CodingAgentMachine, ContextWindow } from "@luke/features/coding-agent-wire";
 import type { LinkOpen } from "@luke/features/link-open";
 import type { ExperimentChoices } from "@luke/settings";
 import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -60,7 +60,7 @@ export const accountPreference = pgTable("account_preference", {
    * since removed is still told apart from no pick at all. Written alone,
    * it moves no `updated_at`.
    */
-  runsOnMachine: text("runs_on_machine").$type<CodingAgentMachine>(),
+  runsOnMachine: text("runs_on_machine").$type<AgentMachineKind>(),
   runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),
   /**

@@ -16,12 +16,13 @@
  * write to them notifies the account it moves, so a read the account loses
  * is woken and answers without it.
  */
+
+import { agentDelegationTable, agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
-import { codingAgent, codingAgentDelegation } from "../schemas/coding-agent.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
@@ -58,13 +59,13 @@ export const taskSync = defineSyncTable(task, {
  * so is when its pull request was last read, because every read of the pull
  * request rewrites that; no view reads either live.
  */
-export const codingAgentSync = defineSyncTable(codingAgent, {
+export const agentSync = defineSyncTable(agentTable, {
   topics: [
-    { kind: TOPIC.AGENT, column: codingAgent.id },
-    { kind: TOPIC.TASK, column: codingAgent.taskId },
-    { kind: TOPIC.WORKSPACE, column: codingAgent.organizationId },
+    { kind: TOPIC.AGENT, column: agentTable.id },
+    { kind: TOPIC.TASK, column: agentTable.taskId },
+    { kind: TOPIC.WORKSPACE, column: agentTable.organizationId },
   ],
-  ignore: [codingAgent.lastStep, codingAgent.publishedRead],
+  ignore: [agentTable.lastStep, agentTable.publishedRead],
 });
 
 /** An account's membership of a workspace, on the workspace's topic and the account's. */
@@ -348,13 +349,13 @@ export const turnsSync = defineSyncTable(turns, {
   topics: [
     { kind: TOPIC.CONVERSATION, column: turns.conversationId },
     {
-      through: codingAgent,
-      key: codingAgent.conversationId,
+      through: agentTable,
+      key: agentTable.conversationId,
       by: turns.conversationId,
       topics: [
-        { kind: TOPIC.AGENT, column: codingAgent.id },
-        { kind: TOPIC.TASK, column: codingAgent.taskId },
-        { kind: TOPIC.WORKSPACE, column: codingAgent.organizationId },
+        { kind: TOPIC.AGENT, column: agentTable.id },
+        { kind: TOPIC.TASK, column: agentTable.taskId },
+        { kind: TOPIC.WORKSPACE, column: agentTable.organizationId },
       ],
     },
   ],
@@ -377,12 +378,12 @@ export const asksSync = defineSyncTable(asks, {
  * topic, looked up through the worker's own conversation, so the agent's
  * transcript hears the call that opened the worker.
  */
-export const codingAgentDelegationSync = defineSyncTable(codingAgentDelegation, {
+export const agentDelegationSync = defineSyncTable(agentDelegationTable, {
   topics: [
     {
       through: conversations,
       key: conversations.id,
-      by: codingAgentDelegation.childConversationId,
+      by: agentDelegationTable.childConversationId,
       topics: [{ kind: TOPIC.CONVERSATION, column: conversations.parentConversationId }],
     },
   ],
@@ -390,7 +391,7 @@ export const codingAgentDelegationSync = defineSyncTable(codingAgentDelegation, 
 
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
-  codingAgentSync,
+  agentSync,
   memberSync,
   userSync,
   invitationSync,
@@ -417,5 +418,5 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   conversationsSync,
   turnsSync,
   asksSync,
-  codingAgentDelegationSync,
+  agentDelegationSync,
 ];

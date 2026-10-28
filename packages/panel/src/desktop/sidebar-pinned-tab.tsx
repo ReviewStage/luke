@@ -1,9 +1,5 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import {
-  CODING_AGENT_BOUNDS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type AgentPullRequest, type AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -135,7 +131,7 @@ function pinSubject(
 }
 
 /** What a pin's pull request is drawn and named from: its number, title, and where it stands. */
-type PinnedPullRequest = PullRequestMarked & Pick<CodingAgentPullRequest, "title">;
+type PinnedPullRequest = PullRequestMarked & Pick<AgentPullRequest, "title">;
 
 /** The repository a pull request's address names, without its number: what two pull requests of one repository share. */
 function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
@@ -148,10 +144,7 @@ function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
  * (`pullRequestOfTab`), a numbered tab's included. Nothing for any other pin,
  * or for a pin of another task, whose agents the window does not read.
  */
-function openPullRequestOf(
-  pin: PinnedTab,
-  tasks: TasksControl,
-): CodingAgentPullRequest | undefined {
+function openPullRequestOf(pin: PinnedTab, tasks: TasksControl): AgentPullRequest | undefined {
   const { tab } = pin;
   if (!isChangesTab(tab) || pin.task !== tasks.activeTaskId) return undefined;
   return pullRequestOfTab(tasks.agents, tab);
@@ -224,7 +217,7 @@ function unpinItem(pin: PinnedTab, tasks: TasksControl): MenuAction {
  * whose whole menu the pin then offers; none for another task's pin, or an
  * agent the open task no longer holds.
  */
-function openAgentOf(pin: PinnedTab, tasks: TasksControl): CodingAgentSummary | undefined {
+function openAgentOf(pin: PinnedTab, tasks: TasksControl): AgentSummary | undefined {
   const { tab } = pin;
   if (!isAgentTab(tab) || pin.task !== tasks.activeTaskId) return undefined;
   return tasks.agents.agents?.find((each) => each.id === tab.agent);
@@ -274,7 +267,7 @@ const pinPullRequestAtom = Atom.family((agentId: string) =>
         (answer) =>
           "failure" in answer
             ? Effect.fail(answer.failure)
-            : Effect.succeed<CodingAgentPullRequest | undefined>(answer.pullRequest ?? undefined),
+            : Effect.succeed<AgentPullRequest | undefined>(answer.pullRequest ?? undefined),
       ),
     ),
     PIN_PULL_REQUEST_KEPT,
@@ -495,7 +488,7 @@ function PinnedAgentRow({
   agent,
   drawn,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   drawn: PinnedRowDrawn;
 }): React.JSX.Element {
   const { pin, tasks } = drawn;
@@ -526,7 +519,7 @@ function PinnedAgentRow({
             <InlineEdit
               value={rename.asked ?? pin.label}
               label="Agent name"
-              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
               editing
               onEnd={(edit) => {
                 endedByKey(edit.byKey);

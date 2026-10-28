@@ -6,8 +6,8 @@ import type {
 import { sql } from "drizzle-orm";
 import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { bytea, createdAt, timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 import { device } from "./device.js";
 
 /**
@@ -45,7 +45,7 @@ export const deviceAgentLine = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -97,7 +97,7 @@ export const deviceAgentRequest = pgTable(
     id: uuid("id").primaryKey(),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

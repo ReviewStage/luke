@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+import { createAgent, readAgent } from "@luke/database/models/agent-store";
+import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
@@ -81,7 +81,7 @@ const openAgent = Effect.gen(function* () {
   yield* db.insert(user).values({ id: owner, name: "Test User", email: `${owner}@luke.test` });
   yield* connectAgentApiKeys(owner);
   const task = yield* startTask(owner, { name: "Invitations" });
-  const started = yield* createCodingAgent(owner, {
+  const started = yield* createAgent(owner, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -115,7 +115,7 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
     Effect.gen(function* () {
       const eve = fakeEve();
       const { agentId, sessionId } = yield* openAgent;
-      yield* replaceCodingAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
+      yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
 
       yield* sweepAt(new Date(DUE.getTime() - 1_000), eve);
       assert.deepEqual(sentTo(eve, sessionId), [], "not yet due");
@@ -130,7 +130,7 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
       const refusing = fakeEve(true);
       const eve = fakeEve();
       const { agentId, sessionId } = yield* openAgent;
-      yield* replaceCodingAgentWakeups(agentId, [{ at: DUE, prompt: "Check the deploy." }]);
+      yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check the deploy." }]);
 
       yield* sweepAt(DUE, refusing);
       yield* sweepAt(new Date(DUE.getTime() + 1_000), eve);
@@ -139,7 +139,7 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
       assert.deepEqual(sentTo(eve, sessionId), ["Check the deploy."]);
 
       const given = yield* openAgent;
-      yield* replaceCodingAgentWakeups(given.agentId, [{ at: DUE, prompt: "Never lands." }]);
+      yield* replaceAgentWakeups(given.agentId, [{ at: DUE, prompt: "Never lands." }]);
       let at = DUE.getTime();
       for (let attempt = 0; attempt < NATIVE_WAKEUP_SWEEP.MAX_ATTEMPTS; attempt += 1) {
         yield* sweepAt(new Date(at), refusing);
@@ -156,8 +156,8 @@ it.layer(getTestDB())("the delivery of a released wait's wakeups", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, agentId, sessionId } = yield* openAgent;
-        yield* replaceCodingAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+        yield* replaceAgentWakeups(agentId, [{ at: DUE, prompt: "Check CI on #42." }]);
+        const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
 
         const cancelled = yield* cancelledTurn(
           Effect.succeed({ cancel: () => Effect.die("no turn runs, so nothing is cancelled") }),

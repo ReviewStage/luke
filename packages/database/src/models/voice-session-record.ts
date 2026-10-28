@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_MACHINE,
-  type CodingAgentKind,
-  type CodingAgentMachine,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, type AgentKind, type AgentMachineKind } from "@luke/features/agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
@@ -17,7 +13,7 @@ import {
   type VoiceCloseReason,
   type VoiceSegmentRole,
 } from "../voice-vocabulary.js";
-import { readCodingAgent, readCodingAgentRouting } from "./coding-agent-store.js";
+import { readAgent, readAgentRouting } from "./agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readTask } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
@@ -112,9 +108,9 @@ export interface HeldVoiceAgent {
   readonly agentId: string;
   readonly taskId: string | null;
   readonly repository: string | null;
-  readonly kind: CodingAgentKind;
+  readonly kind: AgentKind;
   /** Where its runner runs; a Vercel Sandbox where unsaid, as the agent reads. */
-  readonly machine: CodingAgentMachine;
+  readonly machine: AgentMachineKind;
   readonly archived: boolean;
   /** What answers the agent's conversation; eve for a conversation from before the column. A call reaches eve alone. */
   readonly runtime: ConversationRuntime;
@@ -539,17 +535,17 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
       ),
     heldAgent: (input) =>
       Effect.gen(function* () {
-        const agent = yield* readCodingAgent(input.userId, input.agentId);
+        const agent = yield* readAgent(input.userId, input.agentId);
         if (Option.isNone(agent)) return undefined;
         // An agent deleted between the two reads is none the call reaches.
-        const routing = yield* readCodingAgentRouting(input.userId, input.agentId);
+        const routing = yield* readAgentRouting(input.userId, input.agentId);
         if (Option.isNone(routing)) return undefined;
         return {
           agentId: agent.value.id,
           taskId: agent.value.taskId,
           repository: agent.value.repository,
           kind: agent.value.kind,
-          machine: agent.value.machine ?? CODING_AGENT_MACHINE.VERCEL,
+          machine: agent.value.machine ?? AGENT_MACHINE.VERCEL,
           archived: agent.value.archivedAt !== null,
           runtime: routing.value.runtime,
           conversation: { userId: agent.value.userId, conversationId: agent.value.conversationId },

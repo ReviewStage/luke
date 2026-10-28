@@ -53,7 +53,7 @@
 import { randomUUID } from "node:crypto";
 import { INPUT_LINE, InputLineSchema } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { hasRepository, readAgent } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentPin,
   deviceAgentLineStanding,
@@ -68,7 +68,7 @@ import {
 import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
 import { hostRemoved } from "@luke/database/models/host-store";
 import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
-import { CODING_AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -171,7 +171,7 @@ function onlyEnds(text: string): boolean {
 
 /** A local agent's place on its Mac, under Luke's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: CODING_AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
+  return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
 }
 
 /** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
@@ -385,7 +385,7 @@ function deviceMachineOver(
             ? { handle: { ...place, command: launch.value.id }, mark: mark.value }
             : undefined;
         const found: FoundPlace = {
-          machine: CODING_AGENT_MACHINE.DEVICE,
+          machine: AGENT_MACHINE.DEVICE,
           session,
           agentId,
           name: nameOfAgent(agentId),
@@ -453,7 +453,7 @@ function deviceMachineOver(
         // Note that the refusal comes before the caller's steps run, so it has nothing to undo.
         yield* refuseAway(pin);
         const read = Effect.gen(function* () {
-          const agent = yield* stored(readCodingAgent(pin.userId, pin.agentId));
+          const agent = yield* stored(readAgent(pin.userId, pin.agentId));
           if (Option.isNone(agent) || !hasRepository(agent.value))
             return { agent, identity: Exit.succeed(undefined) };
           const target = { userId: pin.userId, conversationId: agent.value.conversationId };

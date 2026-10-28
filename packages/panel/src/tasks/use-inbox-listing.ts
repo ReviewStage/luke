@@ -1,4 +1,4 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";

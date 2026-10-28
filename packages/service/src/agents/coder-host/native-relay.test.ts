@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  createCodingAgent,
-  readCodingAgentRouting,
+  type Agent,
+  createAgent,
+  readAgentRouting,
   readRunnerTokenConversation,
-  recordCodingAgentRunnerToken,
-  takeCodingAgentMentionedServers,
-} from "@luke/database/models/coding-agent-store";
+  recordAgentRunnerToken,
+  takeAgentMentionedServers,
+} from "@luke/database/models/agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import { saveProviderKey } from "@luke/database/models/provider-key-store";
 import {
@@ -18,10 +18,10 @@ import {
 } from "@luke/database/models/recorded-session";
 import { createTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { agentTable } from "@luke/database/schemas/agent";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { AGENT_PAYER } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -142,7 +142,7 @@ const openTeam = Effect.gen(function* () {
 /** An agent of the owner's on the task, on the runtime given; a blank one is handed no plan, so its first words open its session. */
 const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code", blank = false) =>
   Effect.gen(function* () {
-    const started = yield* createCodingAgent(owner, {
+    const started = yield* createAgent(owner, {
       taskId,
       idempotencyKey: randomUUID(),
       model: OPUS,
@@ -151,20 +151,20 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code", 
       prompt: null,
       repository: null,
       runtime,
-      payer: runtime === "claude_code" ? CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION : undefined,
+      payer: runtime === "claude_code" ? AGENT_PAYER.CLAUDE_SUBSCRIPTION : undefined,
     });
     assert.ok(Option.isSome(started));
     return started.value.agent;
   });
 
-const messageTo = (agent: CodingAgent, text = "Expire invitations after a week.") => ({
+const messageTo = (agent: Agent, text = "Expire invitations after a week.") => ({
   conversationId: agent.conversationId,
   turn: EVE_HOST_TURN.TYPED,
   message: text,
 });
 
 /** A native session recorded on the agent's conversation, as a launch claims it. */
-const nativeSessionOf = (owner: string, agent: CodingAgent) =>
+const nativeSessionOf = (owner: string, agent: Agent) =>
   Effect.gen(function* () {
     const session = `${NATIVE_SESSION_PREFIX.claude_code}000000000001-${randomUUID()}`;
     yield* claimRuntimeSession(
@@ -193,9 +193,9 @@ const heldHere = (
 const serversOfConversation = (conversationId: string) =>
   Database.use((db) =>
     db
-      .select({ servers: codingAgent.mentionedServers })
-      .from(codingAgent)
-      .where(eq(codingAgent.conversationId, conversationId)),
+      .select({ servers: agentTable.mentionedServers })
+      .from(agentTable)
+      .where(eq(agentTable.conversationId, conversationId)),
   ).pipe(Effect.map((rows) => rows[0]?.servers ?? null));
 
 /**
@@ -214,19 +214,19 @@ const launchMeets = (conversationId: string) =>
     const servers = yield* serversOfConversation(conversationId);
     const [agent] = yield* Database.use((db) =>
       db
-        .select({ id: codingAgent.id, userId: codingAgent.userId })
-        .from(codingAgent)
-        .where(eq(codingAgent.conversationId, conversationId)),
+        .select({ id: agentTable.id, userId: agentTable.userId })
+        .from(agentTable)
+        .where(eq(agentTable.conversationId, conversationId)),
     );
     assert.ok(agent);
     const digest = `digest-${conversationId}`;
-    yield* recordCodingAgentRunnerToken(agent.userId, agent.id, digest);
+    yield* recordAgentRunnerToken(agent.userId, agent.id, digest);
     // The row the bearer landed on is the one a launch on its own connection would have waited for.
     const [onAgent] = yield* Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
-        .where(eq(codingAgent.runnerTokenHash, digest)),
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(eq(agentTable.runnerTokenHash, digest)),
     );
     const launchWaits = onAgent === undefined ? held.conversation : held.agent;
     return { launchWaits, conversationHeld: held.conversation, servers };
@@ -419,12 +419,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               ),
             ),
           );
-          const routing = Option.getOrThrow(
-            yield* readCodingAgentRouting(starter, started.agent.id),
-          );
+          const routing = Option.getOrThrow(yield* readAgentRouting(starter, started.agent.id));
           assert.deepEqual(
             [routing.runtime, routing.payer],
-            ["claude_code", CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION],
+            ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
           );
           assert.deepEqual(relay.heard.at(-1)?.call, "open");
           assert.deepEqual(relay.heard.at(-1)?.account, starter);
@@ -522,7 +520,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             );
           }
           for (const agent of [relaunched, launched]) {
-            assert.deepEqual(yield* takeCodingAgentMentionedServers(owner, agent.conversationId), [
+            assert.deepEqual(yield* takeAgentMentionedServers(owner, agent.conversationId), [
               INTEGRATION_PROVIDER.LINEAR,
             ]);
           }

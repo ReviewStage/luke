@@ -17,16 +17,16 @@ export {
   type AccountToken,
 } from "./account-token.js";
 export { HostedAdminClient } from "./admin-client.js";
+export {
+  HostedAgentClient as HostedCodingAgentClient,
+  type HostedAgentClientOptions as HostedCodingAgentClientOptions,
+} from "./agent-client.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
 export { HostedChannelClient, type HostedChannelClientOptions } from "./channel-client.js";
-export {
-  HostedCodingAgentClient,
-  type HostedCodingAgentClientOptions,
-} from "./coding-agent-client.js";
 export {
   DEVICE_AGENT_NOT_CLAIMED,
   type DeviceAgentBeat,

@@ -11,19 +11,19 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import {
+  AGENT_KIND,
+  AGENT_STATUS,
+  type AgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -1021,7 +1021,7 @@ function taskless(): readonly AppInboxTasklessItem[] {
     .map(({ id, agentId, title, postedAt }) => ({
       id,
       agentId,
-      agentKind: CODING_AGENT_KIND.OPERATOR,
+      agentKind: AGENT_KIND.OPERATOR,
       title,
       postedAt,
       ...channelOf(id),
@@ -1036,7 +1036,7 @@ function taskless(): readonly AppInboxTasklessItem[] {
     }));
 }
 
-const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map(
+const AGENTS: ReadonlyMap<string, AgentSummary> = new Map(
   TASKS.map((task) => [
     task.id,
     {
@@ -1046,7 +1046,7 @@ const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map(
       effort: "high",
       title: task.agentTitle,
       createdAt: LANDED - task.startedAgo,
-      status: task.done ? CODING_AGENT_STATUS.COMPLETED : CODING_AGENT_STATUS.RUNNING,
+      status: task.done ? AGENT_STATUS.COMPLETED : AGENT_STATUS.RUNNING,
       turnId: null,
       runStartedAt: LANDED - task.startedAgo,
       startedBy: task.owner,
@@ -1230,7 +1230,7 @@ function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSee
 
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
-    const pushed: CodingAgentInboxChanged["inbox"] = {
+    const pushed: AgentInboxChanged["inbox"] = {
       items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
     };
     return pushedOnce(pushed);
@@ -1241,12 +1241,12 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
           agent: {
             id: STRAY.agentId,
             planId: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             model: MODEL,
             effort: "high",
             title: STRAY.agentTitle,
             createdAt: LANDED - HOUR,
-            status: CODING_AGENT_STATUS.RUNNING,
+            status: AGENT_STATUS.RUNNING,
             turnId: null,
             runStartedAt: LANDED - HOUR,
             startedBy: STRAY.owner,
@@ -1255,7 +1255,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
             repository: null,
           },
         }
-      : { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
+      : { failure: AGENT_CALL_FAILURE.NOT_FOUND },
   [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };

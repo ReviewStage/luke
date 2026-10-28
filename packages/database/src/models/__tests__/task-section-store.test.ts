@@ -18,8 +18,8 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { organization, user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
@@ -75,7 +75,7 @@ const openAgent = (userId: string, organizationId: string, taskId?: string) =>
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -555,7 +555,7 @@ it.layer(getTestDB())("an account's task sections", (it) => {
         yield* written(dean, placeAgent(agent, launch));
         yield* written(dean, placeAgent(doomed, launch));
 
-        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, doomed)));
+        yield* Database.use((db) => db.delete(agentTable).where(eq(agentTable.id, doomed)));
         assert.deepEqual(
           (yield* listTaskSections(dean)).agentEntries.map(({ agentId }) => agentId),
           [agent],

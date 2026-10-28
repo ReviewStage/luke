@@ -18,7 +18,7 @@ import {
   ADMIN_REFUSED,
   type AdminReadAnswer,
 } from "@luke/features/admin-wire";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { pagePlaceId } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";

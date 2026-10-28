@@ -1,9 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import {
-  CODING_AGENT_KIND,
-  type CodingAgentSummary,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, type AgentSummary, type TasklessAgent } from "@luke/features/agent-wire";
 import { readerZone } from "@luke/features/date-mention";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -195,8 +191,8 @@ export function useLukeOperator(asking: {
 }
 
 /** Whether an agent is the account's operator, by its kind alone. */
-export function isLuke(agent: Pick<CodingAgentSummary, "kind">): boolean {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR;
+export function isLuke(agent: Pick<AgentSummary, "kind">): boolean {
+  return agent.kind === AGENT_KIND.OPERATOR;
 }
 
 /**

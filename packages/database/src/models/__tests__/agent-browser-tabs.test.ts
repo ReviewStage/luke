@@ -9,8 +9,8 @@ import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
@@ -31,7 +31,7 @@ import {
   takeOverBrowserTab,
   upsertBrowserTab,
 } from "../agent-browser-tabs.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createAgent } from "../agent-store.js";
 import { CLEARED_CONVERSATION_RETENTION_MS, purgeClearedConversations } from "../soft-delete.js";
 import { createTask } from "../task-store.js";
 
@@ -60,7 +60,7 @@ const openAccount = Effect.gen(function* () {
 /** A starter's coding agent on the task named, its browser named by its own conversation. */
 const startAgent = (starter: string, taskId: string) =>
   Effect.map(
-    createCodingAgent(starter, {
+    createAgent(starter, {
       taskId,
       planSnapshot: "# Checkout",
       prompt: null,
@@ -168,9 +168,9 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         const { starter, teammate, taskId, agent, other } = yield* openTask;
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ githubAccess: GITHUB_ACCESS.TOKEN })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const coders = yield* upsertBrowserTab(
           action(agent.conversationId, "target-1", "https://shop.test/"),

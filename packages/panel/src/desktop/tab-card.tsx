@@ -1,7 +1,4 @@
-import type {
-  CodingAgentChangesPeople,
-  CodingAgentPullRequest,
-} from "@luke/features/coding-agent-wire";
+import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
@@ -80,8 +77,8 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
       /** The pull request, none before it is read. */
-      readonly pullRequest: CodingAgentPullRequest | undefined;
-      readonly people: CodingAgentChangesPeople | undefined;
+      readonly pullRequest: AgentPullRequest | undefined;
+      readonly people: AgentChangesPeople | undefined;
       readonly onOpenAgent: () => void;
     }
   | {

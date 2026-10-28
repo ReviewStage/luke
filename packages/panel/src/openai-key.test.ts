@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -143,7 +143,7 @@ test("until the keys are read, when the read fails, and while no one is signed i
   act(() => roots.pop()?.unmount());
 
   for (const failed of [
-    () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     () => Promise.reject(new Error("The port is closed.")),
   ]) {
     const page = await mount(failed);

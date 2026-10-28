@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -13,8 +14,8 @@ import {
   recordAutomationRun,
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_DEFAULT_GUARDS,
@@ -31,7 +32,6 @@ import {
   type automationChangeRequestSchema,
   type automationCreateRequestSchema,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
@@ -123,7 +123,7 @@ function agentOf(
     awaitingLineAt: standing.awaitingLineAt,
   });
   const failureReason =
-    status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
+    status === AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
   return {
     id,
     title,
@@ -227,7 +227,7 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
     return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
   }
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, target.agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
 });
@@ -278,10 +278,10 @@ const aimedAtOwnOperator = /* @__PURE__ */ Effect.fnUntraced(function* (
   target: AutomationTarget | undefined,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
   if (target?.kind !== AUTOMATION_TARGET.SAME_AGENT) return false;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, target.agentId));
   return (
     Option.isSome(agent) &&
-    agent.value.kind === CODING_AGENT_KIND.OPERATOR &&
+    agent.value.kind === AGENT_KIND.OPERATOR &&
     agent.value.userId === userId &&
     agent.value.organizationId === organizationId
   );

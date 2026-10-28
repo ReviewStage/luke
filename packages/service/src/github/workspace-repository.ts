@@ -23,10 +23,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  type CodingAgent,
-  readVisibleAgentWorkspace,
-} from "@luke/database/models/coding-agent-store";
+import { type Agent, readVisibleAgentWorkspace } from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -61,15 +58,13 @@ export function taskWorkspace(
  */
 export function agentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "id">,
+  agent: Pick<Agent, "id">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return readVisibleAgentWorkspace(userId, agent.id);
 }
 
 /** The member an agent's GitHub reads act as: its starter where it recorded the token's access, and none otherwise. */
-export function agentMember(
-  agent: Pick<CodingAgent, "githubAccess" | "userId">,
-): string | undefined {
+export function agentMember(agent: Pick<Agent, "githubAccess" | "userId">): string | undefined {
   return agent.githubAccess === GITHUB_ACCESS.TOKEN ? agent.userId : undefined;
 }
 

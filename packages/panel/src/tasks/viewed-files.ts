@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+} from "@luke/features/agent-view";
 import {
   FILE_VIEWED_STATE,
   type FileViewedState,
@@ -49,14 +49,14 @@ export interface ViewedFiles {
 }
 
 /** What a read of the marks leaves to say, as a change's answer would. */
-function readNote(answer: CodingAgentPullRequestViewedAnswerView): WriteNote | undefined {
+function readNote(answer: AgentPullRequestViewedAnswerView): WriteNote | undefined {
   if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE)
     return undefined;
   return noteOf(answer);
 }
 
 /** Whether a change's answer is GitHub having made it. */
-function took(answer: CodingAgentPullRequestWriteAnswerView): boolean {
+function took(answer: AgentPullRequestWriteAnswerView): boolean {
   return !("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE;
 }
 
@@ -74,7 +74,7 @@ interface Pressing {
  */
 export function useViewedFiles(
   agentId: string,
-  read: (agentId: string) => Promise<CodingAgentPullRequestViewedAnswerView>,
+  read: (agentId: string) => Promise<AgentPullRequestViewedAnswerView>,
   /** How many answers the changes read has landed with, a pull request named in the latest; none while none is. */
   reading: number | undefined,
 ): ViewedFiles {
@@ -98,8 +98,8 @@ export function useViewedFiles(
     latest.current
       .read(agentId)
       .catch(
-        (): CodingAgentPullRequestViewedAnswerView => ({
-          failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        (): AgentPullRequestViewedAnswerView => ({
+          failure: AGENT_CALL_FAILURE.UNANSWERED,
         }),
       )
       .then((answer) => {
@@ -139,8 +139,8 @@ export function useViewedFiles(
         request: { action, path },
       })
         .catch(
-          (): CodingAgentPullRequestWriteAnswerView => ({
-            failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+          (): AgentPullRequestWriteAnswerView => ({
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
           }),
         )
         .then((answer) => {

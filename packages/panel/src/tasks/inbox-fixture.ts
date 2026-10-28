@@ -17,9 +17,9 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AgentInboxChanged } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
-import type { CodingAgentInboxChanged } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -429,9 +429,9 @@ function agentOn(
   id: string,
   taskId: string,
   title: string,
-  status: CodingAgentSummary["status"],
+  status: AgentSummary["status"],
   startedAgo: number,
-): CodingAgentSummary {
+): AgentSummary {
   return {
     id,
     planId: taskId,
@@ -446,36 +446,24 @@ function agentOn(
   };
 }
 
-const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map([
+const AGENTS: ReadonlyMap<string, AgentSummary> = new Map([
   [
     TASK.INVITES,
     agentOn(
       AGENT.INVITES,
       TASK.INVITES,
       "Build teammate invitations",
-      CODING_AGENT_STATUS.RUNNING,
+      AGENT_STATUS.RUNNING,
       3 * DAY,
     ),
   ],
   [
     TASK.DIGEST,
-    agentOn(
-      AGENT.DIGEST,
-      TASK.DIGEST,
-      "Send the weekly digest",
-      CODING_AGENT_STATUS.RUNNING,
-      4 * HOUR,
-    ),
+    agentOn(AGENT.DIGEST, TASK.DIGEST, "Send the weekly digest", AGENT_STATUS.RUNNING, 4 * HOUR),
   ],
   [
     TASK.ROUNDING,
-    agentOn(
-      AGENT.ROUNDING,
-      TASK.ROUNDING,
-      "Fix ledger rounding",
-      CODING_AGENT_STATUS.COMPLETED,
-      5 * DAY,
-    ),
+    agentOn(AGENT.ROUNDING, TASK.ROUNDING, "Fix ledger rounding", AGENT_STATUS.COMPLETED, 5 * DAY),
   ],
 ]);
 
@@ -483,7 +471,7 @@ const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map([
 function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
   const agent = AGENTS.get(taskId);
   if (agent === undefined) return {};
-  const working = agent.status === CODING_AGENT_STATUS.RUNNING ? 1 : 0;
+  const working = agent.status === AGENT_STATUS.RUNNING ? 1 : 0;
   return {
     agents: {
       total: 1,
@@ -615,7 +603,7 @@ const NO_AUTOMATIONS: AutomationListView = { automations: [] };
  */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ id }) => {
-    const pushed: CodingAgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
+    const pushed: AgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
     return pushedOnce(pushed);
   },
   [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {

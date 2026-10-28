@@ -7,8 +7,8 @@ import type {
   VoiceSegmentRole,
 } from "../voice-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 
 /**
  * Voice, stored the way a call platform stores a call: one row per live
@@ -76,7 +76,7 @@ export const voiceSessions = pgTable(
      * written to; null for a session opened before calls named their agent,
      * and once that agent is deleted, since the call's record outlives it.
      */
-    agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
+    agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "set null" }),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
     startedAt: timestamptz("started_at").notNull().defaultNow(),

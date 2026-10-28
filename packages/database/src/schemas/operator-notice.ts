@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { OperatorNoticeKind } from "../storage-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
+import { agentTable } from "./agent.js";
 import { task } from "./task.js";
 
 /**
@@ -24,13 +24,13 @@ export const operatorNotice = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     operatorId: uuid("operator_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** What happened (`OPERATOR_NOTICE_KIND`). */
     kind: text("kind").$type<OperatorNoticeKind>().notNull(),
     /** The member's agent it happened to. */
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** The agent's task as the event was written; null for an agent with none. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /** When the latest event this row stands for happened: a repeat while unread moves it. */
@@ -67,10 +67,10 @@ export const operatorWake = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     operatorId: uuid("operator_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** When the latest wake for this agent's failure landed. */
     wokenAt: timestamptz("woken_at").notNull(),
   },

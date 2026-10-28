@@ -1,7 +1,7 @@
 /**
  * runner-lease.ts -- an agent's runner lease, held around every call that writes to its runner or queues a line for it.
  *
- * The lease is one row per agent (`@luke/database/models/coding-agent-runner-lease`),
+ * The lease is one row per agent (`@luke/database/models/agent-runner-lease`),
  * claimed for `CODER.RUNNER_LEASE.HOLD` and let go as the call ends. It is
  * what keeps a cloud runner's writes in order and a local agent's lines
  * committed in the order of their `seq` (`device-agent-store.ts`'s header).
@@ -9,9 +9,9 @@
 
 import { randomUUID } from "node:crypto";
 import {
-  claimCodingAgentRunnerLease,
-  releaseCodingAgentRunnerLease,
-} from "@luke/database/models/coding-agent-runner-lease";
+  claimAgentRunnerLease,
+  releaseAgentRunnerLease,
+} from "@luke/database/models/agent-runner-lease";
 import { Clock, Data, Duration, Effect, Option } from "effect";
 import { CODER } from "./bounds.js";
 
@@ -36,9 +36,7 @@ const claimRunnerLease = (
     const startedAt = yield* Clock.currentTimeMillis;
     while (true) {
       const now = yield* Clock.currentTimeMillis;
-      if (
-        yield* claimCodingAgentRunnerLease(agentId, holder, new Date(now), new Date(now + hold))
-      ) {
+      if (yield* claimAgentRunnerLease(agentId, holder, new Date(now), new Date(now + hold))) {
         return holder;
       }
       if (now - startedAt >= Duration.toMillis(CODER.RUNNER_LEASE.WAIT)) {
@@ -50,7 +48,7 @@ const claimRunnerLease = (
 
 /** The lease let go, where the holder still holds it; a release that fails leaves it to lapse at its `HOLD`. */
 const released = (agentId: string, holder: string) =>
-  releaseCodingAgentRunnerLease(agentId, holder).pipe(
+  releaseAgentRunnerLease(agentId, holder).pipe(
     Effect.catch((failure) => Effect.logWarning(`a runner lease was not let go: ${failure._tag}`)),
   );
 
@@ -77,7 +75,7 @@ export const holdingRunnerIfFree = <A, E, R>(agentId: string, body: Effect.Effec
       const holder = randomUUID();
       const now = yield* Clock.currentTimeMillis;
       const until = now + Duration.toMillis(CODER.RUNNER_LEASE.HOLD);
-      if (!(yield* claimCodingAgentRunnerLease(agentId, holder, new Date(now), new Date(until)))) {
+      if (!(yield* claimAgentRunnerLease(agentId, holder, new Date(now), new Date(until)))) {
         return Option.none<A>();
       }
       return Option.some(yield* restore(body).pipe(Effect.ensuring(released(agentId, holder))));

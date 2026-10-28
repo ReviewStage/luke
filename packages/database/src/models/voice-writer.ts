@@ -319,7 +319,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
           });
           if (Option.isNone(voiceSession)) return voiceSession;
           // Note that a call into an agent deleted since takes no more words: the delete took the
-          // ones it had, under this same row's lock (`deleteCodingAgent`), so a word racing it
+          // ones it had, under this same row's lock (`deleteAgent`), so a word racing it
           // either landed first and went with them, or waited and finds the conversation stamped.
           const standing = yield* findStandingConversation(target.conversation.conversationId);
           if (Option.isNone(standing)) return Option.none();

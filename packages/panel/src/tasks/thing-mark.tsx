@@ -1,4 +1,4 @@
-import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY } from "@luke/features/agent-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
 import type { Workspace } from "@luke/features/workspace-wire";

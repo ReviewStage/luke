@@ -1,10 +1,10 @@
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_KIND,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
+  AGENT_BOUNDS,
+  AGENT_KIND,
+  type AgentStatus,
+  type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import type { MentionLines } from "@luke/features/mention-link";
@@ -166,7 +166,7 @@ const NAME_LABEL = "Agent name";
  * listed workspace's agents hold it; none for an agent on a task, or one the
  * list does not hold, whose page then offers neither.
  */
-function listedAgent(tasks: TasksControl, agent: CodingAgentSummary): TasklessAgent | undefined {
+function listedAgent(tasks: TasksControl, agent: AgentSummary): TasklessAgent | undefined {
   if (agent.planId !== null) return undefined;
   const { standing, archived } = tasks.listedAgents;
   return [...standing, ...archived].find((each) => each.id === agent.id);
@@ -191,7 +191,7 @@ function AgentPageBar({
   steps,
 }: {
   tasks: TasksControl;
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
   /** The places above the page, an automation's agent's alone: Automations and its automation (`automation-agent-run.tsx`). */
@@ -221,9 +221,7 @@ function AgentPageBar({
         };
   // Note that an archived agent offers neither a pin nor a section, as an archived task, and Luke never does.
   const own =
-    listed !== undefined &&
-    agent.archivedAt === undefined &&
-    agent.kind !== CODING_AGENT_KIND.OPERATOR;
+    listed !== undefined && agent.archivedAt === undefined && agent.kind !== AGENT_KIND.OPERATOR;
   const agentPin = own
     ? {
         pinned: listed.pinnedAt !== undefined,
@@ -246,7 +244,7 @@ function AgentPageBar({
         <InlineEdit
           value={rename.asked ?? label}
           label={NAME_LABEL}
-          maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+          maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
           editing
           onEnd={(edit) => {
             rename.end(edit.value);
@@ -468,7 +466,7 @@ export function DesktopAgentPage({
   });
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = useSteadyDoor(
-    (agent: string, callId: string, task: string, status: CodingAgentStatus) => {
+    (agent: string, callId: string, task: string, status: AgentStatus) => {
       views.onWorkerStatus(callId, status);
       sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
     },

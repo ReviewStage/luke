@@ -10,12 +10,12 @@ import {
 } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  createCodingAgent,
-  readCodingAgentRouting,
-  recordCodingAgentNativeSession,
-  updateCodingAgentChoice,
-} from "@luke/database/models/coding-agent-store";
+  type Agent,
+  createAgent,
+  readAgentRouting,
+  recordAgentNativeSession,
+  updateAgentChoice,
+} from "@luke/database/models/agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import {
   type KeyRing,
@@ -34,7 +34,7 @@ import { user } from "@luke/database/schemas/auth";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import {
   deviceAgentLaunchSecretsSchema,
   deviceAgentLayout,
@@ -176,7 +176,7 @@ const openAgent = Effect.gen(function* () {
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
   );
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: "start-1",
     model: "openai/gpt-6.1-sol",
@@ -236,7 +236,7 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
 const developerContent = (line: InputLine | undefined) =>
   line?.type === INPUT_LINE.MESSAGE ? line.content.slice(1) : [];
 
-const message = (agent: CodingAgent, text: string, lineId?: string) => ({
+const message = (agent: Agent, text: string, lineId?: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
   message: text,
@@ -244,7 +244,7 @@ const message = (agent: CodingAgent, text: string, lineId?: string) => ({
 });
 
 /** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
-const turnUnderWay = (userId: string, agent: CodingAgent) =>
+const turnUnderWay = (userId: string, agent: Agent) =>
   Effect.gen(function* () {
     const turnId = randomUUID();
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -278,9 +278,9 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           codexExecutable,
         });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const localAgent = (payer: (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER]) =>
+        const localAgent = (payer: (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER]) =>
           Effect.map(
-            createCodingAgent(userId, {
+            createAgent(userId, {
               taskId: task.id,
               idempotencyKey: randomUUID(),
               model: "openai/gpt-6.1-sol",
@@ -290,7 +290,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
               repository: null,
               runtime: CONVERSATION_RUNTIME.CODEX,
               payer,
-              machine: CODING_AGENT_MACHINE.DEVICE,
+              machine: AGENT_MACHINE.DEVICE,
               deviceId,
             }),
             (started) => Option.getOrThrow(started).agent,
@@ -301,7 +301,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           run: (effect) => Effect.runPromise(effect),
         }).pipe(Layer.provide(http));
         /** The agent's launch, its line's row as stored and its secrets as the Mac's claim opens them. */
-        const launched = (agent: CodingAgent) =>
+        const launched = (agent: Agent) =>
           Effect.gen(function* () {
             // Note that the machines are provided innermost, so the Mac's machine answers rather than the fake sandbox's.
             const sessions = yield* sessionsFor(userId).pipe(
@@ -334,7 +334,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           });
         const folder = deviceAgentLayout(DEVICE_LAYOUT.home, "").folder;
 
-        const onPlan = yield* localAgent(CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION);
+        const onPlan = yield* localAgent(AGENT_PAYER.CHATGPT_SUBSCRIPTION);
         const plan = yield* launched(onPlan);
         assert.deepEqual(Object.keys(plan.secrets.env), [RUNNER_ENV.BEARER]);
         assert.equal(plan.config.executable, codexExecutable);
@@ -350,7 +350,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(JSON.stringify(plan.secrets).includes("access-0"), false);
 
         yield* beatDevice(userId, deviceId, { codex: true });
-        const own = yield* launched(yield* localAgent(CODING_AGENT_PAYER.MAC_SIGN_IN));
+        const own = yield* launched(yield* localAgent(AGENT_PAYER.MAC_SIGN_IN));
         assert.deepEqual(Object.keys(own.secrets.env), [RUNNER_ENV.BEARER]);
         assert.equal(own.config.ownLogin, true);
         // The line says which credential the launch took, which the token route reads back.
@@ -387,7 +387,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         const [config, first] = linesOf(command) as [CodexConfig, InputLine];
@@ -434,7 +434,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "openai/gpt-6.1-sol-fast",
@@ -443,7 +443,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: CODING_AGENT_PAYER.API_KEY,
+          payer: AGENT_PAYER.API_KEY,
         });
         assert.ok(Option.isSome(started));
         const agent = started.value.agent;
@@ -526,7 +526,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        yield* updateCodingAgentChoice(userId, agent.id, {
+        yield* updateAgentChoice(userId, agent.id, {
           model: "openai/gpt-4.1",
           effort: "low",
         });
@@ -553,7 +553,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.deepEqual(yield* sessions.send(opened.sessionId, message(agent, "Hello?")), {
           outcome: EVE_SEND_OUTCOME.RETIRED,
@@ -577,7 +577,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         // The events route records Codex's thread as the runner reports it, and the run ends.
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, THREAD), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, THREAD), true);
         const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
         sequence.next = 17;
         const ended = yield* runnerEnded({
@@ -606,7 +606,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.deepEqual(developerContent(first), [{ type: "text", text: "Now the emails." }]);
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
       }),
   );

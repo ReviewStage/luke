@@ -21,7 +21,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
   type DueOperatorWake,
   dueOperatorWakes,
@@ -82,7 +82,7 @@ function wakeLine(wake: DueOperatorWake, step: string): string {
  */
 const wake = (eveFor: EveForAccount, due: DueOperatorWake, now: Date) =>
   Effect.gen(function* () {
-    const operator = yield* readCodingAgent(due.userId, due.operatorId);
+    const operator = yield* readAgent(due.userId, due.operatorId);
     if (Option.isNone(operator) || operator.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);

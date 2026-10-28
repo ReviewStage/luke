@@ -16,7 +16,7 @@
  * are.
  */
 
-import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
+import { type Agent, hasRepository } from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect } from "effect";
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
@@ -39,7 +39,7 @@ function loadedMarkdown(skill: RepositorySkill): string {
 /** Each source's skills for the agent, in precedence order: its repository's on its default branch, where it has one, then its member's installed ones. */
 function sourcedSkills(
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: Agent,
   loaded: (skill: RepositorySkill) => string = loadedMarkdown,
 ): Effect.Effect<readonly [readonly AgentSkill[], readonly AgentSkill[]], never, CheckoutServices> {
   return Effect.gen(function* () {
@@ -60,7 +60,7 @@ function sourcedSkills(
 /** The skills the agent's session is offered: its repository's on its default branch, where it has one, then its member's installed ones (`mergedSkills`). */
 export function agentSkills(
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
   return Effect.flatMap(sourcedSkills(target, agent), (sources) => mergedSkills(target, sources));
 }
@@ -77,7 +77,7 @@ export function agentSkills(
  */
 export function nativeSkills(
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: Agent,
   roots: readonly string[],
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
   return Effect.gen(function* () {

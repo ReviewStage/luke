@@ -1,10 +1,10 @@
 import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  type CodingAgentAttachment,
-  type CodingAgentBrief,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentAttachment,
+  type AgentBrief,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -214,7 +214,7 @@ export function agentTranscriptRead(
   readTranscript: CodingAgentsControl["readTranscript"],
   agentId: string,
   title: string,
-  brief: CodingAgentBrief | undefined,
+  brief: AgentBrief | undefined,
   quiet = false,
 ): TranscriptRead {
   return () =>
@@ -258,7 +258,7 @@ export function useAgentTerminalDoors(
 export interface AgentDraftDoors {
   readonly onFork: ((fork: AgentFork) => void) | undefined;
   readonly onContinue:
-    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
 }
 
@@ -280,7 +280,7 @@ export function useAgentDraftDoors(
   const onContinue = useSteadyDoor(
     archived
       ? undefined
-      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
+      : (agentId: string, words: string, attachments: readonly AgentAttachment[]) =>
           onOpenDraft(agents.onContinueDraft(agentId, words, attachments)),
   );
   return { onFork, onContinue };
@@ -294,7 +294,7 @@ export function useAgentDraftDoors(
  */
 export function useAgentActions(
   agent: Pick<
-    CodingAgentSummary,
+    AgentSummary,
     | "id"
     | "planId"
     | "status"
@@ -325,13 +325,13 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
-  const luke = agent.kind === CODING_AGENT_KIND.OPERATOR;
+  const luke = agent.kind === AGENT_KIND.OPERATOR;
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
   const renamable = !luke && agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
-  const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
+  const local = agent.machine === AGENT_MACHINE.DEVICE;
   // Note that a local agent runs in a worktree on its starter's Mac, which no relayed tab reaches, so
   // its Terminal opens the Mac's own Terminal there, offered to its starter alone, whose Mac it is.
   const starter = agent.startedBy !== undefined && agent.startedBy.userId === agents.me;

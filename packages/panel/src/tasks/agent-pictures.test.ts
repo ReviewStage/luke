@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
 import {
   CONVERSATION_MEDIA_TYPE,
   PICTURE_OMISSION,
@@ -89,13 +89,13 @@ function shown(callId: string, pictures: readonly ReturnType<typeof picture>[]):
 
 const text = (words: string): WireRecord => ({ type: "text", text: words });
 
-function finished(parts: readonly WireRecord[]): CodingAgentMessage {
+function finished(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts, startedAt: 1_000, finishedAt: 61_000 };
 }
 
 /** The message drawn as an agent's turn is, under a door recording each picture it is asked to read. */
 async function drawn(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   moving = false,
   answer: (id: string) => Promise<PictureAnswer> = () =>
     Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
@@ -844,7 +844,7 @@ test("an image a line's row names by the picture it was kept as is read through 
 });
 
 test("a line still on its way draws its files going up with no share, each taking its check as the line lands", () => {
-  const message: CodingAgentMessage = {
+  const message: AgentTranscriptMessage = {
     id: "line-1",
     role: MESSAGE_ROLE.USER,
     parts: [

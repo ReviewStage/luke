@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
@@ -975,7 +975,7 @@ test("for an automation's agent an empty box starts no bare task, and words past
   await card.key("Enter", { metaKey: true });
   assert.equal(card.starts.length, 0, "no bare task");
 
-  card.type("a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  card.type("a".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS));
   await card.key("Enter");
   assert.equal(card.starts.length, 0, "nothing past the bound is sent");
   assert.match(card.note() ?? "", /^That request is too long\./u);

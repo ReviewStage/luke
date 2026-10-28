@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_PAYER,
-  CODING_AGENT_RUNTIME,
-  type CodingAgentPayer,
-  type CodingAgentRuntime,
-  type CodingAgentUsage,
-} from "@luke/features/coding-agent-wire";
+  AGENT_PAYER,
+  AGENT_RUNTIME,
+  type AgentPayer,
+  type AgentRuntime,
+  type AgentUsage,
+} from "@luke/features/agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -177,11 +177,11 @@ const RUNTIME_MODELS: readonly CatalogModel[] = [
 
 /** The open menu of a chip on an agent on the runtime given: the models it lists, and its pinned rows. */
 function openMenuOn(
-  runtime: CodingAgentRuntime | undefined,
+  runtime: AgentRuntime | undefined,
   choice: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
   models: readonly CatalogModel[] = RUNTIME_MODELS,
-  usage: CodingAgentUsage | undefined = undefined,
-  payer: CodingAgentPayer | undefined = undefined,
+  usage: AgentUsage | undefined = undefined,
+  payer: AgentPayer | undefined = undefined,
 ): {
   models: string[];
   foot: string;
@@ -221,8 +221,8 @@ function openMenuOn(
 }
 
 test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither, while an eve agent's offers every model with both", () => {
-  const claudeCode = openMenuOn(CODING_AGENT_RUNTIME.CLAUDE_CODE);
-  const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX);
+  const claudeCode = openMenuOn(AGENT_RUNTIME.CLAUDE_CODE);
+  const codex = openMenuOn(AGENT_RUNTIME.CODEX);
   const eve = openMenuOn(undefined);
 
   assert.equal(claudeCode.models.length, 2, claudeCode.models.join(" | "));
@@ -262,7 +262,7 @@ test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not eve
 test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
   const opened: string[] = [];
   fakeAppPlatform({ assetBase: () => "https://luke.test/", openWeb: (href) => opened.push(href) });
-  const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX, {
+  const codex = openMenuOn(AGENT_RUNTIME.CODEX, {
     model: "openai/gpt-6.1-sol",
     effort: "low",
   });
@@ -272,27 +272,27 @@ test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\
   act(() => link.click());
   assert.deepEqual(opened, ["https://chatgpt.com/settings/usage"]);
 
-  for (const runtime of [CODING_AGENT_RUNTIME.CLAUDE_CODE, undefined]) {
+  for (const runtime of [AGENT_RUNTIME.CLAUDE_CODE, undefined]) {
     assert.doesNotMatch(openMenuOn(runtime).foot, /plan|Manage usage/u);
   }
 });
 
 test("a Codex agent its OpenAI API key pays for names no plan, before its first turn settles too, and its menu ends on what it cost", () => {
   const onKey = openMenuOn(
-    CODING_AGENT_RUNTIME.CODEX,
+    AGENT_RUNTIME.CODEX,
     { model: "openai/gpt-6.1-sol", effort: "low" },
     RUNTIME_MODELS,
-    { inputTokens: 1000, outputTokens: 200, costUsd: 0.42, payer: CODING_AGENT_PAYER.API_KEY },
+    { inputTokens: 1000, outputTokens: 200, costUsd: 0.42, payer: AGENT_PAYER.API_KEY },
   );
   assert.doesNotMatch(onKey.foot, /plan|Manage usage/u);
   assert.match(onKey.foot, /\$0\.42/u);
   // Before its first turn settles, the payer the page names says the same.
   const first = openMenuOn(
-    CODING_AGENT_RUNTIME.CODEX,
+    AGENT_RUNTIME.CODEX,
     { model: "openai/gpt-6.1-sol", effort: "low" },
     RUNTIME_MODELS,
     undefined,
-    CODING_AGENT_PAYER.API_KEY,
+    AGENT_PAYER.API_KEY,
   );
   assert.doesNotMatch(first.foot, /plan|Manage usage/u);
 });

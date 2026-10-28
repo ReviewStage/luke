@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { codingAgentMessageRequestSchema } from "./coding-agent-wire.js";
+import { agentMessageRequestSchema } from "./agent-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { TASK_BOUNDS } from "./task-wire.js";
 import { filledText } from "./text-schema.js";
@@ -132,7 +132,7 @@ const planCommentFileSchema = EffectSchema.Struct({
 export type PlanCommentFile = typeof planCommentFileSchema.Type;
 
 /** The files a comment carries as it is written: the files a message to a coding agent may carry, held to the same bounds. */
-const planCommentFilesSchema = codingAgentMessageRequestSchema.fields.attachments;
+const planCommentFilesSchema = agentMessageRequestSchema.fields.attachments;
 
 /** One entry of a thread, as the window and the agents read it. */
 const planCommentEntrySchema = EffectSchema.Struct({

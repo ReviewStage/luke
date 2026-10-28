@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -247,7 +247,7 @@ test("a pinned agent's tab of a task not open says its agent's name as the task'
           title: "Expire stale invitations",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
         },
       ],
       pullRequestTotal: 0,
@@ -351,14 +351,14 @@ test("a pinned Changes tab naming a pull request by number keeps its pinned labe
 
 describe("a pinned Changes tab's card", () => {
   const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
-  const summary: CodingAgentSummary = {
+  const summary: AgentSummary = {
     id: AGENT,
     planId: TASK.id,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: "Expiry job",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const read = {
@@ -372,7 +372,7 @@ describe("a pinned Changes tab's card", () => {
     changedFiles: 3,
   };
   /** The open task, which has read its agent's pull request. */
-  const openTask = (agents: readonly CodingAgentSummary[]): TasksControl => {
+  const openTask = (agents: readonly AgentSummary[]): TasksControl => {
     const base = tasksControl({ tasks: [TASK] });
     return {
       ...base,

@@ -1,5 +1,5 @@
 /**
- * agents.ts -- a coding agent as the desktop lists, starts, reads, changes, and stops it, its changes and review options, and its shells (`coding-agent-wire.ts`, `terminal-wire.ts`).
+ * agents.ts -- a coding agent as the desktop lists, starts, reads, changes, and stops it, its changes and review options, and its shells (`agent-wire.ts`, `terminal-wire.ts`).
  *
  * Every path names the task or the agent it is about as `{id}`, and a shell
  * as `{terminal}`, which the handler reads as an id: one that is no UUID
@@ -26,26 +26,26 @@ import { wireKeys } from "@luke/wire/effect";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
-  CODING_AGENT_LIST_QUERY,
-  CODING_AGENT_WORKSPACE_QUERY,
-  codingAgentAnswerSchema,
-  codingAgentArchiveRequestSchema,
-  codingAgentChangesAnswerSchema,
-  codingAgentDeleteAnswerSchema,
-  codingAgentListAnswerSchema,
-  codingAgentPageAnswerSchema,
-  codingAgentPinRequestSchema,
-  codingAgentRenameRequestSchema,
-  codingAgentReviewOptionsAnswerSchema,
-  codingAgentRewindRequestSchema,
-  codingAgentServersRequestSchema,
-  codingAgentStartRequestFields,
-  codingAgentStartRequestSchema,
+  AGENT_LIST_QUERY,
+  AGENT_WORKSPACE_QUERY,
+  agentAnswerSchema,
+  agentArchiveRequestSchema,
+  agentChangesAnswerSchema,
+  agentDeleteAnswerSchema,
+  agentListAnswerSchema,
+  agentPageAnswerSchema,
+  agentPinRequestSchema,
+  agentRenameRequestSchema,
+  agentReviewOptionsAnswerSchema,
+  agentRewindRequestSchema,
+  agentServersRequestSchema,
+  agentStartRequestFields,
+  agentStartRequestSchema,
   MAXIMUM_START_BODY_BYTES,
   operatorEnsureAnswerSchema,
   operatorEnsureRequestSchema,
   startBrief,
-} from "../coding-agent-wire.js";
+} from "../agent-wire.js";
 import { githubRepositoryFullNameSchema } from "../github-repositories-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -91,18 +91,18 @@ const archivedQuery = EffectSchema.optionalKey(EffectSchema.String);
  * them.
  */
 const codingAgentChangeRequestSchema = EffectSchema.Union([
-  codingAgentRenameRequestSchema,
-  codingAgentArchiveRequestSchema,
-  codingAgentPinRequestSchema,
-  codingAgentServersRequestSchema,
+  agentRenameRequestSchema,
+  agentArchiveRequestSchema,
+  agentPinRequestSchema,
+  agentServersRequestSchema,
   modelChoiceSchema,
 ]);
 
 /** A change as it travels. */
-export type CodingAgentChangeRequest = typeof codingAgentChangeRequestSchema.Encoded;
+export type AgentChangeRequest = typeof codingAgentChangeRequestSchema.Encoded;
 
 /** A Start's fields bar its source, since a Start from an agent lands in that agent's own place on its own path. */
-const { from: _from, ...workspaceStartFields } = codingAgentStartRequestFields;
+const { from: _from, ...workspaceStartFields } = agentStartRequestFields;
 
 /** A Start in a workspace with no task: a fresh Start's body, and the repository the agent works in, where it works in one. */
 const workspaceStartRequestSchema = EffectSchema.Struct({
@@ -115,7 +115,7 @@ const workspaceStartRequestSchema = EffectSchema.Struct({
 /** A Start's answer: its status, and the agent. */
 const startAnswerSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(AGENT_START_STATUS)),
-  body: codingAgentAnswerSchema,
+  body: agentAnswerSchema,
 });
 
 export const agentsContract = {
@@ -124,23 +124,23 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.AGENTS }))
     .input(
       EffectSchema.Struct({
-        [CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: EffectSchema.optionalKey(EffectSchema.String),
-        [CODING_AGENT_WORKSPACE_QUERY.REPOSITORY]: EffectSchema.optionalKey(EffectSchema.String),
-        [CODING_AGENT_WORKSPACE_QUERY.WORDS]: EffectSchema.optionalKey(EffectSchema.String),
-        [CODING_AGENT_WORKSPACE_QUERY.ARCHIVED]: archivedQuery,
+        [AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: EffectSchema.optionalKey(EffectSchema.String),
+        [AGENT_WORKSPACE_QUERY.REPOSITORY]: EffectSchema.optionalKey(EffectSchema.String),
+        [AGENT_WORKSPACE_QUERY.WORDS]: EffectSchema.optionalKey(EffectSchema.String),
+        [AGENT_WORKSPACE_QUERY.ARCHIVED]: archivedQuery,
       }),
     )
-    .output(EffectSchema.flip(codingAgentListAnswerSchema)),
+    .output(EffectSchema.flip(agentListAnswerSchema)),
   /** One task's agents with their status. */
   listOfTask: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.TASKS}/{id}/agents` }))
     .input(
       EffectSchema.Struct({
         id: EffectSchema.String,
-        [CODING_AGENT_LIST_QUERY.ARCHIVED]: archivedQuery,
+        [AGENT_LIST_QUERY.ARCHIVED]: archivedQuery,
       }),
     )
-    .output(EffectSchema.flip(codingAgentListAnswerSchema)),
+    .output(EffectSchema.flip(agentListAnswerSchema)),
   /** An agent started on the task, or the one a retry under the same key already started. */
   start: hostedProcedure
     .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
@@ -152,7 +152,7 @@ export const agentsContract = {
         outputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(idParams, codingAgentStartRequestSchema))
+    .input(exactBodyInput(idParams, agentStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
   /** An agent started from the one the path names, continuing it or forking it, in that agent's own place: its task, or its workspace and repository where it has no task. */
   startFrom: hostedProcedure
@@ -165,7 +165,7 @@ export const agentsContract = {
         outputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(idParams, codingAgentStartRequestSchema))
+    .input(exactBodyInput(idParams, agentStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
   /** An agent started in the workspace the path names with no task, in the repository the body names or in none, or the one a retry under the same key already started. */
   startInWorkspace: hostedProcedure
@@ -196,23 +196,23 @@ export const agentsContract = {
   read: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: AGENT_PATH }))
     .input(idParams)
-    .output(EffectSchema.flip(codingAgentPageAnswerSchema)),
+    .output(EffectSchema.flip(agentPageAnswerSchema)),
   /** One change of an agent, answering it as it then stands. */
   change: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(idParams, codingAgentChangeRequestSchema))
-    .output(EffectSchema.flip(codingAgentAnswerSchema)),
+    .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent deleted for good, stopped first where it still works. */
   delete: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: AGENT_PATH }))
     .input(idParams)
-    .output(EffectSchema.flip(codingAgentDeleteAnswerSchema)),
+    .output(EffectSchema.flip(agentDeleteAnswerSchema)),
   /** One agent stopped. */
   stop: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))
     .input(idParams)
-    .output(EffectSchema.flip(codingAgentAnswerSchema)),
+    .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works. */
   rewind: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))
@@ -223,8 +223,8 @@ export const agentsContract = {
         inputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(idParams, codingAgentRewindRequestSchema))
-    .output(EffectSchema.flip(codingAgentAnswerSchema)),
+    .input(exactBodyInput(idParams, agentRewindRequestSchema))
+    .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent's changes, or those of the pull request of its repository the query numbers. */
   changes: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/changes` }))
@@ -234,12 +234,12 @@ export const agentsContract = {
         number: EffectSchema.optionalKey(EffectSchema.String),
       }),
     )
-    .output(EffectSchema.flip(codingAgentChangesAnswerSchema)),
+    .output(EffectSchema.flip(agentChangesAnswerSchema)),
   /** What the reviewer and label pickers of one agent's Pull request tab offer. */
   reviewOptions: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
-    .output(EffectSchema.flip(codingAgentReviewOptionsAnswerSchema)),
+    .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
   /** One agent's stopped sandbox resumed, on the developer's click. */
   sandboxResume: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))

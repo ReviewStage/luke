@@ -7,6 +7,117 @@ import {
   type AdminReadParams,
   adminReadAnswerSchema,
 } from "@luke/features/admin-wire";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentAccountInboxAnswerView,
+  type AgentAgentAnswer,
+  type AgentArchiveParams,
+  type AgentChangesAnswerView,
+  type AgentChooseParams,
+  type AgentDefaultAnswer,
+  type AgentDeleteAnswerView,
+  type AgentGitHubImageParams,
+  type AgentGitHubImageView,
+  type AgentInboxAnsweredView,
+  type AgentInboxAnswerParams,
+  type AgentInboxAttachmentParams,
+  type AgentInboxAttachmentView,
+  type AgentInboxChanged,
+  type AgentInboxCloseParams,
+  type AgentInboxMessagedView,
+  type AgentInboxMessageParams,
+  type AgentInboxReadAllView,
+  type AgentInboxReadStateParams,
+  type AgentInboxReadStateView,
+  type AgentInboxScope,
+  type AgentInboxStartParams,
+  type AgentListAnswer,
+  type AgentListParams,
+  type AgentMessageParams,
+  type AgentMessagesAnswerView,
+  type AgentMessagesParams,
+  type AgentModelsAnswer,
+  type AgentOperatorEnsureAnswerView,
+  type AgentOperatorEnsureParams,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPageAnswerView,
+  type AgentPageParams,
+  type AgentPartParams,
+  type AgentPartView,
+  type AgentPictureParams,
+  type AgentPinParams,
+  type AgentPullRequestActionParams,
+  type AgentPullRequestAnswerView,
+  type AgentPullRequestParams,
+  type AgentPullRequestReadParams,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+  type AgentRenameParams,
+  type AgentReviewOptionsAnswerView,
+  type AgentRewindParams,
+  type AgentServersParams,
+  type AgentStartParams,
+  type AgentStopParams,
+  type AgentTranscriptChanged,
+  type AgentTranscriptKey,
+  type AgentTranscriptOlderAnswer,
+  type AgentTranscriptOlderParams,
+  type AgentWorkspaceListParams,
+  agentAccountInboxAnswerViewSchema,
+  agentAgentAnswerSchema,
+  agentChangesAnswerViewSchema,
+  agentDefaultAnswerViewSchema,
+  agentDeleteAnswerViewSchema,
+  agentGitHubImageViewSchema,
+  agentInboxAnsweredViewSchema,
+  agentInboxAttachmentViewSchema,
+  agentInboxChangedSchema,
+  agentInboxMessagedViewSchema,
+  agentInboxReadAllViewSchema,
+  agentInboxReadStateViewSchema,
+  agentListAnswerViewSchema,
+  agentMessagesAnswerViewSchema,
+  agentModelsAnswerSchema,
+  agentOperatorEnsureAnswerViewSchema,
+  agentOverviewChecksAnswerViewSchema,
+  agentOverviewConversationAnswerViewSchema,
+  agentOverviewPullRequestAnswerViewSchema,
+  agentPageAnswerViewSchema,
+  agentPartViewSchema,
+  agentPullRequestAnswerViewSchema,
+  agentPullRequestViewedAnswerViewSchema,
+  agentPullRequestWriteAnswerViewSchema,
+  agentReviewOptionsAnswerViewSchema,
+  agentTranscriptChangedSchema,
+  agentTranscriptOlderAnswerSchema,
+  type ChatGptSignInAnswerView,
+  chatGptSignInAnswerViewSchema,
+  type DevicePresenceAnswerView,
+  type DictationTranscribeAnswerView,
+  type DictationTranscribeParams,
+  devicePresenceAnswerViewSchema,
+  dictationTranscribeAnswerViewSchema,
+  type GitHubTokenAnswerView,
+  type GitHubTokenSaveParams,
+  githubTokenAnswerViewSchema,
+  type HostDoneAnswerView,
+  type HostInstallTokenAnswerView,
+  type HostsAnswerView,
+  hostDoneAnswerViewSchema,
+  hostInstallTokenAnswerViewSchema,
+  hostsAnswerViewSchema,
+  type MemoriesAnswerView,
+  type MemoriesReadParams,
+  type MemoryForgetParams,
+  memoriesAnswerViewSchema,
+  type ProviderKeyForAgentsParams,
+  type ProviderKeyRemoveParams,
+  type ProviderKeySaveParams,
+  type ProviderKeysAnswerView,
+  providerKeysAnswerViewSchema,
+} from "@luke/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -58,117 +169,6 @@ import {
   channelsViewSchema,
   channelThreadsViewSchema,
 } from "@luke/features/channel-view";
-import {
-  type ChatGptSignInAnswerView,
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
-  type CodingAgentAgentAnswer,
-  type CodingAgentArchiveParams,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentChooseParams,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentDeleteAnswerView,
-  type CodingAgentGitHubImageParams,
-  type CodingAgentGitHubImageView,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAttachmentParams,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxChanged,
-  type CodingAgentInboxCloseParams,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxMessageParams,
-  type CodingAgentInboxReadAllView,
-  type CodingAgentInboxReadStateParams,
-  type CodingAgentInboxReadStateView,
-  type CodingAgentInboxScope,
-  type CodingAgentInboxStartParams,
-  type CodingAgentListAnswer,
-  type CodingAgentListParams,
-  type CodingAgentMessageParams,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentMessagesParams,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOperatorEnsureAnswerView,
-  type CodingAgentOperatorEnsureParams,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPageParams,
-  type CodingAgentPartParams,
-  type CodingAgentPartView,
-  type CodingAgentPictureParams,
-  type CodingAgentPinParams,
-  type CodingAgentPullRequestActionParams,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestParams,
-  type CodingAgentPullRequestReadParams,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentRenameParams,
-  type CodingAgentReviewOptionsAnswerView,
-  type CodingAgentRewindParams,
-  type CodingAgentServersParams,
-  type CodingAgentStartParams,
-  type CodingAgentStopParams,
-  type CodingAgentTranscriptChanged,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptOlderAnswer,
-  type CodingAgentTranscriptOlderParams,
-  type CodingAgentWorkspaceListParams,
-  chatGptSignInAnswerViewSchema,
-  codingAgentAccountInboxAnswerViewSchema,
-  codingAgentAgentAnswerSchema,
-  codingAgentChangesAnswerViewSchema,
-  codingAgentDefaultAnswerViewSchema,
-  codingAgentDeleteAnswerViewSchema,
-  codingAgentGitHubImageViewSchema,
-  codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAttachmentViewSchema,
-  codingAgentInboxChangedSchema,
-  codingAgentInboxMessagedViewSchema,
-  codingAgentInboxReadAllViewSchema,
-  codingAgentInboxReadStateViewSchema,
-  codingAgentListAnswerViewSchema,
-  codingAgentMessagesAnswerViewSchema,
-  codingAgentModelsAnswerSchema,
-  codingAgentOperatorEnsureAnswerViewSchema,
-  codingAgentOverviewChecksAnswerViewSchema,
-  codingAgentOverviewConversationAnswerViewSchema,
-  codingAgentOverviewPullRequestAnswerViewSchema,
-  codingAgentPageAnswerViewSchema,
-  codingAgentPartViewSchema,
-  codingAgentPullRequestAnswerViewSchema,
-  codingAgentPullRequestViewedAnswerViewSchema,
-  codingAgentPullRequestWriteAnswerViewSchema,
-  codingAgentReviewOptionsAnswerViewSchema,
-  codingAgentTranscriptChangedSchema,
-  codingAgentTranscriptOlderAnswerSchema,
-  type DevicePresenceAnswerView,
-  type DictationTranscribeAnswerView,
-  type DictationTranscribeParams,
-  devicePresenceAnswerViewSchema,
-  dictationTranscribeAnswerViewSchema,
-  type GitHubTokenAnswerView,
-  type GitHubTokenSaveParams,
-  githubTokenAnswerViewSchema,
-  type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
-  type HostsAnswerView,
-  hostDoneAnswerViewSchema,
-  hostInstallTokenAnswerViewSchema,
-  hostsAnswerViewSchema,
-  type MemoriesAnswerView,
-  type MemoriesReadParams,
-  type MemoryForgetParams,
-  memoriesAnswerViewSchema,
-  type ProviderKeyForAgentsParams,
-  type ProviderKeyRemoveParams,
-  type ProviderKeySaveParams,
-  type ProviderKeysAnswerView,
-  providerKeysAnswerViewSchema,
-} from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
@@ -678,11 +678,11 @@ export interface HostOperator {
     params: TasksWorkspaceInvitationCancelParams,
   ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
-  codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
+  codingAgentModels(): Effect.Effect<AgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
-  codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
+  codingAgentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
   /** The default written; the choice as kept, or why it is unchanged. */
-  codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+  codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
   /** The account's hosts, as Settings lists them; or why there is no list. */
   hostsList(): Effect.Effect<HostsAnswerView>;
   hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
@@ -693,39 +693,35 @@ export interface HostOperator {
   /** One of the account's install tokens revoked; done, or why not. */
   hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
   /** One task's coding agents with their status; or why there is no list. */
-  codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
+  codingAgentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
   /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
-  codingAgentWorkspaceList(
-    params: CodingAgentWorkspaceListParams,
-  ): Effect.Effect<CodingAgentListAnswer>;
+  codingAgentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
   /** An agent started on a task under the press's own key; the agent, or why none started. */
-  codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
-  codingAgentMessages(
-    params: CodingAgentMessagesParams,
-  ): Effect.Effect<CodingAgentMessagesAnswerView>;
+  codingAgentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
   /** One agent sent a message naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
-  codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
+  codingAgentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
-  codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  codingAgentDelete(params: CodingAgentStopParams): Effect.Effect<CodingAgentDeleteAnswerView>;
-  codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
+  codingAgentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
   /** The account's operator in a workspace, Luke, ensured, or reset and ensured afresh: its id, or why there is none. */
   codingAgentEnsureOperator(
-    params: CodingAgentOperatorEnsureParams,
-  ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
+    params: AgentOperatorEnsureParams,
+  ): Effect.Effect<AgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
-  codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+  codingAgentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
@@ -772,8 +768,8 @@ export interface HostOperator {
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
-    params: CodingAgentPullRequestReadParams,
-  ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+    params: AgentPullRequestReadParams,
+  ): Effect.Effect<AgentPullRequestAnswerView>;
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
   pullRequestChapters(
     params: PullRequestChaptersParams,
@@ -817,37 +813,33 @@ export interface HostOperator {
   /** One installed skill removed; or why it stands. */
   installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
-  codingAgentChanges(
-    params: CodingAgentPullRequestReadParams,
-  ): Effect.Effect<CodingAgentChangesAnswerView>;
+  codingAgentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
   /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
-  codingAgentGitHubImage(
-    params: CodingAgentGitHubImageParams,
-  ): Effect.Effect<CodingAgentGitHubImageView>;
+  codingAgentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
   /** One change to an agent's pull request, made on GitHub as the account on its own GitHub sign-in; how GitHub took it, or why there is no answer. */
   codingAgentPullRequestAction(
-    params: CodingAgentPullRequestActionParams,
-  ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+    params: AgentPullRequestActionParams,
+  ): Effect.Effect<AgentPullRequestWriteAnswerView>;
   /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
   codingAgentPullRequestViewed(
-    params: CodingAgentPullRequestReadParams,
-  ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
+    params: AgentPullRequestReadParams,
+  ): Effect.Effect<AgentPullRequestViewedAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
   codingAgentOverviewPullRequest(
-    params: CodingAgentPullRequestReadParams,
-  ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+    params: AgentPullRequestReadParams,
+  ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
   codingAgentReviewOptions(
-    params: CodingAgentPullRequestParams,
-  ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
+    params: AgentPullRequestParams,
+  ): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   codingAgentOverviewChecks(
-    params: CodingAgentPullRequestReadParams,
-  ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
+    params: AgentPullRequestReadParams,
+  ): Effect.Effect<AgentOverviewChecksAnswerView>;
   /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
   codingAgentOverviewConversation(
-    params: CodingAgentPullRequestReadParams,
-  ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
+    params: AgentPullRequestReadParams,
+  ): Effect.Effect<AgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
@@ -875,59 +867,47 @@ export interface HostOperator {
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
   /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
-  codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  codingAgentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
-  codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  codingAgentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** A followed inbox, its items whole or why there are none, each time it changes. */
-  onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
+  onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  codingAgentInboxAnswer(
-    params: CodingAgentInboxAnswerParams,
-  ): Effect.Effect<CodingAgentInboxAnsweredView>;
+  codingAgentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
   /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
-  codingAgentInboxClose(
-    params: CodingAgentInboxCloseParams,
-  ): Effect.Effect<CodingAgentInboxAnsweredView>;
+  codingAgentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
   /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  codingAgentInboxMessage(
-    params: CodingAgentInboxMessageParams,
-  ): Effect.Effect<CodingAgentInboxMessagedView>;
+  codingAgentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
   /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
-  codingAgentInboxStart(
-    params: CodingAgentInboxStartParams,
-  ): Effect.Effect<CodingAgentInboxMessagedView>;
+  codingAgentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   codingAgentInboxReadState(
-    params: CodingAgentInboxReadStateParams,
-  ): Effect.Effect<CodingAgentInboxReadStateView>;
+    params: AgentInboxReadStateParams,
+  ): Effect.Effect<AgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
+  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   codingAgentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
   codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits across the followed account, or why there is none, each time it moves. */
-  onAccountInboxChanged(listener: (answer: CodingAgentAccountInboxAnswerView) => void): () => void;
+  onAccountInboxChanged(listener: (answer: AgentAccountInboxAnswerView) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
-  transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
   /** One followed transcript let go: nothing more is heard of it until it is followed again. */
-  transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
   /** The page of a transcript below the oldest message the window holds, read at once; or why there is none. */
-  transcriptOlder(
-    params: CodingAgentTranscriptOlderParams,
-  ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
+  transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
   /** A followed transcript's next page, or why there is none, each time it moves. */
-  onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
+  onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
   codingAgentInboxAttachment(
-    params: CodingAgentInboxAttachmentParams,
-  ): Effect.Effect<CodingAgentInboxAttachmentView>;
+    params: AgentInboxAttachmentParams,
+  ): Effect.Effect<AgentInboxAttachmentView>;
   /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
-  codingAgentPicture(
-    params: CodingAgentPictureParams,
-  ): Effect.Effect<CodingAgentInboxAttachmentView>;
+  codingAgentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
-  codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
+  codingAgentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
@@ -1008,9 +988,7 @@ interface HostOperatorOptions {
 }
 
 /** A Pull request tab's read as the gateway carries it: the agent, and the pull request's number where the tab names one other than the agent's own. */
-function pullRequestRead(
-  params: CodingAgentPullRequestReadParams,
-): CodingAgentPullRequestReadParams {
+function pullRequestRead(params: AgentPullRequestReadParams): AgentPullRequestReadParams {
   return params.number === undefined
     ? { agentId: params.agentId }
     : { agentId: params.agentId, number: params.number };
@@ -1057,12 +1035,12 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 
 /** What a coding-agent call the host could not answer is drawn as. */
 /** A followed transcript as the gateway's params carry it. */
-function transcriptParams(transcript: CodingAgentTranscriptKey): WireRecord {
+function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
 
-const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const CODING_AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
@@ -1752,12 +1730,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentModels: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_MODELS),
-        answerOf(codingAgentModelsAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentModelsAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentDefaultRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ),
-        answerOf(codingAgentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentDefaultWrite: (choice) =>
       Effect.map(
@@ -1768,7 +1746,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? undefined
             : { contextWindow: choice.contextWindow }),
         }),
-        answerOf(codingAgentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     hostsList: () =>
       Effect.map(
@@ -1798,7 +1776,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentWorkspaceList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, params),
-        answerOf(codingAgentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentList: (params) =>
       Effect.map(
@@ -1808,7 +1786,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? undefined
             : { includeArchived: params.includeArchived }),
         }),
-        answerOf(codingAgentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     // Note that the Start goes on whole, as the act port decoded it against the same schema the
     // Gateway's method reads, because a field copied by name is one a later field is left out of,
@@ -1816,7 +1794,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_START, params),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentMessages: (params) =>
       Effect.map(
@@ -1825,7 +1803,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           after: params.after,
           ...("callId" in params ? { callId: params.callId } : undefined),
         }),
-        answerOf(codingAgentMessagesAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentMessagesAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentMessage: (params) =>
       Effect.map(
@@ -1835,7 +1813,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentChoose: (params) =>
       Effect.map(
@@ -1845,7 +1823,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           effort: params.effort,
           ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentRename: (params) =>
       Effect.map(
@@ -1853,7 +1831,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           title: params.title,
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentServers: (params) =>
       Effect.map(
@@ -1861,12 +1839,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           disabledServers: params.disabledServers,
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentStop: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentRewind: (params) =>
       Effect.map(
@@ -1874,7 +1852,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           messageId: params.messageId,
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentArchive: (params) =>
       Effect.map(
@@ -1882,12 +1860,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           archived: params.archived,
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentDelete: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: params.agentId }),
-        answerOf(codingAgentDeleteAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentDeleteAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPin: (params) =>
       Effect.map(
@@ -1896,7 +1874,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           pinned: params.pinned,
           ...(params.position === undefined ? undefined : { position: params.position }),
         }),
-        answerOf(codingAgentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentEnsureOperator: (params) =>
       Effect.map(
@@ -1906,12 +1884,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.restore === undefined ? undefined : { restore: params.restore }),
           ...(params.timeZone === undefined ? undefined : { timeZone: params.timeZone }),
         }),
-        answerOf(codingAgentOperatorEnsureAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentOperatorEnsureAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
-        answerOf(codingAgentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     channelsList: (params) =>
       Effect.map(
@@ -2020,7 +1998,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(codingAgentPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     pullRequestChapters: (params) =>
       Effect.map(
@@ -2098,12 +2076,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentChanges: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, pullRequestRead(params)),
-        answerOf(codingAgentChangesAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentChangesAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentGitHubImage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
-        answerOf(codingAgentGitHubImageViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentGitHubImageViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPullRequestAction: (params) =>
       Effect.map(
@@ -2111,32 +2089,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...pullRequestRead(params),
           request: params.request,
         }),
-        answerOf(codingAgentPullRequestWriteAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentPullRequestWriteAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPullRequestViewed: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
-        answerOf(codingAgentPullRequestViewedAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentPullRequestViewedAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(codingAgentOverviewPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentOverviewPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentReviewOptions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
-        answerOf(codingAgentReviewOptionsAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentReviewOptionsAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentOverviewChecks: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
-        answerOf(codingAgentOverviewChecksAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentOverviewChecksAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentOverviewConversation: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
-        answerOf(codingAgentOverviewConversationAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentOverviewConversationAnswerViewSchema, CODING_AGENT_UNANSWERED),
       ),
     providerKeysRead: () =>
       Effect.map(
@@ -2228,7 +2206,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.INBOX_CHANGED,
         (payload) =>
           Result.getOrUndefined(
-            readEither(codingAgentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+            readEither(agentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),
@@ -2240,7 +2218,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           reply: params.reply,
           clientKey: params.clientKey,
         }),
-        answerOf(codingAgentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxClose: (params) =>
       Effect.map(
@@ -2249,7 +2227,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           revision: params.revision,
           clientKey: params.clientKey,
         }),
-        answerOf(codingAgentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxMessage: (params) =>
       Effect.map(
@@ -2261,7 +2239,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.answers === undefined ? undefined : { answers: params.answers }),
           ...(params.revision === undefined ? undefined : { revision: params.revision }),
         }),
-        answerOf(codingAgentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxStart: (params) =>
       Effect.map(
@@ -2272,7 +2250,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
         }),
-        answerOf(codingAgentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxReadState: (params) =>
       Effect.map(
@@ -2280,7 +2258,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           unread: params.unread,
         }),
-        answerOf(codingAgentInboxReadStateViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxReadStateViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentInboxReadAll: (params) =>
       Effect.map(
@@ -2288,7 +2266,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
           params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
         ),
-        answerOf(codingAgentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentAccountInboxFollow: () =>
       fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
@@ -2299,9 +2277,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED,
         (payload) =>
           Result.getOrUndefined(
-            readEither(codingAgentAccountInboxAnswerViewSchema, { excess: EXCESS_KEYS.DROP })(
-              payload,
-            ),
+            readEither(agentAccountInboxAnswerViewSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),
@@ -2315,7 +2291,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...transcriptParams(params),
           before: params.before,
         }),
-        answerOf(codingAgentTranscriptOlderAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentTranscriptOlderAnswerSchema, CODING_AGENT_UNANSWERED),
       ),
     transcriptUnfollow: (transcript) =>
       fire(
@@ -2326,7 +2302,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.TRANSCRIPT_CHANGED,
         (payload) =>
           Result.getOrUndefined(
-            readEither(codingAgentTranscriptChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+            readEither(agentTranscriptChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),
@@ -2336,17 +2312,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           attachmentId: params.attachmentId,
         }),
-        answerOf(codingAgentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPicture: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
-        answerOf(codingAgentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
       ),
     codingAgentPart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
-        answerOf(codingAgentPartViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentPartViewSchema, CODING_AGENT_UNANSWERED),
       ),
     onSettingsChanged: (listener) =>
       on(

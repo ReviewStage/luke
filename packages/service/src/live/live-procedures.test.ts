@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { queueMacCommand } from "@luke/database/models/mac-command-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
@@ -348,7 +348,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         const dana = yield* openUser;
         const eli = yield* openUser;
         const started = yield* startTask(dana, { name: "Teammate invitations" });
-        const coder = yield* createCodingAgent(dana, {
+        const coder = yield* createAgent(dana, {
           taskId: started.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -587,7 +587,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         const owner = yield* openUser;
         const stranger = yield* openUser;
         const task = yield* startTask(owner, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(owner, {
+        const started = yield* createAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -774,7 +774,7 @@ it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
         const owner = yield* openUser;
         const stranger = yield* openUser;
         const task = yield* startTask(owner, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(owner, {
+        const started = yield* createAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",

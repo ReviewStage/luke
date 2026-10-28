@@ -2,7 +2,7 @@
  * client-notices.ts -- the agent notices as a client links them: read from the document and the host, written back into the document, and shown through the doors and the presenter the platform hands in.
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
+import type { AgentAccountInboxAnswerView } from "@luke/features/agent-view";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   AgentNoticeDoors,
@@ -59,8 +59,8 @@ function accountKey(account: AccountSnapshot): string | undefined {
  * stream runs: heard from before the follow is asked, so its first answer is
  * never missed, and let go as the stream ends.
  */
-function accountInboxOf(host: NoticeHost): Stream.Stream<CodingAgentAccountInboxAnswerView> {
-  return Stream.callback<CodingAgentAccountInboxAnswerView>((queue) =>
+function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswerView> {
+  return Stream.callback<AgentAccountInboxAnswerView>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() => host.onAccountInboxChanged((answer) => Queue.offerUnsafe(queue, answer))),

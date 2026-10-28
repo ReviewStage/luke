@@ -9,7 +9,7 @@ import {
   taskBrowserTabsLiveStatement,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { saveGitHubToken } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -131,7 +131,7 @@ const openTask = Effect.gen(function* () {
     githubAccess: typeof GITHUB_ACCESS.APP | typeof GITHUB_ACCESS.TOKEN,
   ) =>
     Effect.map(
-      createCodingAgent(starter, {
+      createAgent(starter, {
         taskId,
         planSnapshot: "# Checkout",
         prompt: null,

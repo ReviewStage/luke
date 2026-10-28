@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
@@ -55,14 +55,14 @@ import { OpenLinkProvider } from "./use-open-link.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK,
   model: "openai/gpt-5.6-sol",
   effort: "high",
   title: "Invite flow",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
 };
 

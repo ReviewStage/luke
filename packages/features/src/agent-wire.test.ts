@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
 import {
+  type AgentTranscriptMessage,
   applyMessagesPage,
-  type CodingAgentMessage,
   DEVICE_STANDING,
   deviceStanding,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 
-function message(id: string, text: string): CodingAgentMessage {
+function message(id: string, text: string): AgentTranscriptMessage {
   return { id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text }] };
 }
 

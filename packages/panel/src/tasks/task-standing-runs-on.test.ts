@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_KIND } from "@luke/features/device-agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -86,7 +86,7 @@ test("the Runs on chip names the device the task runs on, and a press drops no m
     {
       ...TASK,
       runsOn: {
-        machine: CODING_AGENT_MACHINE.DEVICE,
+        machine: AGENT_MACHINE.DEVICE,
         deviceId: STUDIO,
         device: { name: "Studio", kind: DEVICE_KIND.DESKTOP, seenAt: Date.now() },
       },

@@ -13,21 +13,21 @@
  */
 
 import type {
-  CodingAgentInboxAnsweredView,
-  CodingAgentInboxAnswerParams,
-  CodingAgentInboxAttachmentParams,
-  CodingAgentInboxAttachmentView,
-  CodingAgentInboxChanged,
-  CodingAgentInboxCloseParams,
-  CodingAgentInboxMessagedView,
-  CodingAgentInboxMessageParams,
-  CodingAgentInboxReadAllView,
-  CodingAgentInboxReadStateParams,
-  CodingAgentInboxReadStateView,
-  CodingAgentInboxScope,
-  CodingAgentInboxStartParams,
-  CodingAgentPictureParams,
-} from "@luke/features/coding-agent-view";
+  AgentInboxAnsweredView,
+  AgentInboxAnswerParams,
+  AgentInboxAttachmentParams,
+  AgentInboxAttachmentView,
+  AgentInboxChanged,
+  AgentInboxCloseParams,
+  AgentInboxMessagedView,
+  AgentInboxMessageParams,
+  AgentInboxReadAllView,
+  AgentInboxReadStateParams,
+  AgentInboxReadStateView,
+  AgentInboxScope,
+  AgentInboxStartParams,
+  AgentPictureParams,
+} from "@luke/features/agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
@@ -38,33 +38,21 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
 export interface AgentInboxProceduresDependencies {
   host: {
     /** A task's or agent's inbox followed at the host, heard through `onInboxChanged`; following again starts over. */
-    codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
-    codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
-    onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
-    codingAgentInboxAnswer(
-      params: CodingAgentInboxAnswerParams,
-    ): Effect.Effect<CodingAgentInboxAnsweredView>;
-    codingAgentInboxClose(
-      params: CodingAgentInboxCloseParams,
-    ): Effect.Effect<CodingAgentInboxAnsweredView>;
-    codingAgentInboxMessage(
-      params: CodingAgentInboxMessageParams,
-    ): Effect.Effect<CodingAgentInboxMessagedView>;
-    codingAgentInboxStart(
-      params: CodingAgentInboxStartParams,
-    ): Effect.Effect<CodingAgentInboxMessagedView>;
+    codingAgentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
+    codingAgentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
+    onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
+    codingAgentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
+    codingAgentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
+    codingAgentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
+    codingAgentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
     codingAgentInboxReadState(
-      params: CodingAgentInboxReadStateParams,
-    ): Effect.Effect<CodingAgentInboxReadStateView>;
-    codingAgentInboxReadAll(
-      params: InboxReadAllRequest,
-    ): Effect.Effect<CodingAgentInboxReadAllView>;
+      params: AgentInboxReadStateParams,
+    ): Effect.Effect<AgentInboxReadStateView>;
+    codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<AgentInboxReadAllView>;
     codingAgentInboxAttachment(
-      params: CodingAgentInboxAttachmentParams,
-    ): Effect.Effect<CodingAgentInboxAttachmentView>;
-    codingAgentPicture(
-      params: CodingAgentPictureParams,
-    ): Effect.Effect<CodingAgentInboxAttachmentView>;
+      params: AgentInboxAttachmentParams,
+    ): Effect.Effect<AgentInboxAttachmentView>;
+    codingAgentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   };
 }
 
@@ -76,7 +64,7 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function agentInboxProcedures(dependencies: AgentInboxProceduresDependencies) {
   const { host } = dependencies;
   /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
-  const openInboxes: OpenFollows<CodingAgentInboxChanged["inbox"], CodingAgentInboxScope> =
+  const openInboxes: OpenFollows<AgentInboxChanged["inbox"], AgentInboxScope> =
     MutableHashMap.empty();
   return {
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
@@ -85,11 +73,11 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const changes = followedStream(
         {
-          keyOf: (scope: CodingAgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
+          keyOf: (scope: AgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
           follow: host.codingAgentInboxFollow,
           unfollow: host.codingAgentInboxUnfollow,
           onChanged: host.onInboxChanged,
-          valueOf: (changed: CodingAgentInboxChanged, scope: CodingAgentInboxScope) =>
+          valueOf: (changed: AgentInboxChanged, scope: AgentInboxScope) =>
             changed.scope.kind === scope.kind && changed.scope.id === scope.id
               ? Option.some(changed.inbox)
               : Option.none(),

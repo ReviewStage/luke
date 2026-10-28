@@ -20,7 +20,7 @@ import {
   type PullRequestMerging,
   REVIEW_DECISION,
   type ReviewDecision,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { MERGE_METHOD, type MergeMethod } from "@luke/features/pull-request-write-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";

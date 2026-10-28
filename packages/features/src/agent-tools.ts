@@ -10,12 +10,8 @@
  * transcripts still name.
  */
 
+import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
 import { CHANNEL_TOOL } from "./channel-wire.js";
-import {
-  AGENT_MESSAGE_TOOL,
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_TODOS_TOOL,
-} from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
@@ -66,9 +62,9 @@ export const AGENT_TOOL = {
   GREP: "grep",
   APPLY_PATCH: "apply_patch",
   // A coding agent's own, and the delegation every agent makes.
-  DELEGATE: CODING_AGENT_DELEGATE_TOOL,
+  DELEGATE: AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
-  WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
+  WRITE_TODOS: AGENT_TODOS_TOOL,
   POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_THREADS: INBOX_TOOL.READ,

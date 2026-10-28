@@ -1,10 +1,10 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentDefaultAnswer,
-} from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentDefaultAnswer,
+} from "@luke/features/agent-view";
+import type { AgentAttachment, TasklessAgent } from "@luke/features/agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -456,7 +456,7 @@ interface AutomationsViewControl {
 export interface NewTaskAgent {
   readonly idempotencyKey: string;
   readonly prompt: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
 }
 
@@ -768,7 +768,7 @@ export interface TasksControl {
     /** Reads the models now, for the chip's name, its menu opening, and its Retry. */
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
-    readDefault: () => Promise<CodingAgentDefaultAnswer>;
+    readDefault: () => Promise<AgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers. */
@@ -2423,7 +2423,7 @@ export function useTasksTab(input: {
   const openAgent = (
     planId: string,
     handed: NewTaskAgent,
-    started: CodingAgentAgentAnswer | undefined,
+    started: AgentAgentAnswer | undefined,
     device: MacOffer | undefined,
   ) => {
     sidePanel.onCloseOn(planId, SIDE_PANEL_TAB.PLAN);
@@ -2437,7 +2437,7 @@ export function useTasksTab(input: {
       return;
     }
     const refused = agentStartFailureNote(
-      started ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      started ?? { failure: AGENT_CALL_FAILURE.UNANSWERED },
       planId,
       device,
     );

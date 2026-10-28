@@ -1,13 +1,10 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentReviewOptionsAnswerView,
-} from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE, type AgentReviewOptionsAnswerView } from "@luke/features/agent-view";
 import type {
-  CodingAgentReviewOptions,
+  AgentReviewOptions,
   GitHubPerson,
   PullRequestLabel,
   PullRequestReviewTeam,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   type PullRequestAction,
@@ -101,7 +98,7 @@ const OPTIONS = {
 
 type OptionsRead =
   | { readonly kind: typeof OPTIONS.UNASKED | typeof OPTIONS.READING | typeof OPTIONS.FAILED }
-  | { readonly kind: typeof OPTIONS.LANDED; readonly value: CodingAgentReviewOptions };
+  | { readonly kind: typeof OPTIONS.LANDED; readonly value: AgentReviewOptions };
 
 /** What the pickers offer and the door that reads it, as both share it. */
 export interface ReviewOptions {
@@ -113,7 +110,7 @@ export interface ReviewOptions {
 /** The agent's repository's labels, collaborators, and teams, read once, as a picker first asks, and again only after a failure. */
 export function useReviewOptions(
   agentId: string,
-  readOptions: (agentId: string) => Promise<CodingAgentReviewOptionsAnswerView>,
+  readOptions: (agentId: string) => Promise<AgentReviewOptionsAnswerView>,
 ): ReviewOptions {
   const [held, setHeld] = useState<{ agentId: string; read: OptionsRead }>({
     agentId,
@@ -125,8 +122,8 @@ export function useReviewOptions(
     setHeld({ agentId, read: { kind: OPTIONS.READING } });
     void readOptions(agentId)
       .catch(
-        (): CodingAgentReviewOptionsAnswerView => ({
-          failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        (): AgentReviewOptionsAnswerView => ({
+          failure: AGENT_CALL_FAILURE.UNANSWERED,
         }),
       )
       .then((answer) =>

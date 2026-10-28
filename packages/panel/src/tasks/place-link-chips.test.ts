@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -83,7 +83,7 @@ const TASK: TaskSummary = {
         title: "Expire old invitations",
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
       },
     ],
     pullRequestTotal: 0,
@@ -107,7 +107,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Triage new Sentry issues",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: AT,
           automationId: TRIAGE,
           automationName: "Nightly triage",
@@ -267,7 +267,7 @@ function archivedAgent(id: string, planId: string | null, model: string) {
     effort: "high",
     title: "Retired sweep",
     createdAt: AT,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     archivedAt: AT,
   };

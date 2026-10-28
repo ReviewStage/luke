@@ -1,9 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
 import { EXPERIMENT } from "@luke/settings";
@@ -210,7 +206,7 @@ function useAnswerField({
   /** The agent the words go to, which the `@` list does not offer; none where they go to no agent. */
   self: string | undefined;
   /** That agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands, or for no agent. */
-  agent: CodingAgentSummary | undefined;
+  agent: AgentSummary | undefined;
   skills: SkillSource | undefined;
   keywords: readonly string[];
   statuses: IntegrationStatuses;
@@ -233,10 +229,7 @@ function useAnswerField({
       statuses,
       place: {
         disabled: agent?.disabledServers ?? [],
-        handed:
-          agent?.status === CODING_AGENT_STATUS.RUNNING
-            ? SERVER_HANDED.STEERS
-            : SERVER_HANDED.OPENS,
+        handed: agent?.status === AGENT_STATUS.RUNNING ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
       },
     },
     onNote,
@@ -415,7 +408,7 @@ interface AnswerBoxProps {
   readerId: string | undefined;
   control: TaskInboxControl;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands. */
-  agent: CodingAgentSummary | undefined;
+  agent: AgentSummary | undefined;
   /** The item's thread, which the box replies to. */
   thread: readonly InboxMessage[];
   /** The open ask's controls, the card's body over its foot; nothing where none waits, or the ask is of words alone. */
@@ -435,7 +428,7 @@ interface AnswerBoxProps {
 /** A new thread's first message, as the box hands it: its words and files, and the key the start goes under. */
 export interface NewThreadStart {
   readonly text: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly clientKey: string;
 }
 

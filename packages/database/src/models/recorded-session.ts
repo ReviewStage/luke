@@ -35,7 +35,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { agentReachableBy } from "./workspace-store.js";
@@ -77,9 +77,9 @@ const parentConversation = alias(conversations, "parent_conversation");
 function namedByWork(conversationId: SQLWrapper): SQL {
   return exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
-      .where(eq(codingAgent.conversationId, conversationId)),
+      .select({ one: agentTable.id })
+      .from(agentTable)
+      .where(eq(agentTable.conversationId, conversationId)),
   );
 }
 
@@ -102,9 +102,9 @@ function parentStands(): SQL {
 function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
   return exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
-      .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
+      .select({ one: agentTable.id })
+      .from(agentTable)
+      .where(and(eq(agentTable.conversationId, conversationId), agentReachableBy(userId))),
   );
 }
 

@@ -39,21 +39,21 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  archiveCodingAgentCommitted,
-  type CodingAgent,
-  type CodingAgentCommitted,
-  type CodingAgentLine,
-  deleteCodingAgent,
+  type Agent,
+  type AgentCommitted,
+  type AgentLine,
+  archiveAgentCommitted,
+  deleteAgent,
   hasRepository,
-  listCodingAgentLines,
-  listWorkspaceCodingAgentLines,
+  listAgentLines,
+  listWorkspaceAgentLines,
   nativeRuntimesOfReached,
   operatorReplaced,
-  pinCodingAgentCommitted,
-  renameCodingAgentCommitted,
-  updateCodingAgentChoice,
-  updateCodingAgentServers,
-} from "@luke/database/models/coding-agent-store";
+  pinAgentCommitted,
+  renameAgentCommitted,
+  updateAgentChoice,
+  updateAgentServers,
+} from "@luke/database/models/agent-store";
 import { devicesNamed } from "@luke/database/models/device-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
@@ -61,11 +61,7 @@ import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { runtimeChoiceRefusal } from "@luke/features/agent-runtime-models";
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_LIST_ARCHIVED,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, AGENT_LIST_ARCHIVED, type AgentSummary } from "@luke/features/agent-wire";
 import { AGENT_START_STATUS } from "@luke/features/contract";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
@@ -159,14 +155,14 @@ const choiceOrInvalid = <A, E, R>(
 
 /** Whether a list read asks for the archived agents too; a build from before archiving never does. */
 function listsArchived(archived: string | undefined): boolean {
-  return archived === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
+  return archived === AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
 /** The agents listed, each read as its line, with its status, who it names, and what continued it, as the lists answer them. */
 const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agents: readonly CodingAgentLine[],
-): Effect.fn.Return<{ agents: CodingAgentSummary[] }, HostedRefusal, DatabaseServices> {
+  agents: readonly AgentLine[],
+): Effect.fn.Return<{ agents: AgentSummary[] }, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
   const continuedBy = yield* continuedByOf(
@@ -193,7 +189,7 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
 const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   changed: Option.Option<Parameters<typeof summaryOf>[1]>,
-): Effect.fn.Return<{ agent: CodingAgentSummary }, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<{ agent: AgentSummary }, HostedRefusal, DatabaseServices> {
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return { agent: yield* summaryOf(userId, changed.value) };
 });
@@ -206,8 +202,8 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  changed: Option.Option<CodingAgentCommitted>,
-): Effect.fn.Return<{ agent: CodingAgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
+  changed: Option.Option<AgentCommitted>,
+): Effect.fn.Return<{ agent: AgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agent = yield* summaryOf(userId, changed.value.agent);
   const { txid } = changed.value;
@@ -276,7 +272,7 @@ const listedShells = /* @__PURE__ */ Effect.fnUntraced(function* (sessionId: str
 });
 
 /** Whether the agent, read again under its conversation's lock, still stands as a Stop left it, as a task's archive reads each of its own. */
-function agentStandsStopped(agent: CodingAgent) {
+function agentStandsStopped(agent: Agent) {
   return standsStopped([
     {
       id: agent.id,
@@ -306,7 +302,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
   );
   // A Start answers 201 for the agent it made, 200 for the one a retry under its key made before.
   const startAnswer = (started: {
-    readonly agent: CodingAgentSummary;
+    readonly agent: AgentSummary;
     readonly created: boolean;
     readonly txid?: string;
   }) => ({
@@ -333,7 +329,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         workspaceId === "" ||
         repository === "" ||
         words === "" ||
-        (words?.length ?? 0) > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS
+        (words?.length ?? 0) > AGENT_BOUNDS.MAX_SEARCH_CHARS
       ) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
@@ -342,7 +338,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listWorkspaceCodingAgentLines(context.userId, workspaceId, {
+        listWorkspaceAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
@@ -357,7 +353,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
       if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listCodingAgentLines(context.userId, taskId, {
+        listAgentLines(context.userId, taskId, {
           includeArchived: listsArchived(input.archived),
         }),
       );
@@ -509,7 +505,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            renameCodingAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
+            renameAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
           ),
         );
       }
@@ -522,7 +518,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
         }
         const archived = yield* hostedStoreOrUnavailable(
-          archiveCodingAgentCommitted(userId, agent.id, body.archived),
+          archiveAgentCommitted(userId, agent.id, body.archived),
         );
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {
@@ -534,7 +530,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            pinCodingAgentCommitted(userId, agent.id, body.pinned, body.position),
+            pinAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
         );
       }
@@ -542,7 +538,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* changedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            updateCodingAgentServers(userId, agent.id, body.disabledServers),
+            updateAgentServers(userId, agent.id, body.disabledServers),
           ),
         );
       }
@@ -553,9 +549,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
-      const changed = yield* hostedStoreOrUnavailable(
-        updateCodingAgentChoice(userId, agent.id, choice),
-      );
+      const changed = yield* hostedStoreOrUnavailable(updateAgentChoice(userId, agent.id, choice));
       if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value);
       return yield* changedAgent(userId, changed);
     }),
@@ -575,7 +569,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const eveAt = yield* retiringReach(seams, context.request, userId);
       yield* stoppedForGood(seams, writer, context.request, userId, agent);
       const deleted = yield* hostedStoreOrUnavailable(
-        deleteCodingAgent(userId, agent.id, {
+        deleteAgent(userId, agent.id, {
           standsStopped: agentStandsStopped,
           beforeDelete: retiredBeforeDelete(eveAt),
         }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),

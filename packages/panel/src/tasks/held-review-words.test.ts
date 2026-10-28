@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  DIFF_SIDE,
-  type PendingReviewComment,
-  type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+import { DIFF_SIDE, type PendingReviewComment, type ReviewThread } from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,

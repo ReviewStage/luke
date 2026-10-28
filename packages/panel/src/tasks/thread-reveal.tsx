@@ -1,4 +1,4 @@
-import type { ReviewThread } from "@luke/features/coding-agent-wire";
+import type { ReviewThread } from "@luke/features/agent-wire";
 import type { PullRequestThreadView } from "@luke/features/link-grammar";
 import { LANDED_ANIMATION } from "@luke/ui/landed";
 import {

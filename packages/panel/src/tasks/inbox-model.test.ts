@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -1137,7 +1137,7 @@ test("the items of agents with no plan stand under the automation that started t
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
     waitingTaskless("agent-6", {
-      agentKind: CODING_AGENT_KIND.OPERATOR,
+      agentKind: AGENT_KIND.OPERATOR,
       automationId: null,
       automationName: null,
       repository: null,

@@ -35,7 +35,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgent } from "@luke/database/models/agent-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import {
   nextSessionSandboxes,
@@ -194,10 +194,10 @@ function describeStopFailure(failure: {
  * read and the stop.
  */
 const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: Pick<CodingAgent, "id" | "userId">,
+  agent: Pick<Agent, "id" | "userId">,
   sessionId: string,
 ) {
-  const current = yield* readCodingAgent(agent.userId, agent.id);
+  const current = yield* readAgent(agent.userId, agent.id);
   if (Option.isNone(current) || current.value.archivedAt === null) return;
   yield* (yield* SessionSandboxes).stopFor(sessionId);
 });
@@ -216,7 +216,7 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: SandboxStopReach,
-  agents: ReadonlyArray<Pick<CodingAgent, "id" | "userId" | "conversationId">>,
+  agents: ReadonlyArray<Pick<Agent, "id" | "userId" | "conversationId">>,
 ) {
   const read = yield* Effect.forEach(agents, (agent) =>
     recordedRuntimeSession(agent).pipe(

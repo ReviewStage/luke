@@ -12,7 +12,7 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
 import { trimmedText } from "./text-schema.js";
 
 /**
- * coding-agent-wire.ts -- a task's coding agents, as the desktop starts, lists, reads, messages, and stops them.
+ * agent-wire.ts -- a task's coding agents, as the desktop starts, lists, reads, messages, and stops them.
  *
  * A coding agent is one cloud session the service runs over a task: it
  * checks the task's repository out, implements the plan, and decides on a
@@ -56,7 +56,7 @@ import { trimmedText } from "./text-schema.js";
  * follow-up, with no alias.
  */
 
-export const CODING_AGENT_BOUNDS = {
+export const AGENT_BOUNDS = {
   /** The most characters a Start's or a message's key may spell; a UUID is the usual. */
   MAX_KEY_CHARS: 128,
   /** The most characters a model id or an effort may spell on the way in; the catalog decides whether they name anything. */
@@ -133,7 +133,7 @@ export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_W
  * started it, on their own GitHub account with the Luke GitHub App's bot as
  * co-author, or the App's bot alone, with why it is the bot.
  */
-export const CODING_AGENT_AUTHOR = {
+export const AGENT_AUTHOR = {
   /** The developer who started the agent, through the GitHub account they signed in with. */
   DEVELOPER: "developer",
   /** The App: the developer has no GitHub sign-in, or GitHub no longer honours it. */
@@ -148,7 +148,7 @@ export const CODING_AGENT_AUTHOR = {
   TOKEN: "token",
 } as const;
 
-export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
+export type AgentAuthor = (typeof AGENT_AUTHOR)[keyof typeof AGENT_AUTHOR];
 
 /**
  * Who pays for a coding agent's model calls, recorded as the agent starts
@@ -158,7 +158,7 @@ export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING
  * runs out pauses the agent rather than falling through to another payer; a
  * Mac signed out since falls back to the account's saved credential.
  */
-export const CODING_AGENT_PAYER = {
+export const AGENT_PAYER = {
   // Note that the stored spelling says "plan", the subscription's own word, not a task's document.
   CLAUDE_SUBSCRIPTION: "claude_plan",
   CHATGPT_SUBSCRIPTION: "chatgpt_plan",
@@ -168,7 +168,7 @@ export const CODING_AGENT_PAYER = {
   MAC_SIGN_IN: "mac_sign_in",
 } as const;
 
-export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];
+export type AgentPayer = (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER];
 
 /**
  * What answers a coding agent's conversation, as its conversation's row
@@ -177,45 +177,42 @@ export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_A
  * agent's sandbox. The store's own vocabulary spells the same words
  * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
  */
-export const CODING_AGENT_RUNTIME = {
+export const AGENT_RUNTIME = {
   EVE: "eve",
   CLAUDE_CODE: "claude_code",
   CODEX: "codex",
 } as const;
 
-export type CodingAgentRuntime = (typeof CODING_AGENT_RUNTIME)[keyof typeof CODING_AGENT_RUNTIME];
+export type AgentRuntime = (typeof AGENT_RUNTIME)[keyof typeof AGENT_RUNTIME];
 
 /** The runtimes that are a provider's own harness rather than eve, which an agent's summary names. */
-export const NATIVE_CODING_AGENT_RUNTIMES = [
-  CODING_AGENT_RUNTIME.CLAUDE_CODE,
-  CODING_AGENT_RUNTIME.CODEX,
-] as const;
+export const NATIVE_AGENT_RUNTIMES = [AGENT_RUNTIME.CLAUDE_CODE, AGENT_RUNTIME.CODEX] as const;
 
-export type NativeCodingAgentRuntime = (typeof NATIVE_CODING_AGENT_RUNTIMES)[number];
+export type NativeAgentRuntime = (typeof NATIVE_AGENT_RUNTIMES)[number];
 
 /**
  * What kind of agent a row is: a coder, which every agent started on work is,
  * or a member's operator, the one agent per member per workspace that
  * manages their other agents, started blank with no task and no repository.
  */
-export const CODING_AGENT_KIND = {
+export const AGENT_KIND = {
   CODER: "coder",
   OPERATOR: "operator",
 } as const;
 
-export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGENT_KIND];
+export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
 
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
  * agent from before the column does, or one of the starter's devices, which
  * takes its work as rows it follows (`@luke/features/device-agent-wire`).
  */
-export const CODING_AGENT_MACHINE = {
+export const AGENT_MACHINE = {
   VERCEL: "vercel",
   DEVICE: "device",
 } as const;
 
-export type CodingAgentMachine = (typeof CODING_AGENT_MACHINE)[keyof typeof CODING_AGENT_MACHINE];
+export type AgentMachineKind = (typeof AGENT_MACHINE)[keyof typeof AGENT_MACHINE];
 
 /** Why a Start on This Mac was refused, which the refusal names (`local-agent-refused`). */
 export const LOCAL_AGENT_REFUSAL = {
@@ -319,17 +316,17 @@ export const OPERATOR_QUIET_REPLY = "HEARTBEAT_OK";
 const OPERATOR_TIME_ZONE_MAX_CHARS = 64;
 
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
-export const CODING_AGENT_BRIEF = {
+export const AGENT_BRIEF = {
   PLAN: "plan",
   // Note that the value says "task", because a released desktop decodes it.
   PROMPT: "task",
   BLANK: "blank",
 } as const;
 
-export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
+export type AgentBrief = (typeof AGENT_BRIEF)[keyof typeof AGENT_BRIEF];
 
 /** Where an agent stands, read from its newest turn: not yet started, at work, or how it ended. */
-export const CODING_AGENT_STATUS = {
+export const AGENT_STATUS = {
   /** The agent exists and its session has not run a turn yet. */
   STARTING: "starting",
   /** A turn is under way, or a message of the developer's awaits the turn it will open. */
@@ -340,14 +337,14 @@ export const CODING_AGENT_STATUS = {
   CANCELLED: "cancelled",
 } as const;
 
-export type CodingAgentStatus = (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS];
+export type AgentStatus = (typeof AGENT_STATUS)[keyof typeof AGENT_STATUS];
 
 /**
  * Why a turn ended failed, as one fixed word: the service maps the turn's
  * own record to these, so nothing a provider or the runtime said travels
  * to the window.
  */
-export const CODING_AGENT_FAILURE = {
+export const AGENT_FAILURE = {
   /** The model call failed. */
   MODEL: "model",
   /** The sandbox or the checkout failed. */
@@ -371,7 +368,7 @@ export const CODING_AGENT_FAILURE = {
   OTHER: "other",
 } as const;
 
-export type CodingAgentFailure = (typeof CODING_AGENT_FAILURE)[keyof typeof CODING_AGENT_FAILURE];
+export type AgentFailure = (typeof AGENT_FAILURE)[keyof typeof AGENT_FAILURE];
 
 /**
  * The files a message may carry, by the media type each travels as: an
@@ -379,7 +376,7 @@ export type CodingAgentFailure = (typeof CODING_AGENT_FAILURE)[keyof typeof CODI
  * extension, which travels as its UTF-8 bytes and is inlined for the model
  * as fenced text under its name.
  */
-export const CODING_AGENT_ATTACHMENT_TYPE = {
+export const AGENT_ATTACHMENT_TYPE = {
   PNG: "image/png",
   JPEG: "image/jpeg",
   WEBP: "image/webp",
@@ -387,17 +384,17 @@ export const CODING_AGENT_ATTACHMENT_TYPE = {
   TEXT: "text/plain",
 } as const;
 
-export type CodingAgentAttachmentType =
-  (typeof CODING_AGENT_ATTACHMENT_TYPE)[keyof typeof CODING_AGENT_ATTACHMENT_TYPE];
+export type AgentAttachmentType =
+  (typeof AGENT_ATTACHMENT_TYPE)[keyof typeof AGENT_ATTACHMENT_TYPE];
 
 /** The most bytes one file of each type may hold. */
-const CODING_AGENT_ATTACHMENT_BYTES = {
-  [CODING_AGENT_ATTACHMENT_TYPE.PNG]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
-  [CODING_AGENT_ATTACHMENT_TYPE.JPEG]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
-  [CODING_AGENT_ATTACHMENT_TYPE.WEBP]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
-  [CODING_AGENT_ATTACHMENT_TYPE.PDF]: CODING_AGENT_BOUNDS.MAX_PDF_BYTES,
-  [CODING_AGENT_ATTACHMENT_TYPE.TEXT]: CODING_AGENT_BOUNDS.MAX_TEXT_BYTES,
-} as const satisfies Record<CodingAgentAttachmentType, number>;
+const AGENT_ATTACHMENT_BYTES = {
+  [AGENT_ATTACHMENT_TYPE.PNG]: AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [AGENT_ATTACHMENT_TYPE.JPEG]: AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [AGENT_ATTACHMENT_TYPE.WEBP]: AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [AGENT_ATTACHMENT_TYPE.PDF]: AGENT_BOUNDS.MAX_PDF_BYTES,
+  [AGENT_ATTACHMENT_TYPE.TEXT]: AGENT_BOUNDS.MAX_TEXT_BYTES,
+} as const satisfies Record<AgentAttachmentType, number>;
 
 /** The characters base64 spells a count of bytes in, padded, as an attachment's data carries them. */
 export function base64Chars(bytes: number): number {
@@ -406,12 +403,12 @@ export function base64Chars(bytes: number): number {
 
 /** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
 export const MAXIMUM_ATTACHMENTS_BODY_BYTES =
-  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
-  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
+  base64Chars(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
+  AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
 
 /** A Start names a key, a choice, and a prompt with its files at most: the prompt's bound at JSON's widest escape, the files, and room for the rest. */
 export const MAXIMUM_START_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
+  6 * AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
 /** The bytes standard padded base64 spells, as an attachment's data carries them. */
 export function base64Bytes(base64: string): number {
@@ -438,13 +435,13 @@ function spellsUtf8(base64: string): boolean {
 
 /** Whether a file is within its type's bound and, where it is text, spells UTF-8. */
 function attachmentIsReadable(attachment: {
-  readonly mediaType: CodingAgentAttachmentType;
+  readonly mediaType: AgentAttachmentType;
   readonly data: string;
 }): boolean {
-  if (attachment.data.length > base64Chars(CODING_AGENT_ATTACHMENT_BYTES[attachment.mediaType])) {
+  if (attachment.data.length > base64Chars(AGENT_ATTACHMENT_BYTES[attachment.mediaType])) {
     return false;
   }
-  return attachment.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT || spellsUtf8(attachment.data);
+  return attachment.mediaType !== AGENT_ATTACHMENT_TYPE.TEXT || spellsUtf8(attachment.data);
 }
 
 /**
@@ -453,40 +450,40 @@ function attachmentIsReadable(attachment: {
  * spelling UTF-8. Nothing beside it says where on the developer's machine
  * it came from.
  */
-const codingAgentAttachmentSchema = EffectSchema.Struct({
+const agentAttachmentSchema = EffectSchema.Struct({
   name: EffectSchema.Trim.check(
     EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
+    EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
     EffectSchema.isPattern(ONE_LINE_PATTERN),
   ),
-  mediaType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+  mediaType: EffectSchema.Literals(Object.values(AGENT_ATTACHMENT_TYPE)),
   data: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
     EffectSchema.isPattern(BASE64_PATTERN),
   ),
 }).check(EffectSchema.makeFilter(attachmentIsReadable));
 
-export type CodingAgentAttachment = typeof codingAgentAttachmentSchema.Type;
+export type AgentAttachment = typeof agentAttachmentSchema.Type;
 
 /** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
-const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
-  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
+const agentAttachmentsSchema = EffectSchema.Array(agentAttachmentSchema).check(
+  EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_ATTACHMENTS),
   EffectSchema.makeFilter(
     (attachments) =>
       attachments.reduce((sum, attachment) => sum + base64Bytes(attachment.data), 0) <=
-      CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES,
+      AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES,
   ),
 );
 
 /** A message's words, trimmed and bounded, and empty where the files carry the message alone. */
 const messageWordsSchema = EffectSchema.Trim.check(
-  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_MESSAGE_CHARS),
 );
 
 /** Whether a message carries anything: words, files, or both, never neither. The words are trimmed already. */
 export function hasWordsOrFiles(
   words: string,
-  attachments: readonly CodingAgentAttachment[] | undefined,
+  attachments: readonly AgentAttachment[] | undefined,
 ): boolean {
   return words !== "" || (attachments ?? []).length > 0;
 }
@@ -501,9 +498,9 @@ export function hasWordsOrFiles(
  * a provider retired from the list reads as nothing switched off.
  */
 export const disabledServersSchema = EffectSchema.Array(
-  EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVER_CHARS)),
+  EffectSchema.String.check(EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_SERVER_CHARS)),
 ).pipe(
-  EffectSchema.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVERS)),
+  EffectSchema.check(EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_SERVERS)),
   EffectSchema.decodeTo(
     EffectSchema.Array(integrationConnectionNameSchema),
     SchemaTransformation.transform({
@@ -525,7 +522,7 @@ export const disabledServersSchema = EffectSchema.Array(
  * after; a fork naming none keeps the message whole, as a desktop before
  * the count asked.
  */
-const codingAgentStartFromSchema = EffectSchema.Struct({
+const agentStartFromSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   messageId: EffectSchema.optionalKey(wireUuidSchema),
   messageSteps: EffectSchema.optionalKey(
@@ -542,7 +539,7 @@ const codingAgentStartFromSchema = EffectSchema.Struct({
   ),
 );
 
-export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
+export type AgentStartFrom = typeof agentStartFromSchema.Type;
 
 /**
  * Starting an agent (POST): the request's own key, which a retry carries
@@ -568,15 +565,15 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * machine: the agent runs where its source runs, else where its task runs
  * (`task-wire.ts`'s `runsOn`), else in the cloud.
  */
-export const codingAgentStartRequestFields = {
-  idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
-  model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
-  effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+export const agentStartRequestFields = {
+  idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
+  model: EffectSchema.optionalKey(trimmedText(AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+  effort: EffectSchema.optionalKey(trimmedText(AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   prompt: EffectSchema.optionalKey(messageWordsSchema),
-  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
-  from: EffectSchema.optionalKey(codingAgentStartFromSchema),
+  from: EffectSchema.optionalKey(agentStartFromSchema),
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -585,7 +582,7 @@ export const codingAgentStartRequestFields = {
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
 function carriesFiles(
   words: string | undefined,
-  attachments: readonly CodingAgentAttachment[] | undefined,
+  attachments: readonly AgentAttachment[] | undefined,
 ): boolean {
   return words === undefined ? attachments === undefined : hasWordsOrFiles(words, attachments);
 }
@@ -600,8 +597,8 @@ export const startBrief = EffectSchema.makeFilter(
     blank,
   }: {
     readonly prompt?: string;
-    readonly attachments?: readonly CodingAgentAttachment[];
-    readonly from?: CodingAgentStartFrom;
+    readonly attachments?: readonly AgentAttachment[];
+    readonly from?: AgentStartFrom;
     readonly note?: string;
     readonly blank?: boolean;
   }) => {
@@ -615,22 +612,20 @@ export const startBrief = EffectSchema.makeFilter(
 );
 
 /** The Start request as a caller holds it, before it is put on the wire. */
-const codingAgentStartRequestValueSchema = EffectSchema.Struct(codingAgentStartRequestFields).check(
-  startBrief,
-);
+const agentStartRequestValueSchema = EffectSchema.Struct(agentStartRequestFields).check(startBrief);
 
 /** The Start request on the wire, where the prompt travels as `task`, because a released desktop sends that key. */
-export const codingAgentStartRequestSchema = EffectSchema.Struct(codingAgentStartRequestFields)
+export const agentStartRequestSchema = EffectSchema.Struct(agentStartRequestFields)
   .pipe(wireKeys({ prompt: "task" }))
   .check(startBrief);
 
-export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
+export type AgentStartRequest = typeof agentStartRequestSchema.Type;
 
 /** A Start request as it travels: read as a caller holds it, so it is trimmed and held to its bounds, then keyed as the wire spells it; a refusal where the service would refuse it by shape. */
-export const codingAgentStartRequestOnWire = (request: CodingAgentStartRequest) =>
+export const agentStartRequestOnWire = (request: AgentStartRequest) =>
   Result.flatMap(
-    readEither(codingAgentStartRequestValueSchema)(request),
-    EffectSchema.encodeUnknownResult(codingAgentStartRequestSchema),
+    readEither(agentStartRequestValueSchema)(request),
+    EffectSchema.encodeUnknownResult(agentStartRequestSchema),
   );
 
 /**
@@ -645,13 +640,13 @@ export const codingAgentStartRequestOnWire = (request: CodingAgentStartRequest) 
  * agent's summary with its status read after the message was taken, which
  * is running.
  */
-export const codingAgentMessageRequestSchema = EffectSchema.Struct({
+export const agentMessageRequestSchema = EffectSchema.Struct({
   text: messageWordsSchema,
-  clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
-  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  clientKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
+  attachments: EffectSchema.optionalKey(agentAttachmentsSchema),
 }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
-export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
+export type AgentMessageRequest = typeof agentMessageRequestSchema.Type;
 
 /**
  * Rewinding an agent (POST): the developer's line it goes back to just
@@ -660,19 +655,19 @@ export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.T
  * never the agent's checkout. The answer is the agent's summary as it then
  * stands.
  */
-export const codingAgentRewindRequestSchema = EffectSchema.Struct({
-  messageId: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+export const agentRewindRequestSchema = EffectSchema.Struct({
+  messageId: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
 });
 
 /**
  * Renaming an agent (PATCH): the title as the tab should show it, trimmed
  * and bounded; empty clears it, so the tab falls back to the model's name.
  */
-export const codingAgentRenameRequestSchema = EffectSchema.Struct({
-  title: EffectSchema.Trim.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+export const agentRenameRequestSchema = EffectSchema.Struct({
+  title: EffectSchema.Trim.check(EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_TITLE_CHARS)),
 });
 
-export type CodingAgentRenameRequest = typeof codingAgentRenameRequestSchema.Type;
+export type AgentRenameRequest = typeof agentRenameRequestSchema.Type;
 
 /**
  * Archiving an agent, or bringing it back (PATCH). Archiving one with a
@@ -681,11 +676,11 @@ export type CodingAgentRenameRequest = typeof codingAgentRenameRequestSchema.Typ
  * awaiting its turn, has no turn to stop yet and is refused as not ready,
  * to be tried again. An archived agent takes no message.
  */
-export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
+export const agentArchiveRequestSchema = EffectSchema.Struct({
   archived: EffectSchema.Boolean,
 });
 
-export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
+export type AgentArchiveRequest = typeof agentArchiveRequestSchema.Type;
 
 /**
  * Pinning an agent in the sidebar, or unpinning it (PATCH). The pin is the
@@ -694,7 +689,7 @@ export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.T
  * the pin stands in the sidebar's Pinned section (`pin-order.ts`), comes
  * only with a pin. The answer is the agent as it then stands.
  */
-export const codingAgentPinRequestSchema = EffectSchema.Struct({
+export const agentPinRequestSchema = EffectSchema.Struct({
   pinned: EffectSchema.Boolean,
   position: EffectSchema.optionalKey(pinPositionSchema),
 }).check(
@@ -704,38 +699,38 @@ export const codingAgentPinRequestSchema = EffectSchema.Struct({
   ),
 );
 
-export type CodingAgentPinRequest = typeof codingAgentPinRequestSchema.Type;
+export type AgentPinRequest = typeof agentPinRequestSchema.Type;
 
 /**
  * Switching the agent's MCP servers (PATCH): the whole list of those off,
  * which replaces the list standing, so two quick changes land as the later
  * one. Empty switches every server back on.
  */
-export const codingAgentServersRequestSchema = EffectSchema.Struct({
+export const agentServersRequestSchema = EffectSchema.Struct({
   disabledServers: disabledServersSchema,
 });
 
-export type CodingAgentServersRequest = typeof codingAgentServersRequestSchema.Type;
+export type AgentServersRequest = typeof agentServersRequestSchema.Type;
 
 /**
  * The task's agent list's query (GET): `archived=include` lists the
  * archived agents among the rest, each carrying its `archivedAt`. Without
  * it they are left out, which is what a build from before archiving asks.
  */
-export const CODING_AGENT_LIST_QUERY = {
+export const AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
 /** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their shown name (`agentName`) or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
-export const CODING_AGENT_WORKSPACE_QUERY = {
+export const AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
   WORDS: "words",
-  ARCHIVED: CODING_AGENT_LIST_QUERY.ARCHIVED,
+  ARCHIVED: AGENT_LIST_QUERY.ARCHIVED,
 } as const;
 
 /** What the list's `archived` query may say. */
-export const CODING_AGENT_LIST_ARCHIVED = {
+export const AGENT_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
@@ -744,14 +739,13 @@ export const CODING_AGENT_LIST_ARCHIVED = {
  * member on it, or another coding agent of the workspace for the member who
  * started that agent, through its `archive_agent` tool.
  */
-export const CODING_AGENT_ARCHIVER = {
+export const AGENT_ARCHIVER = {
   MEMBER: "member",
   LUKE: "luke",
   AGENT: "agent",
 } as const;
 
-export type CodingAgentArchiver =
-  (typeof CODING_AGENT_ARCHIVER)[keyof typeof CODING_AGENT_ARCHIVER];
+export type AgentArchiver = (typeof AGENT_ARCHIVER)[keyof typeof AGENT_ARCHIVER];
 
 /**
  * Who archived an agent, as its banner and card say it: a member, or Luke or
@@ -761,8 +755,8 @@ export type CodingAgentArchiver =
  * a member archived by archiving its task, which brings it back with the
  * task; a build from before it reads the archive as the member's own.
  */
-const codingAgentArchivedBySchema = EffectSchema.Struct({
-  by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+const agentArchivedBySchema = EffectSchema.Struct({
+  by: EffectSchema.Literals(Object.values(AGENT_ARCHIVER)),
   member: EffectSchema.optionalKey(memberRefSchema),
   agent: EffectSchema.optionalKey(
     EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
@@ -771,7 +765,7 @@ const codingAgentArchivedBySchema = EffectSchema.Struct({
   withTask: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
-export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;
+export type AgentArchivedBy = typeof agentArchivedBySchema.Type;
 
 /**
  * One agent as the tabs draw it: the task it works on, its title, what it
@@ -781,7 +775,7 @@ export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;
  * the task's own, so a build that predates agents with no task never meets
  * one.
  */
-export const codingAgentSummarySchema = EffectSchema.Struct({
+export const agentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   planId: EffectSchema.NullOr(wireUuidSchema),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
@@ -794,13 +788,13 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * its chip offers (`agent-runtime-models.ts`); absent for an agent on eve,
    * and from a service older than it.
    */
-  runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_CODING_AGENT_RUNTIMES)),
+  runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
   /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
-  machine: EffectSchema.optionalKey(EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE)),
+  machine: EffectSchema.optionalKey(EffectSchema.Literal(AGENT_MACHINE.DEVICE)),
   /**
    * The Mac a local agent runs on, by its own name, and the epoch
    * milliseconds it last beat, which a reader holds against its own clock
@@ -819,7 +813,7 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   ),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
-  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
   /**
    * True where the agent is a member's operator whose newest turn's reply is
    * its quiet reply alone (`OPERATOR_QUIET_REPLY`): a heartbeat that found
@@ -860,11 +854,11 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * for an agent started blank, its first line as any other line. Absent
    * from a service older than the task, which handed every agent the plan.
    */
-  brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
+  brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
   /** Who archived the agent, and why where they said; absent while it is not archived, for an archive from before the record, and from a service before it. */
-  archivedBy: EffectSchema.optionalKey(codingAgentArchivedBySchema),
+  archivedBy: EffectSchema.optionalKey(agentArchivedBySchema),
   /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
   /**
@@ -921,7 +915,7 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
+export type AgentSummary = typeof agentSummarySchema.Type;
 
 /** A started, stopped, or changed agent (POST, PATCH). */
 /**
@@ -930,11 +924,11 @@ export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
  * pin changed a row, so the desktop following the task list waits for it to
  * arrive before it confirms the write, as Neon's mutations guide says.
  */
-const codingAgentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+const agentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 
-export const codingAgentAnswerSchema = EffectSchema.Struct({
-  agent: codingAgentSummarySchema,
-  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+export const agentAnswerSchema = EffectSchema.Struct({
+  agent: agentSummarySchema,
+  txid: EffectSchema.optionalKey(agentTxidSchema),
   /**
    * Retired: a service no longer sends it, since a Start on a teammate's
    * device is refused (`LOCAL_AGENT_REFUSAL.NOT_OWNER`) and never runs in the
@@ -952,8 +946,8 @@ export const codingAgentAnswerSchema = EffectSchema.Struct({
  * subscription before it confirms the send. Absent from a send that wrote
  * nothing, and from a service older than it.
  */
-export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
-  agent: codingAgentSummarySchema,
+export const agentMessageAnswerSchema = EffectSchema.Struct({
+  agent: agentSummarySchema,
   txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
@@ -981,13 +975,13 @@ export type OperatorEnsureRequest = typeof operatorEnsureRequestSchema.Type;
 /** The operator an ensure answers, by its id, and the transaction its row went in where this ensure made it. */
 export const operatorEnsureAnswerSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
-  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+  txid: EffectSchema.optionalKey(agentTxidSchema),
 });
 
 /** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
-export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
+export const agentDeleteAnswerSchema = EffectSchema.Struct({
   deleted: EffectSchema.Literal(true),
-  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+  txid: EffectSchema.optionalKey(agentTxidSchema),
 });
 
 /**
@@ -998,7 +992,7 @@ export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
  * it, cut as the agent was handed it, and the member who asked for a run
  * now, absent once their account is gone.
  */
-const codingAgentOriginSchema = EffectSchema.Struct({
+const agentOriginSchema = EffectSchema.Struct({
   prompt: EffectSchema.String,
   subject: EffectSchema.optionalKey(
     EffectSchema.Struct({
@@ -1011,7 +1005,7 @@ const codingAgentOriginSchema = EffectSchema.Struct({
   runBy: EffectSchema.optionalKey(memberRefSchema),
 });
 
-export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
+export type AgentOrigin = typeof agentOriginSchema.Type;
 
 /**
  * One agent as its own page reads it, which is how an agent an automation
@@ -1021,23 +1015,23 @@ export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
  * repository it works in, null for one with none. An agent on a plan reads
  * so too, by the same id.
  */
-const codingAgentPageSchema = EffectSchema.Struct({
-  ...codingAgentSummarySchema.fields,
+const agentPageSchema = EffectSchema.Struct({
+  ...agentSummarySchema.fields,
   automationId: EffectSchema.NullOr(wireUuidSchema),
   /** The run that started the agent; absent for one started by hand, and from a service before it. */
-  origin: EffectSchema.optionalKey(codingAgentOriginSchema),
+  origin: EffectSchema.optionalKey(agentOriginSchema),
   workspaceId: EffectSchema.String,
   repository: EffectSchema.NullOr(EffectSchema.String),
 });
 
-export type CodingAgentPage = typeof codingAgentPageSchema.Type;
+export type AgentPage = typeof agentPageSchema.Type;
 
 /** One agent read by its id (GET), on a task or with none. */
-export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
+export const agentPageAnswerSchema = EffectSchema.Struct({ agent: agentPageSchema });
 
 /** The task's agents (GET), in the order they were started. */
-export const codingAgentListAnswerSchema = EffectSchema.Struct({
-  agents: EffectSchema.Array(codingAgentSummarySchema),
+export const agentListAnswerSchema = EffectSchema.Struct({
+  agents: EffectSchema.Array(agentSummarySchema),
 });
 
 /** Where a pull request stands on GitHub, as its pill is coloured. */
@@ -1061,7 +1055,7 @@ export const CHECK_SUMMARY = {
 export type CheckSummary = (typeof CHECK_SUMMARY)[keyof typeof CHECK_SUMMARY];
 
 /** The pull request an agent opened, as GitHub holds it now: what its pill and its summary row say. */
-export const codingAgentPullRequestSchema = EffectSchema.Struct({
+export const agentPullRequestSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
   /** The pull request's own page on GitHub. */
@@ -1079,10 +1073,10 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
-export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
+export type AgentPullRequest = typeof agentPullRequestSchema.Type;
 
 /** Who opened a pull request, as each read and line of it carries them. */
-type PullRequestAuthor = Pick<CodingAgentPullRequest, "author" | "authorAvatarUrl" | "authorBot">;
+type PullRequestAuthor = Pick<AgentPullRequest, "author" | "authorAvatarUrl" | "authorBot">;
 
 /** Who opened a pull request, each field where the read held it, so a line built from it names them as the read did; nothing where GitHub named no one. */
 export function pullRequestAuthorOf(pullRequest: PullRequestAuthor): PullRequestAuthor {
@@ -1100,13 +1094,13 @@ export function pullRequestAuthorOf(pullRequest: PullRequestAuthor): PullRequest
  * where GitHub holds one; and the pull request from it, where one is open or
  * was; null for each it has not. A pull request's branch is its head.
  */
-export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
+export const agentPullRequestAnswerSchema = EffectSchema.Struct({
   repository: EffectSchema.NullOr(EffectSchema.String),
   branch: EffectSchema.NullOr(EffectSchema.String),
-  pullRequest: EffectSchema.NullOr(codingAgentPullRequestSchema),
+  pullRequest: EffectSchema.NullOr(agentPullRequestSchema),
 });
 
-export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+export type AgentPullRequestAnswer = typeof agentPullRequestAnswerSchema.Type;
 
 /**
  * One agent with no plan as the plan list carries it beside the plans, so
@@ -1119,10 +1113,10 @@ export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSc
  * prompt.
  */
 export const tasklessAgentSchema = EffectSchema.Struct({
-  ...codingAgentSummarySchema.fields,
-  automationId: codingAgentPageSchema.fields.automationId,
-  workspaceId: codingAgentPageSchema.fields.workspaceId,
-  repository: codingAgentPageSchema.fields.repository,
+  ...agentSummarySchema.fields,
+  automationId: agentPageSchema.fields.automationId,
+  workspaceId: agentPageSchema.fields.workspaceId,
+  repository: agentPageSchema.fields.repository,
   /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
   activityAt: countedNumber,
   /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
@@ -1132,12 +1126,12 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   /** The pull request it opened, as GitHub last answered the service, which its row's card shows as a task's row's card shows its own; absent while it opened none, and from a service before it was sent. */
   pullRequest: EffectSchema.optionalKey(
     EffectSchema.Struct({
-      number: codingAgentPullRequestSchema.fields.number,
-      title: codingAgentPullRequestSchema.fields.title,
-      url: codingAgentPullRequestSchema.fields.url,
-      state: codingAgentPullRequestSchema.fields.state,
-      checks: codingAgentPullRequestSchema.fields.checks,
-      queued: codingAgentPullRequestSchema.fields.queued,
+      number: agentPullRequestSchema.fields.number,
+      title: agentPullRequestSchema.fields.title,
+      url: agentPullRequestSchema.fields.url,
+      state: agentPullRequestSchema.fields.state,
+      checks: agentPullRequestSchema.fields.checks,
+      queued: agentPullRequestSchema.fields.queued,
     }),
   ),
 });
@@ -1202,7 +1196,7 @@ const changedFileSchema = EffectSchema.Struct({
   blobSha: EffectSchema.optionalKey(commitShaSchema),
 });
 
-export type CodingAgentChangedFile = typeof changedFileSchema.Type;
+export type AgentChangedFile = typeof changedFileSchema.Type;
 
 /**
  * Where a reviewer stands on a pull request, by their newest review that
@@ -1256,7 +1250,7 @@ const reviewCommentSchema = EffectSchema.Struct({
  * GitHub, its files in the order GitHub lists them now, and whether the
  * list was cut short at the bound; or null where it has opened none yet,
  * which is not the same as a pull request that changes nothing. Who opened
- * it, who the agent writes as on GitHub (`CODING_AGENT_AUTHOR`), its
+ * it, who the agent writes as on GitHub (`AGENT_AUTHOR`), its
  * reviewers and where each stands, and its reviews that said something
  * ride beside the files, each absent from a service before them, and who
  * the agent writes as absent too for an agent whose first session never
@@ -1265,7 +1259,7 @@ const reviewCommentSchema = EffectSchema.Struct({
  * counted from), each absent where it could not be read, and `baseSha`
  * absent where no image the files change stood before them.
  */
-export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
+export const agentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       url: EffectSchema.String,
@@ -1276,9 +1270,7 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
       ),
       truncated: EffectSchema.Boolean,
       author: EffectSchema.optionalKey(githubPersonSchema),
-      writtenAs: EffectSchema.optionalKey(
-        EffectSchema.Literals(Object.values(CODING_AGENT_AUTHOR)),
-      ),
+      writtenAs: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_AUTHOR))),
       reviewers: EffectSchema.optionalKey(
         EffectSchema.Array(pullRequestReviewerSchema).check(
           EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
@@ -1293,11 +1285,11 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-type CodingAgentChanges = NonNullable<(typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]>;
+type AgentChanges = NonNullable<(typeof agentChangesAnswerSchema.Type)["pullRequest"]>;
 
 /** Who an agent's pull request names, as its changes carry them; every key absent from a service before them, or where they could not be read. */
-export type CodingAgentChangesPeople = Pick<
-  CodingAgentChanges,
+export type AgentChangesPeople = Pick<
+  AgentChanges,
   "author" | "writtenAs" | "reviewers" | "comments"
 >;
 
@@ -1646,7 +1638,7 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
  * service before them. Null where the agent has opened none yet, or the
  * repository no longer holds it.
  */
-export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
+export const agentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       number: countedNumber,
@@ -1665,9 +1657,7 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       mergedAt: EffectSchema.NullOr(countedNumber),
       merge: EffectSchema.Literals(Object.values(MERGE_STATE)),
       author: EffectSchema.optionalKey(githubPersonSchema),
-      writtenAs: EffectSchema.optionalKey(
-        EffectSchema.Literals(Object.values(CODING_AGENT_AUTHOR)),
-      ),
+      writtenAs: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_AUTHOR))),
       requested: EffectSchema.Array(githubPersonSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
       ),
@@ -1699,7 +1689,7 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
  * collaborators), and its organization's teams that reach it, each up to
  * the bound; each empty where the Luke GitHub App may not read it.
  */
-export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({
+export const agentReviewOptionsAnswerSchema = EffectSchema.Struct({
   labels: EffectSchema.Array(pullRequestLabelSchema).check(
     EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
   ),
@@ -1711,10 +1701,10 @@ export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentReviewOptions = typeof codingAgentReviewOptionsAnswerSchema.Type;
+export type AgentReviewOptions = typeof agentReviewOptionsAnswerSchema.Type;
 
-export type CodingAgentOverviewPullRequest = NonNullable<
-  (typeof codingAgentOverviewPullRequestAnswerSchema.Type)["pullRequest"]
+export type AgentOverviewPullRequest = NonNullable<
+  (typeof agentOverviewPullRequestAnswerSchema.Type)["pullRequest"]
 >;
 
 /**
@@ -1724,7 +1714,7 @@ export type CodingAgentOverviewPullRequest = NonNullable<
  * up to theirs, absent from a service before them. Null where the agent has
  * opened no pull request yet.
  */
-export const codingAgentOverviewChecksAnswerSchema = EffectSchema.Struct({
+export const agentOverviewChecksAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       checks: EffectSchema.Array(pullRequestCheckSchema).check(
@@ -1739,8 +1729,8 @@ export const codingAgentOverviewChecksAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentOverviewChecks = NonNullable<
-  (typeof codingAgentOverviewChecksAnswerSchema.Type)["pullRequest"]
+export type AgentOverviewChecks = NonNullable<
+  (typeof agentOverviewChecksAnswerSchema.Type)["pullRequest"]
 >;
 
 /**
@@ -1759,7 +1749,7 @@ export type CodingAgentOverviewChecks = NonNullable<
  * theirs, absent from a service before it. Null where the agent has opened
  * no pull request yet.
  */
-export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
+export const agentOverviewConversationAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       reviewers: EffectSchema.Array(pullRequestReviewerSchema).check(
@@ -1787,8 +1777,8 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentOverviewConversation = NonNullable<
-  (typeof codingAgentOverviewConversationAnswerSchema.Type)["pullRequest"]
+export type AgentOverviewConversation = NonNullable<
+  (typeof agentOverviewConversationAnswerSchema.Type)["pullRequest"]
 >;
 
 /** A reviewer of a pull request, and where they stand on it. */
@@ -1803,7 +1793,7 @@ export type PullRequestReviewer = typeof pullRequestReviewerSchema.Type;
  * (`GET /api/agents/{id}/subagents/{callId}/messages`), so a tab can open the
  * worker's session from the moment the call is requested.
  */
-export const CODING_AGENT_DELEGATE_TOOL = "delegate";
+export const AGENT_DELEGATE_TOOL = "delegate";
 
 /**
  * The tool one coding agent sends another of its workspace a message with,
@@ -1845,14 +1835,14 @@ export function agentMessageWords(text: string): string | undefined {
 }
 
 /** eve's id for a tool call, as the path names a subagent's transcript by it. */
-export const codingAgentCallIdSchema = trimmedText(CODING_AGENT_BOUNDS.MAX_CALL_ID_CHARS);
+export const agentCallIdSchema = trimmedText(AGENT_BOUNDS.MAX_CALL_ID_CHARS);
 
 /**
  * What a delegation's tool part carries as its input: the task in the
  * agent's words, and the model and effort the agent chose for the worker,
  * each absent where the agent left it to its own.
  */
-export const codingAgentDelegationInputSchema = EffectSchema.Struct({
+export const agentDelegationInputSchema = EffectSchema.Struct({
   task: describeWire(
     EffectSchema.String,
     "The worker's whole job in Markdown, since it knows nothing else: the goal in one sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
@@ -1880,7 +1870,7 @@ export const codingAgentDelegationInputSchema = EffectSchema.Struct({
 });
 
 /** What a settled delegation's tool part carries as its output: the model and effort the worker ran on, and its answer. */
-export const codingAgentDelegationOutputSchema = EffectSchema.Struct({
+export const agentDelegationOutputSchema = EffectSchema.Struct({
   model: EffectSchema.String,
   effort: EffectSchema.String,
   result: EffectSchema.String,
@@ -1893,17 +1883,16 @@ export const codingAgentDelegationOutputSchema = EffectSchema.Struct({
  * tab draws each call where it landed with the older ones folded. Named
  * to-dos rather than a plan, because the plan is Luke's own document.
  */
-export const CODING_AGENT_TODOS_TOOL = "write_todos";
+export const AGENT_TODOS_TOOL = "write_todos";
 
 /** Where one to-do stands. */
-export const CODING_AGENT_TODO_STATUS = {
+export const AGENT_TODO_STATUS = {
   PENDING: "pending",
   IN_PROGRESS: "in_progress",
   DONE: "done",
 } as const;
 
-export type CodingAgentTodoStatus =
-  (typeof CODING_AGENT_TODO_STATUS)[keyof typeof CODING_AGENT_TODO_STATUS];
+export type AgentTodoStatus = (typeof AGENT_TODO_STATUS)[keyof typeof AGENT_TODO_STATUS];
 
 /**
  * What a to-do write's tool part carries as its input: the whole list, in
@@ -1911,19 +1900,19 @@ export type CodingAgentTodoStatus =
  * schema and eve holds the call to it, and a tab reads the stored part
  * back through it, so the two read one list.
  */
-export const codingAgentTodosInputSchema = EffectSchema.Struct({
+export const agentTodosInputSchema = EffectSchema.Struct({
   todos: EffectSchema.Array(
     EffectSchema.Struct({
       content: EffectSchema.String.check(
         EffectSchema.isNonEmpty(),
-        EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TODO_CHARS),
+        EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_TODO_CHARS),
       ),
-      status: EffectSchema.Literals(Object.values(CODING_AGENT_TODO_STATUS)),
+      status: EffectSchema.Literals(Object.values(AGENT_TODO_STATUS)),
     }),
-  ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TODOS)),
+  ).check(EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_TODOS)),
 });
 
-export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
+export type AgentTodos = typeof agentTodosInputSchema.Type;
 
 /**
  * One JSON object as the row holds it, read whole: a message part or the
@@ -1963,7 +1952,7 @@ export type TurnTokens = typeof turnTokensSchema.Type;
 
 /** A catalog id or an effort as a turn's row recorded it. */
 const recordedChoice = EffectSchema.String.check(
-  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS),
+  EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_CHOICE_CHARS),
 );
 
 /**
@@ -2006,7 +1995,7 @@ export const MESSAGE_SENDER = {
 export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
 /** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
-export const CODING_AGENT_SENDER = {
+export const AGENT_SENDER = {
   MEMBER: "member",
   FORMER: "former",
   LUKE: "luke",
@@ -2028,10 +2017,10 @@ export const CODING_AGENT_SENDER = {
  * while it drops a key it does not know: an older build draws the agent as a
  * sender it cannot place, under its name, and a newer one as an agent.
  */
-const codingAgentSenderSchema = EffectSchema.Struct({
+const agentSenderSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   userId: EffectSchema.optionalKey(EffectSchema.String),
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_SENDER))),
   /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
   agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /**
@@ -2051,7 +2040,7 @@ const codingAgentSenderSchema = EffectSchema.Struct({
   taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
-export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
+export type AgentSender = typeof agentSenderSchema.Type;
 
 /** Which field of a part a page carries cut: a tool call's output, or a reasoning's words. */
 export const PART_CUT_FIELD = {
@@ -2072,7 +2061,7 @@ export const TRANSCRIPT_PARTS_QUERY = { PARTS: "parts", CUT: "cut" } as const;
  * the field, so nothing reads the cut words as the part's own; the message's
  * id and this index name the part to fetch whole.
  */
-const codingAgentPartCutSchema = EffectSchema.Struct({
+const partCutSchema = EffectSchema.Struct({
   index: countedNumber,
   field: EffectSchema.Literals(Object.values(PART_CUT_FIELD)),
   bytes: countedNumber,
@@ -2080,14 +2069,14 @@ const codingAgentPartCutSchema = EffectSchema.Struct({
   tail: EffectSchema.String,
 });
 
-export type CodingAgentPartCut = typeof codingAgentPartCutSchema.Type;
+export type PartCut = typeof partCutSchema.Type;
 
 /** One part of a transcript's message whole, as its row holds it: what a reader fetches for a part its page carried cut. */
-export const codingAgentPartAnswerSchema = EffectSchema.Struct({
+export const agentPartAnswerSchema = EffectSchema.Struct({
   part: storedObjectSchema,
 });
 
-export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
+export type AgentPartAnswer = typeof agentPartAnswerSchema.Type;
 
 /**
  * One message of an agent's transcript, as the conversation's row holds it:
@@ -2100,7 +2089,7 @@ export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
  * ended, so a tab says how long a finished turn worked, and once it has,
  * what it ran on and spent (`turnRecordFields`).
  */
-const codingAgentMessageSchema = EffectSchema.Struct({
+const agentTranscriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
    * What opened a brain turn, as its row recorded it, on the turn's
@@ -2114,11 +2103,11 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
-  /** The parts carried cut, each standing in `parts` without its field (`codingAgentPartCutSchema`); absent where none is, on a page not asked cut, and from a service older than it. */
-  cutParts: EffectSchema.optionalKey(EffectSchema.Array(codingAgentPartCutSchema)),
+  /** The parts carried cut, each standing in `parts` without its field (`partCutSchema`); absent where none is, on a page not asked cut, and from a service older than it. */
+  cutParts: EffectSchema.optionalKey(EffectSchema.Array(partCutSchema)),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
-  /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
-  sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
+  /** What sent one of the developer's messages to a coding agent (`agentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
+  sentBy: EffectSchema.optionalKey(agentSenderSchema),
   /**
    * The id one of the developer's lines was written under, which a line a
    * window sent is its send key's (`sentLineId` of `@luke/wire/host-ids`), so
@@ -2127,7 +2116,7 @@ const codingAgentMessageSchema = EffectSchema.Struct({
    * service older than it.
    */
   clientId: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS)),
+    EffectSchema.String.check(EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_LINE_ID_CHARS)),
   ),
   /**
    * Epoch milliseconds one of the developer's lines was sent, which the tab
@@ -2155,7 +2144,7 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   ...turnRecordFields,
 });
 
-export type CodingAgentMessage = typeof codingAgentMessageSchema.Type;
+export type AgentTranscriptMessage = typeof agentTranscriptMessageSchema.Type;
 
 /**
  * Where a reader stands in the transcript: the highest message sequence it
@@ -2165,12 +2154,10 @@ export type CodingAgentMessage = typeof codingAgentMessageSchema.Type;
  */
 const CURSOR_PATTERN = /^\d+:\d+$/u;
 
-export const codingAgentCursorSchema = EffectSchema.String.check(
-  EffectSchema.isPattern(CURSOR_PATTERN),
-);
+export const agentCursorSchema = EffectSchema.String.check(EffectSchema.isPattern(CURSOR_PATTERN));
 
 /** The cursor a reader starts from: before every message. */
-export const CODING_AGENT_CURSOR_START = "0:0";
+export const AGENT_CURSOR_START = "0:0";
 
 /**
  * What some turns cost: the tokens the model read and wrote, how many of
@@ -2178,22 +2165,22 @@ export const CODING_AGENT_CURSOR_START = "0:0";
  * service knows one for every model they ran on; tokens alone where it
  * does not.
  */
-const codingAgentUsageSchema = EffectSchema.Struct({
+const agentUsageSchema = EffectSchema.Struct({
   inputTokens: countedNumber,
   outputTokens: countedNumber,
   cachedInputTokens: EffectSchema.optionalKey(countedNumber),
   costUsd: EffectSchema.optionalKey(countedNumber),
   /**
-   * Who paid for the turns (`CODING_AGENT_PAYER`), on the agent's own
+   * Who paid for the turns (`AGENT_PAYER`), on the agent's own
    * transcript where its row records one: a plan's turns are drawn as the
    * plan's usage rather than in dollars, since a subscription has no bill
    * per token. Absent on a worker's, an agent from before payers were
    * recorded, and from a service older than it.
    */
-  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_PAYER))),
 });
 
-export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
+export type AgentUsage = typeof agentUsageSchema.Type;
 
 /**
  * What the agent's own conversation holds in its model's context, as its
@@ -2209,7 +2196,7 @@ export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
  * a compaction's summary may have folded it in. When that step ended, and
  * when eve last compacted the conversation, where it has.
  */
-const codingAgentContextSchema = EffectSchema.Struct({
+const agentContextSchema = EffectSchema.Struct({
   windowTokens: countedNumber,
   compactionThresholdTokens: countedNumber,
   inputTokens: countedNumber,
@@ -2227,38 +2214,38 @@ const codingAgentContextSchema = EffectSchema.Struct({
   compactedAt: EffectSchema.optionalKey(countedNumber),
 });
 
-export type CodingAgentContext = typeof codingAgentContextSchema.Type;
+export type AgentContext = typeof agentContextSchema.Type;
 
 /** One delegation under way: the call that started it, and when its worker began, in epoch milliseconds. */
-const codingAgentDelegationStartSchema = EffectSchema.Struct({
-  callId: codingAgentCallIdSchema,
+const agentDelegationStartSchema = EffectSchema.Struct({
+  callId: agentCallIdSchema,
   startedAt: countedNumber,
 });
 
-export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema.Type;
+export type AgentDelegationStart = typeof agentDelegationStartSchema.Type;
 
 /**
  * Where one of an agent's workers stands, by the call that started it: the
  * status its own session's newest turn reads as, the pair it runs on as its
  * delegation recorded it, and when it began.
  */
-const codingAgentSubagentStandingSchema = EffectSchema.Struct({
-  callId: codingAgentCallIdSchema,
-  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+const agentSubagentStandingSchema = EffectSchema.Struct({
+  callId: agentCallIdSchema,
+  status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
   model: EffectSchema.String,
   effort: EffectSchema.String,
   startedAt: countedNumber,
 });
 
-export type CodingAgentSubagentStanding = typeof codingAgentSubagentStandingSchema.Type;
+export type AgentSubagentStanding = typeof agentSubagentStandingSchema.Type;
 
 /** One worker's short title, generated from the task it was handed, by the call that started it. */
-const codingAgentSubagentTitleSchema = EffectSchema.Struct({
-  callId: codingAgentCallIdSchema,
+const agentSubagentTitleSchema = EffectSchema.Struct({
+  callId: agentCallIdSchema,
   title: EffectSchema.String,
 });
 
-export type CodingAgentSubagentTitle = typeof codingAgentSubagentTitleSchema.Type;
+export type AgentSubagentTitle = typeof agentSubagentTitleSchema.Type;
 
 /**
  * The messages past a cursor (GET), the cursor to read on from, and where
@@ -2273,9 +2260,9 @@ export type CodingAgentSubagentTitle = typeof codingAgentSubagentTitleSchema.Typ
  * and what its model's context holds once a step has ended; a worker's
  * page carries no context, and its `title` is the worker's own.
  */
-export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
-  messages: EffectSchema.Array(codingAgentMessageSchema),
-  cursor: codingAgentCursorSchema,
+export const agentMessagesAnswerSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(agentTranscriptMessageSchema),
+  cursor: agentCursorSchema,
   /**
    * The turn the page before the oldest message here is read before, on a
    * task conversation's page read from its newest turns or before one;
@@ -2283,7 +2270,7 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * service older than it.
    */
   earlier: EffectSchema.optionalKey(EffectSchema.String),
-  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
   /** When the run that status is read from began, as the agent's summary says it, so a tab following the transcript counts the run a new turn opened. */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
@@ -2292,7 +2279,7 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * subagent's row counts how long it has worked; absent on a worker's
    * page, while none runs, and from a service older than it.
    */
-  delegations: EffectSchema.optionalKey(EffectSchema.Array(codingAgentDelegationStartSchema)),
+  delegations: EffectSchema.optionalKey(EffectSchema.Array(agentDelegationStartSchema)),
   /**
    * Every worker of the agent's whose title has landed, by the call that
    * started it, whichever page carried the call: a title is generated
@@ -2300,18 +2287,16 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * worker's page, while no worker has a title, and from a service older
    * than it.
    */
-  subagentTitles: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSubagentTitleSchema)),
+  subagentTitles: EffectSchema.optionalKey(EffectSchema.Array(agentSubagentTitleSchema)),
   /**
    * Where every worker of the agent's stands, by the call that started it,
    * read from the worker's own session rather than the call, whose own state
    * says only that the delegation was made. Absent on a worker's page, while
    * the agent has delegated nothing, and from a service older than it.
    */
-  subagents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSubagentStandingSchema)),
+  subagents: EffectSchema.optionalKey(EffectSchema.Array(agentSubagentStandingSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
-  failureReason: EffectSchema.optionalKey(
-    EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
-  ),
+  failureReason: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
   /**
    * Where a failed agent that ran directly on its Mac, which now runs every
    * agent in a VM and so refused to start it, left its work: the folder of
@@ -2320,21 +2305,21 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * from a service older than it.
    */
   ranDirectly: EffectSchema.optionalKey(EffectSchema.Struct({ folder: EffectSchema.String })),
-  usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  usage: EffectSchema.optionalKey(agentUsageSchema),
   /**
-   * Who pays for the agent (`CODING_AGENT_PAYER`), as its row recorded it at
+   * Who pays for the agent (`AGENT_PAYER`), as its row recorded it at
    * Start, before any turn settled too, so the chip says whose plan pays,
    * or none, from the first. Absent on a worker's page, for an agent from
    * before payers were recorded, and from a service older than it.
    */
-  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_PAYER))),
   /**
    * What the newest turn alone cost. No service sends it any more, since a
    * price the window draws means the whole run's (`usage`); it stays an
    * optional key so the answer's shape is the one older desktops read.
    */
-  turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
-  context: EffectSchema.optionalKey(codingAgentContextSchema),
+  turnUsage: EffectSchema.optionalKey(agentUsageSchema),
+  context: EffectSchema.optionalKey(agentContextSchema),
   /**
    * The journal revision the agent's transcript was last rewound at, on
    * its own transcript once it has been: a reader whose transcript was read
@@ -2346,14 +2331,14 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   rewound: EffectSchema.optionalKey(countedNumber),
 });
 
-export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
+export type AgentMessagesAnswer = typeof agentMessagesAnswerSchema.Type;
 
 /**
  * Where a reader of a transcript read back from its end stands: the lowest
  * message sequence it holds, in decimal. The next older page is the
  * messages below it.
  */
-export const codingAgentBeforeSchema = EffectSchema.String.check(EffectSchema.isPattern(/^\d+$/u));
+export const agentBeforeSchema = EffectSchema.String.check(EffectSchema.isPattern(/^\d+$/u));
 
 /**
  * The transcript's newest page, read at once: the newest messages, oldest
@@ -2362,12 +2347,12 @@ export const codingAgentBeforeSchema = EffectSchema.String.check(EffectSchema.is
  * `before` the place the next older page is read below; absent where
  * nothing older stands.
  */
-export const codingAgentNewestAnswerSchema = EffectSchema.Struct({
-  ...codingAgentMessagesAnswerSchema.fields,
-  before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+export const agentNewestAnswerSchema = EffectSchema.Struct({
+  ...agentMessagesAnswerSchema.fields,
+  before: EffectSchema.optionalKey(agentBeforeSchema),
 });
 
-export type CodingAgentNewestAnswer = typeof codingAgentNewestAnswerSchema.Type;
+export type AgentNewestAnswer = typeof agentNewestAnswerSchema.Type;
 
 /**
  * An older page of the transcript, read below `before`: its messages,
@@ -2375,12 +2360,12 @@ export type CodingAgentNewestAnswer = typeof codingAgentNewestAnswerSchema.Type;
  * nothing older stands. It carries nothing of the agent as a whole, which
  * the newest page told.
  */
-export const codingAgentOlderAnswerSchema = EffectSchema.Struct({
-  messages: EffectSchema.Array(codingAgentMessageSchema),
-  before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+export const agentOlderAnswerSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(agentTranscriptMessageSchema),
+  before: EffectSchema.optionalKey(agentBeforeSchema),
 });
 
-export type CodingAgentOlderAnswer = typeof codingAgentOlderAnswerSchema.Type;
+export type AgentOlderAnswer = typeof agentOlderAnswerSchema.Type;
 
 /**
  * A page of an agent's messages joined to the ones held: a message heard
@@ -2395,9 +2380,9 @@ export type CodingAgentOlderAnswer = typeof codingAgentOlderAnswerSchema.Type;
  * draw one transcript from the same answers.
  */
 export function applyMessagesPage(
-  held: readonly CodingAgentMessage[],
-  page: readonly CodingAgentMessage[],
-): readonly CodingAgentMessage[] {
+  held: readonly AgentTranscriptMessage[],
+  page: readonly AgentTranscriptMessage[],
+): readonly AgentTranscriptMessage[] {
   if (page.length === 0) return held;
   const heard = new Map(page.map((message) => [message.id, message]));
   const joined = held.map((message) => {

@@ -1,8 +1,8 @@
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import {
+  AGENT_DEFAULT_CHOICE,
   type CatalogModel,
-  CODING_AGENT_DEFAULT_CHOICE,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -240,7 +240,7 @@ function DefaultRows({
       <PickerRow
         label="Default model"
         detail={note}
-        changed={read.base !== CODING_AGENT_DEFAULT_CHOICE.model}
+        changed={read.base !== AGENT_DEFAULT_CHOICE.model}
         saves={modelWrite.saves}
         error={modelWrite.rejection}
         value={read.base}
@@ -321,7 +321,7 @@ function DefaultRows({
         label="Effort"
         adornment={
           <SettingMarks
-            changed={choice.effort !== CODING_AGENT_DEFAULT_CHOICE.effort}
+            changed={choice.effort !== AGENT_DEFAULT_CHOICE.effort}
             saves={effortWrite.saves}
           />
         }

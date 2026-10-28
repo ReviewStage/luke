@@ -1,9 +1,6 @@
 import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@luke/credentials";
 import type { HostedCodingAgentClient } from "@luke/features";
-import {
-  type ChatGptSignInAnswerView,
-  CODING_AGENT_CALL_FAILURE,
-} from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@luke/features/agent-view";
 import {
   type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_REJECTION,
@@ -50,7 +47,7 @@ export interface ChatGptSignInComposer extends Composer {
   readonly reset: Effect.Effect<void>;
 }
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Why the service kept nothing, in a sentence for the row. */
 const REJECTION_WORDS = {

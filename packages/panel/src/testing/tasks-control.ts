@@ -1,9 +1,9 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptPage,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentMessagesAnswerView,
+  type AgentTranscriptKey,
+  type AgentTranscriptPage,
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
@@ -26,8 +26,8 @@ const ignore = () => undefined;
 /** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
 /** A page as the host pushes it: caught up where it came back with nothing on it, unless it says otherwise. */
 export function pushedPage(
-  page: CodingAgentMessagesAnswerView | CodingAgentTranscriptPage,
-): CodingAgentTranscriptPage {
+  page: AgentMessagesAnswerView | AgentTranscriptPage,
+): AgentTranscriptPage {
   if ("failure" in page || "caughtUp" in page) return page;
   return { ...page, caughtUp: page.messages.length === 0 };
 }
@@ -40,8 +40,8 @@ export function pushedPage(
  */
 export function pushedTranscripts(
   pagesOf: (
-    transcript: CodingAgentTranscriptKey,
-  ) => readonly (CodingAgentMessagesAnswerView | CodingAgentTranscriptPage)[],
+    transcript: AgentTranscriptKey,
+  ) => readonly (AgentMessagesAnswerView | AgentTranscriptPage)[],
   held?: { readonly page: number; readonly release: Promise<void> },
 ): TranscriptFollower {
   return (transcript, hear) => {
@@ -148,7 +148,7 @@ export function codingAgentsControl(
     modelsRead: { state: MODELS_READ.UNREAD, generation: 0 },
     macs: undefined,
     readModels: ignore,
-    readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readDefault: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
     continueAgent: undefined,
     start: {
@@ -158,10 +158,10 @@ export function codingAgentsControl(
       onPress: () => Promise.resolve(undefined),
     },
     onStop: () => Promise.resolve(),
-    onRewind: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onRewind: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    onMessage: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    onChoose: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    onSwitchServers: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     onOpenIntegrations: ignore,
     onOpenApiKeys: ignore,
     pending: { titles: new Map(), archives: new Map() },
@@ -177,28 +177,26 @@ export function codingAgentsControl(
       ),
     onStatus: ignore,
     onTitle: ignore,
-    readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readTranscript: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     transcripts: pushedTranscripts(() => []),
-    readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequest: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     numberedPullRequests: new Map(),
     readNumberedPullRequest: () => Promise.resolve(false),
-    readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readChapters: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    generateChapters: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverviewPullRequest: () =>
-      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readReviewOptions: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverviewChecks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readOverviewConversation: () =>
-      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readPullRequestViewed: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readChanges: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readChapters: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    generateChapters: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewPullRequest: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readReviewOptions: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewChecks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewConversation: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequestViewed: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
     inboxFollower: { follow: () => () => undefined },
-    answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    messageInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    startInboxThread: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    answerInbox: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    messageInbox: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    startInboxThread: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    readInboxImage: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
   };
 }
@@ -399,7 +397,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       modelsFailed: false,
       modelsRead: { state: MODELS_READ.UNREAD, generation: 0 },
       readModels: ignore,
-      readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+      readDefault: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,
       tasks: [],
       onShowMention: ignore,

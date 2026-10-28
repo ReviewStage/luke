@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -19,7 +20,6 @@ import {
   type AutomationSummary,
   type AutomationWorkspaceRun,
 } from "@luke/features/automation-wire";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -239,9 +239,9 @@ let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
 /** The workspace's newest agents on the repository, as a read with no words answers them. */
-let workspaceAgents: readonly CodingAgentSummary[] = [];
+let workspaceAgents: readonly AgentSummary[] = [];
 /** The agents a search for `words` finds, as the service answers it. */
-let agentsFound: (words: string) => readonly CodingAgentSummary[] = () => [];
+let agentsFound: (words: string) => readonly AgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
 /** Every run of the workspace's automations, as its Runs tab's follow pushes them. */

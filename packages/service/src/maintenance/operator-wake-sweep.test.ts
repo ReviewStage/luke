@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, createAgent } from "@luke/database/models/agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { RUN_EVENT, RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
@@ -84,12 +84,12 @@ const openMember = Effect.gen(function* () {
   yield* connectAgentApiKeys(member);
   const workspace = yield* openWorkspace(member);
   const operator = Option.getOrThrow(
-    yield* createCodingAgent(member, {
+    yield* createAgent(member, {
       taskId: null,
       organizationId: workspace,
       planSnapshot: null,
       prompt: null,
-      kind: CODING_AGENT_KIND.OPERATOR,
+      kind: AGENT_KIND.OPERATOR,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -97,7 +97,7 @@ const openMember = Effect.gen(function* () {
     }),
   ).agent;
   const agent = Option.getOrThrow(
-    yield* createCodingAgent(member, {
+    yield* createAgent(member, {
       taskId: null,
       organizationId: workspace,
       planSnapshot: null,
@@ -119,7 +119,7 @@ const openMember = Effect.gen(function* () {
 });
 
 /** One turn of the agent's, begun and failed at `at`. */
-const failedAt = (agent: CodingAgent, at: number) =>
+const failedAt = (agent: Agent, at: number) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const target = { userId: agent.userId, conversationId: agent.conversationId };

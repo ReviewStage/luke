@@ -1,4 +1,4 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,

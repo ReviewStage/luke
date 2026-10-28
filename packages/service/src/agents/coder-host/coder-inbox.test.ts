@@ -3,17 +3,14 @@ import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createAgent } from "@luke/database/models/agent-store";
 import { archiveChannel, createChannel } from "@luke/database/models/channel-store";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -85,7 +82,7 @@ const openUser = Effect.gen(function* () {
 /** An agent the account starts on the task, in its repository. */
 const agentOn = (userId: string, task: { readonly id: string; readonly workspaceId: string }) =>
   Effect.gen(function* () {
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -567,7 +564,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
       Effect.gen(function* () {
         const agent = yield* openAgent;
         // Past a message's file bound too, which the item's table held a recording to before.
-        const recording = paddedTo(webmBytes(1280, 800), CODING_AGENT_BOUNDS.MAX_PDF_BYTES + 1);
+        const recording = paddedTo(webmBytes(1280, 800), AGENT_BOUNDS.MAX_PDF_BYTES + 1);
         const sandbox = sandboxWith({ "/tmp/video/flow.webm": recording });
 
         const posted = yield* post(
@@ -740,7 +737,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           files: [
             {
               name: "pricing.txt",
-              mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+              mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
               data: Buffer.from("free\n").toString("base64"),
             },
           ],

@@ -1,4 +1,4 @@
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { AgentStatus } from "@luke/features/agent-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
@@ -831,12 +831,7 @@ function PlanDocument({
   };
   // A delegation's row in an agent's transcript opens its worker in the side
   // panel, where every subagent stands; where the worker stands seeds its glyph.
-  const openDelegation = (
-    agent: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => {
+  const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
     sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
   };

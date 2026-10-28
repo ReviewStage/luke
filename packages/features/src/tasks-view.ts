@@ -3,12 +3,8 @@ import {
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
 } from "./agent-browser-tab-wire.js";
-import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  codingAgentSummarySchema,
-  localAgentRefusalSchema,
-  tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+import { agentAgentAnswerSchema } from "./agent-view.js";
+import { agentSummarySchema, localAgentRefusalSchema, tasklessAgentSchema } from "./agent-wire.js";
 import {
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
@@ -219,7 +215,7 @@ export const tasksViewSchema = EffectSchema.Struct({
    * is followed live over Neon Realtime, when it is what the notices' ledger
    * reads in place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
@@ -403,7 +399,7 @@ export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     planId: EffectSchema.String,
-    agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
+    agentStart: EffectSchema.optionalKey(agentAgentAnswerSchema),
   }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals(START_CALL_FAILURES),

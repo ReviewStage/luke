@@ -1,24 +1,24 @@
-import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_AUTHOR,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_PAYER,
+  AGENT_ARCHIVER,
+  AGENT_AUTHOR,
+  AGENT_BRIEF,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  AGENT_PAYER,
+  type AgentAuthor,
+  type AgentBrief,
+  type AgentKind,
+  type AgentMachineKind,
+  type AgentPayer,
+  type AgentPullRequest,
+  type AgentSubagentTitle,
+  agentPullRequestSchema,
   CONTEXT_WINDOW,
-  type CodingAgentAuthor,
-  type CodingAgentBrief,
-  type CodingAgentKind,
-  type CodingAgentMachine,
-  type CodingAgentPayer,
-  type CodingAgentPullRequest,
-  type CodingAgentSubagentTitle,
   type ContextWindow,
-  codingAgentPullRequestSchema,
   contextWindowSchema,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import { automationFiringSchema } from "@luke/features/automation-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
   integrationConnectionNameSchema,
@@ -49,18 +49,18 @@ import { alias } from "drizzle-orm/pg-core";
 import { Data, DateTime, Effect, Exit, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
-import { agentPin } from "../schemas/agent-pin.js";
-import { organization, user } from "../schemas/auth.js";
 import {
-  codingAgent,
-  codingAgentDelegation,
+  agentDelegationTable,
+  agentTable,
   type StoredAgentStep,
   type StoredArchive,
   type StoredAutomationOrigin,
   type StoredPublishedRead,
   type StoredPullRequest,
   type StoredStartedFrom,
-} from "../schemas/coding-agent.js";
+} from "../schemas/agent.js";
+import { agentPin } from "../schemas/agent-pin.js";
+import { organization, user } from "../schemas/auth.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
@@ -96,7 +96,7 @@ import {
 import type { ConversationTarget } from "./writer.js";
 
 /**
- * coding-agent-store.ts -- the coding agents started on a workspace's tasks, each one conversation and one row linking it to its task.
+ * agent-store.ts -- the coding agents started on a workspace's tasks, each one conversation and one row linking it to its task.
  *
  * An agent belongs to its workspace, its task's or, for an agent an
  * automation started with no task, its own: every member reads, renames,
@@ -165,10 +165,10 @@ import type { ConversationTarget } from "./writer.js";
  */
 
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
-export type CodingAgentStoreEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
+export type AgentStoreEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /** One coding agent as the service holds it: what the tabs read, and what the agent's own turns run on. */
-export interface CodingAgent {
+export interface Agent {
   readonly id: string;
   /** The account that started the agent, whose conversation it runs in and whose provider key pays for it. */
   readonly userId: string;
@@ -207,49 +207,48 @@ export interface CodingAgent {
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
   readonly disabledServers: readonly string[];
   /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
-  readonly author: CodingAgentAuthor | null;
+  readonly author: AgentAuthor | null;
   /** How its repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
   readonly githubAccess: GitHubAccess;
   /** What the agent is: a coder, or its member's operator. */
-  readonly kind: CodingAgentKind;
+  readonly kind: AgentKind;
   readonly createdAt: Date;
   /** Where its runner runs: a Vercel Sandbox, or its starter's Mac; a Vercel Sandbox where unsaid. */
-  readonly machine?: CodingAgentMachine;
+  readonly machine?: AgentMachineKind;
   /** The Mac a local agent is pinned to; null for one in a sandbox, or once that Mac is gone. */
   readonly deviceId?: string | null;
 }
 
 /**
- * One coding agent as a list line reads it (`CODING_AGENT_LINE_COLUMNS`):
+ * One coding agent as a list line reads it (`AGENT_LINE_COLUMNS`):
  * the agent without what it was handed, the plan's text or the developer's
  * prompt, and without the run that started it, which only its own page and
  * its own turns read; which of the two it was handed, or neither, which its
  * tab's brief is drawn from, and its automation's name stand in their place.
  */
-export interface CodingAgentLine
-  extends Omit<CodingAgent, "automationOrigin" | "planSnapshot" | "prompt"> {
+export interface AgentLine extends Omit<Agent, "automationOrigin" | "planSnapshot" | "prompt"> {
   /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
   readonly automationName: string | null;
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
-  readonly brief: CodingAgentBrief;
+  readonly brief: AgentBrief;
 }
 
 /** One agent with no plan as the sidebar lists it for its reader: the agent's line, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
-export interface TasklessCodingAgent extends CodingAgentLine {
+export interface TasklessAgentRow extends AgentLine {
   readonly pinnedAt: Date | null;
   readonly pinPosition: string | null;
 }
 
 /** What a Start answered: the agent, and whether this Start made it or a retry found it. */
-export interface CodingAgentStarted {
-  readonly agent: CodingAgent;
+export interface AgentStarted {
+  readonly agent: Agent;
   readonly created: boolean;
   /** The transaction the agent's row was written in, where this Start wrote it. */
   readonly txid?: string;
 }
 
 /** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`message-reads.ts`), re-exported here beside the agents it is read for. */
-export type CodingAgentLatestTurn = LatestTurn;
+export type AgentLatestTurn = LatestTurn;
 export {
   awaitingLinesOf,
   awaitingLinesOfReached,
@@ -272,7 +271,7 @@ export function hasRepository<A extends { readonly repository: string | null }>(
 }
 
 /** What a Start hands the agent as its first message: the plan's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
-export type CodingAgentBriefText =
+export type AgentBriefText =
   | { readonly planSnapshot: string; readonly prompt: null }
   | { readonly planSnapshot: null; readonly prompt: string }
   | { readonly planSnapshot: null; readonly prompt: null };
@@ -284,29 +283,29 @@ export type CodingAgentBriefText =
  * no plan to hand it; or, as the member's operator alone, in a workspace
  * with no task and handed nothing.
  */
-export type CodingAgentPlace =
-  | (CodingAgentBriefText & {
+export type AgentPlace =
+  | (AgentBriefText & {
       readonly taskId: string;
       readonly organizationId?: undefined;
-      readonly kind?: typeof CODING_AGENT_KIND.CODER | undefined;
+      readonly kind?: typeof AGENT_KIND.CODER | undefined;
     })
   | {
       readonly taskId: null;
       readonly organizationId: string;
       readonly planSnapshot: null;
       readonly prompt: string;
-      readonly kind?: typeof CODING_AGENT_KIND.CODER | undefined;
+      readonly kind?: typeof AGENT_KIND.CODER | undefined;
     }
   | {
       readonly taskId: null;
       readonly organizationId: string;
       readonly planSnapshot: null;
       readonly prompt: null;
-      readonly kind: typeof CODING_AGENT_KIND.OPERATOR;
+      readonly kind: typeof AGENT_KIND.OPERATOR;
     };
 
 /** A Start: where it goes, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
-export type NewCodingAgent = CodingAgentPlace & {
+export type NewAgent = AgentPlace & {
   /** The automation whose run starts the agent; none for one started by hand. */
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent; none for one started by hand. */
@@ -335,9 +334,9 @@ export type NewCodingAgent = CodingAgentPlace & {
   /** What answers the agent's conversation; eve where none is named. */
   readonly runtime?: ConversationRuntime | undefined;
   /** Who pays for the agent's model calls; none recorded where none is named. */
-  readonly payer?: CodingAgentPayer | undefined;
+  readonly payer?: AgentPayer | undefined;
   /** Where its runner runs; a Vercel Sandbox where none is named. */
-  readonly machine?: CodingAgentMachine | undefined;
+  readonly machine?: AgentMachineKind | undefined;
   /** The account's Mac a local agent is pinned to; none for one in a sandbox. */
   readonly deviceId?: string | undefined;
 };
@@ -347,103 +346,101 @@ export type NewCodingAgent = CodingAgentPlace & {
  * eve for a conversation from before the column, the harness's own session
  * or thread id, the digest of its runner's bearer, and who pays for it.
  */
-export interface CodingAgentRouting {
+export interface AgentRouting {
   readonly runtime: ConversationRuntime;
   /** The harness's session or thread id; null on eve and before the harness answers one. */
   readonly nativeSession: string | null;
   /** The digest of the runner's bearer at Luke's MCP server; null where no runner holds one. */
   readonly runnerTokenHash: string | null;
   /** Who pays for the agent's model calls; null for an agent from before the column. */
-  readonly payer: CodingAgentPayer | null;
+  readonly payer: AgentPayer | null;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
-const CODING_AGENT_COLUMNS = {
-  id: codingAgent.id,
-  userId: codingAgent.userId,
-  taskId: codingAgent.taskId,
+const AGENT_COLUMNS = {
+  id: agentTable.id,
+  userId: agentTable.userId,
+  taskId: agentTable.taskId,
   organizationId: AGENT_WORKSPACE,
-  automationId: codingAgent.automationId,
-  automationOrigin: codingAgent.automationOrigin,
-  startedFrom: codingAgent.startedFrom,
-  startedByAgentId: codingAgent.startedByAgentId,
-  conversationId: codingAgent.conversationId,
-  model: codingAgent.model,
-  effort: codingAgent.effort,
-  contextWindow: codingAgent.contextWindow,
-  planSnapshot: codingAgent.planSnapshot,
-  prompt: codingAgent.prompt,
-  repository: codingAgent.repository,
-  branch: codingAgent.branch,
-  startBranch: codingAgent.startBranch,
-  title: codingAgent.title,
-  archivedAt: codingAgent.archivedAt,
-  archivedBy: codingAgent.archivedBy,
-  disabledServers: codingAgent.disabledServers,
-  author: codingAgent.author,
-  githubAccess: codingAgent.githubAccess,
-  kind: codingAgent.kind,
-  createdAt: codingAgent.createdAt,
-  machine: codingAgent.machine,
-  deviceId: codingAgent.deviceId,
+  automationId: agentTable.automationId,
+  automationOrigin: agentTable.automationOrigin,
+  startedFrom: agentTable.startedFrom,
+  startedByAgentId: agentTable.startedByAgentId,
+  conversationId: agentTable.conversationId,
+  model: agentTable.model,
+  effort: agentTable.effort,
+  contextWindow: agentTable.contextWindow,
+  planSnapshot: agentTable.planSnapshot,
+  prompt: agentTable.prompt,
+  repository: agentTable.repository,
+  branch: agentTable.branch,
+  startBranch: agentTable.startBranch,
+  title: agentTable.title,
+  archivedAt: agentTable.archivedAt,
+  archivedBy: agentTable.archivedBy,
+  disabledServers: agentTable.disabledServers,
+  author: agentTable.author,
+  githubAccess: agentTable.githubAccess,
+  kind: agentTable.kind,
+  createdAt: agentTable.createdAt,
+  machine: agentTable.machine,
+  deviceId: agentTable.deviceId,
 };
 
 /**
- * The columns a list line projects (`CodingAgentLine`): every one of
- * `CODING_AGENT_COLUMNS` but the plan's text, the prompt, and the run that
+ * The columns a list line projects (`AgentLine`): every one of
+ * `AGENT_COLUMNS` but the plan's text, the prompt, and the run that
  * started the agent, whose prompt and webhook body it carries, with whether
  * a prompt was handed and the run's automation name read in their place.
  * Note that the lists read these, because they read every agent of every
  * listed task on every refresh, and the text columns are the bulk of a row.
  */
-const CODING_AGENT_LINE_COLUMNS = {
-  id: codingAgent.id,
-  userId: codingAgent.userId,
-  taskId: codingAgent.taskId,
+const AGENT_LINE_COLUMNS = {
+  id: agentTable.id,
+  userId: agentTable.userId,
+  taskId: agentTable.taskId,
   organizationId: AGENT_WORKSPACE,
-  automationId: codingAgent.automationId,
-  automationName: agentAutomationNameSql(codingAgent),
-  startedFrom: codingAgent.startedFrom,
-  startedByAgentId: codingAgent.startedByAgentId,
-  conversationId: codingAgent.conversationId,
-  model: codingAgent.model,
-  effort: codingAgent.effort,
-  contextWindow: codingAgent.contextWindow,
-  brief: sql<CodingAgentBrief>`case
-    when ${codingAgent.prompt} is not null then ${CODING_AGENT_BRIEF.PROMPT}
-    when ${codingAgent.planSnapshot} is not null then ${CODING_AGENT_BRIEF.PLAN}
-    else ${CODING_AGENT_BRIEF.BLANK}
+  automationId: agentTable.automationId,
+  automationName: agentAutomationNameSql(agentTable),
+  startedFrom: agentTable.startedFrom,
+  startedByAgentId: agentTable.startedByAgentId,
+  conversationId: agentTable.conversationId,
+  model: agentTable.model,
+  effort: agentTable.effort,
+  contextWindow: agentTable.contextWindow,
+  brief: sql<AgentBrief>`case
+    when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT}
+    when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN}
+    else ${AGENT_BRIEF.BLANK}
   end`,
-  repository: codingAgent.repository,
-  branch: codingAgent.branch,
-  startBranch: codingAgent.startBranch,
-  title: codingAgent.title,
-  archivedAt: codingAgent.archivedAt,
-  archivedBy: codingAgent.archivedBy,
-  disabledServers: codingAgent.disabledServers,
-  author: codingAgent.author,
-  githubAccess: codingAgent.githubAccess,
-  kind: codingAgent.kind,
-  createdAt: codingAgent.createdAt,
-  machine: codingAgent.machine,
-  deviceId: codingAgent.deviceId,
+  repository: agentTable.repository,
+  branch: agentTable.branch,
+  startBranch: agentTable.startBranch,
+  title: agentTable.title,
+  archivedAt: agentTable.archivedAt,
+  archivedBy: agentTable.archivedBy,
+  disabledServers: agentTable.disabledServers,
+  author: agentTable.author,
+  githubAccess: agentTable.githubAccess,
+  kind: agentTable.kind,
+  createdAt: agentTable.createdAt,
+  machine: agentTable.machine,
+  deviceId: agentTable.deviceId,
 } as const;
 
-/** What an agent was handed as its first message, as `CODING_AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
-export function codingAgentBriefOf(
-  agent: Pick<CodingAgent, "planSnapshot" | "prompt">,
-): CodingAgentBrief {
-  if (agent.prompt !== null) return CODING_AGENT_BRIEF.PROMPT;
-  return agent.planSnapshot === null ? CODING_AGENT_BRIEF.BLANK : CODING_AGENT_BRIEF.PLAN;
+/** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
+export function agentBriefOf(agent: Pick<Agent, "planSnapshot" | "prompt">): AgentBrief {
+  if (agent.prompt !== null) return AGENT_BRIEF.PROMPT;
+  return agent.planSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.PLAN;
 }
 
-/** The line a full read of an agent draws, as `CODING_AGENT_LINE_COLUMNS` reads it from the row. */
-export function codingAgentLineOf(agent: CodingAgent): CodingAgentLine {
+/** The line a full read of an agent draws, as `AGENT_LINE_COLUMNS` reads it from the row. */
+export function agentLineOf(agent: Agent): AgentLine {
   const { automationOrigin, planSnapshot: _planSnapshot, prompt: _prompt, ...line } = agent;
   return {
     ...line,
     automationName: automationOrigin?.name ?? null,
-    brief: codingAgentBriefOf(agent),
+    brief: agentBriefOf(agent),
   };
 }
 
@@ -495,7 +492,7 @@ const StartedFromColumnSchema = Schema.NullOr(
 /** The `archived_by` column as a row holds it. */
 const ArchivedByColumnSchema = Schema.NullOr(
   Schema.Struct({
-    by: Schema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+    by: Schema.Literals(Object.values(AGENT_ARCHIVER)),
     userId: Schema.String,
     agentId: Schema.optionalKey(Schema.String),
     agentName: Schema.optionalKey(Schema.String),
@@ -504,9 +501,9 @@ const ArchivedByColumnSchema = Schema.NullOr(
   }),
 );
 /** An author as the agent's row holds it. */
-const AuthorColumnSchema = Schema.Literals(Object.values(CODING_AGENT_AUTHOR));
+const AuthorColumnSchema = Schema.Literals(Object.values(AGENT_AUTHOR));
 
-const CodingAgentRowSchema = Schema.Struct({
+const AgentRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
@@ -530,9 +527,9 @@ const CodingAgentRowSchema = Schema.Struct({
   disabledServers: DisabledServersColumnSchema,
   author: Schema.NullOr(AuthorColumnSchema),
   githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
-  kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  kind: Schema.Literals(Object.values(AGENT_KIND)),
   createdAt: InstantColumnSchema,
-  machine: Schema.Literals(Object.values(CODING_AGENT_MACHINE)),
+  machine: Schema.Literals(Object.values(AGENT_MACHINE)),
   deviceId: Schema.NullOr(Schema.String),
 });
 
@@ -541,18 +538,18 @@ const {
   planSnapshot: _planSnapshot,
   prompt: _prompt,
   ...LINE_ROW_FIELDS
-} = CodingAgentRowSchema.fields;
+} = AgentRowSchema.fields;
 
-/** An agent's row as a list line reads it (`CODING_AGENT_LINE_COLUMNS`). */
-const CodingAgentLineRowSchema = Schema.Struct({
+/** An agent's row as a list line reads it (`AGENT_LINE_COLUMNS`). */
+const AgentLineRowSchema = Schema.Struct({
   ...LINE_ROW_FIELDS,
   automationName: Schema.NullOr(Schema.String),
-  brief: Schema.Literals(Object.values(CODING_AGENT_BRIEF)),
+  brief: Schema.Literals(Object.values(AGENT_BRIEF)),
 });
 
 /** An agent's line with the reader's own pin beside it; null where they hold none. */
 const TasklessAgentRowSchema = Schema.Struct({
-  ...CodingAgentLineRowSchema.fields,
+  ...AgentLineRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
 });
@@ -561,7 +558,7 @@ const IdRowSchema = Schema.Struct({ id: Schema.String });
 
 /** The agent under this id, where the account is a member of its workspace; any other id reads as no agent. */
 function reachableAgent(userId: string, agentId: string): SQL | undefined {
-  return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
+  return and(eq(agentTable.id, agentId), agentReachableBy(userId));
 }
 
 /** The task row under its own lock, where the account is a member of its workspace. */
@@ -595,7 +592,7 @@ const lockReachableWorkspace = SqlSchema.findOneOption({
 });
 
 /** The workspace a Start puts its agent in, locked: the task's, or the workspace named; nothing where the account reaches neither. */
-const lockedPlace = Effect.fnUntraced(function* (userId: string, place: CodingAgentPlace) {
+const lockedPlace = Effect.fnUntraced(function* (userId: string, place: AgentPlace) {
   if (place.taskId === null) {
     const reached = yield* lockReachableWorkspace({ userId, organizationId: place.organizationId });
     return Option.map(reached, (workspace) => ({ organizationId: workspace.id }));
@@ -608,13 +605,13 @@ const findAgentByKey = SqlSchema.findOneOption({
     userId: Schema.String,
     idempotencyKey: Schema.String,
   }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, idempotencyKey }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
-        .where(and(eq(codingAgent.userId, userId), eq(codingAgent.idempotencyKey, idempotencyKey)))
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
+        .where(and(eq(agentTable.userId, userId), eq(agentTable.idempotencyKey, idempotencyKey)))
         .limit(1),
     ),
 });
@@ -625,9 +622,9 @@ const findOwnAgentId = SqlSchema.findOneOption({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), eq(agentTable.userId, userId))),
     ),
 });
 
@@ -646,7 +643,7 @@ const ownStarterOf = Effect.fnUntraced(function* (userId: string, agentId: strin
 /** A runtime as a conversation's row holds it. */
 const RuntimeColumnSchema = Schema.Literals(Object.values(CONVERSATION_RUNTIME));
 /** A payer as the agent's row holds it. */
-const PayerColumnSchema = Schema.Literals(Object.values(CODING_AGENT_PAYER));
+const PayerColumnSchema = Schema.Literals(Object.values(AGENT_PAYER));
 
 const insertAgentConversation = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, runtime: RuntimeColumnSchema, now: Schema.Date }),
@@ -676,7 +673,7 @@ const TXID = sql<string>`pg_current_xact_id()::text`;
 
 /** An agent's row as a write returned it, with the transaction it committed in. */
 const CommittedAgentRowSchema = Schema.Struct({
-  ...CodingAgentRowSchema.fields,
+  ...AgentRowSchema.fields,
   txid: Schema.String,
 });
 
@@ -686,26 +683,26 @@ const TxidRowSchema = Schema.Struct({ txid: Schema.String });
 /** The member's operator standing in the workspace, archived ones left out. */
 function liveOperatorOf(userId: string, organizationId: string): SQL | undefined {
   return and(
-    eq(codingAgent.organizationId, organizationId),
-    eq(codingAgent.userId, userId),
-    eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
-    isNull(codingAgent.archivedAt),
+    eq(agentTable.organizationId, organizationId),
+    eq(agentTable.userId, userId),
+    eq(agentTable.kind, AGENT_KIND.OPERATOR),
+    isNull(agentTable.archivedAt),
   );
 }
 
 /** Read under the workspace's lock a Start takes, by the member alone, since only they reach their operator. */
 const findLiveOperator = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, organizationId }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
         .where(
           and(
             liveOperatorOf(userId, organizationId),
-            workspaceReachableBy(userId, codingAgent.organizationId),
+            workspaceReachableBy(userId, agentTable.organizationId),
           ),
         )
         .limit(1),
@@ -719,22 +716,22 @@ const findLiveOperator = SqlSchema.findOneOption({
  * (`operatorReplaced`), since the partial unique index would refuse it.
  */
 function replacedOperator(): SQL {
-  const standing = alias(codingAgent, "standing_operator");
+  const standing = alias(agentTable, "standing_operator");
   const another = exists(
     queryBuilder
       .select({ id: standing.id })
       .from(standing)
       .where(
         and(
-          eq(standing.organizationId, codingAgent.organizationId),
-          eq(standing.userId, codingAgent.userId),
-          eq(standing.kind, CODING_AGENT_KIND.OPERATOR),
+          eq(standing.organizationId, agentTable.organizationId),
+          eq(standing.userId, agentTable.userId),
+          eq(standing.kind, AGENT_KIND.OPERATOR),
           isNull(standing.archivedAt),
-          ne(standing.id, codingAgent.id),
+          ne(standing.id, agentTable.id),
         ),
       ),
   );
-  return sql`(${eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR)} and ${another})`;
+  return sql`(${eq(agentTable.kind, AGENT_KIND.OPERATOR)} and ${another})`;
 }
 
 const findReplacedOperator = SqlSchema.findAll({
@@ -743,8 +740,8 @@ const findReplacedOperator = SqlSchema.findAll({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
+        .select({ id: agentTable.id })
+        .from(agentTable)
         .where(and(reachableAgent(userId, agentId), replacedOperator())),
     ),
 });
@@ -777,8 +774,8 @@ const insertAgent = SqlSchema.findOneOption({
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
     payer: Schema.NullOr(PayerColumnSchema),
-    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
-    machine: Schema.Literals(Object.values(CODING_AGENT_MACHINE)),
+    kind: Schema.Literals(Object.values(AGENT_KIND)),
+    machine: Schema.Literals(Object.values(AGENT_MACHINE)),
     deviceId: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
@@ -786,7 +783,7 @@ const insertAgent = SqlSchema.findOneOption({
   execute: (write) =>
     Database.use((db) =>
       db
-        .insert(codingAgent)
+        .insert(agentTable)
         .values({
           userId: write.userId,
           taskId: write.taskId,
@@ -816,15 +813,15 @@ const insertAgent = SqlSchema.findOneOption({
           createdAt: write.now,
         })
         .onConflictDoNothing({
-          target: [codingAgent.organizationId, codingAgent.userId],
+          target: [agentTable.organizationId, agentTable.userId],
           // Note that the predicate spells its literal, because Postgres infers the index from it at plan time.
-          where: sql`${codingAgent.kind} = ${sql.raw(`'${CODING_AGENT_KIND.OPERATOR}'`)} and ${codingAgent.archivedAt} is null`,
+          where: sql`${agentTable.kind} = ${sql.raw(`'${AGENT_KIND.OPERATOR}'`)} and ${agentTable.archivedAt} is null`,
         })
-        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
+        .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
-const updateAgentChoice = SqlSchema.findOneOption({
+const updateAgentChoiceRow = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
@@ -832,31 +829,31 @@ const updateAgentChoice = SqlSchema.findOneOption({
     effort: Schema.String,
     contextWindow: contextWindowSchema,
   }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, agentId, model, effort, contextWindow }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ model, effort, contextWindow })
         .where(reachableAgent(userId, agentId))
-        .returning(CODING_AGENT_COLUMNS),
+        .returning(AGENT_COLUMNS),
     ),
 });
 
-const updateAgentServers = SqlSchema.findOneOption({
+const updateAgentServersRow = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
   }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, agentId, disabledServers }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ disabledServers })
         .where(reachableAgent(userId, agentId))
-        .returning(CODING_AGENT_COLUMNS),
+        .returning(AGENT_COLUMNS),
     ),
 });
 
@@ -867,9 +864,9 @@ const lockAgentMentionedServers = SqlSchema.findOneOption({
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
+        .select({ id: agentTable.id, mentionedServers: agentTable.mentionedServers })
+        .from(agentTable)
+        .where(and(eq(agentTable.conversationId, conversationId), agentReachableBy(userId)))
         .limit(1)
         .for("update"),
     ),
@@ -882,8 +879,8 @@ const readReachableMentionedServers = SqlSchema.findOneOption({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
-        .from(codingAgent)
+        .select({ id: agentTable.id, mentionedServers: agentTable.mentionedServers })
+        .from(agentTable)
         .where(reachableAgent(userId, agentId)),
     ),
 });
@@ -897,7 +894,7 @@ const MentionedServersChangeSchema = Schema.Struct({
 const ADDED_AFTER = 1_000_000;
 
 /** The agent's mentioned servers as they stand, each with its place, in the statement that changes them. */
-const STANDING_SERVERS = sql`jsonb_array_elements_text(coalesce(${codingAgent.mentionedServers}, '[]'::jsonb)) with ordinality as stood(name, place)`;
+const STANDING_SERVERS = sql`jsonb_array_elements_text(coalesce(${agentTable.mentionedServers}, '[]'::jsonb)) with ordinality as stood(name, place)`;
 
 /**
  * Adds the names to the agent's mentioned servers in the one statement,
@@ -909,11 +906,11 @@ const addMentionedServers = SqlSchema.void({
   execute: ({ agentId, names }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({
           mentionedServers: sql`(select jsonb_agg(merged.name order by merged.place) from (select every.name, min(every.place) as place from (select stood.name, stood.place from ${STANDING_SERVERS} union all select added.name, added.place + ${ADDED_AFTER} from jsonb_array_elements_text(${JSON.stringify(names)}::jsonb) with ordinality as added(name, place)) as every group by every.name) as merged)`,
         })
-        .where(eq(codingAgent.id, agentId)),
+        .where(eq(agentTable.id, agentId)),
     ),
 });
 
@@ -923,11 +920,11 @@ const removeMentionedServers = SqlSchema.void({
   execute: ({ agentId, names }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({
           mentionedServers: sql`(select jsonb_agg(stood.name order by stood.place) from ${STANDING_SERVERS} where not exists (select 1 from jsonb_array_elements_text(${JSON.stringify(names)}::jsonb) as gone(name) where gone.name = stood.name))`,
         })
-        .where(eq(codingAgent.id, agentId)),
+        .where(eq(agentTable.id, agentId)),
     ),
 });
 
@@ -938,11 +935,11 @@ const setAgentMentionedServers = SqlSchema.void({
   }),
   execute: ({ agentId, mentionedServers }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ mentionedServers }).where(eq(codingAgent.id, agentId)),
+      db.update(agentTable).set({ mentionedServers }).where(eq(agentTable.id, agentId)),
     ),
 });
 
-const updateAgentBranch = SqlSchema.void({
+const updateAgentBranchRow = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
@@ -950,7 +947,7 @@ const updateAgentBranch = SqlSchema.void({
   }),
   execute: ({ userId, agentId, branch }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ branch }).where(reachableAgent(userId, agentId)),
+      db.update(agentTable).set({ branch }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1025,10 +1022,10 @@ const updateAgentTitle = SqlSchema.findOneOption({
   execute: ({ userId, agentId, title }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ title })
         .where(reachableAgent(userId, agentId))
-        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
+        .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -1043,7 +1040,7 @@ const updateAgentTitle = SqlSchema.findOneOption({
  * agent is woken by no review, comment, or check on its pull request.
  */
 export const noOpenPullRequest: SQL = notInArray(
-  sql`coalesce(${codingAgent.published}->>'state', '')`,
+  sql`coalesce(${agentTable.published}->>'state', '')`,
   [PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.DRAFT],
 );
 
@@ -1059,12 +1056,12 @@ const updateUnmovedArchived = SqlSchema.findAll({
   execute: ({ userId, agentId, seenSeq, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ archivedAt, archivedBy })
         .where(
           and(
             reachableAgent(userId, agentId),
-            isNull(codingAgent.archivedAt),
+            isNull(agentTable.archivedAt),
             // Note that a pull request reopened since the read moves no line, so it is read again here.
             noOpenPullRequest,
             exists(
@@ -1073,14 +1070,14 @@ const updateUnmovedArchived = SqlSchema.findAll({
                 .from(conversations)
                 .where(
                   and(
-                    eq(conversations.id, codingAgent.conversationId),
+                    eq(conversations.id, agentTable.conversationId),
                     eq(conversations.nextMessageSeq, seenSeq),
                   ),
                 ),
             ),
           ),
         )
-        .returning({ id: codingAgent.id }),
+        .returning({ id: agentTable.id }),
     ),
 });
 
@@ -1101,10 +1098,7 @@ const lockAgentTask = SqlSchema.void({
         .where(
           inArray(
             task.id,
-            db
-              .select({ id: codingAgent.taskId })
-              .from(codingAgent)
-              .where(eq(codingAgent.id, agentId)),
+            db.select({ id: agentTable.taskId }).from(agentTable).where(eq(agentTable.id, agentId)),
           ),
         )
         .for("share"),
@@ -1122,31 +1116,31 @@ const updateAgentArchived = SqlSchema.findOneOption({
   execute: ({ userId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ archivedAt, archivedBy })
         .where(
           archivedAt === null
             ? and(reachableAgent(userId, agentId), not(replacedOperator()))
             : reachableAgent(userId, agentId),
         )
-        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
+        .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
-const fillAgentTitle = SqlSchema.findAll({
+const fillAgentTitleRows = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, title: Schema.String }),
   Result: IdRowSchema,
   execute: ({ userId, agentId, title }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ title })
-        .where(and(reachableAgent(userId, agentId), isNull(codingAgent.title)))
-        .returning({ id: codingAgent.id }),
+        .where(and(reachableAgent(userId, agentId), isNull(agentTable.title)))
+        .returning({ id: agentTable.id }),
     ),
 });
 
-const settleAgentAuthor = SqlSchema.findOneOption({
+const settleAgentAuthorRow = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
@@ -1156,11 +1150,11 @@ const settleAgentAuthor = SqlSchema.findOneOption({
   execute: ({ userId, agentId, author }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         // Note that the author standing is kept, so the first session's word is the agent's for good.
-        .set({ author: sql`coalesce(${codingAgent.author}, ${author})` })
+        .set({ author: sql`coalesce(${agentTable.author}, ${author})` })
         .where(reachableAgent(userId, agentId))
-        .returning({ author: codingAgent.author }),
+        .returning({ author: agentTable.author }),
     ),
 });
 
@@ -1172,7 +1166,7 @@ const updateAgentAuthor = SqlSchema.void({
   }),
   execute: ({ userId, agentId, author }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ author }).where(reachableAgent(userId, agentId)),
+      db.update(agentTable).set({ author }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1190,11 +1184,11 @@ const findAgentRouting = SqlSchema.findOneOption({
         .select({
           runtime: conversations.runtime,
           nativeSession: conversations.nativeSession,
-          runnerTokenHash: codingAgent.runnerTokenHash,
-          payer: codingAgent.payer,
+          runnerTokenHash: agentTable.runnerTokenHash,
+          payer: agentTable.payer,
         })
-        .from(codingAgent)
-        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(reachableAgent(userId, agentId))
         .limit(1),
     ),
@@ -1206,9 +1200,9 @@ const findVisibleAgentWorkspace = SqlSchema.findOneOption({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ organizationId: codingAgent.organizationId })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId)))
+        .select({ organizationId: agentTable.organizationId })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentVisibleTo(userId)))
         .limit(1),
     ),
 });
@@ -1218,8 +1212,8 @@ function reachableAgentConversation(userId: string, agentId: string): SQL {
   return inArray(
     conversations.id,
     queryBuilder
-      .select({ id: codingAgent.conversationId })
-      .from(codingAgent)
+      .select({ id: agentTable.conversationId })
+      .from(agentTable)
       .where(reachableAgent(userId, agentId)),
   );
 }
@@ -1300,11 +1294,11 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
           conversationId: conversations.id,
           runtimeSessionId: conversations.runtimeSessionId,
         })
-        .from(codingAgent)
-        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
           and(
-            eq(codingAgent.runnerTokenHash, runnerTokenHash),
+            eq(agentTable.runnerTokenHash, runnerTokenHash),
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             isNull(conversations.deletedAt),
           ),
@@ -1338,11 +1332,11 @@ const findNativeAgentConversation = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({ conversationId: conversations.id })
-        .from(codingAgent)
-        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
           and(
-            eq(codingAgent.id, agentId),
+            eq(agentTable.id, agentId),
             inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
             isNull(conversations.deletedAt),
           ),
@@ -1365,9 +1359,9 @@ const findEveAgentsOfSession = SqlSchema.findAll({
   execute: ({ runtimeSessionId }) =>
     Database.use((db) =>
       db
-        .select({ agentId: codingAgent.id, conversationId: conversations.id })
+        .select({ agentId: agentTable.id, conversationId: conversations.id })
         .from(conversations)
-        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
+        .innerJoin(agentTable, eq(agentTable.conversationId, conversations.id))
         .where(
           and(
             eq(conversations.runtimeSessionId, runtimeSessionId),
@@ -1431,10 +1425,10 @@ const updateAgentRunnerToken = SqlSchema.findAll({
   execute: ({ userId, agentId, runnerTokenHash }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ runnerTokenHash })
         .where(reachableAgent(userId, agentId))
-        .returning({ id: codingAgent.id }),
+        .returning({ id: agentTable.id }),
     ),
 });
 
@@ -1458,7 +1452,7 @@ const updateAgentStep = SqlSchema.void({
   }),
   execute: ({ userId, agentId, lastStep }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ lastStep }).where(reachableAgent(userId, agentId)),
+      db.update(agentTable).set({ lastStep }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1466,7 +1460,7 @@ const updateAgentCompaction = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, at: Schema.Date }),
   execute: ({ userId, agentId, at }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ compactedAt: at }).where(reachableAgent(userId, agentId)),
+      db.update(agentTable).set({ compactedAt: at }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1482,12 +1476,12 @@ const findAgentContext = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          model: codingAgent.model,
-          contextWindow: codingAgent.contextWindow,
-          lastStep: codingAgent.lastStep,
-          compactedAt: codingAgent.compactedAt,
+          model: agentTable.model,
+          contextWindow: agentTable.contextWindow,
+          lastStep: agentTable.lastStep,
+          compactedAt: agentTable.compactedAt,
         })
-        .from(codingAgent)
+        .from(agentTable)
         .where(reachableAgent(userId, agentId))
         .limit(1),
     ),
@@ -1504,35 +1498,35 @@ function ofReachedTask({ userId, taskId, includeArchived }: typeof AgentsOfTaskS
   return and(
     reachableTask(userId, taskId),
     agentSeenBy(userId),
-    includeArchived ? undefined : isNull(codingAgent.archivedAt),
+    includeArchived ? undefined : isNull(agentTable.archivedAt),
   );
 }
 
 const findAgentsOfTask = SqlSchema.findAll({
   Request: AgentsOfTaskSchema,
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: (request) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
-        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
+        .innerJoin(task, eq(task.id, agentTable.taskId))
         .where(ofReachedTask(request))
-        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+        .orderBy(asc(agentTable.createdAt), asc(agentTable.id)),
     ),
 });
 
 const findAgentLinesOfTask = SqlSchema.findAll({
   Request: AgentsOfTaskSchema,
-  Result: CodingAgentLineRowSchema,
+  Result: AgentLineRowSchema,
   execute: (request) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_LINE_COLUMNS)
-        .from(codingAgent)
-        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .select(AGENT_LINE_COLUMNS)
+        .from(agentTable)
+        .innerJoin(task, eq(task.id, agentTable.taskId))
         .where(ofReachedTask(request))
-        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+        .orderBy(asc(agentTable.createdAt), asc(agentTable.id)),
     ),
 });
 
@@ -1549,10 +1543,10 @@ function containing(words: string): string {
  * spaced, because the catalog's own names live with the client.
  */
 const AGENT_SHOWN_NAME = sql<string>`coalesce(
-  ${agentGivenNameSql(codingAgent)},
-  ${codingAgent.title},
-  ${codingAgent.automationOrigin} ->> 'name',
-  replace(regexp_replace(${codingAgent.model}, '^[^/]*/', ''), '-', ' ')
+  ${agentGivenNameSql(agentTable)},
+  ${agentTable.title},
+  ${agentTable.automationOrigin} ->> 'name',
+  replace(regexp_replace(${agentTable.model}, '^[^/]*/', ''), '-', ' ')
 )`;
 
 /**
@@ -1574,7 +1568,7 @@ function agentNamed(query: string): SQL | undefined {
           queryBuilder
             .select({ one: task.id })
             .from(task)
-            .where(and(eq(task.id, codingAgent.taskId), ilike(task.name, pattern))),
+            .where(and(eq(task.id, agentTable.taskId), ilike(task.name, pattern))),
         ),
       );
     }),
@@ -1598,41 +1592,41 @@ function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
   return and(
     agentReachableBy(userId),
     eq(AGENT_WORKSPACE, organizationId),
-    ownOnly ? eq(codingAgent.userId, userId) : undefined,
-    includeArchived ? undefined : isNull(codingAgent.archivedAt),
-    taskId === null ? undefined : eq(codingAgent.taskId, taskId),
+    ownOnly ? eq(agentTable.userId, userId) : undefined,
+    includeArchived ? undefined : isNull(agentTable.archivedAt),
+    taskId === null ? undefined : eq(agentTable.taskId, taskId),
     words === null ? undefined : agentNamed(words),
     // Note that a repository is matched as GitHub matches one, its case aside.
     repository === null
       ? undefined
-      : eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
+      : eq(sql`lower(${agentTable.repository})`, repository.toLowerCase()),
   );
 }
 
 const findAgentsOfWorkspace = SqlSchema.findAll({
   Request: AgentsOfWorkspaceSchema,
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: (request) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
         .where(ofReachedWorkspace(request))
-        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
         .limit(request.limit),
     ),
 });
 
 const findAgentLinesOfWorkspace = SqlSchema.findAll({
   Request: AgentsOfWorkspaceSchema,
-  Result: CodingAgentLineRowSchema,
+  Result: AgentLineRowSchema,
   execute: (request) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_LINE_COLUMNS)
-        .from(codingAgent)
+        .select(AGENT_LINE_COLUMNS)
+        .from(agentTable)
         .where(ofReachedWorkspace(request))
-        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
         .limit(request.limit),
     ),
 });
@@ -1645,29 +1639,29 @@ const findTasklessAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          ...CODING_AGENT_LINE_COLUMNS,
+          ...AGENT_LINE_COLUMNS,
           pinnedAt: agentPin.pinnedAt,
           pinPosition: agentPin.position,
         })
-        .from(codingAgent)
+        .from(agentTable)
         .leftJoin(
           agentPin,
-          and(eq(agentPin.codingAgentId, codingAgent.id), eq(agentPin.userId, userId)),
+          and(eq(agentPin.codingAgentId, agentTable.id), eq(agentPin.userId, userId)),
         )
         .where(
           and(
-            isNull(codingAgent.taskId),
+            isNull(agentTable.taskId),
             agentReachableBy(userId),
-            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(agentTable.archivedAt),
           ),
         )
-        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id)),
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id)),
     ),
 });
 
 /** The `published` column as the service writes it (`StoredPullRequest`): the wire's pull request, and what the service alone reads, absent from a row written before it was kept. */
 const PublishedColumnSchema = Schema.Struct({
-  ...codingAgentPullRequestSchema.fields,
+  ...agentPullRequestSchema.fields,
   headSha: Schema.optionalKey(Schema.String),
   mergedAt: Schema.optionalKey(Schema.Number),
 });
@@ -1689,7 +1683,7 @@ const updateAgentPublished = SqlSchema.void({
   execute: ({ userId, agentId, published, publishedRead }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ published, publishedRead })
         .where(reachableAgent(userId, agentId)),
     ),
@@ -1699,7 +1693,7 @@ const updateAgentPublishedReadForgotten = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
-      db.update(codingAgent).set({ publishedRead: null }).where(reachableAgent(userId, agentId)),
+      db.update(agentTable).set({ publishedRead: null }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1712,8 +1706,8 @@ const findAgentPublished = SqlSchema.findOneOption({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ published: codingAgent.published, publishedRead: codingAgent.publishedRead })
-        .from(codingAgent)
+        .select({ published: agentTable.published, publishedRead: agentTable.publishedRead })
+        .from(agentTable)
         .where(reachableAgent(userId, agentId))
         .limit(1),
     ),
@@ -1726,24 +1720,24 @@ const findAgentsOfTasks = SqlSchema.findAll({
     includeArchived: Schema.Boolean,
   }),
   Result: Schema.Struct({
-    ...CodingAgentLineRowSchema.fields,
-    published: Schema.NullOr(codingAgentPullRequestSchema),
+    ...AgentLineRowSchema.fields,
+    published: Schema.NullOr(agentPullRequestSchema),
   }),
   execute: ({ userId, taskIds, includeArchived }) =>
     Database.use((db) =>
       db
-        .select({ ...CODING_AGENT_LINE_COLUMNS, published: codingAgent.published })
-        .from(codingAgent)
-        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .select({ ...AGENT_LINE_COLUMNS, published: agentTable.published })
+        .from(agentTable)
+        .innerJoin(task, eq(task.id, agentTable.taskId))
         .where(
           and(
             inArray(task.id, [...taskIds]),
             taskReachableBy(userId),
             agentSeenBy(userId),
-            includeArchived ? undefined : isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(agentTable.archivedAt),
           ),
         )
-        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+        .orderBy(asc(agentTable.createdAt), asc(agentTable.id)),
     ),
 });
 
@@ -1760,14 +1754,14 @@ const findMergedAgentOfTask = SqlSchema.findOneOption({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
-        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .innerJoin(task, eq(task.id, agentTable.taskId))
         .where(
           and(
             eq(task.id, taskId),
             taskReachableBy(userId),
-            isNotNull(sql`${codingAgent.published} ->> 'mergedAt'`),
+            isNotNull(sql`${agentTable.published} ->> 'mergedAt'`),
           ),
         )
         .limit(1),
@@ -1777,16 +1771,16 @@ const findMergedAgentOfTask = SqlSchema.findOneOption({
 const findPublishedAgentsById = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
-    ...CodingAgentRowSchema.fields,
-    published: Schema.NullOr(codingAgentPullRequestSchema),
+    ...AgentRowSchema.fields,
+    published: Schema.NullOr(agentPullRequestSchema),
   }),
   execute: ({ userId, agentIds }) =>
     Database.use((db) =>
       db
-        .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
-        .from(codingAgent)
-        .where(and(inArray(codingAgent.id, [...agentIds]), agentReachableBy(userId)))
-        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+        .select({ ...AGENT_COLUMNS, published: agentTable.published })
+        .from(agentTable)
+        .where(and(inArray(agentTable.id, [...agentIds]), agentReachableBy(userId)))
+        .orderBy(asc(agentTable.createdAt), asc(agentTable.id)),
     ),
 });
 
@@ -1806,19 +1800,19 @@ const findStartedFrom = SqlSchema.findAll({
       // Each source's own oldest are kept, so a source started from many hides none of another's.
       const ranked = db
         .select({
-          id: codingAgent.id,
-          title: codingAgent.title,
-          startedFrom: codingAgent.startedFrom,
-          createdAt: codingAgent.createdAt,
-          rank: sql<number>`row_number() over (partition by (${codingAgent.startedFrom}->>'agentId') order by ${codingAgent.createdAt}, ${codingAgent.id})`.as(
+          id: agentTable.id,
+          title: agentTable.title,
+          startedFrom: agentTable.startedFrom,
+          createdAt: agentTable.createdAt,
+          rank: sql<number>`row_number() over (partition by (${agentTable.startedFrom}->>'agentId') order by ${agentTable.createdAt}, ${agentTable.id})`.as(
             "rank",
           ),
         })
-        .from(codingAgent)
+        .from(agentTable)
         .where(
           and(
             // Note that the source is matched on the expression its index is built on.
-            inArray(sql`(${codingAgent.startedFrom}->>'agentId')`, [...agentIds]),
+            inArray(sql`(${agentTable.startedFrom}->>'agentId')`, [...agentIds]),
             agentReachableBy(userId),
           ),
         )
@@ -1837,16 +1831,16 @@ const findAgentsOnBranches = SqlSchema.findAll({
     branches: Schema.Array(Schema.String),
     limit: Schema.Number,
   }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ repository, branches, limit }) =>
     Database.use((db) =>
       db
-        .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
-        .from(codingAgent)
+        .select({ ...AGENT_COLUMNS, userId: agentTable.userId })
+        .from(agentTable)
         .where(
-          and(eq(codingAgent.repository, repository), inArray(codingAgent.branch, [...branches])),
+          and(eq(agentTable.repository, repository), inArray(agentTable.branch, [...branches])),
         )
-        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+        .orderBy(desc(agentTable.createdAt), asc(agentTable.id))
         .limit(limit),
     ),
 });
@@ -1857,33 +1851,29 @@ const findAgentsOnPullRequest = SqlSchema.findAll({
     number: Schema.Number,
     limit: Schema.Number,
   }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ repository, number, limit }) =>
     Database.use((db) =>
       db
-        .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
-        .from(codingAgent)
+        .select({ ...AGENT_COLUMNS, userId: agentTable.userId })
+        .from(agentTable)
         .where(
           and(
-            eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
-            eq(sql`(${codingAgent.published}->>'number')::int`, number),
+            eq(sql`lower(${agentTable.repository})`, repository.toLowerCase()),
+            eq(sql`(${agentTable.published}->>'number')::int`, number),
           ),
         )
-        .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+        .orderBy(desc(agentTable.createdAt), asc(agentTable.id))
         .limit(limit),
     ),
 });
 
 const findAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
-      db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
-        .where(reachableAgent(userId, agentId))
-        .limit(1),
+      db.select(AGENT_COLUMNS).from(agentTable).where(reachableAgent(userId, agentId)).limit(1),
     ),
 });
 
@@ -1942,17 +1932,17 @@ const deleteAgentPin = SqlSchema.findOneOption({
  * archive. Note that these leave out the plan's text and the prompt, the bulk
  * of a row, since every Luke tool call an agent makes reads its agent.
  */
-const CODING_AGENT_HEADER_COLUMNS = {
-  id: codingAgent.id,
-  userId: codingAgent.userId,
-  organizationId: codingAgent.organizationId,
-  taskId: codingAgent.taskId,
-  repository: codingAgent.repository,
-  title: codingAgent.title,
-  archivedAt: codingAgent.archivedAt,
+const AGENT_HEADER_COLUMNS = {
+  id: agentTable.id,
+  userId: agentTable.userId,
+  organizationId: agentTable.organizationId,
+  taskId: agentTable.taskId,
+  repository: agentTable.repository,
+  title: agentTable.title,
+  archivedAt: agentTable.archivedAt,
 } as const;
 
-const CodingAgentHeaderRowSchema = Schema.Struct({
+const AgentHeaderRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   organizationId: Schema.String,
@@ -1964,25 +1954,25 @@ const CodingAgentHeaderRowSchema = Schema.Struct({
 
 const findAgentHeaderOfConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
-  Result: CodingAgentHeaderRowSchema,
+  Result: AgentHeaderRowSchema,
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_HEADER_COLUMNS)
-        .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
+        .select(AGENT_HEADER_COLUMNS)
+        .from(agentTable)
+        .where(and(eq(agentTable.conversationId, conversationId), agentReachableBy(userId))),
     ),
 });
 
 const findAgentOfConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
+        .where(and(eq(agentTable.conversationId, conversationId), agentReachableBy(userId)))
         .limit(1),
     ),
 });
@@ -1993,9 +1983,9 @@ const deleteAgentRow = SqlSchema.findAll({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .delete(codingAgent)
+        .delete(agentTable)
         .where(reachableAgent(userId, agentId))
-        .returning({ conversationId: codingAgent.conversationId, txid: TXID }),
+        .returning({ conversationId: agentTable.conversationId, txid: TXID }),
     ),
 });
 
@@ -2021,10 +2011,10 @@ const deleteConversationRow = SqlSchema.void({
  * Nothing where the account reaches no such task or is no member of the
  * workspace.
  */
-export function createCodingAgent(
+export function createAgent(
   userId: string,
-  started: NewCodingAgent,
-): Effect.Effect<Option.Option<CodingAgentStarted>, StoreFailure, DatabaseServices> {
+  started: NewAgent,
+): Effect.Effect<Option.Option<AgentStarted>, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -2039,7 +2029,7 @@ export function createCodingAgent(
         }
         const organizationId = reached.value.organizationId;
         // A member's operator is one per workspace, so a Start of it answers the one standing.
-        if (started.kind === CODING_AGENT_KIND.OPERATOR) {
+        if (started.kind === AGENT_KIND.OPERATOR) {
           const standing = yield* findLiveOperator({ userId, organizationId });
           if (Option.isSome(standing))
             return Option.some({ agent: standing.value, created: false });
@@ -2075,8 +2065,8 @@ export function createCodingAgent(
           mentionedServers: storedServers(started.mentionedServers ?? []),
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
           payer: started.payer ?? null,
-          kind: started.kind ?? CODING_AGENT_KIND.CODER,
-          machine: started.machine ?? CODING_AGENT_MACHINE.VERCEL,
+          kind: started.kind ?? AGENT_KIND.CODER,
+          machine: started.machine ?? AGENT_MACHINE.VERCEL,
           deviceId: started.deviceId ?? null,
           now,
         });
@@ -2101,10 +2091,7 @@ export function createCodingAgent(
  * its conversation, with every message and turn the conversation holds,
  * which is none. Answers whether the account reached such an agent.
  */
-export function discardCodingAgent(
-  userId: string,
-  agentId: string,
-): CodingAgentStoreEffect<boolean> {
+export function discardAgent(userId: string, agentId: string): AgentStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -2118,9 +2105,9 @@ export function discardCodingAgent(
 }
 
 /** What a delete that stopped the agent first tells it. */
-export interface CodingAgentDeleteGuard<R> {
+export interface AgentDeleteGuard<R> {
   /** Whether the agent, read under its conversation's lock, still stands as the caller's Stop left it; false refuses the delete. */
-  readonly standsStopped: (agent: CodingAgent) => Effect.Effect<boolean, StoreFailure, R>;
+  readonly standsStopped: (agent: Agent) => Effect.Effect<boolean, StoreFailure, R>;
   /** Run under that lock before anything is deleted, given the agent's conversation. */
   readonly beforeDelete: (
     conversationIds: readonly string[],
@@ -2179,10 +2166,10 @@ const deleteAgentCallWords = SqlSchema.void({
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
-export function deleteCodingAgent<R = never>(
+export function deleteAgent<R = never>(
   userId: string,
   agentId: string,
-  guard: CodingAgentDeleteGuard<R>,
+  guard: AgentDeleteGuard<R>,
 ): Effect.Effect<
   Option.Option<{ readonly txid: string }>,
   StoreFailure | TaskAgentUnstopped,
@@ -2214,20 +2201,20 @@ export function deleteCodingAgent<R = never>(
 }
 
 /** Every agent started on the task, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such task. */
-export function listCodingAgents(
+export function listAgents(
   userId: string,
   taskId: string,
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly CodingAgent[]> {
+): AgentStoreEffect<readonly Agent[]> {
   return findAgentsOfTask({ userId, taskId, includeArchived: options.includeArchived ?? false });
 }
 
 /** Every agent started on the task as its line reads, by any member, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account reaches no such task. */
-export function listCodingAgentLines(
+export function listAgentLines(
   userId: string,
   taskId: string,
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly CodingAgentLine[]> {
+): AgentStoreEffect<readonly AgentLine[]> {
   return findAgentLinesOfTask({
     userId,
     taskId,
@@ -2269,20 +2256,20 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
  * the words where some are given, and at most `limit`; a workspace the account is not in has
  * none.
  */
-export function listWorkspaceCodingAgents(
+export function listWorkspaceAgents(
   userId: string,
   organizationId: string,
   options: WorkspaceAgentsAsked,
-): CodingAgentStoreEffect<readonly CodingAgent[]> {
+): AgentStoreEffect<readonly Agent[]> {
   return findAgentsOfWorkspace(workspaceRequest(userId, organizationId, options));
 }
 
-/** The workspace's agents as `listWorkspaceCodingAgents` lists them, each as its line reads. */
-export function listWorkspaceCodingAgentLines(
+/** The workspace's agents as `listWorkspaceAgents` lists them, each as its line reads. */
+export function listWorkspaceAgentLines(
   userId: string,
   organizationId: string,
   options: WorkspaceAgentsAsked,
-): CodingAgentStoreEffect<readonly CodingAgentLine[]> {
+): AgentStoreEffect<readonly AgentLine[]> {
   return findAgentLinesOfWorkspace(workspaceRequest(userId, organizationId, options));
 }
 
@@ -2292,10 +2279,10 @@ export function listWorkspaceCodingAgentLines(
  * each as its line reads with the account's own pin of it: what the plan
  * list carries beside the plans, read by the same gate.
  */
-export function listTasklessCodingAgents(
+export function listTasklessAgentRows(
   userId: string,
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly TasklessCodingAgent[]> {
+): AgentStoreEffect<readonly TasklessAgentRow[]> {
   return findTasklessAgents({ userId, includeArchived: options.includeArchived ?? false });
 }
 
@@ -2320,7 +2307,7 @@ const findTaskNames = SqlSchema.findAll({
 export function taskNamesOf(
   userId: string,
   taskIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, AgentTaskName>> {
+): AgentStoreEffect<ReadonlyMap<string, AgentTaskName>> {
   const ids = [...new Set(taskIds)];
   if (ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(
@@ -2330,23 +2317,23 @@ export function taskNamesOf(
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */
-export interface PublishedCodingAgent {
-  readonly agent: CodingAgent;
-  readonly published: CodingAgentPullRequest | null;
+export interface PublishedAgent {
+  readonly agent: Agent;
+  readonly published: AgentPullRequest | null;
 }
 
 /** One agent's line, and the pull request from its branch as GitHub last answered; null before a read found one. */
-export interface PublishedCodingAgentLine {
-  readonly agent: CodingAgentLine;
-  readonly published: CodingAgentPullRequest | null;
+export interface PublishedAgentLine {
+  readonly agent: AgentLine;
+  readonly published: AgentPullRequest | null;
 }
 
 /** Every agent standing on the plans named, by any member, each as its line reads with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
-export function listPublishedCodingAgents(
+export function listPublishedAgents(
   userId: string,
   taskIds: readonly string[],
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly PublishedCodingAgentLine[]> {
+): AgentStoreEffect<readonly PublishedAgentLine[]> {
   if (taskIds.length === 0) return Effect.succeed([]);
   const includeArchived = options.includeArchived === true;
   return Effect.map(findAgentsOfTasks({ userId, taskIds, includeArchived }), (rows) =>
@@ -2355,10 +2342,10 @@ export function listPublishedCodingAgents(
 }
 
 /** The agents named, by id, on a plan or with none, archived or not, each with what it published, in the order they were started: the read opening an agent's tab makes, so one of a workspace the account is not in names none. None asked, none read. */
-export function listPublishedCodingAgentsById(
+export function listPublishedAgentsById(
   userId: string,
   agentIds: readonly string[],
-): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+): AgentStoreEffect<readonly PublishedAgent[]> {
   if (agentIds.length === 0) return Effect.succeed([]);
   return Effect.map(findPublishedAgentsById({ userId, agentIds }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
@@ -2369,7 +2356,7 @@ export function listPublishedCodingAgentsById(
 const CONTINUATIONS_PER_AGENT = 20;
 
 /** One agent started from another: its id, its title, null before it has one, and the message it forked the other at where it was forked rather than continued. */
-export interface CodingAgentStartedFromIt {
+export interface AgentStartedFromIt {
   readonly agentId: string;
   readonly title: string | null;
   readonly messageId?: string;
@@ -2384,11 +2371,11 @@ export interface CodingAgentStartedFromIt {
 export function continuationsOf(
   userId: string,
   agentIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, readonly CodingAgentStartedFromIt[]>> {
+): AgentStoreEffect<ReadonlyMap<string, readonly AgentStartedFromIt[]>> {
   if (agentIds.length === 0) return Effect.succeed(new Map());
   const perSource = CONTINUATIONS_PER_AGENT;
   return Effect.map(findStartedFrom({ userId, agentIds, perSource }), (rows) => {
-    const bySource = new Map<string, CodingAgentStartedFromIt[]>();
+    const bySource = new Map<string, AgentStartedFromIt[]>();
     for (const { id, title, startedFrom } of rows) {
       if (startedFrom === null) continue;
       const each = bySource.get(startedFrom.agentId) ?? [];
@@ -2404,20 +2391,17 @@ export function continuationsOf(
 }
 
 /** The pull request from the agent's branch as GitHub just answered, or null where it answered none, with the read that found it where one is named; nothing written for an agent of a workspace the account is not in. */
-export function recordCodingAgentPublished(
+export function recordAgentPublished(
   userId: string,
   agentId: string,
   published: StoredPullRequest | null,
   read?: StoredPublishedRead,
-): CodingAgentStoreEffect<void> {
+): AgentStoreEffect<void> {
   return updateAgentPublished({ userId, agentId, published, publishedRead: read ?? null });
 }
 
 /** The row's read of GitHub let go, so its pull request is no longer answered in GitHub's place; nothing written for an agent of a workspace the account is not in. */
-export function forgetCodingAgentPublishedRead(
-  userId: string,
-  agentId: string,
-): CodingAgentStoreEffect<void> {
+export function forgetAgentPublishedRead(userId: string, agentId: string): AgentStoreEffect<void> {
   return updateAgentPublishedReadForgotten({ userId, agentId });
 }
 
@@ -2425,15 +2409,15 @@ export function forgetCodingAgentPublishedRead(
 export function taskHasMergedPullRequest(
   userId: string,
   taskId: string,
-): CodingAgentStoreEffect<boolean> {
+): AgentStoreEffect<boolean> {
   return Effect.map(findMergedAgentOfTask({ userId, taskId }), Option.isSome);
 }
 
 /** The pull request the agent's row keeps as GitHub last answered, whole; null before a read found one, and for an agent the account does not reach. */
-export function readCodingAgentPublished(
+export function readAgentPublished(
   userId: string,
   agentId: string,
-): CodingAgentStoreEffect<StoredPullRequest | null> {
+): AgentStoreEffect<StoredPullRequest | null> {
   return Effect.map(findAgentPublished({ userId, agentId }), (row) =>
     Option.isSome(row) ? row.value.published : null,
   );
@@ -2446,10 +2430,10 @@ export interface KeptPublished {
 }
 
 /** The row's pull request with the read that wrote it; null where no read is kept, and for an agent the account does not reach. */
-export function readCodingAgentKeptPublished(
+export function readAgentKeptPublished(
   userId: string,
   agentId: string,
-): CodingAgentStoreEffect<KeptPublished | null> {
+): AgentStoreEffect<KeptPublished | null> {
   return Effect.map(findAgentPublished({ userId, agentId }), (row) =>
     Option.isSome(row) && row.value.publishedRead !== null
       ? { published: row.value.published, read: row.value.publishedRead }
@@ -2458,9 +2442,9 @@ export function readCodingAgentKeptPublished(
 }
 
 /** One agent and the account that owns it, as a delivery from GitHub that names a repository and a branch finds it. */
-export interface OwnedCodingAgent {
+export interface OwnedAgent {
   readonly userId: string;
-  readonly agent: CodingAgent;
+  readonly agent: Agent;
 }
 
 /**
@@ -2470,11 +2454,11 @@ export interface OwnedCodingAgent {
  * delivery names a repository and a branch and nothing of who started an
  * agent on them; what each answers is read again on its owner's own token.
  */
-export function listCodingAgentsOnBranches(
+export function listAgentsOnBranches(
   repository: string,
   branches: readonly string[],
   limit: number,
-): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
+): AgentStoreEffect<readonly OwnedAgent[]> {
   if (branches.length === 0) return Effect.succeed([]);
   return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
     rows.map((agent) => ({ userId: agent.userId, agent })),
@@ -2488,39 +2472,36 @@ export function listCodingAgentsOnBranches(
  * it names no branch, as a comment's does. Like the read by branches, it
  * names no account.
  */
-export function listCodingAgentsOnPullRequest(
+export function listAgentsOnPullRequest(
   repository: string,
   number: number,
   limit: number,
-): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
+): AgentStoreEffect<readonly OwnedAgent[]> {
   return Effect.map(findAgentsOnPullRequest({ repository, number, limit }), (rows) =>
     rows.map((agent) => ({ userId: agent.userId, agent })),
   );
 }
 
 /** The account's agent a Start made under its key, or nothing where no Start under it made one. */
-export function readCodingAgentByKey(
+export function readAgentByKey(
   userId: string,
   idempotencyKey: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+): AgentStoreEffect<Option.Option<Agent>> {
   return findAgentByKey({ userId, idempotencyKey });
 }
 
 /** The agent under this id, or nothing for an agent of a workspace the account is not in. */
-export function readCodingAgent(
-  userId: string,
-  agentId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+export function readAgent(userId: string, agentId: string): AgentStoreEffect<Option.Option<Agent>> {
   return findAgent({ userId, agentId });
 }
 
 /** The agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent of a workspace the account is not in. */
-export function updateCodingAgentChoice(
+export function updateAgentChoice(
   userId: string,
   agentId: string,
   choice: ModelChoice,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return updateAgentChoice({
+): AgentStoreEffect<Option.Option<Agent>> {
+  return updateAgentChoiceRow({
     userId,
     agentId,
     model: choice.model,
@@ -2530,12 +2511,16 @@ export function updateCodingAgentChoice(
 }
 
 /** The MCP servers switched off for the agent, the whole list, which its next turn on is not handed; nothing for an agent of a workspace the account is not in. */
-export function updateCodingAgentServers(
+export function updateAgentServers(
   userId: string,
   agentId: string,
   disabledServers: readonly string[],
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return updateAgentServers({ userId, agentId, disabledServers: storedServers(disabledServers) });
+): AgentStoreEffect<Option.Option<Agent>> {
+  return updateAgentServersRow({
+    userId,
+    agentId,
+    disabledServers: storedServers(disabledServers),
+  });
 }
 
 /**
@@ -2586,10 +2571,10 @@ export function dispatchMentioningServers<E, R>(
  * next turn, never lost. None for a conversation of no agent the account
  * reaches.
  */
-export function takeCodingAgentMentionedServers(
+export function takeAgentMentionedServers(
   userId: string,
   conversationId: string,
-): CodingAgentStoreEffect<readonly string[]> {
+): AgentStoreEffect<readonly string[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -2603,19 +2588,16 @@ export function takeCodingAgentMentionedServers(
 }
 
 /** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */
-export function updateCodingAgentBranch(
+export function updateAgentBranch(
   userId: string,
   agentId: string,
   branch: string | null,
-): CodingAgentStoreEffect<void> {
-  return updateAgentBranch({ userId, agentId, branch });
+): AgentStoreEffect<void> {
+  return updateAgentBranchRow({ userId, agentId, branch });
 }
 
 /** The account's turn marked as one a step of ran at standard speed because Anthropic refused it Fast; nothing written for a turn the account does not own. */
-export function recordTurnFastRefused(
-  userId: string,
-  turnId: string,
-): CodingAgentStoreEffect<void> {
+export function recordTurnFastRefused(userId: string, turnId: string): AgentStoreEffect<void> {
   return markTurnFastRefused({ userId, turnId });
 }
 
@@ -2637,7 +2619,7 @@ export function reserveTurnPlanNotes(
   userId: string,
   conversationId: string,
   requested: number,
-): CodingAgentStoreEffect<Option.Option<TurnPlanNotes>> {
+): AgentStoreEffect<Option.Option<TurnPlanNotes>> {
   return reserveTurnNotes({ userId, conversationId, requested });
 }
 
@@ -2647,36 +2629,36 @@ export function settleTurnPlanNotes(
   turnId: string,
   requested: number,
   saved: number,
-): CodingAgentStoreEffect<void> {
+): AgentStoreEffect<void> {
   return releaseTurnNotes({ userId, turnId, released: requested - saved });
 }
 
 /** The agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent of a workspace the account is not in. */
-export function renameCodingAgent(
+export function renameAgent(
   userId: string,
   agentId: string,
   title: string | null,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return Effect.map(renameCodingAgentCommitted(userId, agentId, title), Option.map(agentOf));
+): AgentStoreEffect<Option.Option<Agent>> {
+  return Effect.map(renameAgentCommitted(userId, agentId, title), Option.map(agentOf));
 }
 
 /** An agent as a write left it, and the transaction it committed in; none where it changed no row. */
-export interface CodingAgentCommitted {
-  readonly agent: CodingAgent;
+export interface AgentCommitted {
+  readonly agent: Agent;
   readonly txid?: string;
 }
 
 /** The agent's row without the transaction it was returned with. */
-function agentOf({ agent }: CodingAgentCommitted): CodingAgent {
+function agentOf({ agent }: AgentCommitted): Agent {
   return agent;
 }
 
-/** The agent renamed, as `renameCodingAgent` renames it, and the transaction its row was written in. */
-export function renameCodingAgentCommitted(
+/** The agent renamed, as `renameAgent` renames it, and the transaction its row was written in. */
+export function renameAgentCommitted(
   userId: string,
   agentId: string,
   title: string | null,
-): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
+): AgentStoreEffect<Option.Option<AgentCommitted>> {
   return Effect.map(
     updateAgentTitle({ userId, agentId, title }),
     Option.map(({ txid, ...agent }) => ({ agent, txid })),
@@ -2684,14 +2666,14 @@ export function renameCodingAgentCommitted(
 }
 
 /** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. An archive, this one and every other below, settles the agent's open inbox items in the same transaction, and bringing the agent back opens again those its archive settled (`inbox-settle.ts`). Nothing for an agent of a workspace the account is not in. */
-export function archiveCodingAgent(
+export function archiveAgent(
   userId: string,
   agentId: string,
   archived: boolean,
-  archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  archivedBy: StoredArchive = { by: AGENT_ARCHIVER.MEMBER, userId },
+): AgentStoreEffect<Option.Option<Agent>> {
   return Effect.map(
-    archiveCodingAgentCommitted(userId, agentId, archived, archivedBy),
+    archiveAgentCommitted(userId, agentId, archived, archivedBy),
     Option.map(agentOf),
   );
 }
@@ -2708,16 +2690,16 @@ const updateLiveOperatorArchived = SqlSchema.findAll({
   execute: ({ userId, organizationId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ archivedAt, archivedBy })
         .where(
           and(
-            eq(codingAgent.id, agentId),
+            eq(agentTable.id, agentId),
             liveOperatorOf(userId, organizationId),
-            workspaceReachableBy(userId, codingAgent.organizationId),
+            workspaceReachableBy(userId, agentTable.organizationId),
           ),
         )
-        .returning({ id: codingAgent.id }),
+        .returning({ id: agentTable.id }),
     ),
 });
 
@@ -2725,7 +2707,7 @@ const updateLiveOperatorArchived = SqlSchema.findAll({
 export function readStandingOperator(
   userId: string,
   organizationId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+): AgentStoreEffect<Option.Option<Agent>> {
   return findLiveOperator({ userId, organizationId });
 }
 
@@ -2735,7 +2717,7 @@ export function readStandingOperator(
  * archive by hand and the agent tool refuse it by this, and their writes
  * change nothing where it holds.
  */
-export function operatorReplaced(userId: string, agentId: string): CodingAgentStoreEffect<boolean> {
+export function operatorReplaced(userId: string, agentId: string): AgentStoreEffect<boolean> {
   return Effect.map(findReplacedOperator({ userId, agentId }), (rows) => rows.length > 0);
 }
 
@@ -2751,7 +2733,7 @@ export function archiveOperatorAgent(
   userId: string,
   organizationId: string,
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<string>> {
+): AgentStoreEffect<Option.Option<string>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -2761,7 +2743,7 @@ export function archiveOperatorAgent(
           organizationId,
           agentId,
           archivedAt: now,
-          archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+          archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId },
         });
         yield* settleAgentInboxItems(
           archived.map(({ id }) => id),
@@ -2780,12 +2762,12 @@ function archivedOperatorOf(
   agentId: string,
 ): SQL | undefined {
   return and(
-    eq(codingAgent.id, agentId),
-    eq(codingAgent.organizationId, organizationId),
-    eq(codingAgent.userId, userId),
-    eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
-    isNotNull(codingAgent.archivedAt),
-    workspaceReachableBy(userId, codingAgent.organizationId),
+    eq(agentTable.id, agentId),
+    eq(agentTable.organizationId, organizationId),
+    eq(agentTable.userId, userId),
+    eq(agentTable.kind, AGENT_KIND.OPERATOR),
+    isNotNull(agentTable.archivedAt),
+    workspaceReachableBy(userId, agentTable.organizationId),
   );
 }
 
@@ -2795,12 +2777,12 @@ const findArchivedOperator = SqlSchema.findOneOption({
     organizationId: Schema.String,
     agentId: Schema.String,
   }),
-  Result: CodingAgentRowSchema,
+  Result: AgentRowSchema,
   execute: ({ userId, organizationId, agentId }) =>
     Database.use((db) =>
       db
-        .select(CODING_AGENT_COLUMNS)
-        .from(codingAgent)
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
         .where(archivedOperatorOf(userId, organizationId, agentId))
         .limit(1),
     ),
@@ -2816,10 +2798,10 @@ const unarchiveOperator = SqlSchema.findOneOption({
   execute: ({ userId, organizationId, agentId }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ archivedAt: null, archivedBy: null })
         .where(and(archivedOperatorOf(userId, organizationId, agentId), not(replacedOperator())))
-        .returning({ ...CODING_AGENT_COLUMNS, txid: TXID }),
+        .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -2831,12 +2813,12 @@ export function readArchivedOperator(
   userId: string,
   organizationId: string,
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+): AgentStoreEffect<Option.Option<Agent>> {
   return findArchivedOperator({ userId, organizationId, agentId });
 }
 
 /** What a restore of an operator came to: the one brought back, the transaction it went in, and the one it archived in its place. */
-export interface OperatorRestored extends CodingAgentCommitted {
+export interface OperatorRestored extends AgentCommitted {
   readonly retiredId: string | undefined;
 }
 
@@ -2855,7 +2837,7 @@ export function restoreOperatorAgent(
   organizationId: string,
   agentId: string,
   standingId: string | undefined,
-): CodingAgentStoreEffect<Option.Option<OperatorRestored>> {
+): AgentStoreEffect<Option.Option<OperatorRestored>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client
       .withTransaction(
@@ -2874,7 +2856,7 @@ export function restoreOperatorAgent(
                 organizationId,
                 agentId: standing.value.id,
                 archivedAt,
-                archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
+                archivedBy: { by: AGENT_ARCHIVER.MEMBER, userId },
               })
             : [];
           yield* settleAgentInboxItems(
@@ -2896,13 +2878,13 @@ export function restoreOperatorAgent(
   );
 }
 
-/** The agent archived or brought back, as `archiveCodingAgent` does it, and the transaction its row was written in. */
-export function archiveCodingAgentCommitted(
+/** The agent archived or brought back, as `archiveAgent` does it, and the transaction its row was written in. */
+export function archiveAgentCommitted(
   userId: string,
   agentId: string,
   archived: boolean,
-  archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
-): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
+  archivedBy: StoredArchive = { by: AGENT_ARCHIVER.MEMBER, userId },
+): AgentStoreEffect<Option.Option<AgentCommitted>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -2965,10 +2947,10 @@ const archiveIfUnarchived = SqlSchema.findAll({
   execute: ({ userId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ archivedAt, archivedBy })
-        .where(and(reachableAgent(userId, agentId), isNull(codingAgent.archivedAt)))
-        .returning({ id: codingAgent.id }),
+        .where(and(reachableAgent(userId, agentId), isNull(agentTable.archivedAt)))
+        .returning({ id: agentTable.id }),
     ),
 });
 
@@ -2979,12 +2961,12 @@ const archiveIfUnarchived = SqlSchema.findAll({
  * the read and the stamp leaves an agent archived at work. An agent
  * archived already keeps the archive standing.
  */
-export function archiveIdleCodingAgent(
+export function archiveIdleAgent(
   userId: string,
   agentId: string,
   archivedBy: StoredArchive,
-  idle: (agent: CodingAgent) => CodingAgentStoreEffect<boolean>,
-): CodingAgentStoreEffect<IdleArchive> {
+  idle: (agent: Agent) => AgentStoreEffect<boolean>,
+): AgentStoreEffect<IdleArchive> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -3019,25 +3001,25 @@ const unarchiveIfStamped = SqlSchema.findAll({
   execute: ({ userId, agentId, archivedAt }) =>
     Database.use((db) =>
       db
-        .update(codingAgent)
+        .update(agentTable)
         .set({ archivedAt: null, archivedBy: null })
         .where(
           and(
             reachableAgent(userId, agentId),
-            eq(codingAgent.archivedAt, archivedAt),
+            eq(agentTable.archivedAt, archivedAt),
             not(replacedOperator()),
           ),
         )
-        .returning({ id: codingAgent.id }),
+        .returning({ id: agentTable.id }),
     ),
 });
 
 /** Brings the agent back, but only from the archive stamped at `archivedAt`, the one its reader saw, so an archive made since stands; answers whether it was brought back. */
-export function unarchiveCodingAgentFrom(
+export function unarchiveAgentFrom(
   userId: string,
   agentId: string,
   archivedAt: Date,
-): CodingAgentStoreEffect<boolean> {
+): AgentStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -3061,25 +3043,22 @@ export function unarchiveCodingAgentFrom(
  * nor for an agent on a plan, which stands under its plan rather than in
  * the sidebar, so a pin of it would be read nowhere.
  */
-export function pinCodingAgent(
+export function pinAgent(
   userId: string,
   agentId: string,
   pinned: boolean,
   position?: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return Effect.map(
-    pinCodingAgentCommitted(userId, agentId, pinned, position),
-    Option.map(agentOf),
-  );
+): AgentStoreEffect<Option.Option<Agent>> {
+  return Effect.map(pinAgentCommitted(userId, agentId, pinned, position), Option.map(agentOf));
 }
 
-/** The account's pin of the agent set, as `pinCodingAgent` sets it, and the transaction the pin was written in; none where it stood as asked. */
-export function pinCodingAgentCommitted(
+/** The account's pin of the agent set, as `pinAgent` sets it, and the transaction the pin was written in; none where it stood as asked. */
+export function pinAgentCommitted(
   userId: string,
   agentId: string,
   pinned: boolean,
   position?: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgentCommitted>> {
+): AgentStoreEffect<Option.Option<AgentCommitted>> {
   return Effect.gen(function* () {
     const found = yield* findAgent({ userId, agentId });
     if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
@@ -3100,9 +3079,9 @@ const findAgentConversation = SqlSchema.findOneOption({
   execute: (agentId) =>
     Database.use((db) =>
       db
-        .select({ userId: codingAgent.userId, conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .where(eq(codingAgent.id, agentId)),
+        .select({ userId: agentTable.userId, conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .where(eq(agentTable.id, agentId)),
     ),
 });
 
@@ -3112,24 +3091,24 @@ const findAgentConversation = SqlSchema.findOneOption({
  * itself, such as the agent a run was claimed for, because it reads past
  * any account's gate.
  */
-export function codingAgentConversation(
+export function agentConversation(
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<ConversationTarget>> {
+): AgentStoreEffect<Option.Option<ConversationTarget>> {
   return findAgentConversation(agentId);
 }
 
 /**
- * Archives the agent as `archiveCodingAgent` does, but only where it stands
+ * Archives the agent as `archiveAgent` does, but only where it stands
  * unarchived, its conversation's lines have run no further than the
  * `seenSeq` its reader saw, so an agent a message woke since stands, and it
  * has no pull request open (`noOpenPullRequest`); answers whether it was
  * archived.
  */
-export function archiveUnmovedCodingAgent(
+export function archiveUnmovedAgent(
   userId: string,
   agentId: string,
   seenSeq: number,
-): CodingAgentStoreEffect<boolean> {
+): AgentStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -3152,12 +3131,12 @@ export function archiveUnmovedCodingAgent(
 }
 
 /** The title written where the agent has none yet, so a name the developer gave stands whatever this carries; answers whether it was written. */
-export function fillCodingAgentTitle(
+export function fillAgentTitle(
   userId: string,
   agentId: string,
   title: string,
-): CodingAgentStoreEffect<boolean> {
-  return Effect.map(fillAgentTitle({ userId, agentId, title }), (rows) => rows.length > 0);
+): AgentStoreEffect<boolean> {
+  return Effect.map(fillAgentTitleRows({ userId, agentId, title }), (rows) => rows.length > 0);
 }
 
 /**
@@ -3166,12 +3145,12 @@ export function fillCodingAgentTitle(
  * word never moves what the first one's instructions and checkout used;
  * nothing for an agent of a workspace the account is not in.
  */
-export function settleCodingAgentAuthor(
+export function settleAgentAuthor(
   userId: string,
   agentId: string,
-  author: CodingAgentAuthor,
-): CodingAgentStoreEffect<Option.Option<CodingAgentAuthor>> {
-  return Effect.map(settleAgentAuthor({ userId, agentId, author }), (row) =>
+  author: AgentAuthor,
+): AgentStoreEffect<Option.Option<AgentAuthor>> {
+  return Effect.map(settleAgentAuthorRow({ userId, agentId, author }), (row) =>
     Option.map(row, (settled) => settled.author),
   );
 }
@@ -3182,19 +3161,19 @@ export function settleCodingAgentAuthor(
  * once their token was refused; nothing for an agent of a workspace the
  * account is not in.
  */
-export function recordCodingAgentAuthor(
+export function recordAgentAuthor(
   userId: string,
   agentId: string,
-  author: CodingAgentAuthor,
-): CodingAgentStoreEffect<void> {
+  author: AgentAuthor,
+): AgentStoreEffect<void> {
   return updateAgentAuthor({ userId, agentId, author });
 }
 
-/** How the agent is run (`CodingAgentRouting`); nothing for an agent of a workspace the account is not in. */
-export function readCodingAgentRouting(
+/** How the agent is run (`AgentRouting`); nothing for an agent of a workspace the account is not in. */
+export function readAgentRouting(
   userId: string,
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgentRouting>> {
+): AgentStoreEffect<Option.Option<AgentRouting>> {
   return Effect.map(
     findAgentRouting({ userId, agentId }),
     Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
@@ -3205,7 +3184,7 @@ export function readCodingAgentRouting(
 export function readVisibleAgentWorkspace(
   userId: string,
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<string>> {
+): AgentStoreEffect<Option.Option<string>> {
   return Effect.map(
     findVisibleAgentWorkspace({ userId, agentId }),
     Option.map((row) => row.organizationId),
@@ -3219,7 +3198,7 @@ export function readVisibleAgentWorkspace(
  */
 export function nativeRuntimesOfReached(
   conversationIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, (typeof NATIVE_RUNTIMES)[number]>> {
+): AgentStoreEffect<ReadonlyMap<string, (typeof NATIVE_RUNTIMES)[number]>> {
   if (conversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findNativeRuntimes({ conversationIds }),
@@ -3228,11 +3207,11 @@ export function nativeRuntimesOfReached(
 }
 
 /** The harness's own session or thread id recorded on the agent's conversation, over whatever stood; answers whether the account reached the agent. */
-export function recordCodingAgentNativeSession(
+export function recordAgentNativeSession(
   userId: string,
   agentId: string,
   nativeSession: string,
-): CodingAgentStoreEffect<boolean> {
+): AgentStoreEffect<boolean> {
   return Effect.map(
     updateAgentNativeSession({ userId, agentId, nativeSession }),
     (rows) => rows.length > 0,
@@ -3246,9 +3225,7 @@ export function recordCodingAgentNativeSession(
  * and is read back unread here); null before the first turn's message, and
  * for a conversation the account does not hold.
  */
-export function readNativeHanded(
-  target: ConversationTarget,
-): CodingAgentStoreEffect<WireValue | null> {
+export function readNativeHanded(target: ConversationTarget): AgentStoreEffect<WireValue | null> {
   return Effect.map(findNativeHanded(target), (row) =>
     Option.match(row, { onNone: () => null, onSome: ({ handed }) => handed }),
   );
@@ -3258,16 +3235,16 @@ export function readNativeHanded(
 export function recordNativeHanded(
   target: ConversationTarget,
   handed: WireValue,
-): CodingAgentStoreEffect<void> {
+): AgentStoreEffect<void> {
   return updateNativeHanded({ ...target, handed });
 }
 
 /** The digest of the runner's bearer recorded on the agent's conversation, or null to retire it; answers whether the account reached the agent. */
-export function recordCodingAgentRunnerToken(
+export function recordAgentRunnerToken(
   userId: string,
   agentId: string,
   runnerTokenHash: string | null,
-): CodingAgentStoreEffect<boolean> {
+): AgentStoreEffect<boolean> {
   return Effect.map(
     updateAgentRunnerToken({ userId, agentId, runnerTokenHash }),
     (rows) => rows.length > 0,
@@ -3284,14 +3261,14 @@ export interface RunnerTokenConversation {
 
 /**
  * The coding agent's conversation whose runner was handed the bearer of this
- * digest (`recordCodingAgentRunnerToken`), where its starter still reaches the
+ * digest (`recordAgentRunnerToken`), where its starter still reaches the
  * agent; nothing for a digest no standing conversation holds, a retired
  * bearer's among them, and nothing once the starter left the agent's
  * workspace, since the runner acts as them.
  */
 export function readRunnerTokenConversation(
   runnerTokenHash: string,
-): CodingAgentStoreEffect<Option.Option<RunnerTokenConversation>> {
+): AgentStoreEffect<Option.Option<RunnerTokenConversation>> {
   return Effect.gen(function* () {
     const found = yield* findRunnerTokenConversation({ runnerTokenHash });
     if (Option.isNone(found)) return found;
@@ -3302,7 +3279,7 @@ export function readRunnerTokenConversation(
 }
 
 /** When the conversation's newest turn ended; null while it is queued or running, or before any turn. */
-function newestTurnEndedAt(conversationId: string): CodingAgentStoreEffect<Date | null> {
+function newestTurnEndedAt(conversationId: string): AgentStoreEffect<Date | null> {
   return Effect.map(findNewestTurnStanding({ conversationId }), (newest) => {
     const ended = Option.filter(newest, (turn) =>
       ENDED_TURN_STATUSES.some((status) => status === turn.status),
@@ -3330,7 +3307,7 @@ export interface NativeRunStanding {
  */
 export function readNativeRunStanding(
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<NativeRunStanding>> {
+): AgentStoreEffect<Option.Option<NativeRunStanding>> {
   return Effect.gen(function* () {
     if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
     const found = yield* findNativeAgentConversation({ agentId });
@@ -3361,7 +3338,7 @@ export interface EveRunStanding {
  */
 export function readEveRunStanding(
   runtimeSessionId: string,
-): CodingAgentStoreEffect<Option.Option<EveRunStanding>> {
+): AgentStoreEffect<Option.Option<EveRunStanding>> {
   return Effect.gen(function* () {
     const found = yield* findEveAgentsOfSession({ runtimeSessionId });
     const [only] = found;
@@ -3371,33 +3348,33 @@ export function readEveRunStanding(
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
-export function readCodingAgentOfConversation(
+export function readAgentOfConversation(
   userId: string,
   conversationId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+): AgentStoreEffect<Option.Option<Agent>> {
   return findAgentOfConversation({ userId, conversationId });
 }
 
-/** An agent as far as its header reads it (`CODING_AGENT_HEADER_COLUMNS`). */
-export type CodingAgentHeader = Pick<
-  CodingAgent,
+/** An agent as far as its header reads it (`AGENT_HEADER_COLUMNS`). */
+export type AgentHeader = Pick<
+  Agent,
   "id" | "userId" | "organizationId" | "taskId" | "repository" | "title" | "archivedAt"
 >;
 
 /**
  * The header of the agent whose conversation this is, for a caller that needs
  * no more of it than who it is, its workspace, task, repository, title, and archive;
- * nothing where `readCodingAgentOfConversation` answers nothing.
+ * nothing where `readAgentOfConversation` answers nothing.
  */
-export function readCodingAgentHeaderOfConversation(
+export function readAgentHeaderOfConversation(
   userId: string,
   conversationId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgentHeader>> {
+): AgentStoreEffect<Option.Option<AgentHeader>> {
   return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
-export interface CodingAgentContextRow {
+export interface AgentContextRow {
   readonly model: string;
   readonly contextWindow: ContextWindow;
   readonly lastStep: StoredAgentStep | null;
@@ -3405,33 +3382,33 @@ export interface CodingAgentContextRow {
 }
 
 /** The newest model step of the agent's own conversation, which replaces the one before it; nothing written for an agent of a workspace the account is not in. */
-export function recordCodingAgentStep(
+export function recordAgentStep(
   userId: string,
   agentId: string,
   lastStep: StoredAgentStep,
-): CodingAgentStoreEffect<void> {
+): AgentStoreEffect<void> {
   return updateAgentStep({ userId, agentId, lastStep });
 }
 
 /** When eve compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */
-export function recordCodingAgentCompaction(
+export function recordAgentCompaction(
   userId: string,
   agentId: string,
   at: Date,
-): CodingAgentStoreEffect<void> {
+): AgentStoreEffect<void> {
   return updateAgentCompaction({ userId, agentId, at });
 }
 
 /** What the agent's own conversation holds in its model's context, or nothing for an agent of a workspace the account is not in. */
-export function readCodingAgentContext(
+export function readAgentContext(
   userId: string,
   agentId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgentContextRow>> {
+): AgentStoreEffect<Option.Option<AgentContextRow>> {
   return findAgentContext({ userId, agentId });
 }
 
 /** What an agent chose for one worker, and when the delegation was recorded. */
-export interface CodingAgentDelegation extends ModelChoice {
+export interface AgentDelegation extends ModelChoice {
   readonly createdAt: Date;
 }
 
@@ -3445,9 +3422,9 @@ const insertDelegation = SqlSchema.void({
   execute: ({ childConversationId, callId, model, effort }) =>
     Database.use((db) =>
       db
-        .insert(codingAgentDelegation)
+        .insert(agentDelegationTable)
         .values({ childConversationId, callId, model, effort })
-        .onConflictDoNothing({ target: codingAgentDelegation.childConversationId }),
+        .onConflictDoNothing({ target: agentDelegationTable.childConversationId }),
     ),
 });
 
@@ -3466,15 +3443,15 @@ const findDelegation = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          model: codingAgentDelegation.model,
-          effort: codingAgentDelegation.effort,
+          model: agentDelegationTable.model,
+          effort: agentDelegationTable.effort,
           createdAt: conversations.createdAt,
         })
-        .from(codingAgentDelegation)
-        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .from(agentDelegationTable)
+        .innerJoin(conversations, eq(conversations.id, agentDelegationTable.childConversationId))
         .where(
           and(
-            eq(codingAgentDelegation.childConversationId, childConversationId),
+            eq(agentDelegationTable.childConversationId, childConversationId),
             eq(conversations.userId, userId),
             eq(conversations.parentConversationId, parentConversationId),
             isNull(conversations.deletedAt),
@@ -3488,7 +3465,7 @@ export function writeDelegation(
   childConversationId: string,
   callId: string,
   choice: ModelChoice,
-): CodingAgentStoreEffect<void> {
+): AgentStoreEffect<void> {
   return insertDelegation({
     childConversationId,
     callId,
@@ -3501,7 +3478,7 @@ export function writeDelegation(
 export function readDelegation(
   parent: ConversationTarget,
   childConversationId: string,
-): CodingAgentStoreEffect<Option.Option<CodingAgentDelegation>> {
+): AgentStoreEffect<Option.Option<AgentDelegation>> {
   return findDelegation({
     userId: parent.userId,
     parentConversationId: parent.conversationId,
@@ -3520,14 +3497,14 @@ const findDelegationStarts = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          childConversationId: codingAgentDelegation.childConversationId,
+          childConversationId: agentDelegationTable.childConversationId,
           createdAt: conversations.createdAt,
         })
-        .from(codingAgentDelegation)
-        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .from(agentDelegationTable)
+        .innerJoin(conversations, eq(conversations.id, agentDelegationTable.childConversationId))
         .where(
           and(
-            inArray(codingAgentDelegation.childConversationId, [...childConversationIds]),
+            inArray(agentDelegationTable.childConversationId, [...childConversationIds]),
             eq(conversations.userId, userId),
             eq(conversations.parentConversationId, parentConversationId),
             isNull(conversations.deletedAt),
@@ -3540,7 +3517,7 @@ const findDelegationStarts = SqlSchema.findAll({
 export function delegationStartsOf(
   parent: ConversationTarget,
   childConversationIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, Date>> {
+): AgentStoreEffect<ReadonlyMap<string, Date>> {
   if (childConversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findDelegationStarts({
@@ -3614,12 +3591,12 @@ const findLineSenders = SqlSchema.findAll({
           memberName: user.name,
           senderName: messages.senderName,
           senderModel: messages.senderModel,
-          agentId: codingAgent.id,
-          agentTaskId: codingAgent.taskId,
+          agentId: agentTable.id,
+          agentTaskId: agentTable.taskId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
-        .leftJoin(codingAgent, eq(codingAgent.id, messages.senderAgentId))
+        .leftJoin(agentTable, eq(agentTable.id, messages.senderAgentId))
         .where(
           and(
             inArray(messages.id, [...messageIds]),
@@ -3676,7 +3653,7 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
 export function lineSendersOf(
   target: ConversationTarget,
   messageIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, LineSent>> {
+): AgentStoreEffect<ReadonlyMap<string, LineSent>> {
   if (messageIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findLineSenders({ userId: target.userId, conversationId: target.conversationId, messageIds }),
@@ -3742,7 +3719,7 @@ const findLinePlaces = SqlSchema.findAll({
 export function linePlacesOf(
   target: ConversationTarget,
   messageIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, LinePlace>> {
+): AgentStoreEffect<ReadonlyMap<string, LinePlace>> {
   if (messageIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
@@ -3774,19 +3751,19 @@ const findDelegations = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          callId: codingAgentDelegation.callId,
-          childConversationId: codingAgentDelegation.childConversationId,
-          model: codingAgentDelegation.model,
-          effort: codingAgentDelegation.effort,
+          callId: agentDelegationTable.callId,
+          childConversationId: agentDelegationTable.childConversationId,
+          model: agentDelegationTable.model,
+          effort: agentDelegationTable.effort,
           createdAt: conversations.createdAt,
         })
-        .from(codingAgentDelegation)
-        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .from(agentDelegationTable)
+        .innerJoin(conversations, eq(conversations.id, agentDelegationTable.childConversationId))
         .where(
           and(
             eq(conversations.userId, userId),
             eq(conversations.parentConversationId, parentConversationId),
-            isNotNull(codingAgentDelegation.callId),
+            isNotNull(agentDelegationTable.callId),
             isNull(conversations.deletedAt),
           ),
         )
@@ -3797,7 +3774,7 @@ const findDelegations = SqlSchema.findAll({
 /** Every worker the account's conversation delegated to by a call it kept, oldest first. */
 export function delegationsOf(
   parent: ConversationTarget,
-): CodingAgentStoreEffect<readonly DelegationRecord[]> {
+): AgentStoreEffect<readonly DelegationRecord[]> {
   return findDelegations({ userId: parent.userId, parentConversationId: parent.conversationId });
 }
 
@@ -3807,14 +3784,14 @@ const findDelegationTitles = SqlSchema.findAll({
   execute: ({ userId, parentConversationId }) =>
     Database.use((db) =>
       db
-        .select({ callId: codingAgentDelegation.callId, title: conversations.title })
-        .from(codingAgentDelegation)
-        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .select({ callId: agentDelegationTable.callId, title: conversations.title })
+        .from(agentDelegationTable)
+        .innerJoin(conversations, eq(conversations.id, agentDelegationTable.childConversationId))
         .where(
           and(
             eq(conversations.userId, userId),
             eq(conversations.parentConversationId, parentConversationId),
-            isNotNull(codingAgentDelegation.callId),
+            isNotNull(agentDelegationTable.callId),
             isNotNull(conversations.title),
             isNull(conversations.deletedAt),
           ),
@@ -3826,7 +3803,7 @@ const findDelegationTitles = SqlSchema.findAll({
 /** Every titled worker of the account's conversation by the call that delegated it, oldest first; one recorded before its call was kept reads as untitled. */
 export function delegationTitlesOf(
   parent: ConversationTarget,
-): CodingAgentStoreEffect<readonly CodingAgentSubagentTitle[]> {
+): AgentStoreEffect<readonly AgentSubagentTitle[]> {
   return findDelegationTitles({
     userId: parent.userId,
     parentConversationId: parent.conversationId,
@@ -3843,9 +3820,9 @@ const findUntitledDelegations = SqlSchema.findAll({
   execute: ({ userId, parentConversationId, since }) =>
     Database.use((db) =>
       db
-        .select({ childConversationId: codingAgentDelegation.childConversationId })
-        .from(codingAgentDelegation)
-        .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+        .select({ childConversationId: agentDelegationTable.childConversationId })
+        .from(agentDelegationTable)
+        .innerJoin(conversations, eq(conversations.id, agentDelegationTable.childConversationId))
         .where(
           and(
             eq(conversations.userId, userId),
@@ -3862,7 +3839,7 @@ const findUntitledDelegations = SqlSchema.findAll({
 export function untitledDelegationsSince(
   parent: ConversationTarget,
   since: Date,
-): CodingAgentStoreEffect<ReadonlySet<string>> {
+): AgentStoreEffect<ReadonlySet<string>> {
   return Effect.map(
     findUntitledDelegations({
       userId: parent.userId,

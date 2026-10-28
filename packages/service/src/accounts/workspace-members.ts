@@ -8,9 +8,9 @@ import {
   type WorkspaceStoreEffect,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { member, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
@@ -100,9 +100,9 @@ function formerOf(organizationId: string): SQL | undefined {
       inArray(
         user.id,
         queryBuilder
-          .select({ id: codingAgent.userId })
-          .from(codingAgent)
-          .where(eq(codingAgent.organizationId, organizationId)),
+          .select({ id: agentTable.userId })
+          .from(agentTable)
+          .where(eq(agentTable.organizationId, organizationId)),
       ),
       // Note that only the workspace's own automations count, since a personal one is read by its maker alone.
       inArray(

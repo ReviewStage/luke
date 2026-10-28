@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
@@ -13,7 +13,7 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/coding-agent-wire";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -251,7 +251,7 @@ const openSharedTask = Effect.gen(function* () {
 const startAgent = (owner: string, taskId: string) =>
   Effect.gen(function* () {
     const { agent } = Option.getOrThrow(
-      yield* createCodingAgent(owner, {
+      yield* createAgent(owner, {
         taskId,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",

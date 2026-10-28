@@ -18,6 +18,7 @@ import {
   openTaskAgent,
   openWorkspace,
 } from "@luke/database/testing";
+import { AGENT_ATTACHMENT_TYPE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -26,7 +27,6 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
 import { DateTime, Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -168,7 +168,7 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
             files: [
               {
                 name: "trace.txt",
-                mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+                mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
                 data: Buffer.from("TypeError: deploy is undefined\n").toString("base64"),
               },
             ],

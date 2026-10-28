@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   type TaskListLiveAnswer,
   type TaskListLiveRows,
@@ -44,7 +44,7 @@ type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: b
 /** The list as the live rows make it at one instant, and every agent on a plan beside it. */
 interface LiveTaskList {
   readonly list: TaskListAnswer;
-  readonly taskAgents: readonly CodingAgentSummary[];
+  readonly taskAgents: readonly AgentSummary[];
   readonly taskPullRequests: readonly TaskPullRequests[];
 }
 

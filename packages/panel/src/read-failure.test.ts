@@ -2,10 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentChangesAnswerView,
-} from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@luke/features/agent-view";
 import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -41,7 +38,7 @@ import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
  */
 
 const ignore = () => undefined;
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -218,7 +215,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
 
 test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {
   let reads = 0;
-  const readChanges = (): Promise<CodingAgentChangesAnswerView> => {
+  const readChanges = (): Promise<AgentChangesAnswerView> => {
     reads += 1;
     return Promise.resolve(reads === 1 ? UNANSWERED : { pullRequest: null });
   };

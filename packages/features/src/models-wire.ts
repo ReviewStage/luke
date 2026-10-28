@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
+import { AGENT_BOUNDS, contextWindowSchema } from "./agent-wire.js";
 import {
   DEVICE_KIND,
   DEVICE_PLATFORM,
@@ -36,7 +36,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  */
 
 /** What a first-time account starts an agent on, until it chooses. */
-export const CODING_AGENT_DEFAULT_CHOICE = {
+export const AGENT_DEFAULT_CHOICE = {
   model: "anthropic/claude-opus-5.5",
   effort: "high",
 } as const;
@@ -55,7 +55,7 @@ export const modelProviderSchema = EffectSchema.Literals(Object.values(MODEL_PRO
 /** A model id or an effort as the wire carries it, bounded as a Start bounds them. */
 const choiceText = EffectSchema.Trim.check(
   EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS),
+  EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_CHOICE_CHARS),
 );
 
 /**
@@ -153,6 +153,6 @@ export const modelChoiceSchema = EffectSchema.Struct({
 export type ModelChoice = typeof modelChoiceSchema.Type;
 
 /** The coding-agent part written on its own (PUT): the body carries nothing else, so the settings preferences stand as they were. */
-export const codingAgentDefaultWriteSchema = EffectSchema.Struct({
+export const agentDefaultWriteSchema = EffectSchema.Struct({
   codingAgent: modelChoiceSchema,
 });

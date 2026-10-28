@@ -9,8 +9,8 @@ import {
 import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
+import { AGENT_BOUNDS } from "./agent-wire.js";
 import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
-import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 import { webSocketOrigin } from "./socket-origin.js";
@@ -369,8 +369,8 @@ export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
  */
 export const sessionTypedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_TYPED),
-  text: text(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
-  clientKey: text(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+  text: text(AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  clientKey: text(AGENT_BOUNDS.MAX_KEY_CHARS),
 });
 
 export type SessionTypedFrame = typeof sessionTypedFrameSchema.Type;

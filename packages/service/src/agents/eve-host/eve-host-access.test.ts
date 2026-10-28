@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
@@ -549,7 +549,7 @@ test("a member of a plan's workspace reaches its coding agent's conversation and
   await database.run(joinWorkspace(started.workspaceId, teammate));
   const agent = Option.getOrThrow(
     await database.run(
-      createCodingAgent(userA, {
+      createAgent(userA, {
         taskId: started.id,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",

@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { CodingAgentKind } from "@luke/features/coding-agent-wire";
+import type { AgentKind } from "@luke/features/agent-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -204,7 +204,7 @@ export interface AppInboxTaskHolding {
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
-  agentKind?: CodingAgentKind;
+  agentKind?: AgentKind;
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;

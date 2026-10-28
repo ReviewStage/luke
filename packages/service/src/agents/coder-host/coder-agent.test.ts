@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_KIND,
-  type CodingAgentBrief,
-  type CodingAgentKind,
+  AGENT_BRIEF,
+  AGENT_KIND,
+  type AgentBrief,
+  type AgentKind,
   OPERATOR_QUIET_REPLY,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -224,7 +224,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Luke's
     "task_wait",
   ];
   const CLAUDE_CODES = ["TaskCreate", "WebSearch", "WebFetch", "Skill tool", "Agent tool"];
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const repository of ["Acme/Relay", null]) {
       for (const memberToken of [false, true]) {
         const args = [repository, brief, true, TASK_ADDRESS, undefined, null, memberToken] as const;
@@ -279,7 +279,7 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
     [CODER_HARNESS.CLAUDE_CODE, "on Playwright from Bash,"],
     [CODER_HARNESS.CODEX, "on Playwright from your shell,"],
   ] as const;
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const repository of ["Acme/Relay", null]) {
       for (const [harness, shell] of SHELL_OF) {
         const words = coderInstructions(
@@ -317,7 +317,7 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
     for (const [harness, own, other] of SANDBOX_OF) {
       const words = coderInstructions(
         repository,
-        CODING_AGENT_BRIEF.PROMPT,
+        AGENT_BRIEF.PROMPT,
         true,
         TASK_ADDRESS,
         undefined,
@@ -337,7 +337,7 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   }
   const codex = coderInstructions(
     "Acme/Relay",
-    CODING_AGENT_BRIEF.PROMPT,
+    AGENT_BRIEF.PROMPT,
     true,
     TASK_ADDRESS,
     undefined,
@@ -363,7 +363,7 @@ test("a local agent in a VM on its device is told its tools and logins there are
   for (const repository of ["Acme/Relay", null]) {
     const words = coderInstructions(
       repository,
-      CODING_AGENT_BRIEF.PROMPT,
+      AGENT_BRIEF.PROMPT,
       true,
       TASK_ADDRESS,
       undefined,
@@ -410,7 +410,7 @@ test("a Codex agent is told of Codex's own tools and never of Luke's it is not o
     "Codex's own web search",
     "Codex's own subagents",
   ];
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const repository of ["Acme/Relay", null]) {
       for (const memberToken of [false, true]) {
         const codex = coderInstructions(
@@ -464,7 +464,7 @@ test("an agent on a task is told of the task's links, pages, and comments, and o
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     const taskless = coderInstructions("Acme/Relay", brief, true, null);
     const told = (words: string) => [
@@ -482,7 +482,7 @@ test("an agent on a task is told of the task's links, pages, and comments, and o
 test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, starts them beside itself", () => {
   const OWN_TASK = "Start it on your own task";
   const NO_TASK = "You work on no task, so leave its taskId out to start it beside you";
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     const taskless = coderInstructions("Acme/Relay", brief, true, null);
     assert.deepEqual([onTask.includes(OWN_TASK), onTask.includes(NO_TASK)], [true, false], brief);
@@ -519,7 +519,7 @@ test("an agent on a task is offered edit_plan, show_page, look_at_picture, and t
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
   const UPDATING = "## Updating the plan";
   const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
-  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+  const told = (brief: AgentBrief, taskLink: string | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, taskLink);
     return [
       words.includes(UPDATING),
@@ -527,14 +527,14 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
       words.includes(READ_FIRST),
     ];
   };
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, false]);
+  assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
+  assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
 
 test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task leaving it to the starter and one on a task of its own keeping that one's, and one on no task told of no status", () => {
   const STATUS = "## Your task's status";
-  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+  const told = (brief: AgentBrief, taskLink: string | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, taskLink);
     const at = words.indexOf(STATUS);
     if (at === -1) return [false, false, false, false, false];
@@ -549,7 +549,7 @@ test("every agent on a task is told to keep its task's status with update_task, 
       section.includes("one started on a task of its own keeps that status itself"),
     ];
   };
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     assert.deepEqual(told(brief, TASK_ADDRESS), [true, true, true, true, true], brief);
     assert.deepEqual(told(brief, null), [false, false, false, false, false], brief);
   }
@@ -559,14 +559,14 @@ test("an agent asked for a plan, a proposal, or research opens no pull request o
   const NO_DOCUMENT = "never commit the write-up as a document";
   const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
   const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
-  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+  const told = (brief: AgentBrief, taskLink: string | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, taskLink);
     assert.ok(words.includes(NO_DOCUMENT), brief);
     return [words.includes(PLAN), words.includes(PAGE)];
   };
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true]);
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true]);
-  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, true]);
+  assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true]);
+  assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true]);
+  assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, true]);
 });
 
 test("the thread post tool tells the session never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
@@ -577,7 +577,7 @@ test("the thread post tool tells the session never to ask for a credential or a 
 
 test("the session sends whatever is ready for the developer to look at or review to a thread, a pull request among it, and a test only the developer can run, save an agent another coding agent started, which sends that agent what it would post", () => {
   const READY = "ready for them to look at or review";
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const taskLink of [TASK_ADDRESS, null]) {
       const inbox = coderInstructions("Acme/Relay", brief, true, taskLink).split("## Threads")[1];
       assert.ok(inbox?.includes(READY), brief);
@@ -596,7 +596,7 @@ test("the session sends whatever is ready for the developer to look at or review
 
 test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     const developer = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER);
     const app = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     assert.ok(developer.includes(`exactly as written: \`${TRAILER}\``), brief);
@@ -616,7 +616,7 @@ test("an agent writing as its developer is told to end every commit on the trail
 
 test("an agent on its starter's own token reads its checks and its pull request over GitHub's REST API under its repository, never gh pr, and is told a draft cannot be marked ready from its sandbox", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     const words = (memberToken: boolean) =>
       coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER, null, memberToken);
     const onToken = words(true);
@@ -633,7 +633,7 @@ test("an agent on its starter's own token reads its checks and its pull request 
 test("an agent whose credential reads its checks waits on them with sleep until GitHub tells it they finished, never on a watch of CI, which it is offered and its read-only worker is not", () => {
   const WAIT = `wait with \`${CODER_TOOL.SLEEP}\``;
   const TOLD = "GitHub tells you so in a message, which ends the wait early";
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const memberToken of [false, true]) {
       const reads = coderInstructions(
         "Acme/Relay",
@@ -698,7 +698,7 @@ test("the model is shown the bound on one pause", () => {
 });
 
 test("every agent is told that what happens on its pull request after its turn reaches it from GitHub, and to read its reviews before it ends a turn", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const ciReadable of [true, false]) {
       const instructions = coderInstructions("Acme/Relay", brief, ciReadable, TASK_ADDRESS);
       assert.ok(instructions.includes("reaches you as a message from GitHub"), brief);
@@ -708,7 +708,7 @@ test("every agent is told that what happens on its pull request after its turn r
 });
 
 test("every agent is told to reply on an inbox thread to a question or a request done there, never in its own message alone, and never to post how the work is going", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const instructions = coderInstructions(
         "Acme/Relay",
@@ -739,7 +739,7 @@ test("every agent is told to reply on an inbox thread to a question or a request
 });
 
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const instructions = coderInstructions(
         "Acme/Relay",
@@ -768,7 +768,7 @@ const CODER_PATH = fileURLToPath(
 /** The instructions for each brief, on a task and on none, as the golden records them. */
 function briefInstructions(): Record<string, { onTask: string; taskless: string }> {
   return Object.fromEntries(
-    Object.values(CODING_AGENT_BRIEF).map((brief) => [
+    Object.values(AGENT_BRIEF).map((brief) => [
       brief,
       {
         onTask: coderInstructions("Acme/Relay", brief, true, TASK_LINK),
@@ -788,7 +788,7 @@ const CODER_GOLDEN = Schema.decodeUnknownSync(
 )(JSON.parse(readFileSync(CODER_PATH, "utf8")));
 
 test("a coding agent's instructions are the golden's, byte for byte, for each brief on a task and on none", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     const recorded = CODER_GOLDEN[brief];
     assert.ok(recorded, brief);
     assert.equal(coderInstructions("Acme/Relay", brief, true, TASK_LINK), recorded.onTask, brief);
@@ -797,7 +797,7 @@ test("a coding agent's instructions are the golden's, byte for byte, for each br
 });
 
 test("with Memory off the instructions say nothing of the workspace's memory; with it on they add its section before the one on messages, and nothing else", () => {
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     const off = coderInstructions("Acme/Relay", brief, true, TASK_LINK);
     const on = coderInstructions(
       "Acme/Relay",
@@ -808,7 +808,7 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       null,
       false,
       CODER_HARNESS.EVE,
-      CODING_AGENT_KIND.CODER,
+      AGENT_KIND.CODER,
       true,
     );
     assert.ok(!off.includes("## The workspace's memory"), brief);
@@ -822,10 +822,10 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
 });
 
 test("with Memory on, the operator is told to keep the developer's own preferences and what they are juggling private, and a coder that it keeps and recalls none", () => {
-  const memorySection = (kind: CodingAgentKind) => {
+  const memorySection = (kind: AgentKind) => {
     const on = coderInstructions(
       null,
-      CODING_AGENT_BRIEF.BLANK,
+      AGENT_BRIEF.BLANK,
       false,
       null,
       undefined,
@@ -838,8 +838,8 @@ test("with Memory on, the operator is told to keep the developer's own preferenc
     const start = on.indexOf("## The workspace's memory\n\n");
     return on.slice(start, on.indexOf("## What your messages are", start));
   };
-  const operator = memorySection(CODING_AGENT_KIND.OPERATOR);
-  const coder = memorySection(CODING_AGENT_KIND.CODER);
+  const operator = memorySection(AGENT_KIND.OPERATOR);
+  const coder = memorySection(AGENT_KIND.CODER);
 
   assert.ok(operator.includes("Keep the developer's own preferences and what they are juggling"));
   assert.ok(operator.includes("as private memories, with private set"));
@@ -856,14 +856,14 @@ const OPERATOR_PATH = fileURLToPath(
 function operatorInstructions(): string {
   return coderInstructions(
     null,
-    CODING_AGENT_BRIEF.BLANK,
+    AGENT_BRIEF.BLANK,
     false,
     null,
     undefined,
     null,
     false,
     CODER_HARNESS.EVE,
-    CODING_AGENT_KIND.OPERATOR,
+    AGENT_KIND.OPERATOR,
   );
 }
 
@@ -928,7 +928,7 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     assert.ok(!operator.includes(untold), untold);
   }
   // A coder on no repository is told the opposite on each, so the operator's words are its alone.
-  const coder = coderInstructions(null, CODING_AGENT_BRIEF.BLANK, false, null);
+  const coder = coderInstructions(null, AGENT_BRIEF.BLANK, false, null);
   assert.ok(!coder.includes("## What you may do unasked"));
   assert.ok(coder.includes(`\`${CODER_TOOL.DELETE_SECTION}\``));
   assert.ok(!coder.includes(`\`${CODER_TOOL.LIST_OPEN_ASKS}\``));
