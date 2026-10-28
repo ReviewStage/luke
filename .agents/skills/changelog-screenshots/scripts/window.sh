@@ -3,7 +3,8 @@ set -euo pipefail
 
 # window.sh <out.png> [electron args...] -- runs the staged build in fixture
 # mode with the given args (`--profile shot-<name>`), captures its real window
-# with shadow and traffic lights, and quits it. Frame the capture afterwards
+# with shadow and traffic lights, and quits it (LUKE_SHOT_SETTLE seconds after
+# launch, 8 unless set). Frame the capture afterwards
 # with scripts/changelog-screenshot.sh --from.
 #
 # The capture is retried until it carries the key window's larger shadow,
@@ -37,7 +38,8 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$(dirname -- "$out")"
 (cd "$worktree/apps/desktop" && ./node_modules/.bin/electron . --user-data-dir="$profile" --fixture smoke "$@" >/tmp/luke-shot-window.log 2>&1 &)
-sleep 8
+# Note that LUKE_SHOT_SETTLE gives a shot that stages late (a menu reopened after the activation) longer to draw.
+sleep "${LUKE_SHOT_SETTLE:-8}"
 id=0
 owner=0
 for pid in $(pgrep -f "user-data-dir=$profile"); do
