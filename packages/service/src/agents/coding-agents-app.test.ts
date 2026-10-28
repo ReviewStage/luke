@@ -1326,12 +1326,22 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           idempotencyKey: randomUUID(),
           task: "Sweep the flaky tests.",
         });
+        // A Start from an agent goes by that agent's own path, never into a workspace place it may not stand in.
+        const fromAgent = yield* startIn(owner, {
+          idempotencyKey: randomUUID(),
+          from: { agentId: randomUUID() },
+          repository: RELAY_FULL_NAME,
+        });
 
         assert.deepEqual(yield* placeOf(inRepository), [null, task.workspaceId, RELAY_FULL_NAME]);
         assert.deepEqual(yield* placeOf(inNone), [null, task.workspaceId, null]);
         assert.deepEqual(
           stranger,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          fromAgent,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.equal(eve.opened.length, 2);
       }),

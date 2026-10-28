@@ -102,9 +102,12 @@ const codingAgentChangeRequestSchema = EffectSchema.Union([
 /** A change as it travels. */
 export type CodingAgentChangeRequest = typeof codingAgentChangeRequestSchema.Encoded;
 
-/** A Start in a workspace with no task: a Start's body, and the repository the agent works in, where it works in one. */
+/** A Start's fields bar its source, since a Start from an agent lands in that agent's own place on its own path. */
+const { from: _from, ...workspaceStartFields } = codingAgentStartRequestFields;
+
+/** A Start in a workspace with no task: a fresh Start's body, and the repository the agent works in, where it works in one. */
 const workspaceStartRequestSchema = EffectSchema.Struct({
-  ...codingAgentStartRequestFields,
+  ...workspaceStartFields,
   repository: EffectSchema.optionalKey(githubRepositoryFullNameSchema),
 })
   .pipe(wireKeys({ prompt: "task" }))
