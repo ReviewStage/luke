@@ -109,7 +109,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const { panels } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
-
   // The acts main answers itself on the act port: its windows', ports', and
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {

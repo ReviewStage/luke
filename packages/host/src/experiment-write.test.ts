@@ -120,9 +120,7 @@ const writerOver = (
 it.effect("the service's answer is what the store keeps and the settings carry", () =>
   Effect.gen(function* () {
     const store = yield* signedInStore;
-    const { client, bodies } = serviceAnswering(async () =>
-      holding({ [EXPERIMENT.MEMORY]: true }),
-    );
+    const { client, bodies } = serviceAnswering(async () => holding({ [EXPERIMENT.MEMORY]: true }));
 
     const written = yield* writerOver(client, store).write(ACCOUNT.email, EXPERIMENT.MEMORY, true);
 

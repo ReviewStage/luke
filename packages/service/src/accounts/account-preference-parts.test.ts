@@ -147,9 +147,7 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
 
       // The voice's own write leaves the experiments standing, and the experiments' leaves the voice.
       yield* ask(request(owner, { preferences: { voice: "cedar" } }));
-      const turnedOff = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.MEMORY]: false } }),
-      );
+      const turnedOff = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: false } }));
       assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.MEMORY]: false });
       assert.deepEqual(partOf(turnedOff, "preferences"), { voice: "cedar" });
     }),
