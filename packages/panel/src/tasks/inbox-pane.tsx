@@ -56,7 +56,6 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -795,12 +794,6 @@ function ThreadMessage({
 /** No groups over the item's own. */
 const NO_LEAD: readonly MenuAction[][] = [];
 
-/** The channel a thread is read from beside its stream: its name, the path's first crumb, and the press that closes the thread back to it. */
-export interface InboxPaneChannel {
-  readonly name: string;
-  readonly onClose: () => void;
-}
-
 /** What a phone's item offers in its ⋯ over the item's own actions, past the bar's buttons it stands for. */
 export interface InboxPanePhone {
   /** Opens the side panel beside the item, which the title bar's toggle opens elsewhere; none while it is open or where there is none. */
@@ -1096,15 +1089,13 @@ function useAutomationCrumb(
 }
 
 /**
- * The pane's path, task › agent, led in a channel by the channel's glyph and
- * its bare name, each crumb wearing its tab's glyph in the task's column,
+ * The pane's path, task › agent, each crumb wearing its tab's glyph in the task's column,
  * the task's document glyph and the agent's mark: each opens what it names,
  * the task or the agent's tab, and hangs the card its sidebar row or tab
  * hangs. An agent with no task stands under the automation that started it
  * instead, by its clock and name, which hang its card and open the
  * automation's page where that can be opened, and are words alone where it
- * cannot; in a channel, an agent no automation names stands under the
- * channel alone, Other agents being the Inbox's group. An agent this window
+ * cannot. An agent this window
  * does not list, one started on another Mac, hangs a card saying so and
  * still opens its tab. Once the thread's heading has scrolled away, the
  * item's title joins the path as its last words, in the text's own ink, so
@@ -1119,13 +1110,10 @@ function Crumbs({
   doors,
   title,
   titleShown,
-  channel,
 }: {
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
-  /** The channel the thread is read from, which leads the path; none in the Inbox. */
-  channel: InboxPaneChannel | undefined;
   /** The item's title, as its heading reads it. */
   title: string;
   /** Whether the heading has scrolled away, so the path names the item. */
@@ -1148,21 +1136,8 @@ function Crumbs({
           onPress: () => onOpenHolder?.(),
         }
       : undefined;
-  // Note that in a channel the agents no automation names stand under nothing, since their group is the Inbox's alone.
-  const unnamed =
-    channel !== undefined &&
-    holder.kind === INBOX_HOLDER.AUTOMATION &&
-    holder.automationId === null;
   const crumbs: Crumb[] = [
-    channel === undefined
-      ? undefined
-      : {
-          label: channel.name,
-          glyph: <GLYPH.CHANNEL />,
-          hint: channel.name,
-          onPress: channel.onClose,
-        },
-    task ?? (unnamed ? undefined : automation),
+    task ?? automation,
     {
       label: name,
       glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
@@ -1206,7 +1181,7 @@ export function InboxPane({
   next,
   mentions,
   phone,
-  channel,
+  channelName,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1232,8 +1207,8 @@ export function InboxPane({
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
   phone?: InboxPanePhone | undefined;
-  /** The channel the thread is read from beside its stream, which leads the path and which × closes it back to; none in the Inbox. */
-  channel?: InboxPaneChannel | undefined;
+  /** The channel the Inbox is narrowed to, by name, which the way back to the list names; none where it lists every channel. */
+  channelName?: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1313,10 +1288,10 @@ export function InboxPane({
         <PhoneHead
           place="inbox-item"
           start={
-            channel === undefined ? (
+            channelName === undefined ? (
               <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
             ) : (
-              <BackButton label={`#${channel.name}`} place={`#${channel.name}`} onBack={onBack} />
+              <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
           title={cardTitle(item.title)}
@@ -1341,8 +1316,10 @@ export function InboxPane({
           start={TOOLBAR_INSET.COLUMN}
           wrapHeading
           lead={
-            onBack === undefined ? undefined : (
+            onBack === undefined ? undefined : channelName === undefined ? (
               <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+            ) : (
+              <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
           title={
@@ -1352,7 +1329,6 @@ export function InboxPane({
               doors={doors}
               title={cardTitle(item.title)}
               titleShown={headingAway}
-              channel={channel}
             />
           }
           actions={
@@ -1370,15 +1346,6 @@ export function InboxPane({
                 onMark={doors.onMark}
                 onClose={doors.onClose}
               />
-              {channel === undefined ? null : (
-                <Tooltip label="Close thread">
-                  <IconButton
-                    icon={<GLYPH.CLOSE />}
-                    label="Close thread"
-                    onClick={channel.onClose}
-                  />
-                </Tooltip>
-              )}
             </>
           }
         />

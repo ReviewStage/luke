@@ -7,6 +7,7 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { repositoryPinsWrittenSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { APIError } from "better-auth/api";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { type Context, Effect, Option, Result } from "effect";
@@ -57,6 +58,9 @@ const GRACE_BEARER = "Bearer oauth-token-of-grace";
 /** A userinfo endpoint that knows no token. */
 const NO_TOKEN: UserInfoEndpoint = () => Effect.succeed(undefined);
 
+/** A token refused as Better Auth's userinfo refuses an unknown, expired, or revoked one. */
+const refusedToken = () => new APIError("UNAUTHORIZED", { error: "invalid_token" });
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -79,7 +83,7 @@ function fakeAuthService(tokens: Map<string, string>, revokeAsAnswered = false) 
     (async (context: { headers: Headers }) => {
       const authorization = context.headers.get("authorization") ?? "";
       const sub = tokens.get(authorization);
-      if (sub === undefined) throw new Error("invalid_token");
+      if (sub === undefined) throw refusedToken();
       if (revokeAsAnswered) tokens.delete(authorization);
       return { sub };
     }) as unknown as typeof auth.api.oauth2UserInfo,
@@ -137,14 +141,20 @@ const openAccounts = Effect.gen(function* () {
   };
 });
 
-/** The repositories one request to the pins resource answers as pinned, failing the test where it answers anything else. */
-const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
+/** What the pins resource answers one request, its caller resolved as given. */
+const answerTo = (resolveUserId: UserIdResolver, request: Request) =>
   Effect.gen(function* () {
     // The procedure runs on the services handed to it, the test's clock among them: a pin's instant is read from it.
     // SAFETY: the pins procedures yield the database and the clock alone, which the test's own context holds.
     const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
     const handle = hostedFetch({ repositoryPins: repositoryPinsProcedures({ resolveUserId }) });
-    const response = yield* Effect.promise(() => handle(request, services));
+    return yield* Effect.promise(() => handle(request, services));
+  });
+
+/** The repositories one request to the pins resource answers as pinned, failing the test where it answers anything else. */
+const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
+  Effect.gen(function* () {
+    const response = yield* answerTo(resolveUserId, request);
     // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(body));
@@ -176,7 +186,7 @@ it.effect("a valid token resolves to the auth service's own subject", () =>
 it.effect("a rejected, malformed, or subjectless answer is one indistinguishable no", () =>
   Effect.gen(function* () {
     const rejected = yield* hostedUserId(request({ authorization: "Bearer expired" }), () =>
-      Effect.tryPromise(() => Promise.reject(new Error("invalid_token"))),
+      Effect.tryPromise(() => Promise.reject(refusedToken())),
     );
     assert.deepEqual(rejected, Option.none());
 
@@ -243,15 +253,35 @@ it.effect("a request with no cookie, or a blank one, asks the auth service for n
   }),
 );
 
-it.effect("a session read the auth service fails resolves nobody, as a failed userinfo does", () =>
+it.effect("an auth service that cannot answer is refused as unavailable, never as signed out", () =>
   Effect.gen(function* () {
-    const failing: SessionEndpoint = () =>
-      Effect.tryPromise(() => Promise.reject(new Error("the auth service is down")));
+    const down = () => Effect.tryPromise(() => Promise.reject(new Error("connection terminated")));
+    const throttled = () =>
+      Effect.tryPromise(() => Promise.reject(new APIError("TOO_MANY_REQUESTS")));
+    const noSession: SessionEndpoint = () => Effect.succeedNone;
 
-    assert.deepEqual(
-      yield* requestUserId(read({ cookie: "better-auth.session_token=any" }), NO_TOKEN, failing),
-      Option.none(),
-    );
+    // A bearer whose userinfo fails or is throttled, and a cookie whose session read fails: a caller retries a 503, where a 401 signs it out.
+    for (const [resolveUserId, headers] of [
+      [
+        (incoming: Request) => requestUserId(incoming, down, noSession),
+        { authorization: ADA_BEARER },
+      ],
+      [
+        (incoming: Request) => requestUserId(incoming, throttled, noSession),
+        { authorization: ADA_BEARER },
+      ],
+      [
+        (incoming: Request) => requestUserId(incoming, NO_TOKEN, down),
+        { cookie: "better-auth.session_token=any" },
+      ],
+    ] as const) {
+      const response = yield* answerTo(resolveUserId, read(headers));
+      assert.equal(
+        response.status,
+        HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        JSON.stringify(headers),
+      );
+    }
   }),
 );
 

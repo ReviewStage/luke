@@ -10,7 +10,7 @@ import {
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND } from "@luke/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Duration } from "effect";
 import { expect, test } from "vitest";
@@ -191,6 +191,7 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
             userId: "charles",
             name: "Charles's MacBook Pro",
             kind: DEVICE_KIND.DESKTOP,
+            platform: DEVICE_PLATFORM.DARWIN,
             lastSeenAt: new Date(lastSeenAt),
             signedIn: {},
             codexExecutable: null,
@@ -201,5 +202,9 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
       ]),
     ).mac;
 
-  expect(seen(now - 44_000)).toEqual({ name: "Charles's MacBook Pro", seenAt: now - 44_000 });
+  expect(seen(now - 44_000)).toEqual({
+    name: "Charles's MacBook Pro",
+    seenAt: now - 44_000,
+    deviceId: DEVICE,
+  });
 });

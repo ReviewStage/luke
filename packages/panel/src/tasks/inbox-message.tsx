@@ -19,9 +19,7 @@ import type { InboxImageReads } from "./use-task-inbox.js";
 /**
  * inbox-message.tsx -- an Inbox item's message as every place draws it: its words, the files it carried, the agent named with its card, and the item's words read where they belong.
  *
- * A thread's pane (`inbox-pane.tsx`) and a channel's stream, whose post is
- * its thread's first message (`channel-stream.tsx`), draw a message through
- * these alone, so the two never disagree. Words under `ItemWords` read their
+ * A thread's pane (`inbox-pane.tsx`) draws a message through these. Words under `ItemWords` read their
  * links under the item's workspace, a pull request alone on its line as its
  * card with its title and lines (`lone-link-card.tsx`), and draw the item's
  * own pictures through the reads it is handed (`inbox-pictures.tsx`).

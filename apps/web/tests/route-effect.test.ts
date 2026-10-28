@@ -7,6 +7,7 @@ import {
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
+  resolvedAccount,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
 import { ANY_METHOD } from "@luke/service/route";
@@ -100,7 +101,7 @@ function gateRoute(resolveUserId: UserIdResolver<string | undefined>) {
           if (environment.cronSecret === undefined) {
             return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
           }
-          const account = yield* resolveUserId(request.headers.authorization);
+          const account = yield* resolvedAccount(resolveUserId, request.headers.authorization);
           if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
           return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId: account.value });
         }),

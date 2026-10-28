@@ -179,7 +179,7 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { LocalAgentMac } from "./local-agent-mac.js";
+import { AgentPlace } from "./agent-place.js";
 import { linkChip } from "./mention-chip.js";
 import {
   agentMessagePlace,
@@ -2808,7 +2808,7 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={<LocalAgentMac agent={agent} />}
+            tools={<AgentPlace agent={agent} />}
             onStop={onStop}
             agentName={name}
             keywords={keywords}

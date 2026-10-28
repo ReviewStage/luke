@@ -55,6 +55,7 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import { usePendingNow } from "../pending-clock.js";
+import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import {
@@ -109,6 +110,9 @@ const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
+
+/** How long a read of the models may stay out before it is said as failed, past the host's own ten-second bound on the call it makes. */
+const MODELS_READ_BOUND_MS = 15_000;
 /**
  * use-coding-agents.ts -- the open task's coding agents as one control: the agents and their status, a Start, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
@@ -222,7 +226,9 @@ export interface CodingAgentsControl {
   models: readonly CatalogModel[] | undefined;
   /** Whether the last read of the models did not land, so the menu says so with Retry rather than reading for ever. */
   modelsFailed: boolean;
-  /** The member's devices a task's Runs on may name, as the last read of the models offered them; nothing where it offered none, or before the first read. */
+  /** Where the newest read of the models stands, at the generation it took, which New task waits on. */
+  modelsRead: ModelsRead;
+  /** The member's devices a task's Runs on may name, as the last read of the models offered them: none listed where it offered none, and nothing before a read lands. */
   macs: readonly MacOffer[] | undefined;
   /** Reads the models now, for a menu opening or the menu's Retry. */
   readModels: () => void;
@@ -693,6 +699,27 @@ export const ARCHIVE_DRAWN = {
 
 export type ArchiveDrawn = (typeof ARCHIVE_DRAWN)[keyof typeof ARCHIVE_DRAWN];
 
+/** Where the newest read of the models stands: none asked yet, under way, landed, or failed or out past its bound. */
+export const MODELS_READ = {
+  UNREAD: "unread",
+  READING: "reading",
+  READ: "read",
+  FAILED: "failed",
+} as const;
+
+export type ModelsReadState = (typeof MODELS_READ)[keyof typeof MODELS_READ];
+
+/**
+ * The newest read of the models, stamped with the generation that read
+ * took, so a reader can tell a read made since it looked from one before,
+ * whatever the list it lands holds: two reads listing no device hand the
+ * same empty list through the steady doors.
+ */
+export interface ModelsRead {
+  readonly state: ModelsReadState;
+  readonly generation: number;
+}
+
 /**
  * The names and archives given here that no view carries yet, by agent id:
  * a rename's title, and an archive's time or null for an unarchive.
@@ -816,7 +843,11 @@ export function useCodingAgents(input: {
     was.taskId === taskId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [macs, setMacs] = useState<readonly MacOffer[] | undefined>(undefined);
-  const [modelsFailed, setModelsFailed] = useState(false);
+  const [modelsRead, setModelsRead] = useState<ModelsRead>({
+    state: MODELS_READ.UNREAD,
+    generation: 0,
+  });
+  const modelsGeneration = useRef(0);
   const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
@@ -991,20 +1022,35 @@ export function useCodingAgents(input: {
 
   const readAgain = useCallback(() => setReads((count) => count + 1), []);
 
+  /**
+   * Reads the models, stamping the read with a generation of its own. Note
+   * that only the newest read settles where the read stands, though any read
+   * that lands lists what it read, and that one still out past its bound is
+   * said as failed, so nothing waits on it for ever; should it land after,
+   * it settles as read.
+   */
   const readModels = useCallback(() => {
+    modelsGeneration.current += 1;
+    const generation = modelsGeneration.current;
+    const settle = (state: ModelsReadState) =>
+      setModelsRead((was) =>
+        was.generation === generation &&
+        (state === MODELS_READ.READ || was.state === MODELS_READ.READING)
+          ? { state, generation }
+          : was,
+      );
     // The menu reads again while a read is out, so a Retry shows its reading.
-    setModelsFailed(false);
+    setModelsRead({ state: MODELS_READ.READING, generation });
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer: CodingAgentModelsAnswer) => {
-        if ("failure" in answer) setModelsFailed(true);
-        else {
-          setModels(answer.models);
-          setMacs(answer.macs);
-          setModelsFailed(false);
-        }
+        if ("failure" in answer) return settle(MODELS_READ.FAILED);
+        setModels(answer.models);
+        setMacs(answer.macs ?? []);
+        settle(MODELS_READ.READ);
       },
-      () => setModelsFailed(true),
+      () => settle(MODELS_READ.FAILED),
     );
+    rendererPause(MODELS_READ_BOUND_MS).then(() => settle(MODELS_READ.FAILED));
   }, [act]);
 
   const readDefault = useCallback(
@@ -1897,7 +1943,8 @@ export function useCodingAgents(input: {
     listMissing,
     onRetryList: readAgain,
     models,
-    modelsFailed,
+    modelsFailed: modelsRead.state === MODELS_READ.FAILED,
+    modelsRead,
     macs,
     readModels,
     readDefault,

@@ -1,5 +1,11 @@
 /**
- * hosts-procedures.ts -- the account's hosts as Settings › Agents › Hosts reads and changes them: listed, removed, and the install tokens that add them kept and revoked.
+ * hosts-procedures.ts -- the account's enrolled machines as Settings › Agents › Machines reads and changes them: listed, removed, and the install tokens that add Linux servers kept and revoked.
+ *
+ * A machine is any device of the account's that holds a device secret, a
+ * Linux box that traded an install token and a Mac its desktop enrolled
+ * alike (`@luke/database/models/host-store`), so each is listed, judged
+ * against the floor, and removed the same way; a desktop that never
+ * enrolled is not listed.
  *
  * Every procedure is the account's own, on its bearer or its browser's
  * session (`accountMiddleware`), so the Hosts list works in a browser and on
@@ -17,6 +23,7 @@
 
 import { runningTurnIds, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { accountExperimentOn } from "@luke/database/models/account-store";
+import { devicesSeenSince } from "@luke/database/models/device-store";
 import {
   hostAgentConversations,
   hostsOf,
@@ -106,11 +113,24 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
         hosts: rows.map((row) => ({
           id: row.id,
           name: row.name,
+          platform: row.platform,
           seenAt: row.lastSeenAt.getTime(),
           version: row.version,
           upgradeNeeded: row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
         })),
         installScriptUrl: installScriptUrlOf(context.request),
+      };
+    }),
+    presence: hosts.presence.effect(function* ({ context }) {
+      yield* experimentOn(context.userId);
+      const owned = yield* hostedStoreOrUnavailable(devicesSeenSince(context.userId, new Date(0)));
+      const now = yield* Clock.currentTimeMillis;
+      return {
+        devices: owned.map((row) => ({
+          deviceId: row.id,
+          // Note that the age is taken on this clock, which wrote the beat, so a reader's clock never enters it.
+          ageMs: Math.max(0, now - row.lastSeenAt.getTime()),
+        })),
       };
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {

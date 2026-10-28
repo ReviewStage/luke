@@ -43,7 +43,11 @@ import {
   type PullRequestState,
   type RefusedDevice,
 } from "@luke/features/coding-agent-wire";
-import { DEVICE_KIND, type DeviceKind } from "@luke/features/device-agent-wire";
+import {
+  DEVICE_PLATFORM,
+  type DeviceKind,
+  type DevicePlatform,
+} from "@luke/features/device-agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
@@ -101,6 +105,7 @@ import {
 import { sentLineId } from "@luke/wire/host-ids";
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
+import { devicePlatformOf } from "../device-platform.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
 import {
@@ -619,9 +624,10 @@ export interface RefusedCall {
   readonly refusedDevice?: RefusedDevice | undefined;
 }
 
-/** The device a task runs its agents on, as a refusal names it: its name, its kind where the service said, and its owner where it is another member's and the service said. */
+/** The device a task runs its agents on, as a refusal names it: its name, its platform and kind where the service said, and its owner where it is another member's and the service said. */
 export interface RefusingDevice {
   readonly name: string;
+  readonly platform?: DevicePlatform | undefined;
   readonly kind?: DeviceKind | undefined;
   readonly owner?: string | undefined;
 }
@@ -632,11 +638,11 @@ const UNNAMED_DEVICE = "Your device";
 /** The way out every device refusal ends on, since the cloud takes any agent. */
 const RUN_IN_CLOUD = "or set this task to run in the cloud";
 
-/** How a device that went quiet is brought back: a Mac's app opened, or a host's own Luke started. */
+/** How a device that went quiet is brought back, by its platform: a Mac's app opened, or a Linux server's own Luke started. */
 const DEVICE_WAKE = {
-  [DEVICE_KIND.DESKTOP]: "Open Luke on it",
-  [DEVICE_KIND.HOST]: "Start Luke on that host",
-} as const satisfies Record<DeviceKind, string>;
+  [DEVICE_PLATFORM.DARWIN]: "Open Luke on it",
+  [DEVICE_PLATFORM.LINUX]: "Start Luke on that host",
+} as const satisfies Record<DevicePlatform, string>;
 
 /**
  * Why the device a task runs its agents on would not take a Start, as New
@@ -653,7 +659,7 @@ export function localAgentRefusalWords(
     case LOCAL_AGENT_REFUSAL.OFF:
       return `Local agents are off, so this agent can't start on ${name}. Turn them on in Settings › Experimental, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.MAC_AWAY:
-      return `${name} is offline, so this agent can't start there. ${DEVICE_WAKE[device?.kind ?? DEVICE_KIND.DESKTOP]}, ${RUN_IN_CLOUD}.`;
+      return `${name} is offline, so this agent can't start there. ${DEVICE_WAKE[devicePlatformOf(device ?? {})]}, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.CODEX:
       return `${name} can't run Codex agents yet. Wait for its Codex download to finish, choose a Claude model, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.NO_HARNESS:

@@ -24,6 +24,7 @@
  */
 
 import "@orpc/experimental-effect/extensions/effect";
+import type { DatabaseServices } from "@luke/database/core/query";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { hostedContract } from "@luke/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
@@ -40,7 +41,9 @@ import { sessionCredential } from "../auth/session-credential.js";
 import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
+  type HostedRefusal,
   hostedCarriesBearer,
+  resolvedAccount,
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -73,7 +76,7 @@ export const hosted = implement(hostedContract).$context<HostedContext>();
 /** The caller by its bearer, or with no `Authorization` at all, the browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`). */
 export function accountMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
-    const account = yield* resolveUserId(context.request);
+    const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return yield* next({ context: { userId: account.value } });
   });
@@ -84,36 +87,56 @@ export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    const account = yield* resolveUserId(context.request);
+    const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return yield* next({ context: { userId: account.value } });
   });
 }
 
-/** A device's caller: its account, and where a host called on its device secret, that host's device, which is the one device it may act for. */
+/** A device's caller: its account, and where an enrolled machine called on its device secret, that machine's device, which is the one device it may act for. */
 export interface DeviceCaller extends HostedCaller {
   readonly hostDeviceId: string | undefined;
 }
 
 /**
- * The caller as a device: a host by its device secret
- * (`auth/device-secret.ts`'s `hostCallerOf`, which refuses a secret no
- * standing host holds and a daemon below the floor), and otherwise a desktop
- * by its bearer alone, on `bearerOnlyMiddleware`'s terms.
+ * The caller as a device: an enrolled machine by its device secret, of any
+ * kind or platform (`auth/device-secret.ts`'s `hostCallerOf`, which refuses
+ * a secret no standing machine holds and a host program below the floor),
+ * and otherwise a desktop by its sign-in; nothing where the request names
+ * neither. The one read of a device's caller, which the device-agents
+ * procedures and the runner token route both take.
  */
+export const deviceCallerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  resolveUserId: UserIdResolver,
+  request: Request,
+): Effect.fn.Return<Option.Option<DeviceCaller>, HostedRefusal, DatabaseServices> {
+  const host = yield* hostCallerOf(request);
+  if (Option.isSome(host)) {
+    return Option.some({ userId: host.value.userId, hostDeviceId: host.value.deviceId });
+  }
+  const account = yield* resolvedAccount(resolveUserId, request);
+  return Option.map(account, (userId) => ({ userId, hostDeviceId: undefined }));
+});
+
+/**
+ * Whether a device's caller may act for the device named: an enrolled
+ * machine for itself alone, and a desktop on its sign-in, which names no
+ * device of its own, for any device of its account, as every released
+ * desktop build has. Note that the account is the store's to hold the
+ * device to; this is the one rule of which device, every route alike.
+ */
+export function actsForDevice(caller: DeviceCaller, deviceId: string): boolean {
+  return caller.hostDeviceId === undefined || caller.hostDeviceId === deviceId;
+}
+
+/** The caller as a device (`deviceCallerOf`), by its bearer alone, on `bearerOnlyMiddleware`'s terms. */
 export function deviceMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, DeviceCaller>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    const host = yield* hostCallerOf(context.request);
-    if (Option.isSome(host)) {
-      return yield* next({
-        context: { userId: host.value.userId, hostDeviceId: host.value.deviceId },
-      });
-    }
-    const account = yield* resolveUserId(context.request);
-    if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value, hostDeviceId: undefined } });
+    const caller = yield* deviceCallerOf(resolveUserId, context.request);
+    if (Option.isNone(caller)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    return yield* next({ context: caller.value });
   });
 }
 

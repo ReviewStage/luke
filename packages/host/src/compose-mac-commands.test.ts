@@ -30,8 +30,7 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 /**
  * The concern that runs on this Mac what the account's agents queue for it,
- * against a scripted service and spawner, with Realtime off, as the
- * deployment runs without `LUKE_REALTIME`: the live read answered polled and
+ * against a scripted service and spawner: the live read answered polled and
  * held until the rows move. With the setting on Never, or no account, the
  * service is never read; otherwise every read names the account and the
  * kinds this Mac runs, each command waiting is claimed by its id, the

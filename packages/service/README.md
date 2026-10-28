@@ -2789,6 +2789,35 @@ before the session is counted or created; `upstream-error` when OpenAI refused t
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
 
+## Luke Sync
+
+`src/sync/` is what a wait on the database waits through. A reader opens a
+watch on the topics its rows notify (`src/sync/watch.ts`; the topics and the
+triggers that send them are `@luke/database/sync`), reads, and waits on the
+watch's `next` before each read after; `heldUntil` (`src/http/held-read.ts`)
+holds every held read this way. The watch is opened before the first read, so
+a write that commits while that read runs still wakes the next look.
+
+`src/sync/hub.ts` is the instance's hub: one `LISTEN` on the sync channel per
+function instance, over `DATABASE_URL_UNPOOLED`, since a pooler cannot hold a
+`LISTEN`. It is opened with the first watch on topics and closed thirty
+seconds after the last. It notifies itself through the pool every fifteen
+seconds, reading the notification queue's usage in the same round trip, and
+reconnects where that notification does not come back within fifteen more; a
+watch opened on a listener nobody was watching proves it with the same round
+trip before it answers. Losing a connection and opening its replacement each
+wake every watch, so its reader reads again.
+
+`webServices` provides the hub only where `LUKE_SYNC` reads `on`. Off, or
+unset, `Sync` stands as the clock, nothing reads `DATABASE_URL_UNPOOLED` and
+nothing listens, and every `next` waits its caller's own poll, as every held
+read did before. On without `DATABASE_URL_UNPOOLED`, the listener stays down
+and waits run on their clock; so do they while a listener reconnects, and a
+watch on no topics always does. The hub's metrics (`luke.sync.*`) count
+notifications, wakes, fallback wakes, reconnects, and the milliseconds the
+listener stood down, and gauge the notification queue's usage; none carries a
+topic, an id, or a transaction id.
+
 ## The scheduled sweep
 
 `apps/web/server/routes/maintenance/sweep.ts` is what Vercel's cron calls:

@@ -199,7 +199,6 @@ import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
-import { strandedHome } from "./move-task-dialog.js";
 import { useTasksWaiting } from "./places-waiting.js";
 import {
   ADD_SECTION,
@@ -848,11 +847,7 @@ function taskRows(
         endMark: (
           <>
             {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-            <TaskRowStatus
-              task={task}
-              waiting={waitingOn.get(task.id) ?? 0}
-              stranded={strandedHome(tasks, task)}
-            />
+            <TaskRowStatus task={task} waiting={waitingOn.get(task.id) ?? 0} />
           </>
         ),
         people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
@@ -1083,7 +1078,7 @@ function peopleRows(
   }));
 }
 
-/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, hanging the channel's card as its sidebar row does, which choosing opens on its stream; `#app` typed finds it too. */
+/** The listed workspace's open channels, each by its glyph and name, as the sidebar lists it, and its purpose, hanging the channel's card as its sidebar row does, which choosing narrows the Inbox to; `#app` typed finds it too. */
 function channelRows(
   channels: readonly Channel[],
   workspaceId: string | undefined,

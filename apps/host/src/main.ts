@@ -3,23 +3,23 @@
  *
  * Bundled into one file (`pnpm --filter @luke/host-daemon build`) that the
  * host's release carries at `lib/luke-host.mjs`, beside the runner's bundle
- * at `lib/agent-runner.mjs` (`linux-platform.ts`), and runs on the release's
+ * at `lib/agent-runner.mjs` (`host-platform.ts`), and runs on the release's
  * own Node, which every runner runs on too. Every command runs as the
  * `luke-host` user, whose home holds the daemon's state, `state/` under it.
  *
  * `run` is the command the box's system service runs. A box
  * that never enrolled says so and reads its record again every
  * `UNENROLLED_REST`, rather than exiting for systemd to start it over; one
- * that did runs the daemon (`@luke/host/linux-host`) until the service is
+ * that did runs the daemon (`@luke/host/daemon`) until the service is
  * stopped, which stops every runner it started with it, or until Luke
  * refuses the box's secret, the host removed, when it stops them and exits 0,
  * which the service's `Restart=on-failure` leaves stopped. Every agent runs
- * in a smolvm VM of its own (`linuxPlatform`), on the image's own `gh`, with
+ * in a smolvm VM of its own (`hostPlatform`), on the image's own `gh`, with
  * `/dev/kvm` passed through where the box has it, through the `smolvm` the
- * install script put at a fixed path and named in
- * the service's environment (`SMOLVM_ENV`), never the one `PATH` happens to
- * hold. Before it follows anything it asks that `smolvm` for its `--version`
- * (`hostSmolvmRefusal`) and, where it is not the pinned release, says so and
+ * install script put at a fixed path and named in the service's environment
+ * (`LINUX_HOST`'s `smolvm`), never the one `PATH` happens to hold. Before it
+ * follows anything it asks that `smolvm` for its `--version`
+ * (`hostSmolvm`) and, where it is not the pinned release, says so and
  * exits `RUN_EXIT.SMOLVM_REFUSED`, which the service's
  * `RestartPreventExitStatus` leaves stopped, since a restart would only
  * repeat the refusal.
@@ -30,7 +30,7 @@
  * the secret.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -41,27 +41,26 @@ import {
   NodeRuntime,
 } from "@effect/platform-node";
 import { HOST_ENROLL_OUTCOME } from "@luke/features";
-import { Environment, reporterLayer } from "@luke/host/effect";
 import {
   enrollHostDevice,
+  type HostPlatformOptions,
   hostArch,
   hostDaemon,
-  hostSmolvmRefusal,
-  linuxPlatform,
+  hostPlatform,
+  hostSmolvm,
+  LINUX_HOST,
   readHostDevice,
-} from "@luke/host/linux-host";
+} from "@luke/host/daemon";
+import { Environment, reporterLayer } from "@luke/host/effect";
 import { reportToStderr } from "@luke/host/node";
-import { ConfigProvider, Duration, Effect, Exit, Layer, Option } from "effect";
+import { ConfigProvider, Duration, Effect, Exit, Layer, Option, Result } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /** The daemon's version, which the release's build writes in; a development run is below every floor. */
 const VERSION = process.env.LUKE_HOST_VERSION ?? "0.0.0";
 
-/** The variable the install script's service names the `smolvm` every agent's VM runs under in, by its whole path. */
-const SMOLVM_ENV = "LUKE_HOST_SMOLVM";
-
-/** The device a box hands each agent's VM so it can boot VMs of its own, where the box has it. */
-const KVM = "/dev/kvm";
+/** The OS this bundle runs on, and what the daemon does differently there. */
+const HOST_OS = LINUX_HOST;
 
 /** The service a box enrolls with where its install script names none. */
 const DEFAULT_SERVICE_ORIGIN = "https://tryluke.dev";
@@ -101,24 +100,16 @@ const nodeServices = Layer.mergeAll(
 
 /** The box's architecture, or a failure naming it where no release is built for it. */
 const arch = Effect.suspend(() => {
-  const read = hostArch(process.arch);
+  const read = hostArch(HOST_OS, process.arch);
   return read === undefined
-    ? Effect.fail(`Luke host runs on x64 and arm64 Linux, not ${process.arch}.`)
+    ? Effect.fail(
+        `Luke host runs on ${HOST_OS.arches.join(" and ")} ${HOST_OS.name}, not ${process.arch}.`,
+      )
     : Effect.succeed(read);
 });
 
-/** The line `run` refuses to start with where the box's `smolvm` is not the pinned release or its path was not named; none where it is fine. */
-const smolvmRefusal = (smolvm: string) =>
-  smolvm.length === 0
-    ? Effect.succeed(
-        Option.some(
-          `Luke host: ${SMOLVM_ENV} names no smolvm, so it will not start. Run the install command again (Settings › Agents › Hosts) to set this box's service up.`,
-        ),
-      )
-    : hostSmolvmRefusal(smolvm);
-
 /** The daemon on the box's record, or a rest until there is one, its agents' VMs run by the `smolvm` given; it ends once Luke refuses the box's secret. */
-const follow = (smolvm: string) =>
+const follow = (smolvm: HostPlatformOptions["smolvm"]) =>
   Effect.gen(function* () {
     const device = yield* readHostDevice(stateRoot);
     if (Option.isNone(device)) {
@@ -129,18 +120,17 @@ const follow = (smolvm: string) =>
       return false;
     }
     const boxArch = yield* arch;
-    const platform = linuxPlatform({
+    const platform = hostPlatform({
+      os: HOST_OS,
       installFolder,
       arch: boxArch,
-      hostname: os.hostname(),
       stateRoot,
       smolvm,
       // Note that every command in an agent's VM runs as luke-host, which owns the agent's folder it mounts.
       user: { uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0 },
-      kvm: existsSync(KVM),
     });
     reportToStderr(
-      `Luke host ${VERSION}: following ${device.value.serviceOrigin} as ${os.hostname()}.`,
+      `Luke host ${VERSION}: following ${device.value.serviceOrigin} as ${platform.deviceName}.`,
     );
     yield* hostDaemon({ stateRoot, device: device.value, version: VERSION, platform });
     reportToStderr(
@@ -151,13 +141,12 @@ const follow = (smolvm: string) =>
 
 /** `luke-host run`: the daemon, once the box's `smolvm` is the pinned release; the exit code it ends with otherwise. */
 const run = Effect.gen(function* () {
-  const smolvm = process.env[SMOLVM_ENV] ?? "";
-  const refusal = yield* smolvmRefusal(smolvm);
-  if (Option.isSome(refusal)) {
-    reportToStderr(refusal.value);
+  const smolvm = yield* hostSmolvm(HOST_OS.smolvm, process.env);
+  if (Result.isFailure(smolvm)) {
+    reportToStderr(smolvm.failure);
     return RUN_EXIT.SMOLVM_REFUSED;
   }
-  yield* follow(smolvm);
+  yield* follow(smolvm.success);
   return 0;
 });
 
@@ -169,6 +158,7 @@ const enroll = (token: string, name: string, origin: string) =>
       serviceOrigin: origin.replace(/\/+$/u, ""),
       installToken: token,
       name,
+      platform: HOST_OS.platform,
       arch: yield* arch,
       version: VERSION,
     });
@@ -221,7 +211,11 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
         process.stderr.write("luke-host enroll needs an install token, as --token or on stdin\n"),
       ).pipe(Effect.as(ENROLL_EXIT.USAGE));
     }
-    return enroll(token, values.name ?? os.hostname(), values.origin ?? DEFAULT_SERVICE_ORIGIN);
+    return enroll(
+      token,
+      values.name ?? HOST_OS.deviceName(),
+      values.origin ?? DEFAULT_SERVICE_ORIGIN,
+    );
   }
   return Effect.sync(() =>
     process.stderr.write("usage: luke-host run | enroll [--token <token>] | version | uninstall\n"),

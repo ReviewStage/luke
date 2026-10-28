@@ -1,12 +1,15 @@
+import { readFile, writeFile } from "node:fs/promises";
 import { PgliteClient } from "@effect/sql-pglite";
 import { PGlite } from "@electric-sql/pglite";
 import * as PgliteDrizzle from "drizzle-orm/effect-pglite";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Duration, Effect, Layer, ManagedRuntime, Redacted, Stream } from "effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 import { runWebMigrations } from "../core/migrator.js";
 import { Database, type DatabaseServices } from "../core/query.js";
 import { sqlClientOverUrl } from "../core/sql-client.js";
+import { SyncListener, syncListenerOverUrl } from "../sync/listener.js";
+import { SYNC_CHANNEL } from "../sync/notification.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
 /**
@@ -19,7 +22,9 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-
  * closes (`test-postgres.ts`), so a file's unscoped statement reaches no other
  * file's rows on either dialect. The Postgres half is the production layer's
  * own client and database; the PGlite half is `@effect/sql-pglite`'s client
- * and Drizzle's PGlite driver over it.
+ * and Drizzle's PGlite driver over it. Each carries a `SyncListener` on the
+ * same database: on Postgres the production listener, on a connection of
+ * its own beside the pool's one, and on PGlite the client's own listen.
  */
 
 /**
@@ -39,10 +44,19 @@ export const sqlClientOverPglite = (
   );
 
 /**
- * The data directory of the first PGlite this process migrated, dumped once
- * and loaded by every later opening. A fresh PGlite spends seconds in initdb
- * and the migrations, a load from the dump a fraction of one, and a file
- * that opens a database per test opens dozens (workspaces-app's 45 spent
+ * The variable naming the file a run's global setup dumped one migrated
+ * PGlite to (`migrated-pglite-setup.ts`), read by every test file of the run.
+ */
+export const MIGRATED_PGLITE_ENVIRONMENT = {
+  DUMP: "LUKE_MIGRATED_PGLITE_DUMP",
+} as const;
+
+/**
+ * The data directory of a migrated PGlite, dumped once and loaded by every
+ * later opening: the run's dump where its global setup named one, or else
+ * the first PGlite this module migrated. A fresh PGlite spends seconds in
+ * initdb and the migrations, a load from the dump a fraction of one, and a
+ * file that opens a database per test opens dozens (workspaces-app's 45 spent
  * most of its run here).
  */
 let migratedDataDirectory: Promise<Blob> | undefined;
@@ -62,12 +76,31 @@ async function migrateFreshPglite(): Promise<PGlite> {
 }
 
 /**
+ * Migrates a fresh PGlite and writes its dump to `file`, which a run's global
+ * setup does once so that no test file migrates one of its own.
+ */
+export async function writeMigratedPgliteDump(file: string): Promise<void> {
+  const client = await migrateFreshPglite();
+  try {
+    const dump = await client.dumpDataDir("none");
+    await writeFile(file, new Uint8Array(await dump.arrayBuffer()));
+  } finally {
+    await client.close();
+  }
+}
+
+/**
  * A PGlite of the caller's own carrying the same generated migrations the
- * store's tests run against. Note that the first opening migrates and hands
- * over that very database, dumped before anyone writes to it, so a file that
- * opens one database pays for no dump load on top of its migrations.
+ * store's tests run against. Note that where the run dumped none, the first
+ * opening migrates and hands over that very database, dumped before anyone
+ * writes to it, so a file that opens one database pays for no dump load on
+ * top of its migrations.
  */
 export async function openMigratedPglite(): Promise<PGlite> {
+  const runDump = process.env[MIGRATED_PGLITE_ENVIRONMENT.DUMP];
+  if (migratedDataDirectory === undefined && runDump !== undefined) {
+    migratedDataDirectory = readFile(runDump).then((bytes) => new Blob([bytes]));
+  }
   if (migratedDataDirectory !== undefined) {
     return new PGlite({ loadDataDir: await migratedDataDirectory });
   }
@@ -88,11 +121,20 @@ export async function openMigratedPglite(): Promise<PGlite> {
   return first;
 }
 
+/** A listener on the test's own PGlite, which `@effect/sql-pglite` listens on in process. */
+const syncListenerOverPglite: Layer.Layer<SyncListener, never, PgliteClient.PgliteClient> =
+  Layer.effect(
+    SyncListener,
+    Effect.map(PgliteClient.PgliteClient, (client) => ({
+      listen: Effect.map(client.listen(SYNC_CHANNEL), (payloads) => Stream.fromQueue(payloads)),
+    })),
+  );
+
 function pgliteSqlClientOver(open: () => Promise<PGlite>) {
   return Layer.unwrap(
     Effect.map(
       Effect.acquireRelease(Effect.promise(open), (client) => Effect.promise(() => client.close())),
-      sqlClientOverPglite,
+      (client) => Layer.provideMerge(syncListenerOverPglite, sqlClientOverPglite(client)),
     ),
   );
 }
@@ -118,7 +160,15 @@ function postgresSqlClient(connectionString: string) {
         Effect.promise(() => cloneStoreTestPostgres(connectionString)),
         (clone) => Effect.promise(() => clone.drop()),
       ),
-      (clone) => sqlClientOverUrl(clone.connectionString),
+      (clone) =>
+        Layer.merge(
+          sqlClientOverUrl(clone.connectionString),
+          // Note that the connect timeout is off, for the reason `sqlClientOverUrl` gives.
+          syncListenerOverUrl({
+            url: Redacted.make(clone.connectionString),
+            connectTimeout: Duration.infinity,
+          }),
+        ),
     ),
   );
 }
@@ -130,7 +180,7 @@ const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
  * dialect this run was pointed at: a `getTestDB`, answered as the
  * layer a test provides rather than a handle it awaits, since every
  * statement here is an effect that reads its client and database from the
- * fiber.
+ * fiber, with a `SyncListener` on that database.
  */
-export const getTestDB = (): Layer.Layer<DatabaseServices, SqlError> =>
+export const getTestDB = (): Layer.Layer<DatabaseServices | SyncListener, SqlError> =>
   connectionString === undefined ? pgliteSqlClient : postgresSqlClient(connectionString);

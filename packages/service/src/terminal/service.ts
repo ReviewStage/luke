@@ -22,7 +22,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema, type Scope } from "effect";
+import { type Cause, Effect, Option, Result, Schema, type Scope } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {
   RELAY_UPGRADE_STATUS,
@@ -92,8 +92,10 @@ export interface TerminalRelayOptions {
   readonly server: RelayServer;
   /** The origins the deployment's own pages are served from, the only ones a page's upgrade is taken from. */
   readonly ownOrigins: ReadonlySet<string>;
-  /** The account a credential answers for, or none. */
-  readonly resolveUserId: (credential: RelayCredential) => Effect.Effect<Option.Option<string>>;
+  /** The account a credential answers for, or none; a failure is the auth service's, refused as unavailable. */
+  readonly resolveUserId: (
+    credential: RelayCredential,
+  ) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
   readonly dependencies: RelayDependencies;
 }
 
@@ -106,11 +108,13 @@ export function standTerminalRelay(
     sockets: { maxPayload: MAXIMUM_FRAME_BYTES },
     admit: (request) => admitRelayUpgrade(request.url, request.headers, options.ownOrigins),
     accept: (decision): Effect.Effect<{ readonly status: number } | RelayAsk> =>
-      Effect.map(options.resolveUserId(decision.credential), (account) =>
-        Option.isNone(account)
-          ? { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED }
-          : { ...decision.ask, userId: account.value },
-      ),
+      Effect.match(options.resolveUserId(decision.credential), {
+        onFailure: () => ({ status: RELAY_UPGRADE_STATUS.SERVICE_UNAVAILABLE }),
+        onSuccess: (account) =>
+          Option.isNone(account)
+            ? { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED }
+            : { ...decision.ask, userId: account.value },
+      }),
     relay: (ask, device) => relayTerminal(device, ask, options.dependencies),
   });
 }

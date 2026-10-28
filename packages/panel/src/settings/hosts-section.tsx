@@ -1,4 +1,5 @@
-import { macOnline } from "@luke/features/coding-agent-wire";
+import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   HOST_WIRE,
   type Host,
@@ -19,14 +20,11 @@ import {
   CONFIRM_LOSS,
   CodeCard,
   ConfirmDialog,
-  CopyButton,
   DIALOG_SIZE,
   Dialog,
   DialogActions,
   ErrorState,
   GAP,
-  Inline,
-  JUSTIFY,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
@@ -45,20 +43,29 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { copyThroughShell } from "../copy-feedback.js";
+import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
+import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
+import {
+  type PresenceBook,
+  presenceAgeMs,
+  presenceStanding,
+  useDevicePresence,
+} from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Agents › Hosts: the member's own Linux servers that run their local agents, and Add hosts, which shows the install command once.
+ * hosts-section.tsx -- Settings › Agents › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
  *
- * A host is a server with nobody signed in at it (`@luke/features/host-wire`),
- * which joins its member's devices by running the install command as root.
- * The list names each of the member's hosts, whether it is online, held
- * against the window's own clock as a Mac's label is (`macOnline`), when it
- * was last seen otherwise, and, where its daemon is below the service's
- * floor, Upgrade needed with the command that upgrades it in place. Remove,
- * behind the row's ⋯, refuses that box at once, after asking.
+ * A machine is any device of the member's enrolled with a secret of its own
+ * (`@luke/features/host-wire`): a Linux server that ran the install command
+ * as root, or a Mac its desktop enrolled. The list names each, what it is by
+ * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
+ * the window's own clock as a Mac's label is (`macOnline`), when it was last
+ * seen otherwise, and, where its host program is below the service's floor,
+ * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
+ * updated. Remove, behind the row's ⋯, refuses that machine at once, after
+ * asking. Adding stays Linux-only and says so, since a Mac joins from its app.
  *
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
@@ -85,28 +92,26 @@ const MINUTE_MS = 60_000;
 const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
-  TITLE: "Hosts",
-  EMPTY:
-    "Run agents on your own Linux servers. They connect out to Luke, so nothing needs opening on them.",
-  ADD: "Add hosts",
-  ADD_DESCRIPTION: "One command adds any number of Linux servers, x64 or arm64, for 24 hours.",
+  TITLE: "Machines",
+  ADD: "Add Linux servers",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
-  READ_FAILED: "Could not read your hosts.",
-  SIGNED_OUT: "Sign in to see your hosts.",
+  READ_FAILED: "Could not read your machines.",
+  SIGNED_OUT: "Sign in to see your machines.",
   ONLINE: "Online",
+  UNKNOWN: "Can't check status",
+  CHECKING: "Checking",
   UPGRADE_NEEDED: "Upgrade needed",
   UPGRADE_TITLE: "Run this on the server to upgrade it",
+  MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
   INSTALL_TITLE: "Run this as root on each server",
   LOOP_TITLE: "Or on many servers at once",
-  PROMPT_HELP:
-    "Paste the setup prompt into Claude Code or Codex on a computer that can reach your servers.",
-  PROMPT_WHAT: "setup prompt",
-  SHOWN_FOLLOWS: "A server's agents use your sign-ins and Luke's GitHub App.",
+  COPY_PROMPT: "Copy agent prompt",
+  PROMPT_COPIED: "Agent prompt copied",
   REVOKE: "Revoke this command",
 } as const;
 
-/** The rows that stand while the hosts are read: Add hosts, and a host with its ⋯. */
+/** The rows that stand while the machines are read: Add Linux servers, and a machine with its ⋯. */
 const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
@@ -136,29 +141,47 @@ async function mintedInstallToken(): Promise<{ installToken: string; tokenHash: 
 }
 
 /** A host's line under its name: online, or when it was last seen. */
-function seenWords(host: Host, now: number): string {
-  return macOnline(host.seenAt, now)
-    ? WORDS.ONLINE
-    : `Offline · last seen ${agoText(host.seenAt, now)}`;
+function seenWords(host: Host, book: PresenceBook, now: number): string {
+  // Note that a host the read does not name, though it is the account's own, is gone.
+  const standing = presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
+  if (standing === DEVICE_STANDING.ONLINE) return WORDS.ONLINE;
+  if (standing === DEVICE_STANDING.CHECKING) return WORDS.CHECKING;
+  const age = presenceAgeMs(book, host.id);
+  // Note that the age is the service's, so the moment is made from the window's clock and the age alone.
+  const lastSeen = age === undefined ? "" : ` · last seen ${agoText(now - age, now)}`;
+  return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
 }
 
-/** One host's row: its name, whether it is online, Upgrade needed with its command, and Remove behind its ⋯. */
+/** What Remove says goes, by the machine's platform: a server is cleaned on the box itself, and a Mac joins again only from its app. */
+const REMOVE_BODY = {
+  [DEVICE_PLATFORM.LINUX]:
+    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
+  [DEVICE_PLATFORM.DARWIN]:
+    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, turn local agents on in the Luke app on it.",
+} as const satisfies Record<DevicePlatform, string>;
+
+/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯. */
 function HostRow({
   host,
+  book,
   now,
   installScriptUrl,
   onRemove,
 }: {
   host: Host;
+  book: PresenceBook;
   now: number;
   installScriptUrl: string;
   onRemove: (id: string) => Promise<ActionResult>;
 }): React.JSX.Element {
   const removing = useConfirmDialog({ subject: true, surfaceOpen: true }, () => onRemove(host.id));
+  // Note that a service older than platforms listed only Linux servers.
+  const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
+  const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
   return (
     <>
       <MenuRow
-        thing="Host"
+        thing="Machine"
         actions={[
           {
             label: "Remove",
@@ -174,17 +197,17 @@ function HostRow({
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
           description:
-            host.upgradeNeeded && host.version !== null
-              ? `${seenWords(host, now)} · runs ${host.version}`
-              : seenWords(host, now),
-          below: host.upgradeNeeded ? (
+            host.upgradeNeeded && host.version !== null ? `${seen} · runs ${host.version}` : seen,
+          below: !host.upgradeNeeded ? undefined : platform === DEVICE_PLATFORM.DARWIN ? (
+            <Text>{WORDS.MAC_UPGRADE}</Text>
+          ) : (
             <CodeCard
               title={WORDS.UPGRADE_TITLE}
               titleIs={CODE_CARD_TITLE.WORDS}
               code={hostUpgradeCommand(installScriptUrl)}
               copy={copyThroughShell}
             />
-          ) : undefined,
+          ),
         }}
       />
       <ConfirmDialog
@@ -192,7 +215,7 @@ function HostRow({
         confirm={removing}
         question={{
           title: `Remove ${host.name}?`,
-          body: "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
+          body: REMOVE_BODY[platform],
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -202,7 +225,7 @@ function HostRow({
   );
 }
 
-/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add Linux servers opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -213,6 +236,7 @@ function AddHostsDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const revoking = useConfirmDialog({ subject: true, surfaceOpen: true }, onRevoke);
+  const copyPrompt = useCopyToast();
   return (
     <Dialog
       open
@@ -241,15 +265,17 @@ function AddHostsDialog({
             code={hostInstallLoopCommand(shown.installScriptUrl, shown.installToken)}
             copy={copyThroughShell}
           />
-          <Inline gap={GAP.CONTROL} justify={JUSTIFY.BETWEEN} wrap={false}>
-            <Text>{WORDS.PROMPT_HELP}</Text>
-            <CopyButton
-              text={hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt)}
-              what={WORDS.PROMPT_WHAT}
-              copy={copyThroughShell}
-            />
-          </Inline>
-          <Text>{WORDS.SHOWN_FOLLOWS}</Text>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            onClick={() =>
+              copyPrompt(
+                hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt),
+                WORDS.PROMPT_COPIED,
+              )
+            }
+          >
+            {WORDS.COPY_PROMPT}
+          </Button>
         </Stack>
       </div>
       <ConfirmDialog
@@ -267,13 +293,15 @@ function AddHostsDialog({
   );
 }
 
-/** The Hosts group: Add hosts and the member's hosts, read when the page opens, or why they cannot be drawn. */
+/** The Machines group: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
   const now = useSecond();
   const minute = Math.floor(useMinute() / MINUTE_MS);
   const [hosts, setHosts] = useState<readonly Host[] | undefined>(undefined);
+  // Note that the list is read once a minute for the hosts that join or leave, while each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
+  const book = useDevicePresence(on && signedIn);
   const [installScriptUrl, setInstallScriptUrl] = useState<string | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -379,7 +407,6 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         <>
           <SettingsRow
             label={WORDS.ADD}
-            description={WORDS.ADD_DESCRIPTION}
             error={addFailed ? WORDS.ADD_FAILED : undefined}
           >
             {() => (
@@ -393,19 +420,16 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
               </Button>
             )}
           </SettingsRow>
-          {hosts.length === 0 ? (
-            <SettingsLine>{WORDS.EMPTY}</SettingsLine>
-          ) : (
-            hosts.map((host) => (
+          {hosts.map((host) => (
               <HostRow
                 key={host.id}
                 host={host}
+                book={book}
                 now={now}
                 installScriptUrl={installScriptUrl}
                 onRemove={remove}
               />
-            ))
-          )}
+            ))}
           {shown === undefined ? null : (
             <AddHostsDialog
               shown={shown}
@@ -425,7 +449,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
+        <SettingsRowsSkeleton label={readingWords("your machines")} rows={HOSTS_SKELETON} />
       )}
     </SettingsSection>
   );

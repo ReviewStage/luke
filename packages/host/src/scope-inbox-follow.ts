@@ -13,19 +13,18 @@ import {
 import { Data, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import { Hex } from "effect/encoding";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, LIVE_STATE, type LiveClient, restarting } from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, restarting } from "./live-follow.js";
 
 /**
- * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main from a Neon Realtime subscription the host holds while it is followed, and told whole as it changes.
+ * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main over the service's held poll while it is followed, and told whole as it changes.
  *
- * The host subscribes to the scope's sealed statements (`live-follow.ts`)
- * the first time the scope is followed, keeps the items as each change
- * lands, tells each change, and lets the subscription go a while after the
- * last follow let go of it. Nothing asks the service on a clock. One the
- * account does not reach is not found, as the held read said.
+ * The host follows the scope's live read (`live-follow.ts`) the first time
+ * the scope is followed, keeps the items as each change lands, tells each
+ * change, and lets the follow go a while after the last reader let go of
+ * it. One the account does not reach is not found, as the held read said.
  */
 
-/** How long a subscription no follow holds is kept, so a window coming back finds it standing. */
+/** How long a follow no reader holds is kept, so a window coming back finds it standing. */
 const IDLE = Duration.seconds(30);
 
 /** Which inbox: one plan's, or one agent's, by its id. */
@@ -34,7 +33,7 @@ export class InboxScopeKey extends Data.Class<{
   readonly id: string;
 }> {}
 
-/** Where a scope's items stand as the subscription last delivered them, and the cursor they digest to. */
+/** Where a scope's items stand as the follow last delivered them, and the cursor they digest to. */
 interface LiveInbox {
   readonly items: readonly InboxItem[];
   readonly cursor: string;
@@ -53,7 +52,7 @@ type CodingAgentCallFailure =
   | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
   | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED;
 
-/** A subscription before its first rows, with them, or stopped for good. */
+/** A follow before its first rows, with them, or stopped for good. */
 type LiveState =
   | { readonly kind: typeof LIVE_STATE.WAITING }
   | { readonly kind: typeof LIVE_STATE.STANDING; readonly inbox: LiveInbox }
@@ -78,23 +77,20 @@ function cursorOf(items: readonly InboxItem[]): Effect.Effect<string> {
 }
 
 export interface ScopeInboxDependencies {
-  /** The scope sealed for following for the account named, or with `poll` its rows inline; not found, signed out, or a failure where the service sealed none. */
+  /** The scope's read for the account named, its rows inline, held past `after` where it names one; not found, signed out, or a failure where the service answered none. */
   readonly seal: (
     scope: InboxScopeKey,
     poll: boolean,
     userId: string,
     after?: string,
   ) => Effect.Effect<ScopeInboxLiveAnswer | { readonly failure: string }>;
-  /** The account signed in now, which a follow is sealed for from its first seal on; none where nobody is. */
+  /** The account signed in now, which a follow is read for from its first read on; none where nobody is. */
   readonly accountId: () => string | undefined;
-  /** Realtime's client at the address the service named, loaded where it must be. */
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  readonly now: () => number;
-  /** Where each scope's wait for a write's transaction stands while it is subscribed, which the inbox's writes wait on. */
+  /** Where each scope's wait for a write's transaction stands while it is followed, which the inbox's writes wait on. */
   readonly txWaits: InboxTxWaits;
 }
 
-/** The subscriptions the windows' reads share, each held while read and a while after. */
+/** The follows the windows' reads share, each held while read and a while after. */
 export type ScopeInboxes = RcMap.RcMap<InboxScopeKey, Standing>;
 
 /** The map a composer holds for as long as it stands. */
@@ -122,10 +118,7 @@ export function scopeInboxes(
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
         const rows = decodedLiveRows(
           {
-            openLive: dependencies.openLive,
-            reseal: () => seal(false),
             poll: (after) => seal(true, after),
-            now: dependencies.now,
             onTxWait: dependencies.txWaits.hook(),
           },
           first,
@@ -149,11 +142,10 @@ type Told = CodingAgentInboxChanged["inbox"];
 
 /**
  * The scope's inbox followed until interrupted, each change told whole from
- * its subscription once its first rows land, the same subscription the
- * reads share. One the account does not reach is told not found, which ends
- * the follow. A seal the service did not answer is told unanswered, and it,
- * or a subscription that stopped, is let go and sealed again after
- * `LIVE_RESTART`.
+ * its follow once its first rows land, the same follow the reads share. One
+ * the account does not reach is told not found, which ends the follow. A
+ * read the service did not answer is told unanswered, and it, or a follow
+ * that stopped, is let go and read again after `LIVE_RESTART`.
  */
 export function followInbox(
   inboxes: ScopeInboxes,
@@ -178,7 +170,7 @@ export function followInbox(
       return false;
     }),
   );
-  // Note that a follow that goes on is let go before the wait, so the next run seals it afresh.
+  // Note that a follow that goes on is let go before the wait, so the next run reads it afresh.
   return restarting(
     Effect.flatMap(attempt, (ended) =>
       ended ? Effect.succeed(false) : Effect.as(RcMap.invalidate(inboxes, scope), true),

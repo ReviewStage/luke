@@ -4,6 +4,12 @@ import type {
   HostedDeviceAgentClient,
 } from "@luke/features";
 import {
+  CHECKOUT_IDENTITY_SCRIPT,
+  type CheckoutIdentity,
+  checkoutIdentityEnv,
+} from "@luke/features/checkout-identity";
+import { DEVICE_BEAT } from "@luke/features/coding-agent-wire";
+import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,
   DEVICE_LAUNCH_REFUSAL,
@@ -84,7 +90,10 @@ import type { RunMode } from "./run-mode.js";
  * an agent's lines are delivered strictly in order while agents go on side
  * by side. A launch makes the agent's own repository under its folder
  * (`deviceAgentLayout`) where it has none, through the platform's script,
- * has the agent's VM made and started, and starts the runner in it, with
+ * has the agent's VM made and started, sets in the repository, inside the
+ * VM, who the agent's commits are by where the line says, as a cloud
+ * checkout sets it (`@luke/features/checkout-identity`), and starts the
+ * runner in it, with
  * the claim's secrets in its environment and nowhere else, never a file, an
  * argument, or a log, and its first lines on its stdin; its line is settled
  * with the runner's exit code once it exits. A message or retune line is
@@ -134,8 +143,8 @@ import type { RunMode } from "./run-mode.js";
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
 const IDLE = Duration.seconds(5);
-/** How often a device following its agents beats: a third of the service's forty-five-second presence window. */
-const BEAT_EVERY = Duration.seconds(15);
+/** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
+const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
 const UNSAVED_CHECK = Duration.seconds(30);
 /** Why a folder is kept where its check could not say what it holds. */
@@ -150,8 +159,6 @@ const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 const KILL_GRACE = Duration.seconds(3);
 /** The file in the host's state the device ids and the launches running are kept in. */
 const STATE_FILE = "local-agents.json";
-/** The folder under the agent's own that is its temp folder, which its runner and its commands write to. */
-const TEMP_FOLDER = "tmp";
 /** The exit code a launch is settled with where its worktree could not be made or its runner started. */
 const NOT_STARTED = 1;
 /** How soon a GitHub token the service did not hand is asked for again, well inside the hour the last one lasts. */
@@ -592,6 +599,47 @@ export function composeLocalAgents(
           }).pipe(Effect.orElseSucceed(() => false));
 
         /**
+         * Who the agent's commits are by, as the service settled it, set in
+         * its own repository's config by the step a cloud checkout sets it
+         * with (`CHECKOUT_IDENTITY_SCRIPT`); whether it was. Note that it runs
+         * in the agent's VM, never on the device, whose own git a repository
+         * the agent rigged could steer, and on every launch, since a
+         * repository made before the launch line carried an identity holds
+         * none.
+         */
+        const identitySet = (
+          agentId: string,
+          layout: DeviceAgentLayout,
+          identity: CheckoutIdentity,
+        ) => {
+          const run = platform.sandbox.exec({
+            agentId,
+            folder: layout.folder,
+            cwd: layout.checkoutPath,
+            command: "/bin/bash",
+            args: ["-c", CHECKOUT_IDENTITY_SCRIPT],
+            env: { ...shellVariables, ...checkoutIdentityEnv(identity) },
+          });
+          return Effect.scoped(
+            Effect.flatMap(
+              ChildProcess.make(run.command, [...run.args], {
+                cwd: folder,
+                env: run.env,
+                extendEnv: false,
+                stdin: "ignore",
+                stdout: "ignore",
+                stderr: "ignore",
+                forceKillAfter: KILL_GRACE,
+              }),
+              (handle) => handle.exitCode,
+            ),
+          ).pipe(
+            Effect.map((code) => Number(code) === 0),
+            Effect.orElseSucceed(() => false),
+          );
+        };
+
+        /**
          * A fresh token for the agent's repository from the service, handed
          * to the sandbox, which keeps it outside every folder the agent's VM
          * mounts, where the VM's bindings read it; whether it was. A token
@@ -661,7 +709,7 @@ export function composeLocalAgents(
               withRepository ? sandbox.deviceGit(agentId) : undefined,
             );
             if (!made) return yield* settle(line.id, NOT_STARTED);
-            const temp = path.join(layout.folder, TEMP_FOLDER);
+            const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
             const runnerScope = yield* Scope.fork(agentScope);
             // Note that the runner holds its VM for as long as its scope stands, so the VM is let go of last as the scope closes, once the runner has ended.
@@ -683,6 +731,14 @@ export function composeLocalAgents(
               yield* Scope.close(runnerScope, Exit.void);
               report(`a local agent's VM could not be started: ${refused.value}`);
               return yield* settle(line.id, NOT_STARTED);
+            }
+            const identity = payload.value.identity;
+            if (withRepository && identity !== undefined) {
+              if (!(yield* identitySet(agentId, layout, identity))) {
+                yield* Scope.close(runnerScope, Exit.void);
+                report("a local agent's commit identity could not be set in its VM");
+                return yield* settle(line.id, NOT_STARTED);
+              }
             }
             const stdin = yield* Queue.unbounded<string>();
             const encoder = new TextEncoder();
@@ -1001,7 +1057,7 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
-            const env = { ...shellVariables, TMPDIR: path.join(layout.folder, TEMP_FOLDER) };
+            const env = { ...shellVariables, TMPDIR: layout.temp };
             // Note that an agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
             const sandbox = platform.sandbox;
             const inVm = {

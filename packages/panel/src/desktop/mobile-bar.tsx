@@ -3,7 +3,7 @@ import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { useChannelStreaming } from "../tasks/use-channels.js";
+import { useInboxNarrowed } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { needsYouNoun, useInboxWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -31,31 +31,17 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
  * sidebar's words.
  *
  * With Channels on (STAG-547) the bar is the same: the channels are
- * listed in the drawer, as the sidebar lists them, and a channel chosen
- * there shows its stream in the Inbox's place, which the bar stands over
- * with no place marked, while a thread opened from the stream keeps the
- * whole screen, as an item does.
+ * listed in the drawer under the Inbox, as the sidebar lists them, and a
+ * channel chosen there narrows the Inbox to it, which the bar stands over
+ * with no place marked, since the drawer's row is the place it is.
  */
 
-/** A channel's stream in the Inbox's place: the thread opened over it, by its item's id. */
-export interface BarChannels {
-  readonly threadId: string | undefined;
-}
-
-/** Whether the bar stands: a narrow room, signed in, on one of the places' lists; `channels` is none while no channel's stream stands in the Inbox's place. */
-export function mobileBarShown(
-  room: ShellRoom,
-  tasks: TasksControl,
-  channels: BarChannels | undefined,
-): boolean {
+/** Whether the bar stands: a narrow room, signed in, on one of the places' lists. */
+export function mobileBarShown(room: ShellRoom, tasks: TasksControl): boolean {
   // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
   if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
   const { inboxView, boardView, automationsView, adminView, agentView, personView } = tasks;
-  // Note that a thread stands over a channel's stream only while its item is the one chosen, so a choice history went back past shows the stream.
-  const chosen = inboxView.chosen;
-  const itemStands =
-    chosen !== undefined && (channels === undefined || channels.threadId === chosen.itemId);
-  if (inboxView.open) return inboxView.listed || !itemStands;
+  if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
   // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list and the Runs tab stand over the bar.
@@ -82,8 +68,8 @@ export function MobileBar({
 }): React.JSX.Element {
   const { inboxView, boardView } = tasks;
   const among = leave === undefined;
-  // Note that a channel's stream stands in the Inbox's place, though it is reached from the drawer, so the Inbox is not the place it marks.
-  const streaming = useChannelStreaming();
+  // Note that an Inbox narrowed to a channel is reached from the drawer, so the Inbox is not the place it marks.
+  const narrowed = useInboxNarrowed();
   const inInbox = among && inboxView.open;
   const inTasks = among && !inInbox && boardView.open;
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
@@ -101,7 +87,7 @@ export function MobileBar({
     >
       <BarItem
         icon={<InboxIcon />}
-        current={inInbox && !streaming}
+        current={inInbox && !narrowed}
         count={{ value: waiting, noun: needsYouNoun(waiting) }}
         inert={drawerOpen}
         onPress={go(inboxView.onOpen)}

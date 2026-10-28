@@ -584,6 +584,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),
   // Note that a kept install token is answered without one, since the window mints the token and only its hash travels.
+  [ACT_KIND.HOSTS_PRESENCE]: () => ({ devices: [] }),
   [ACT_KIND.HOSTS_LIST]: () => ({
     hosts: [
       {

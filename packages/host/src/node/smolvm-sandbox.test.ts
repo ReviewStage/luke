@@ -36,7 +36,7 @@ import { smolvmSandbox } from "./smolvm-sandbox.js";
 const SMOLVM = "/usr/local/bin/smolvm";
 /** The image the rollout pinned, by its digest, as CI published it. */
 const IMAGE =
-  "ghcr.io/reviewstage/luke-sandbox:35c90fc1c0bee4e5@sha256:168aedd03509fa3bccb00b84059baea6d19ae7032a7f0ad0c46f43b6a8bf21e0";
+  "ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const MACHINE = `luke-${AGENT_ID}`;
 const RUNNER_FOLDER = "/opt/luke-host/lib";

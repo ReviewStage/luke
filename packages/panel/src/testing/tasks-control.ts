@@ -12,7 +12,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { type CodingAgentsControl, MODELS_READ } from "../tasks/use-coding-agents.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
@@ -139,6 +139,7 @@ export function codingAgentsControl(
     onRetryList: ignore,
     models: undefined,
     modelsFailed: false,
+    modelsRead: { state: MODELS_READ.UNREAD, generation: 0 },
     macs: undefined,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -400,6 +401,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       models: undefined,
       devices: undefined,
       modelsFailed: false,
+      modelsRead: { state: MODELS_READ.UNREAD, generation: 0 },
       readModels: ignore,
       readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,

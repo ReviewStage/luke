@@ -27,6 +27,7 @@
  * a bound it is handed, as a positional argument.
  */
 
+import { PLAYWRIGHT_PIN } from "@luke/agent-runner/pins";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 import { SANDBOX_BROWSER } from "./sandbox-browser.js";
@@ -326,7 +327,9 @@ const START_SCRIPT = [
   RECORDER_ALIVE,
   'mkdir -p "$state" && chmod 700 "$state"',
   `if [ ! -e "$dir/done.json" ] && alive; then echo ${RECORDING_START_OUTPUT.RUNNING}; exit 0; fi`,
-  'encoder=$(ls "$HOME"/.cache/ms-playwright/ffmpeg-*/ffmpeg-linux 2>/dev/null | sort -V | tail -n 1)',
+  // Note that an image from before Playwright's shared folder kept the encoder in the default user's cache, which a sandbox resumed from its snapshot still holds.
+  `encoder=$(ls ${PLAYWRIGHT_PIN.BROWSERS}/ffmpeg-*/ffmpeg-linux 2>/dev/null | sort -V | tail -n 1)`,
+  `[ -n "$encoder" ] || encoder=$(ls "$HOME"/.cache/ms-playwright/ffmpeg-*/ffmpeg-linux 2>/dev/null | sort -V | tail -n 1)`,
   `[ -x "$encoder" ] || { echo 'no encoder in the image' >&2; exit ${RECORDING_START_EXIT.NO_ENCODER}; }`,
   'rm -rf "$dir" && mkdir -p "$dir" && chmod 700 "$dir"',
   'setsid node --no-warnings -e "$source" "$port" "$dir" "$max" "$bytes" "$encoder" "$width" "$height" >"$dir/recorder.log" 2>&1 </dev/null &',

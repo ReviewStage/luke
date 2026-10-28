@@ -245,6 +245,7 @@ const PUBLISHED = {
   deletions: 3,
   changedFiles: 2,
   queued: true,
+  author: "octo-dev",
 } as const;
 
 it.layer(getTestDB())("the plan list's live statements", (it) => {
@@ -418,6 +419,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           [7, 2, 3, 1],
         );
         assert.equal(agents?.pullRequests[0]?.queued, true, "a queued pull request says so");
+        assert.equal(agents?.pullRequests[0]?.author, "octo-dev", "it names who opened it");
         assert.ok(
           (agents?.agents ?? []).every(
             (line) =>

@@ -82,6 +82,7 @@ import {
   type RunnerSelf,
   runsOnHost,
 } from "./launch.js";
+import { SANDBOX_TOOL_ENV } from "./pins.js";
 import {
   CODEX_EFFORT,
   CODEX_ERROR_INFO,
@@ -351,7 +352,8 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
  * every MCP call, as P16 found) and given as long as Luke runs a call, the sandbox with network on and its
  * writable roots (`sandboxPolicy`), and commands inheriting the core variables
- * without the bearer or the key. Nothing in argv is secret.
+ * without the bearer or the key, and handed the image's tools' own
+ * (`SANDBOX_TOOL_ENV`). Nothing in argv is secret.
  *
  * Note that workspace-write keeps `.git` read-only under every writable root
  * (openai/codex#15505), and with `never` nothing escalates, so without its
@@ -400,6 +402,13 @@ function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPol
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
     ["shell_environment_policy.exclude", `[${excluded.map(toml).join(", ")}]`],
+    // Note that the image's tools are set apart, since a command inherits only the core variables.
+    [
+      "shell_environment_policy.set",
+      `{ ${Object.entries(SANDBOX_TOOL_ENV)
+        .map(([name, value]) => `${name} = ${toml(value)}`)
+        .join(", ")} }`,
+    ],
   ];
   return [
     "app-server",

@@ -58,6 +58,7 @@
     "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
     "./models/repository-pin-store": "./src/models/repository-pin-store.js",
+    "./models/runs-on-pick": "./src/models/runs-on-pick.js",
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",
     "./models/token-pull-request-poll": "./src/models/token-pull-request-poll.js",
     "./models/coding-agent-runner-lease": "./src/models/coding-agent-runner-lease.js",
@@ -114,6 +115,11 @@
     "./schemas/workspace-integration": "./src/schemas/workspace-integration.js",
     "./pull-request-chapters-vocabulary": "./src/pull-request-chapters-vocabulary.js",
     "./storage-vocabulary": "./src/storage-vocabulary.js",
+    "./sync/listener": "./src/sync/listener.js",
+    "./sync/notification": "./src/sync/notification.js",
+    "./sync/render": "./src/sync/render.js",
+    "./sync/sync-table": "./src/sync/sync-table.js",
+    "./sync/tables": "./src/sync/tables.js",
     "./testing": "./src/testing/index.js",
     "./testing/no-database": "./src/testing/no-database.js",
     "./voice-vocabulary": "./src/voice-vocabulary.js"
@@ -123,6 +129,7 @@
     "check:migrations": "drizzle-kit check",
     "db:generate": "NODE_OPTIONS='--import tsx' drizzle-kit generate",
     "migrations:convert": "tsx scripts/convert-journal-migrations.ts",
+    "sync:render": "tsx scripts/render-sync.ts",
     "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },

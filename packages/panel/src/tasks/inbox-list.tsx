@@ -4,6 +4,8 @@ import { readFailedWords, TERM } from "@luke/features/words";
 import {
   AttentionMark,
   BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   Chip,
   ChipName,
@@ -13,6 +15,7 @@ import {
   EmptyState,
   type EmptyStateAction,
   ERROR_STATE_PLACEMENT,
+  ErrorLine,
   ErrorState,
   GAP,
   GROUP_SURFACE,
@@ -252,6 +255,15 @@ import { cardTitle } from "./tool-call-model.js";
 /** What an item's row is, which names its ⋯ and its menu "Inbox item actions". */
 const ITEM_THING = "Inbox item";
 
+/** What a row's ⋯ offers with Channels on, which asks which channel its thread moves to (`move-thread-dialog.tsx`). */
+const MOVE_TO_CHANNEL = "Move to channel…";
+
+/** What an archived channel's head offers, and says while it is under way. */
+const ARCHIVED_WORDS = {
+  UNARCHIVE: "Unarchive",
+  UNARCHIVING: "Unarchiving",
+} as const;
+
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
@@ -297,6 +309,11 @@ const INBOX_SCOPES = [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL] as const satisfies reado
 /** The Inbox's name at its head: the scope after it, but for For you, where the Inbox opens, since no other control on the head says it. */
 function inboxTitle(show: InboxShow): string {
   return show === INBOX_SHOW.TO_DO ? "Inbox" : `Inbox · ${SCOPE_WORDS[show].label}`;
+}
+
+/** A channel's name at the head of the Inbox narrowed to it: the scope after it, but for All, where a channel opens. */
+function channelTitle(name: string, show: InboxShow): string {
+  return show === INBOX_SHOW.ALL ? `#${name}` : `#${name} · ${SCOPE_WORDS[show].label}`;
 }
 
 /**
@@ -416,6 +433,7 @@ export function InboxItemRow({
   onChoose,
   onMark,
   onClose,
+  onAskMove,
 }: {
   listed: InboxListed;
   chosen: boolean;
@@ -444,6 +462,8 @@ export function InboxItemRow({
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer; none where the row offers no close. */
   onClose?: InboxCloser | undefined;
+  /** Asks which channel to move the item's thread to; none where the row offers no move, as with Channels off. */
+  onAskMove?: ((listed: InboxListed) => void) | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const unread = isUnread(item);
@@ -570,7 +590,23 @@ export function InboxItemRow({
           hint={{ Hint: RowHint, label: title }}
           selectKey={selectKey}
           onPress={() => onChoose(listed)}
-          menu={rowMenu(ITEM_THING, groups())}
+          menu={rowMenu(
+            ITEM_THING,
+            groups(
+              [],
+              onAskMove === undefined
+                ? []
+                : [
+                    [
+                      {
+                        label: MOVE_TO_CHANNEL,
+                        icon: <GLYPH.CHANNEL />,
+                        onSelect: () => onAskMove(listed),
+                      },
+                    ],
+                  ],
+            ),
+          )}
         />
       </RowHintOptions>
       {close.dialog}
@@ -1126,8 +1162,9 @@ function ListHead({
   head: InboxListHead;
   readerId: string | undefined;
 }): React.JSX.Element {
-  const { shown, show, view } = head;
-  const title = inboxTitle(show.show);
+  const { shown, show, view, channel } = head;
+  const title =
+    channel === undefined ? inboxTitle(show.show) : channelTitle(channel.name, show.show);
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
   // A task's own Inbox tab on a phone hands its View options to the task's header, whose title
@@ -1181,10 +1218,19 @@ function ListHead({
           }
           end={
             <PlaceMore
-              thing="Inbox"
+              thing={channel === undefined ? "Inbox" : `#${channel.name}`}
               shown={shown}
               groups={(opener) => [
                 [
+                  ...(channel?.unarchive === undefined
+                    ? []
+                    : [
+                        {
+                          label: ARCHIVED_WORDS.UNARCHIVE,
+                          icon: <GLYPH.ARCHIVE />,
+                          onSelect: channel.unarchive.onUnarchive,
+                        },
+                      ]),
                   ...(head.onCompose === undefined
                     ? []
                     : [{ label: NEW_THREAD, icon: <ComposeIcon />, onSelect: head.onCompose }]),
@@ -1208,12 +1254,25 @@ function ListHead({
           asked={{ ask: asked.ask }}
         />
         {search}
+        <ErrorLine>{channel?.refusal}</ErrorLine>
         {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
       </>
     );
   }
+  const unarchive = channel?.unarchive;
   const options = (
     <>
+      {unarchive === undefined ? null : (
+        <Button
+          size={BUTTON_SIZE.COMPACT}
+          variant={BUTTON_VARIANT.OUTLINE}
+          busy={unarchive.busy}
+          busyLabel={ARCHIVED_WORDS.UNARCHIVING}
+          onClick={unarchive.onUnarchive}
+        >
+          {ARCHIVED_WORDS.UNARCHIVE}
+        </Button>
+      )}
       {head.onCompose === undefined ? null : (
         <Tooltip label={NEW_THREAD}>
           <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
@@ -1234,9 +1293,15 @@ function ListHead({
       {view === undefined ? (
         <PaneBar title={title} actions={options} />
       ) : (
-        <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
+        <Toolbar
+          title={title}
+          detail={channel?.detail}
+          actions={options}
+          end={TOOLBAR_INSET.COLUMN}
+        />
       )}
       {search}
+      <ErrorLine>{channel?.refusal}</ErrorLine>
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
@@ -1350,6 +1415,19 @@ export interface InboxListHead {
    * search under where the head stood.
    */
   readonly tab?: boolean | undefined;
+  /** The channel the window's Inbox is narrowed to, which names its head; none where it lists every channel. */
+  readonly channel?: InboxChannelHead | undefined;
+}
+
+/** A channel heading the Inbox narrowed to it: its name, the words after it, and what its head offers of its own. */
+export interface InboxChannelHead {
+  readonly name: string;
+  /** Its purpose, or when it was archived; none where it has neither. */
+  readonly detail: string | undefined;
+  /** An archived channel's Unarchive, standing in New thread's place, and whether it is under way; none on an open one. */
+  readonly unarchive: { readonly busy: boolean; readonly onUnarchive: () => void } | undefined;
+  /** What refused the head's action, under the head; none where nothing did. */
+  readonly refusal: string | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */
@@ -1473,6 +1551,7 @@ export function InboxList({
   onChoose,
   onMark,
   onClose,
+  onAskMove,
 }: {
   view: InboxListView;
   /** The id of the item the pane shows. */
@@ -1495,6 +1574,8 @@ export function InboxList({
   onMark?: InboxListMark | undefined;
   /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
+  /** Asks which channel a row's thread moves to, from its ⋯; none where the rows offer no move. */
+  onAskMove?: ((listed: InboxListed) => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const regionId = useId();
@@ -1547,6 +1628,7 @@ export function InboxList({
       onChoose={onChoose}
       onMark={onMark}
       onClose={onClose}
+      onAskMove={onAskMove}
     />
   );
   const needingYou = (items: readonly InboxListed[]) =>

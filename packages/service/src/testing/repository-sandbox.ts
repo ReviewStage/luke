@@ -12,6 +12,7 @@
  * holds. Nothing here runs a shell. Synthetic throughout.
  */
 
+import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
 import type { SandboxCommandResult, SandboxNetworkPolicy, SandboxRunOptions } from "eve/sandbox";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import type { RepositorySandbox, RepositorySandboxDoor } from "../agents/repository-shell.js";
@@ -190,13 +191,13 @@ export function sandboxDouble(
         return Promise.resolve(result(EXIT.FAILED, "", "no checkout stands"));
       }
       // The commit identity set in the standing checkout.
-      const name = env?.[VARIABLE.GIT_NAME];
+      const name = env?.[CHECKOUT_IDENTITY_VARIABLE.NAME];
       if (run.workingDirectory === PATH.CHECKOUT && name !== undefined) {
         const scripted = double.identityAnswers.shift();
         if (scripted !== undefined && scripted.exitCode !== EXIT.OK) {
           return Promise.resolve(result(scripted.exitCode, "", scripted.stderr));
         }
-        double.identities.push({ name, email: env?.[VARIABLE.GIT_EMAIL] ?? "" });
+        double.identities.push({ name, email: env?.[CHECKOUT_IDENTITY_VARIABLE.EMAIL] ?? "" });
         return Promise.resolve(result(EXIT.OK));
       }
       // A command from the checkout root, from the table: the model's under its variable, or the host's own as given.

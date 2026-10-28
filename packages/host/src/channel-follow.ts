@@ -7,22 +7,16 @@ import {
 import { CHANNEL_CALL_FAILURE, type ChannelsMoved } from "@luke/features/channel-view";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import { Effect, Stream } from "effect";
-import {
-  decodedLiveRows,
-  LIVE_GONE,
-  type LiveClient,
-  restarting,
-  type SealedRead,
-} from "./live-follow.js";
+import { decodedLiveRows, LIVE_GONE, restarting, type SealedRead } from "./live-follow.js";
 
 /**
  * channel-follow.ts -- a workspace's channels, followed on the service's live read for the windows that draw them, which hear the channels that moved each time any does.
  *
- * The live read is fetched from the service and followed (`live-follow.ts`):
- * held polls while Realtime is off, a subscription where it is on. Its rows
- * mark where each channel stands (`@luke/features/channel-live`), and each
- * delivery is told as the channels whose mark moved since the last, every
- * one on a seal's first, since the read the window opened with may have
+ * The live read is fetched from the service and followed over its held poll
+ * (`live-follow.ts`). Its rows mark where each channel stands
+ * (`@luke/features/channel-live`), and each delivery is told as the
+ * channels whose mark moved since the last, every one on a read's first,
+ * since the read the window opened with may have
  * missed what it says. The window reads the channels, and the threads of
  * one it shows, again itself; only which channels moved leaves here.
  *
@@ -34,15 +28,12 @@ import {
  * window follows it again.
  */
 
-/** A live read as the follow asks for it: sealed, or with `poll` its rows inline; a failure where the service answered none. */
+/** A live read as the follow asks for it, its rows inline; a failure where the service answered none. */
 type Sealed<Answer> = Answer | { readonly failure: string };
 
 export interface ChannelsFollowDependencies {
   /** The workspace's channels as a live read, or with `poll` their rows inline, held past `after`. */
   readonly live: (poll: boolean, after?: string) => Effect.Effect<Sealed<ChannelsLiveAnswer>>;
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  /** Now, by the host's own clock, which renewals are timed by. */
-  readonly now: () => number;
   /** What the windows following the workspace hear. */
   readonly publish: (heard: ChannelsMoved) => void;
 }
@@ -69,7 +60,7 @@ export function followChannels(dependencies: ChannelsFollowDependencies): Effect
       dependencies.publish({ failure: CHANNEL_CALL_FAILURE.UNANSWERED });
       return true;
     }
-    /** Why the follow ended for good, the first renewal's or poll's terminal failure, kept whatever answers after it. */
+    /** Why the follow ended for good, the first poll's terminal failure, kept whatever answers after it. */
     let endedBy: string | undefined;
     const noted = (read: Sealed<ChannelsLiveAnswer>) => {
       if (
@@ -83,16 +74,11 @@ export function followChannels(dependencies: ChannelsFollowDependencies): Effect
       return goneWhereNotFound(read);
     };
     const rows = decodedLiveRows(
-      {
-        openLive: dependencies.openLive,
-        reseal: () => Effect.map(dependencies.live(false), noted),
-        poll: (after) => Effect.map(dependencies.live(true, after), noted),
-        now: dependencies.now,
-      },
+      { poll: (after) => Effect.map(dependencies.live(true, after), noted) },
       sealed,
       channelsLiveRowsSchema,
     );
-    // Note that the marks start over with each seal, so its first delivery tells every channel.
+    // Note that the marks start over with each read, so its first delivery tells every channel.
     let last: ChannelsLiveRows | undefined;
     const gone = yield* Stream.runForEach(rows, (decoded) =>
       Effect.sync(() => {

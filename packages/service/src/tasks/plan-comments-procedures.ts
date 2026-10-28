@@ -33,6 +33,7 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { NO_TOPICS } from "../sync/watch.js";
 import {
   askableAgent,
   type CommentAskSeams,
@@ -74,6 +75,7 @@ function planCommentsPast(
   return heldUntilMoved(
     planCommentStamps(userId, taskId),
     after,
+    NO_TOPICS,
     CODER.MESSAGES_POLL,
     CODER.MESSAGES_HOLD,
   ).pipe(

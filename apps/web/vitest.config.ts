@@ -23,6 +23,8 @@ export default defineConfig({
   test: {
     name: "web",
     include: ["tests/**/*.test.ts"],
+    // One migrated PGlite per run, which every file's opening loads.
+    globalSetup: ["../../packages/database/src/testing/migrated-pglite-setup.ts"],
     css: { include: [INLINE_STYLESHEETS] },
     server: { deps: { inline: ["streamdown"] } },
     // The whole suite stands up a database, and a PGlite test exceeds vitest's

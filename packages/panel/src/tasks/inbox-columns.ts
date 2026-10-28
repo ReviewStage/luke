@@ -3,29 +3,21 @@
  *
  * An Inbox wide enough holds its list and the chosen item side by side, as a
  * mail app does. Narrower than {@link INBOX_SPLIT}, it shows one at a time,
- * and the one it shows is the item: the chosen one, the whole Inbox wide,
- * under a way back to the list, which Back's chord and Escape take as well,
- * so an Inbox holding one item is that item rather than a list of one row.
- * The list stands alone only once the way back was taken or Show all
- * pressed, or while nothing is chosen, and a row pressed there opens its
- * item again. In a narrow room, a phone's, the list is the place, so an
- * Inbox there opens on its list, and an item stands alone only once a row
- * is pressed or a link asks for it. An Inbox whose
- * list holds nothing but the item has no way back, there being no list worth
- * going back to. The line is drawn by the Inbox's own width rather than the
+ * and the one it shows is the list, however many items it holds, the same
+ * in the window's Inbox, a task's own Inbox tab, and a phone's: an item
+ * stands alone, the whole Inbox wide, only once it was opened, by a row's
+ * press, a link, Next, or New thread, and its way back, which Back's chord
+ * and Escape take as well, stands the list again. An item opened while the
+ * Inbox was split stays open once it narrows, as Material's list-detail
+ * layout keeps it; one merely chosen first does not, so a narrowed Inbox
+ * lands on its list. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a task's own Inbox tab stand in
- * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
- * narrowed keeps the item it shows, as Material's list-detail layout does,
- * and one that splits again forgets that the list was asked for, so it
- * narrows onto its item again. Whether the list was asked for is the
+ * columns of their own, beside a sidebar, a side panel, or neither. Whether the list was asked for is the
  * Inbox's own, unless its holder keeps it (`InboxListing`), as the window
  * keeps its Inbox's, so its history can go back to the list; such a holder
  * hears whether the Inbox shows one column too, so its history holds the
  * list and the item as steps of their own by this line rather than by the
- * window's room, which is narrower. While a channel's stream stands in the
- * list's place, the stream is no list to go back to: Back's chord and Escape
- * close the thread open from it instead, so a phone goes back to the stream
- * and never past it to its list of channels.
+ * window's room, which is narrower.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -33,7 +25,6 @@ import { TOOLBAR_LOOK } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
-import { usePhoneRoom } from "../stage-room.js";
 
 /**
  * The Inbox's two columns, the list as wide as it was last dragged and the
@@ -55,7 +46,7 @@ export const INBOX_COLUMNS = {
   BOTH: "both",
   /** The list alone, the whole Inbox wide. */
   LIST: "list",
-  /** The item alone, the whole Inbox wide, under a way back to the list where the list holds more. */
+  /** The item alone, the whole Inbox wide, under a way back to the list. */
   ITEM: "item",
 } as const;
 
@@ -118,7 +109,7 @@ export interface InboxColumns {
   readonly onOpen: (itemId: string) => void;
   /** Says K or J stepped to another item, which hands the keyboard to its row while the list stands. */
   readonly onStep: () => void;
-  /** Goes back from the item to the list, while the item stands alone and the list holds more. */
+  /** Goes back from the item to the list, while the item stands alone. */
   readonly onBack: (() => void) | undefined;
   /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
   readonly onList: () => void;
@@ -157,33 +148,25 @@ export interface InboxListing {
   readonly onSingle?: ((single: boolean) => void) | undefined;
 }
 
-/** A channel's stream standing in the list's place, and the press that closes the thread open from it; none while no thread is open. */
-export interface InboxStream {
-  readonly onClose: (() => void) | undefined;
-}
-
-/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start in a narrow room, where the list is the place. */
+/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start, since one column shows the list until an item is opened. */
 function useListing(kept: InboxListing | undefined): InboxListing {
-  const phone = usePhoneRoom();
-  const [asked, setAsked] = useState(phone);
+  const [asked, setAsked] = useState(true);
   return kept ?? { asked, onAsk: setAsked };
 }
 
-/** Which columns stand: both where split, else the item unless the list was asked for and is worth going back to, or nothing is chosen. */
+/** Which columns stand: both where split, else the list unless an item was opened since it was asked for. */
 function shownColumns(
   single: boolean,
   chosen: string | undefined,
   listAsked: boolean,
-  backable: boolean,
 ): InboxColumnsShown {
   if (!single) return INBOX_COLUMNS.BOTH;
-  if (chosen === undefined || (listAsked && backable)) return INBOX_COLUMNS.LIST;
+  if (chosen === undefined || listAsked) return INBOX_COLUMNS.LIST;
   return INBOX_COLUMNS.ITEM;
 }
 
 /**
- * The Inbox's columns, measured as it resizes, for the item chosen and
- * whether the list holds more than it (`backable`). An Inbox that measures
+ * The Inbox's columns, measured as it resizes, for the item chosen. An Inbox that measures
  * nothing is not laid out, and keeps the two columns it starts with. Going
  * one way or the other by a press hands the keyboard on, to the item's bar
  * once an item opens and to its row once the list is back, or split, to the
@@ -193,15 +176,11 @@ function shownColumns(
  * they step to while the list stands, so ↑↓ go on from there, and leave it
  * where it is while the item stands alone. Note that the keyboard is moved before
  * the window paints, while the hidden control still holds it. `kept` is
- * whether the list was asked for where the holder keeps it, and `stream`
- * the channel's stream standing in the list's place, whose thread Back's
- * chord and Escape close.
+ * whether the list was asked for where the holder keeps it.
  */
 export function useInboxColumns(
   chosen: string | undefined,
-  backable: boolean,
   kept?: InboxListing,
-  stream?: InboxStream,
 ): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
   const { ref: measure, single: measured } = useColumnSplit();
@@ -220,13 +199,7 @@ export function useInboxColumns(
     },
     [measure],
   );
-  // Note that an Inbox measured split forgets the list was asked for, so narrowing it lands on its
-  // item; one not yet measured keeps it, since the list a holder kept may be what it narrows onto.
-  const split = measured === false;
-  useLayoutEffect(() => {
-    if (split && listAsked) setListAsked(false);
-  }, [split, listAsked, setListAsked]);
-  const shown = shownColumns(single, chosen, listAsked, backable);
+  const shown = shownColumns(single, chosen, listAsked);
   const onSingle = kept?.onSingle;
   useLayoutEffect(() => {
     onSingle?.(single);
@@ -264,15 +237,14 @@ export function useInboxColumns(
   }, [shown, chosen, showAlls, rows]);
 
   const back =
-    shown === INBOX_COLUMNS.ITEM && backable
+    shown === INBOX_COLUMNS.ITEM
       ? () => {
           pressed.current = true;
           setListAsked(true);
         }
       : undefined;
-  const keyed = stream === undefined ? back : stream.onClose;
-  useAppCommand(APP_COMMAND.BACK, keyed);
-  useAppCommand(APP_COMMAND.INBOX_LIST, keyed);
+  useAppCommand(APP_COMMAND.BACK, back);
+  useAppCommand(APP_COMMAND.INBOX_LIST, back);
   return {
     ref,
     shown,

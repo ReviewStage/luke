@@ -1522,6 +1522,24 @@ function toDo(listed: InboxListed, readerId: string | undefined): boolean {
 }
 
 /**
+ * Every holder's items that live in one channel, as an Inbox narrowed to it
+ * lists and counts them, a holder left with none left out; and the item
+ * `kept`, wherever it lives, so one opened from another channel stands
+ * chosen until the Inbox follows it there. Note that an item from a service
+ * that names no channel lives in none.
+ */
+export function channelGroups(
+  groups: readonly InboxGroup[],
+  channelId: string,
+  kept: string | undefined,
+): readonly InboxGroup[] {
+  return groups.flatMap(({ holder, items }) => {
+    const held = items.filter((item) => item.channelId === channelId || item.id === kept);
+    return held.length === 0 ? [] : [{ holder, items: held }];
+  });
+}
+
+/**
  * Every open item, whoever's, the latest changed first, as Home and a
  * person's page list what waits (`use-waiting-items.ts`).
  */

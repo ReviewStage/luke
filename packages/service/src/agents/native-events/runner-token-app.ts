@@ -20,27 +20,22 @@
  * Luke's MCP server from. The token is never logged, and travels in the
  * answer's body alone, which no cache keeps.
  *
- * A host asks here too, on its device secret (`auth/device-secret.ts`'s
- * `hostCallerOf`) rather than a runner's bearer, for a GitHub token for one
- * of its agents (`@luke/features/host-wire`'s `hostGithubTokenRequestSchema`),
- * since a host has no developer's git login. It is answered only for an
- * agent of the host's own member that runs on that very host, and only an
- * installation token the App mints for the agent's repository, on the terms
- * the cloud's checkout mints its sandbox's (`coder-host/checkout.ts`'s
- * `agentRepositoryToken`): good for an hour, cut to that one repository. A
- * member's own classic token, which does not expire, never leaves for a
- * host. The host signs the agent's own `gh` in with it and asks again well
- * inside the hour; it is braked per agent with the Codex token.
- *
- * A desktop that runs its agents sandboxed asks the same, on its own
- * sign-in's bearer alone (`RunnerTokenSeams.resolveUserId`), since its
- * agents' VMs never reach the developer's git login: it is answered only
- * for an agent of that member's that runs on one of the member's own
- * desktops, one that last registered as running its agents in a VM
- * (`DEVICE_ISOLATION.SANDBOX`), and only while the member's Local agents
- * experiment is on, as every device-agents procedure is. A desktop running
- * its agents directly on the Mac is refused, since its agents push on the
- * developer's own login.
+ * A device asks here too, for a GitHub token for one of its agents
+ * (`@luke/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
+ * agents' VMs never reach a developer's git login: an enrolled machine on
+ * its device secret, a Linux box and a Mac alike, and a released desktop
+ * build on its own sign-in's bearer (`RunnerTokenSeams.resolveUserId`), both
+ * read as one device caller (`../../orpc/base.ts`'s `deviceCallerOf`) and
+ * held to one rule (`deviceGithubToken`): the member's Local agents
+ * experiment on, the agent the member's own and pinned to a device the
+ * caller acts for, and that device running its agents in a VM. It is
+ * answered only an installation token the App mints for the agent's
+ * repository, on the terms the cloud's checkout mints its sandbox's
+ * (`coder-host/checkout.ts`'s `agentRepositoryToken`): good for an hour, cut
+ * to that one repository. A member's own classic token, which does not
+ * expire, never leaves for a device. The device signs the agent in with it
+ * and asks again well inside the hour; it is braked per agent with the
+ * Codex token.
  */
 
 import type { RunnerTokenAnswer } from "@luke/agent-runner/protocol";
@@ -54,16 +49,12 @@ import {
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
 import { latestDeviceAgentLaunch } from "@luke/database/models/device-agent-store";
-import { deviceLayout, devicesNamed } from "@luke/database/models/device-store";
+import { deviceLayout } from "@luke/database/models/device-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
-import {
-  DEVICE_ISOLATION,
-  DEVICE_KIND,
-  deviceAgentLaunchPayloadSchema,
-} from "@luke/features/device-agent-wire";
+import { DEVICE_ISOLATION, deviceAgentLaunchPayloadSchema } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@luke/features/host-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -76,7 +67,6 @@ import {
   type ChatGptAccess,
   refreshChatGptAccess,
 } from "../../accounts/chatgpt-credentials.js";
-import { type HostCaller, hostCallerOf } from "../../auth/device-secret.js";
 import { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
@@ -92,6 +82,7 @@ import {
   type UserIdResolver,
 } from "../../http/http-effect.js";
 import { makeRateBrake, type RateBrake } from "../../http/rate-brake.js";
+import { actsForDevice, type DeviceCaller, deviceCallerOf } from "../../orpc/base.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import { agentRepositoryToken } from "../coder-host/checkout.js";
@@ -166,7 +157,7 @@ const askedAgent = /* @__PURE__ */ Effect.fn("web/askedAgent")(function* (userId
  * agent, answered uncached; refused where the agent works in no repository
  * or the installation of its task's workspace does not reach it.
  */
-const deviceAgentGithubToken = /* @__PURE__ */ Effect.fn("web/deviceAgentGithubToken")(function* (
+const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(function* (
   userId: string,
   agent: CodingAgent,
   brake: RateBrake,
@@ -195,52 +186,32 @@ const deviceAgentGithubToken = /* @__PURE__ */ Effect.fn("web/deviceAgentGithubT
 });
 
 /**
- * A GitHub token for the host's own agent named in the body: an
- * installation token for the agent's repository, where the agent is its
- * member's own, runs on this very host, and works in a repository the
- * installation of its task's workspace reaches; refused otherwise.
+ * A GitHub token for a device's own agent named in the body, the one rule
+ * every device caller is held to, an enrolled machine on its secret and a
+ * desktop on its sign-in alike: an installation token for the agent's
+ * repository, where the member's Local agents experiment is on, the agent
+ * is the member's own and pinned to a device the caller acts for
+ * (`actsForDevice`: an enrolled machine its own device alone, a desktop on
+ * its sign-in any of its account's), that device runs its agents in a VM
+ * of their own (`DEVICE_ISOLATION.SANDBOX`), since an agent run directly on
+ * a device pushes on its developer's own login, and the agent works in a
+ * repository the installation of its task's workspace reaches; refused
+ * otherwise.
  */
-const hostGithubToken = /* @__PURE__ */ Effect.fn("web/hostGithubToken")(function* (
-  host: HostCaller,
+const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(function* (
+  caller: DeviceCaller,
   brake: RateBrake,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
-  const found = yield* askedAgent(host.userId);
-  // Note that a teammate's agent the member reaches in a shared workspace is refused, as is one
-  // that runs in the cloud or on another of the member's devices: a host acts for its own alone.
-  const agent = Option.filter(
-    found,
-    (row) =>
-      row.userId === host.userId &&
-      row.machine === CODING_AGENT_MACHINE.DEVICE &&
-      row.deviceId === host.deviceId,
-  );
-  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  return yield* deviceAgentGithubToken(host.userId, agent.value, brake);
-});
-
-/**
- * A GitHub token for an agent on one of the member's own desktops that
- * runs its agents sandboxed, on the terms a host's is answered; refused for
- * an agent on a host, in the cloud, on a desktop running its agents
- * directly on the Mac, or another member's, and for a member with Local
- * agents off.
- */
-const desktopGithubToken = /* @__PURE__ */ Effect.fn("web/desktopGithubToken")(function* (
-  userId: string,
-  brake: RateBrake,
-): Effect.fn.Return<
-  HttpServerResponse.HttpServerResponse,
-  HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | HttpClient.HttpClient | GitHubApp
-> {
+  const { userId } = caller;
   if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS)))) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   const found = yield* askedAgent(userId);
+  // Note that a teammate's agent the member reaches in a shared workspace is refused, as is one in the cloud.
   const agent = Option.filter(
     found,
     (row) => row.userId === userId && row.machine === CODING_AGENT_MACHINE.DEVICE,
@@ -248,17 +219,15 @@ const desktopGithubToken = /* @__PURE__ */ Effect.fn("web/desktopGithubToken")(f
   const deviceId = Option.getOrUndefined(
     Option.flatMap(agent, (row) => Option.fromNullishOr(row.deviceId)),
   );
-  if (Option.isNone(agent) || deviceId === undefined) {
+  if (Option.isNone(agent) || deviceId === undefined || !actsForDevice(caller, deviceId)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  const named = (yield* hostedStoreOrUnavailable(devicesNamed([deviceId]))).get(deviceId);
+  // Note that the device is read under the member, so another member's device reads as none.
   const standing = yield* hostedStoreOrUnavailable(deviceLayout(userId, deviceId));
-  // Note that the device is read under the member, so another member's desktop reads as none.
-  const sandboxedDesktop =
-    named?.kind === DEVICE_KIND.DESKTOP &&
-    Option.exists(standing, (each) => each.isolation === DEVICE_ISOLATION.SANDBOX);
-  if (!sandboxedDesktop) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  return yield* deviceAgentGithubToken(userId, agent.value, brake);
+  if (!Option.exists(standing, (each) => each.isolation === DEVICE_ISOLATION.SANDBOX)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  return yield* repositoryTokenFor(userId, agent.value, brake);
 });
 
 /** POST: the plan's access token, for the Codex agent on the plan the bearer stands for; or, on a host's device secret, its agent's GitHub token. */
@@ -284,10 +253,8 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
   // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
   if (Option.isNone(admitted)) {
-    const host = yield* hostCallerOf(request);
-    if (Option.isSome(host)) return yield* hostGithubToken(host.value, brake);
-    const desktop = yield* seams.resolveUserId(request);
-    if (Option.isSome(desktop)) return yield* desktopGithubToken(desktop.value, brake);
+    const device = yield* deviceCallerOf(seams.resolveUserId, request);
+    if (Option.isSome(device)) return yield* deviceGithubToken(device.value, brake);
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   }
   const { target } = admitted.value;

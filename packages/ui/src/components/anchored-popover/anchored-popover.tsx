@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { visibleViewport } from "../../visible-viewport.js";
+import { clipsAround, cutTo } from "./clip-room.js";
 import {
   type Box,
   POPOVER_ALIGN,
@@ -29,10 +30,13 @@ import { type PressAway, usePressAway } from "./press-away.js";
  * the nearest box marked `data-popover-room` (the desktop's side panel),
  * cut to the window, or else the window; an owner whose layer may hang out
  * of its box, as a tab strip's "+" menu hangs over the column beside the
- * side panel, asks for what is seen of the window alone. It is measured
- * as the layer opens, before it is painted, again whenever the layer, its anchor, its room, or
- * the window resizes, and again whenever anything scrolls, since a scroll
- * moves the anchor inside its room. The layer is held by the anchor's edge
+ * side panel, asks for what is seen of the window alone. Either is cut to
+ * every box around the layer that clips it (`clip-room.ts`), so a picker's
+ * menu in a popover's card that scrolls turns and shrinks inside the card
+ * rather than being cut at its edge. It is measured as the layer opens,
+ * before it is painted, again whenever the layer, its anchor, its room, a
+ * box that clips it, or the window resizes, and again whenever anything
+ * scrolls, since a scroll moves the anchor inside its room. The layer is held by the anchor's edge
  * it was asked to line up with, so a button that grows or shrinks from its
  * other edge, as the model chip does when Fast comes on, leaves its open
  * menu where it stood rather than throwing it sideways for a frame until
@@ -106,16 +110,24 @@ function markedRoom(element: HTMLElement, bounds: PopoverBounds): Element | null
   return bounds === POPOVER_BOUNDS.ROOM ? element.closest(POPOVER_ROOM) : null;
 }
 
-/** The room a popover inside `element` may fill: its marked room cut to what can be seen of the window, or that. */
-function roomAround(element: HTMLElement, bounds: PopoverBounds): Box {
+/**
+ * The room a popover inside `element` may fill: its marked room cut to what
+ * can be seen of the window, or that, cut to what `clips` show of it.
+ */
+export function roomAround(
+  element: HTMLElement,
+  bounds: PopoverBounds,
+  clips: readonly HTMLElement[],
+): Box {
   const marked = markedRoom(element, bounds)?.getBoundingClientRect();
   const seen = visibleViewport();
-  return {
+  const room = {
     left: Math.max(marked?.left ?? seen.left, seen.left),
     top: Math.max(marked?.top ?? seen.top, seen.top),
     right: Math.min(marked?.right ?? seen.right, seen.right),
     bottom: Math.min(marked?.bottom ?? seen.bottom, seen.bottom),
   };
+  return cutTo(room, clips);
 }
 
 /** The width asked for before it is measured: its pixels, or its token's. */
@@ -170,10 +182,11 @@ export function AnchoredPopover({
     const drawn = layer.current;
     const anchor = drawn?.parentElement;
     if (drawn === null || anchor === null || anchor === undefined) return;
+    const clips = clipsAround(drawn);
     const measure = () => {
       const next = popoverPlace({
         anchor: anchor.getBoundingClientRect(),
-        room: roomAround(anchor, bounds),
+        room: roomAround(anchor, bounds, clips),
         width: askedWidth(drawn, width),
         height: drawn.getBoundingClientRect().height,
         align,
@@ -181,14 +194,16 @@ export function AnchoredPopover({
       setPlace((last) => (samePlace(last, next) ? last : next));
     };
     measure();
-    // Note that the popover is placed again whenever it, its button, or its
-    // room resizes, because a menu grows as its rows arrive and the side
-    // panel is dragged wider or narrower without the window resizing.
+    // Note that the popover is placed again whenever it, its button, its
+    // room, or a box clipping it resizes, because a menu grows as its rows
+    // arrive and the side panel is dragged wider or narrower without the
+    // window resizing.
     const observer = new ResizeObserver(measure);
     observer.observe(drawn);
     observer.observe(anchor);
     const room = markedRoom(anchor, bounds);
     if (room !== null) observer.observe(room);
+    for (const clip of clips) observer.observe(clip);
     window.addEventListener("resize", measure);
     // Note that the visual viewport is heard too, because a phone's keyboard
     // rising under a popover's field shrinks what is seen without resizing

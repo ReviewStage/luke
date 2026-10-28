@@ -5,12 +5,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { AnchoredPopover } from "./anchored-popover.js";
-import { POPOVER_ALIGN } from "./popover-place.js";
+import { POPOVER_ALIGN, POPOVER_SIDE } from "./popover-place.js";
 
 /**
  * anchored-popover.test.ts -- a popover its owner closes through `open`
  * keeps its layer, so what it holds can fade out in place, and hears no
- * press away until it opens again.
+ * press away until it opens again; and one hung inside a box that scrolls
+ * keeps inside that box.
  */
 
 const roots: Root[] = [];
@@ -29,6 +30,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** A button whose popover opens and closes through `open`, counting the presses away it hears. */
@@ -78,4 +80,61 @@ test("a popover closed through open keeps what it holds in its layer and hears n
   assert.equal(held, "Held", "the layer keeps what it holds");
   assert.equal(heardClosed, 1, "a closed popover hears none");
   assert.equal(away.count, 2, "opened again it hears one");
+});
+
+test("a popover hung inside a card that scrolls turns below where the card leaves it no room above, though the window would", () => {
+  // The card stands 300 to 700 down the window, its button 320 to 340, and the layer is 120 tall.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.dataset.box === "card") return new DOMRect(0, 300, 400, 400);
+    if (this.dataset.box === "anchor") return new DOMRect(100, 320, 100, 20);
+    return new DOMRect(100, 0, 340, 120);
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.dataset.box === "card" ? 400 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.dataset.box === "card" ? 400 : 0;
+  });
+  // Note that jsdom has no layout, so the layer is laid absolutely, as the app's stylesheet lays
+  // it, and the box it is laid in is its button's, as the positioned anchor is.
+  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.parentElement;
+  });
+  const sheet = document.head.appendChild(document.createElement("style"));
+  sheet.textContent = ".luke-anchored-popover { position: absolute; }";
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        "div",
+        { "data-box": "card", style: { overflowX: "hidden", overflowY: "auto" } },
+        createElement(
+          "span",
+          { "data-box": "anchor", style: { position: "relative" } },
+          createElement(AnchoredPopover, {
+            open: true,
+            align: POPOVER_ALIGN.START,
+            children: createElement("p", null, "Rows"),
+          }),
+        ),
+      ),
+    ),
+  );
+
+  const layer = container.querySelector<HTMLElement>(".luke-anchored-popover");
+  const laid = layer === null ? undefined : getComputedStyle(layer).position;
+  sheet.remove();
+  assert.equal(laid, "absolute", "the layer is laid as the app lays it");
+  // 320 - 300 - 4 - 8 = 8 above inside the card cannot hold 120, and 700 - 340 - 4 - 8 below can.
+  assert.equal(layer?.dataset.side, POPOVER_SIDE.BELOW);
 });

@@ -2907,7 +2907,7 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
   );
 });
 
-test("with Channels on, ⌘K's Channels lists the workspace's channels by name and purpose, and one chosen opens its stream; with Channels off it draws no Channels filter", async () => {
+test("with Channels on, ⌘K's Channels lists the workspace's channels by name and purpose, and one chosen narrows the Inbox to it; with Channels off it draws no Channels filter", async () => {
   const app = {
     id: "a1000001-0000-4000-8000-000000000002",
     name: "app",

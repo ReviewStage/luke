@@ -13,6 +13,7 @@ how to write a query and roll out a migration.
 | `pnpm db:generate --custom --name=<what_it_does>` | Write a folder for hand-written SQL |
 | `pnpm --filter @luke/database check:migrations` | `drizzle-kit check`: refuse two branches' migrations that do not commute (`./scripts/check.sh` runs it) |
 | `pnpm --filter @luke/web db:migrate` | Apply what a database has not recorded, on `DATABASE_URL_UNPOOLED` |
+| `pnpm --filter @luke/database sync:render <migration> <table>…` | Write synced tables' capture into a migration, around its own statements |
 
 Each migration is a folder, `migrations/<UTC timestamp>_<name>/`, holding
 `migration.sql` and the `snapshot.json` the next one is generated from. A
@@ -33,6 +34,19 @@ one process at a time, which is the deploy's to keep. The history
 table sits in `public` rather than Drizzle's default `drizzle` schema, because
 `20261013123642_dead_tables_drop` drops that schema and would take the table
 with it partway through a fresh database's run.
+
+### Luke Sync's capture
+
+A synced table is declared in `src/sync/tables.ts` (`defineSyncTable`): the
+topics a write to it notifies on `luke_sync`, and the hot columns whose
+change notifies nothing. Its trigger function and triggers are rendered from
+that declaration (`src/sync/render.ts`) and never written by hand, because
+they run inside every write to the table. A migration that syncs a table, or
+adds, drops, or renames a column of one, carries its capture: generate the
+migration, then `sync:render` it with the table's name, which drops the
+table's triggers before the migration's statements and creates them after.
+The drift check (`src/sync/__tests__/capture.test.ts`) fails until the
+migrated database carries exactly what the declarations render.
 
 ### The history transfer
 

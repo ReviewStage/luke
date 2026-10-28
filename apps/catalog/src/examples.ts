@@ -117,7 +117,6 @@ import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SOCIAL_SIGN_IN_EXAMPLE } from "./examples/social-sign-in";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
-import { STREAM_DIVIDERS_EXAMPLE } from "./examples/stream-dividers";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
@@ -126,6 +125,7 @@ import { TASK_MARKS_EXAMPLE } from "./examples/task-marks";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
+import { THUMB_STRIPS_EXAMPLE } from "./examples/thumb-strips";
 import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLBARS_EXAMPLE } from "./examples/toolbars";
@@ -240,12 +240,12 @@ export const EXAMPLES: readonly Example[] = [
   RECT_FLOAT_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
-  STREAM_DIVIDERS_EXAMPLE,
   ONE_LINE_EXAMPLE,
   OVER_PANES_EXAMPLE,
   PAGINATION_EXAMPLE,
   PAGE_HEADER_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
+  THUMB_STRIPS_EXAMPLE,
   PAGE_TOOLBAR_EXAMPLE,
   PANE_BARS_EXAMPLE,
   PICTURE_SETS_EXAMPLE,

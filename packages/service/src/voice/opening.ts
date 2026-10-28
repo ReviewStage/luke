@@ -30,7 +30,7 @@ import {
   startupTokens,
   withinStartupBound,
 } from "@luke/live";
-import { Effect, Option, type Schema, type Scope } from "effect";
+import { Effect, Option, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import { messageCredentialMissing } from "../agents/coder-host/agent-runtime-choice.js";
 import { memoryOnFor } from "../agents/memory-tools.js";
@@ -474,7 +474,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
     agentId: string,
   ): Effect.Effect<AdmittedAccount, SessionFailure, DatabaseServices> =>
     Effect.gen(function* () {
-      const account = yield* accounts.resolveUserId(admission.bearer);
+      // An auth service that could not answer is an outage the desktop retries, never a refused token.
+      const resolved = yield* Effect.result(accounts.resolveUserId(admission.bearer));
+      if (Result.isFailure(resolved)) return refused(HOSTED_API_ERROR.UNAVAILABLE);
+      const account = resolved.success;
       if (Option.isNone(account)) return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       const accountId = account.value;
       const named = taskId === undefined ? undefined : yield* admitTask(accountId, taskId);
@@ -592,7 +595,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    */
   const openAttached = (admission: Admission, frame: SessionAttachFrame): SessionEffect<Opened> =>
     Effect.gen(function* () {
-      const account = yield* accounts.resolveUserId(admission.bearer);
+      const resolved = yield* Effect.result(accounts.resolveUserId(admission.bearer));
+      if (Result.isFailure(resolved)) return refused(HOSTED_API_ERROR.UNAVAILABLE);
+      const account = resolved.success;
       const owned = Option.isNone(account)
         ? undefined
         : yield* record.owned({ userId: account.value, sessionId: frame.sessionId });

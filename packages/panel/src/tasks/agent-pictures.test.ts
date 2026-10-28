@@ -12,6 +12,7 @@ import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { viewerPlace } from "../testing/viewer-place.js";
 import {
   type AgentPictureDoor,
   AgentPicturesProvider,
@@ -299,7 +300,7 @@ test("a browser call's screenshots are thumbnails in a strip under its row, mask
 
   await act(async () => open.click());
 
-  assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 2");
+  assert.equal(viewerPlace(document), "1 of 2");
 });
 
 test("a refused show_image is a row where its error is read, and a picture in the agent's words is a link, never an image", async () => {
@@ -424,7 +425,7 @@ test("the viewer over a set of eight walks all eight, the two the turn did not d
 
   await act(async () => first.click());
 
-  assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 8");
+  assert.equal(viewerPlace(document), "1 of 8");
 });
 
 test("a finished turn that ends on its pictures, with no words after them, keeps them out of its folded work", async () => {
@@ -550,15 +551,12 @@ test("the viewer opened on the first picture to land reaches the rest as their r
   assert.ok(tile);
 
   await act(async () => tile.click());
-  assert.equal(
-    document.querySelector(".attachment-viewer-place")?.textContent ?? "1 of 1",
-    "1 of 1",
-  );
+  assert.equal(viewerPlace(document) ?? "1 of 1", "1 of 1");
   await act(async () => {
     for (const release of held) release();
   });
 
-  assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
+  assert.equal(viewerPlace(document), "1 of 3");
 });
 
 test("a WebM the agent showed plays where it stands, above the picture shown with it, left out of the replay, and its Expand opens the viewer over both", async () => {
@@ -637,7 +635,7 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
-    assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 2");
+    assert.equal(viewerPlace(document), "1 of 2");
     assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM, CONVERSATION_MEDIA_TYPE.WEBM]);
 
     const root = roots.pop();
@@ -696,7 +694,7 @@ test("a call that shows a recording between two pictures draws it first, and the
     );
     const shownNow = () => [
       document.querySelector('[role="dialog"] .attachment-viewer-title')?.textContent,
-      document.querySelector('[role="dialog"] .attachment-viewer-place')?.textContent,
+      viewerPlace(document.querySelector('[role="dialog"]') ?? document),
     ];
     const next = () =>
       act(() =>

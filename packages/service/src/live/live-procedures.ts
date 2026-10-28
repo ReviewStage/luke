@@ -1,18 +1,20 @@
 /**
- * live-procedures.ts -- the reads the desktop follows over Neon Realtime, sealed for the account the bearer names.
+ * live-procedures.ts -- the reads the desktop follows, each answered polled for the account the bearer names and held until its rows move.
  *
  * `GET /api/live/inbox` answers what waits on the developer across the
- * account as sealed statements, one per part of the account inbox's answer,
- * and the address to subscribe at (`live-wire.ts`). It is Neon's "Exposing
- * an endpoint" step: the caller is resolved first, on the resource's
- * implementer, each statement is built with that account's id in it, as its
- * held read's is, and sealed, so a subscription reads that account's rows
- * and no other's, and stays bound to the same rule of who may read them as
- * the rows change. A deployment whose Realtime is misconfigured answers
- * `unavailable`, and the desktop asks again a moment later.
+ * account as statements, one per part of the account inbox's answer, each
+ * with its rows inline at the poll address (`live-wire.ts`). The caller is
+ * resolved first, on the resource's implementer, and each statement is
+ * built with that account's id in it, as its held read's is, so it reads
+ * that account's rows and no other's. A read that names where its rows
+ * last stood (`after`) is held until they move past it, or answered
+ * unchanged at the hold's end, its digests and no rows, and the desktop
+ * asks again (`sealedParts`). The hold looks again every second, or, for a
+ * read Luke Sync wakes (`../sync/live-queries.ts`), whenever a write to its
+ * topics lands, and then answers with that write's txid (`liveQueryParts`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
- * account reaches and every agent of them and with no task, as two sealed
+ * account reaches and every agent of them and with no task, as two
  * statements built with the account's id (`task-list-live.ts`).
  *
  * `GET /api/live/task-board?id=` answers one task's whiteboard the same way,
@@ -25,11 +27,6 @@
  * pointer moving within a moment of the agent's action; a takeover is
  * delivered as it stands and lapsed by the reader, since no statement reads
  * the clock.
- *
- * Either read asked with `?poll=true`, or one Realtime is off for or could
- * not seal, is answered with each statement's rows inline at the poll
- * address instead (`sealedParts`), so a reader polls it while Realtime
- * fails, behind the same caller and no other route.
  *
  * `GET /api/live/mac-commands?kinds=` answers the commands of those kinds
  * no Mac of the account has claimed, as one statement, for the Mac to claim
@@ -71,7 +68,6 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import type { DatabaseServices } from "@luke/database/core/query";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
@@ -86,6 +82,7 @@ import {
   workspaceOf as workspaceOfAccount,
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
+import type { SyncTopic } from "@luke/database/sync/notification";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -96,7 +93,7 @@ import {
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
-import { Duration, Effect, Equal, Option, Ref, Result, Schedule } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
@@ -123,47 +120,68 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import type { LiveParams, LiveQuery } from "../sync/live-query.js";
+import { NO_TOPICS } from "../sync/watch.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
-import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
+import { type LiveSealer, pollSealer } from "./poll-sealer.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
 /**
- * How a poll past the reader's digest is held: looked at again every
- * second, and answered unchanged after 25, well inside a function's limit
- * and the client's held deadline.
+ * How a poll past the reader's digest is held: looked at again each time a
+ * write to its rows wakes it where it has a definition (`LIVE_QUERIES`),
+ * and every second where it has none or nothing wakes it, and answered
+ * unchanged after 25, well inside a function's limit and the client's held
+ * deadline.
  */
 const LIVE_POLL_HOLD = { LOOK: Duration.seconds(1), HOLD: Duration.seconds(25) } as const;
 
-/** How many of a read's parts are sealed or read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
+/** How many of a read's parts are read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
 
+/** Each part as it was read, carrying the ids of the transactions whose writes woke the hold that answered it, where any did. */
+function wokenBy<Part extends string>(
+  queries: Record<Part, SealedLiveQueryWire>,
+  txids: readonly string[],
+): Record<Part, SealedLiveQueryWire> {
+  if (txids.length === 0) return queries;
+  // SAFETY: every part is kept, each with the txids beside it.
+  return Object.fromEntries(
+    Object.entries<SealedLiveQueryWire>(queries).map(([part, sealed]) => [
+      part,
+      { ...sealed, txids },
+    ]),
+  ) as Record<Part, SealedLiveQueryWire>;
+}
+
 /**
- * Each part sealed and the address to subscribe at; or, where the reader
- * asked to poll, or Realtime is off or could not seal a part, each part's
- * rows read inline at the poll address (`pollSealer`), so a read Realtime
- * fails is still answered, behind the same caller. Unavailable where even
- * the rows could not be read.
+ * Each part's rows read inline at the poll address (`pollSealer`); where
+ * the reader names where they last stood (`after`), held until they move
+ * past it, waiting between looks on a watch of the topics, or answered
+ * unchanged at the hold's end. An answer a write woke carries that write's
+ * txid, which is how the desktop confirms a write once the read it follows
+ * shows it. Unavailable where the rows could not be read.
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
-  asked: { readonly [LIVE_POLL.QUERY]?: string; readonly [LIVE_POLL.AFTER]?: string },
-  stamp?: Effect.Effect<Option.Option<string>, HostedRefusal, DatabaseServices>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+  topics: readonly SyncTopic[] = NO_TOPICS,
 ): Effect.fn.Return<
   {
     readonly url: string;
     readonly queries: Record<Part, Effect.Success<ReturnType<LiveSealer["seal"]>>>;
   },
   HostedRefusal,
-  DatabaseServices
+  SqlClient.SqlClient
 > {
-  const all = (sealer: LiveSealer) =>
-    Effect.map(
+  const polled = Effect.flatMap(SqlClient.SqlClient, (sql) => {
+    const sealer = pollSealer(sql);
+    return Effect.map(
       Effect.forEach(
         Object.entries<LiveStatement>(statements),
         ([part, statement]) =>
@@ -172,40 +190,28 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
       ),
       (sealed) => ({
         url: sealer.url,
-        // SAFETY: every part of `statements` is sealed above, and no other.
+        // SAFETY: every part of `statements` is read above, and no other.
         queries: Object.fromEntries(sealed) as Record<
           Part,
           Effect.Success<ReturnType<LiveSealer["seal"]>>
         >,
       }),
     );
-  const polled = Effect.flatMap(SqlClient.SqlClient, (sql) => all(pollSealer(sql))).pipe(
-    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-  );
+  }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
   const after = asked[LIVE_POLL.AFTER];
-  const sealing = yield* LiveSealing;
-  if (asked[LIVE_POLL.QUERY] !== LIVE_POLL.ON && Option.isSome(sealing)) {
-    return yield* all(sealing.value).pipe(
-      Effect.catch(() =>
-        Effect.andThen(
-          Effect.logWarning("live: Realtime could not seal a read; it is answered polled"),
-          polled,
-        ),
-      ),
-    );
-  }
   if (after === undefined) return yield* polled;
   // A poll past `after` is held until the rows move past it, or answered unchanged: its digests and no rows.
-  const moved =
-    stamp === undefined
-      ? yield* heldUntil(
-          polled,
-          (read) => liveDigestOf(read.queries) !== after,
-          LIVE_POLL_HOLD.LOOK,
-          LIVE_POLL_HOLD.HOLD,
-        )
-      : yield* heldUntilStampMoved(polled, stamp, (read) => liveDigestOf(read.queries) !== after);
-  if (Option.isSome(moved)) return moved.value;
+  const moved = yield* heldUntil(
+    polled,
+    (read) => liveDigestOf(read.queries) !== after,
+    topics,
+    LIVE_POLL_HOLD.LOOK,
+    LIVE_POLL_HOLD.HOLD,
+  );
+  if (Option.isSome(moved)) {
+    const { read, txids } = moved.value;
+    return { ...read, queries: wokenBy(read.queries, txids) };
+  }
   const standing = yield* polled;
   if (liveDigestOf(standing.queries) !== after) return standing;
   return {
@@ -221,33 +227,23 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
 });
 
 /**
- * A held poll that reads the statements once, then only the stamp each
- * look, and the statements again only where the stamp moved: answers the
- * first read `moved` says moved, or none at the hold's end.
+ * A defined live read's parts (`defineLiveQuery`), built from the params
+ * its procedure bound once it admitted the caller, and held on a watch of
+ * the topics those params name. This is how a procedure answers a read
+ * Luke Sync wakes; unavailable where its statements can't be built.
  */
-function heldUntilStampMoved<A, R>(
-  read: Effect.Effect<A, HostedRefusal, R>,
-  stamp: Effect.Effect<Option.Option<string>, HostedRefusal, DatabaseServices>,
-  moved: (read: A) => boolean,
-): Effect.Effect<Option.Option<A>, HostedRefusal, R | DatabaseServices> {
-  return Effect.gen(function* () {
-    const seen = yield* Ref.make(yield* stamp);
-    const first = yield* read;
-    if (moved(first)) return Option.some(first);
-    const look = Effect.gen(function* () {
-      const now = yield* stamp;
-      // Note that a stamp that reads nothing, as for an account gone from the workspace, always reads again.
-      if (Option.isSome(now) && Equal.equals(now, yield* Ref.getAndSet(seen, now))) {
-        return Option.none<A>();
-      }
-      const again = yield* read;
-      return moved(again) ? Option.some(again) : Option.none<A>();
-    });
-    return yield* look.pipe(
-      Effect.repeat({ schedule: Schedule.spaced(LIVE_POLL_HOLD.LOOK), until: Option.isSome }),
-    );
-  }).pipe(Effect.timeoutOption(LIVE_POLL_HOLD.HOLD), Effect.map(Option.flatten));
-}
+export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+  Param extends string,
+  Part extends string,
+>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+) {
+  const statements = query.statements(params);
+  if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return yield* sealedParts(statements.value, asked, query.topics(params));
+});
 
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -260,9 +256,9 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The caller, where they are the account the read names; refused as signed
- * out otherwise, with the same 401 as no session, as Neon's guide says
- * ("When the session changes"), so a seal, a renewal or a held poll from a
- * page left open under another account's session reads nothing of theirs.
+ * out otherwise, with the same 401 as no session, so a read or a held poll
+ * from a page left open under another account's session reads nothing of
+ * theirs.
  */
 const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string) =>
   input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);

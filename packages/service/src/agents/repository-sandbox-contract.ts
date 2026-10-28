@@ -37,9 +37,6 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     /** The first and last line of the window `show_code` reads, counted from one. */
     FIRST_LINE: "LUKE_FIRST_LINE",
     LAST_LINE: "LUKE_LAST_LINE",
-    /** Who a coding agent's commits are by: the Luke GitHub App's bot and its noreply address, set in the checkout's own config. */
-    GIT_NAME: "LUKE_GIT_NAME",
-    GIT_EMAIL: "LUKE_GIT_EMAIL",
     /** Which step of deepening a shallow checkout the run is (`DEEPEN_STEP`); its presence is what makes a run one. */
     DEEPEN: "LUKE_DEEPEN",
     /** Set on the run that brings a checkout a repository snapshot holds up to its branch; its presence is what makes a run the refresh. */

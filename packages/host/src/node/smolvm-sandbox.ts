@@ -59,8 +59,9 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * the worktree's script runs, reads the same file through a credential
  * helper of its environment (`deviceGit`), never the token.
  *
- * A host runs the `smolvm` its service's PATH finds; a Mac runs the pinned
- * release it fetched and checked itself (`SmolvmSandboxOptions.smolvm`), and
+ * A Linux host runs the `smolvm` at the path its service names, which its
+ * daemon checked answers the pinned release; a Mac runs the pinned release
+ * it fetched and checked itself (`SmolvmSandboxOptions.smolvm`), and
  * before it registers as sandboxed (`ready`) pulls the image once through a
  * throwaway machine, which leaves smolvm's own seed of it behind, so every
  * agent's VM made afterwards starts from a copy of that disk rather than
@@ -148,7 +149,7 @@ const CREDENTIAL_HELPER_KEY = "credential.https://github.com.helper";
 const AGENT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
 interface SmolvmSandboxOptions {
-  /** The `smolvm` the device runs: a program its PATH finds, as on a host, or the pinned release it fetches and checks under its state, as on a Mac. */
+  /** The `smolvm` the device runs: a program at the path given, as on a Linux host, or the pinned release it fetches and checks under its state, as on a Mac. */
   readonly smolvm: string | AgentToolPin;
   /** The program every `smolvm` command is started through, given `smolvm` and its arguments, as a Mac's launcher is; none starts it directly. */
   readonly through?: string | undefined;

@@ -13,8 +13,6 @@ import {
   type ChoiceLook,
   type ChoiceOption,
   type ChoiceSelect,
-  CONTROL_GROUND,
-  ControlGround,
   GAP,
   Inline,
   STATUS_TONE,
@@ -271,26 +269,6 @@ function ChoiceLists(): React.JSX.Element {
             </Inline>
           </Stack>
         </SteppedBack>
-      </CatalogSection>
-      <CatalogSection id="choice-list-on-tint" title="On a tint, laid over the column's ground">
-        <div className="catalog-tint">
-          <ControlGround ground={CONTROL_GROUND.OPAQUE}>
-            <Held
-              legend="How often to retry"
-              options={RETRIES}
-              start={[]}
-              look={CHOICE_LOOK.MARKED}
-            />
-            <Inline>
-              <Button variant={BUTTON_VARIANT.OUTLINE} size={BUTTON_SIZE.COMPACT}>
-                Approve
-              </Button>
-              <Button variant={BUTTON_VARIANT.OUTLINE} size={BUTTON_SIZE.COMPACT}>
-                Request changes
-              </Button>
-            </Inline>
-          </ControlGround>
-        </div>
       </CatalogSection>
       <CatalogSection id="choice-list-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">

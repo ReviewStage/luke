@@ -345,6 +345,7 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
     sandboxed: false,
     checkoutPath: "/Users/dev/.luke/agents/a1/repository",
     installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
+    sharedFiles: "/Users/dev/.luke/agents/a1/tmp",
   };
   const SANDBOX_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
@@ -389,12 +390,13 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
 });
 
-test("a local agent in a VM on its device is told its tools and logins there are out of reach", () => {
+test("a local agent in a VM on its device is told its tools and logins there are out of reach, and to save pages where its device reads them", () => {
   const VM = {
     local: true,
     sandboxed: true,
     checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
     installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
+    sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
   };
   for (const repository of ["Acme/Relay", null]) {
     const words = coderInstructions(
@@ -417,6 +419,9 @@ test("a local agent in a VM on its device is told its tools and logins there are
     assert.ok(!words.includes("the developer's own git credentials"), label);
     assert.ok(!words.includes("## Your browser"), label);
     if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
+    // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
+    assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
+    assert.ok(!words.includes("/tmp/luke"), label);
   }
 });
 
@@ -742,7 +747,7 @@ test("every agent is told that what happens on its pull request after its turn r
   }
 });
 
-test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone, and never to post how the work is going", () => {
+test("every agent is told to reply on an inbox thread to a question or a request done there, never in its own message alone, and never to post how the work is going", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const instructions = coderInstructions(
@@ -758,6 +763,11 @@ test("every agent is told to reply to a message on an inbox thread on that threa
         brief,
       );
       assert.ok(instructions.includes("never answer them in your message alone"), brief);
+      // Note that a request acted on in silence leaves the member asking again, so its end is said on the thread.
+      assert.ok(
+        instructions.includes("once a request is done, say in a line or two what you did"),
+        brief,
+      );
       // Note that a progress note on a thread is noise the developer must acknowledge, so none is asked for.
       assert.ok(
         instructions.includes("Never post on a thread to say how the work is going"),
@@ -778,7 +788,10 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
         onTask ? TASK_ADDRESS : null,
       );
       assert.ok(instructions.includes("playwright screenshot"), brief);
-      assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
+      assert.ok(
+        instructions.includes('NODE_PATH="/usr/local/lib/node_modules:$(npm root -g)"'),
+        brief,
+      );
       assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
     }
   }

@@ -1,3 +1,8 @@
+import {
+  CHECKOUT_IDENTITY_SCRIPT,
+  type CheckoutIdentity,
+  checkoutIdentityEnv,
+} from "@luke/features/checkout-identity";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Data, Duration, Effect, Redacted } from "effect";
 import type { SandboxSession } from "eve/sandbox";
@@ -100,16 +105,6 @@ const REFRESH_SCRIPT = [
   `git checkout --quiet -B "$${SANDBOX_VARIABLE.BRANCH}" FETCH_HEAD`,
   "cd ..",
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
-].join("\n");
-
-/**
- * The commit identity set in the checkout's own config, so the agent's
- * commits are by whoever the checkout names wherever git reads them.
- */
-const IDENTITY_SCRIPT = [
-  "set -e",
-  `git config user.name "$${SANDBOX_VARIABLE.GIT_NAME}"`,
-  `git config user.email "$${SANDBOX_VARIABLE.GIT_EMAIL}"`,
 ].join("\n");
 
 /** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. */
@@ -431,17 +426,13 @@ export const markDeepened = /* @__PURE__ */ Effect.fn("web/markDeepened")(functi
   if (marked.exitCode !== 0) return yield* gitRefusal(marked);
 });
 
-/** Who a checkout's commits are by; a git identity is a name and an address as git takes them. */
-export interface CheckoutIdentity {
-  readonly name: string;
-  readonly email: string;
-}
-
 /**
  * The commit identity set in the standing checkout's own config, never the
- * sandbox's global one: the developer's GitHub account or the Luke GitHub
- * App's bot, as the coding agent's checkout settled it (`coder-host/checkout.ts`),
- * and the agent's instructions tell it to leave it alone.
+ * sandbox's global one, by the step a device's checkout sets it with too
+ * (`CHECKOUT_IDENTITY_SCRIPT`): the developer's GitHub account or the Luke
+ * GitHub App's bot, as the coding agent's checkout settled it
+ * (`coder-host/checkout.ts`), and the agent's instructions tell it to leave
+ * it alone.
  */
 export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIdentity")(function* (
   sandbox: RepositorySandbox,
@@ -450,13 +441,9 @@ export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIde
   const set = yield* runInSandbox(
     sandbox,
     {
-      command: IDENTITY_SCRIPT,
+      command: CHECKOUT_IDENTITY_SCRIPT,
       workingDirectory: SANDBOX_PATH.CHECKOUT,
-      env: {
-        ...COMMAND_ENVIRONMENT,
-        [SANDBOX_VARIABLE.GIT_NAME]: identity.name,
-        [SANDBOX_VARIABLE.GIT_EMAIL]: identity.email,
-      },
+      env: { ...COMMAND_ENVIRONMENT, ...checkoutIdentityEnv(identity) },
     },
     REPOSITORY_REFUSAL.CHECKOUT_FAILED,
   );

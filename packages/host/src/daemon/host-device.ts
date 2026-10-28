@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { enrollHost, HOST_ENROLL_OUTCOME, type HostEnrollOutcome } from "@luke/features";
-import type { DeviceArch } from "@luke/features/device-agent-wire";
-import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
+import type { DeviceArch, DevicePlatform } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
 import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -75,6 +74,8 @@ export interface HostEnrollInput {
   readonly installToken: string;
   /** The box's own name, as the Hosts list shows it. */
   readonly name: string;
+  /** The OS the box runs, which the Hosts list says it is (`HostOs.platform`). */
+  readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
   /** The daemon's version, which the enroll carries as every call of a host's does. */
   readonly version: string;
@@ -95,7 +96,7 @@ export const enrollHostDevice = Effect.fnUntraced(function* (input: HostEnrollIn
   const outcome: HostEnrollOutcome = yield* enrollHost(input.serviceOrigin, input.installToken, {
     deviceId,
     name: input.name,
-    platform: DEVICE_PLATFORM.LINUX,
+    platform: input.platform,
     arch: input.arch,
   }).pipe(
     Effect.updateService(

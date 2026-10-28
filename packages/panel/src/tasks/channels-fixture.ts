@@ -908,12 +908,17 @@ function newest(items: readonly InboxItem[]): number {
 
 /** A task's threads as they stand now, so an answer given in the run stays when the thread is read again. */
 function itemsOf(taskId: string): readonly InboxItem[] {
-  return THREADS.filter((each) => each.taskId === taskId).map((each) => each.item);
+  return THREADS.filter((each) => each.taskId === taskId).map(itemOf);
+}
+
+/** A thread's item as the service reads it, naming the channel it lives in. */
+function itemOf(each: ThreadSeed): InboxItem {
+  return { ...each.item, channelId: each.channelId };
 }
 
 /** The stray agent's threads as they stand now, as a follow of its own inbox reads them. */
 function strayItems(): readonly InboxItem[] {
-  return THREADS.filter((each) => each.item.agentId === STRAY.agentId).map((each) => each.item);
+  return THREADS.filter((each) => each.item.agentId === STRAY.agentId).map(itemOf);
 }
 
 /** The agent's title a thread's post names it by, its task's agent's or the stray agent's. */
@@ -955,7 +960,7 @@ function channelsRead(): readonly Channel[] {
   });
 }
 
-/** A channel's threads, the least recently active first, as the service reads them. */
+/** A channel's threads as the service reads them, which a move answers with. */
 function threadsOf(channelId: string): readonly ChannelThread[] {
   return THREADS.filter((each) => each.channelId === channelId)
     .map((each) => ({
@@ -1254,7 +1259,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.TASKS_PULL_REQUEST]: ({ number }) =>
     number === RELEASE_PULL_REQUEST.number ? RELEASE_PULL_REQUEST : null,
   [ACT_KIND.CHANNELS_LIST]: () => channelsAnswer(),
-  [ACT_KIND.CHANNELS_THREADS]: ({ channelId }) => ({ threads: threadsOf(channelId) }),
   [ACT_KIND.CHANNELS_LOOK]: ({ channelId }) => {
     LAST_LOOKED.get(READER.userId)?.set(channelId, Date.now());
     return channelsAnswer();
@@ -1360,7 +1364,7 @@ function replied(
       : { status: INBOX_STATUS.ANSWERED, answeredBy: READER, settledAt: now }),
   };
   (found as { item: InboxItem }).item = item;
-  return item;
+  return itemOf(found);
 }
 
 /** What the channels profiles answer an act with, in place of main; none for any other kind or profile. */

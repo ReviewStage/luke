@@ -907,7 +907,7 @@ export function inboxAddressedTo(item: InboxItem): InboxPerson | undefined {
 }
 
 /** Whether a thread still asks someone something: open, and holding an ask open, as the service's `ASKING` reads it. */
-export function inboxAsksOpen(item: InboxItem): boolean {
+function inboxAsksOpen(item: InboxItem): boolean {
   return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) !== undefined;
 }
 

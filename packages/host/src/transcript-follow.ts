@@ -28,19 +28,19 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { decodedLiveRows, LIVE_STATE, type LiveClient } from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE } from "./live-follow.js";
 
 /**
- * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
+ * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here over the service's held poll for the windows that draw it, each page told as it is read.
  *
  * A follow opens with the window this host last told of the transcript,
  * where it holds one (`transcript-held.ts`), before it asks the service
  * anything, and reads on from its cursor; otherwise with the transcript's
- * newest page, read beside the seal rather than after it, so the window
- * draws the end of the transcript after one request. The older pages are
- * the window's to ask for. Once the
- * statements the pages are read from (`transcript-live.ts` on the service)
- * are subscribed to, the follow reads past the newest page's cursor, which
+ * newest page, read beside the live read rather than after it, so the
+ * window draws the end of the transcript after one request. The older pages
+ * are the window's to ask for. Once the statements the pages are read from
+ * (`transcript-live.ts` on the service) are followed, the follow reads past
+ * the newest page's cursor, which
  * misses nothing written meanwhile, then the next page at once while the
  * last came back full. A page with fewer than a page's most is caught up.
  * From then on the newest messages are the statements' own rows (`window`,
@@ -54,23 +54,22 @@ import { decodedLiveRows, LIVE_STATE, type LiveClient } from "./live-follow.js";
  * a title it waits on closing, which no row says, the page is read again
  * then too.
  *
- * The subscription is let go a while after the last follow let go of it. A
- * seal the service did not answer is asked for again every `RESEAL`, at
- * most `RESEALS` times, and then the follow is told the transcript could
- * not be read, which the window offers to try again; a subscription that
- * stops is marked broken, which has the follow read at once, and sealed and
- * opened again the same way. One the account does not reach is told not
+ * The live read is let go a while after the last follow let go of it. A
+ * first read the service did not answer is asked for again every `RESEAL`,
+ * at most `RESEALS` times, and then the follow is told the transcript could
+ * not be read, which the window offers to try again, as it is where the
+ * live read stops for good. One the account does not reach is told not
  * found.
  */
 
-/** How long a subscription no read holds is kept, so the window's next read finds it standing. */
+/** How long a live read no follow holds is kept, so the window's next read finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long after a seal the service did not answer, or a subscription that stopped, the transcript is sealed again. */
+/** How long after a read the service did not answer the transcript is read again. */
 const RESEAL = Duration.seconds(1);
-/** How many times in a row a seal the service did not answer is asked for again before the follow says the transcript could not be read. */
+/** How many times in a row a read the service did not answer is asked for again before the follow says the transcript could not be read. */
 const RESEALS = 30;
 
-/** The service did not seal the transcript, asked `RESEALS` times over. */
+/** The service did not answer the transcript's live read, asked `RESEALS` times over. */
 class SealUnanswered extends Data.TaggedError("SealUnanswered")<{ readonly failure: string }> {}
 
 /** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. A task's planning workers are keyed by their composer's own key, on the same terms. */
@@ -92,8 +91,7 @@ interface Drawn {
 type LiveState =
   | { readonly kind: typeof LIVE_STATE.WAITING }
   | { readonly kind: typeof LIVE_STATE.STANDING; readonly digest: string; readonly drawn: Drawn }
-  | { readonly kind: typeof LIVE_STATE.BROKEN }
-  | { readonly kind: typeof LIVE_STATE.UNSEALED };
+  | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 /** What a transcript's read is answered from. */
 type Standing =
@@ -109,25 +107,23 @@ interface Failed {
 }
 
 export interface TranscriptFollowDependencies<Key = TranscriptKey> {
-  /** The transcript sealed for following, or with `poll` its rows inline, held past `after`; not found, or a failure where the service sealed none. */
+  /** The transcript's live read, its rows inline, held past `after` where it names one; not found, or a failure where the service answered none. */
   readonly seal: (
     key: Key,
     poll: boolean,
     userId: string,
     after?: string,
   ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>;
-  /** The account signed in now, which a follow is sealed for from its first seal on; none where nobody is. */
+  /** The account signed in now, which a follow is read for from its first read on; none where nobody is. */
   readonly accountId: () => string | undefined;
-  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  readonly now: () => number;
 }
 
-/** The subscriptions the windows' reads share, each held while read and a while after. */
+/** The live reads the windows' follows share, each held while followed and a while after. */
 export type TranscriptFollows<Key = TranscriptKey> = RcMap.RcMap<Key, Standing, SealUnanswered>;
 
 /**
  * The rows a page beside the messages is read by as one text, in no order of
- * Realtime's, so only a change to one moves it: the turns, the titles, and
+ * Postgres's, so only a change to one moves it: the turns, the titles, and
  * the workers. Note that the messages and the journal's revision are left
  * out, because the window's own rows carry the messages. Held here alone,
  * so it needs no hash, and the host loads where no `node:` module does.
@@ -176,7 +172,7 @@ function cursorParts(cursor: string): { readonly seq: number; readonly revision:
 }
 
 /**
- * The read as the host follows it: every statement the service sealed but
+ * The read as the host follows it: every statement the service answered but
  * the count of its messages, which released desktops wake on and this host
  * needs no longer, since the window's own rows carry the messages.
  */
@@ -185,12 +181,12 @@ function followedRead(sealed: AgentTranscriptLiveAnswer) {
   return { url: sealed.url, queries };
 }
 
-/** A seal's answer as the host follows it: the read without the count of its messages, or the failure as answered. */
+/** A read's answer as the host follows it: the read without the count of its messages, or the failure as answered. */
 function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswer | Failure) {
   return "failure" in answer ? answer : followedRead(answer);
 }
 
-/** The transcript sealed, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
+/** The transcript's first read, asked again every `RESEAL` up to `RESEALS` times while the service does not answer; none where the account does not reach it. */
 function sealedOf(
   seal: (poll: boolean, after?: string) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
 ): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>, SealUnanswered> {
@@ -217,7 +213,7 @@ export function transcriptFollows<Key = TranscriptKey>(
     idleTimeToLive: IDLE,
     lookup: (key: Key) =>
       Effect.gen(function* () {
-        // The account the follow starts for, which every renewal and poll names, so one under another's session is refused as signed out.
+        // The account the follow starts for, which every poll names, so one under another's session is refused as signed out.
         const userId = dependencies.accountId();
         const seal = (poll: boolean, after?: string) =>
           userId === undefined
@@ -226,17 +222,12 @@ export function transcriptFollows<Key = TranscriptKey>(
         const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: LIVE_STATE.REFUSED } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        /** One seal followed until its subscription stops, which marks the state broken. */
-        const follow = (sealed: AgentTranscriptLiveAnswer) =>
+        // A live read that stops for good, signed out or a row that does not decode, marks the state broken.
+        yield* Effect.forkScoped(
           Stream.runForEach(
             decodedLiveRows(
-              {
-                openLive: dependencies.openLive,
-                reseal: () => Effect.map(seal(false), followedAnswer),
-                poll: (after) => Effect.map(seal(true, after), followedAnswer),
-                now: dependencies.now,
-              },
-              followedRead(sealed),
+              { poll: (after) => Effect.map(seal(true, after), followedAnswer) },
+              followedRead(first.value),
               agentTranscriptLiveRowsSchema,
             ),
             (decoded) =>
@@ -245,22 +236,7 @@ export function transcriptFollows<Key = TranscriptKey>(
                 digest: digestOf(decoded),
                 drawn: drawnOf(decoded),
               }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: LIVE_STATE.BROKEN })));
-        yield* Effect.forkScoped(
-          Effect.gen(function* () {
-            let sealed = first.value;
-            while (true) {
-              yield* follow(sealed);
-              yield* Effect.sleep(RESEAL);
-              const again = yield* Effect.result(sealedOf(seal));
-              // A seal the service stopped answering is said, so the follow tells the window rather than waiting on a subscription that never opens again.
-              if (again._tag === "Failure") {
-                return yield* SubscriptionRef.set(state, { kind: LIVE_STATE.UNSEALED });
-              }
-              if (Option.isNone(again.success)) return;
-              sealed = again.success.value;
-            }
-          }),
+          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: LIVE_STATE.BROKEN }))),
         );
         return { kind: LIVE_STATE.LIVE, state } as const;
       }),
@@ -336,18 +312,18 @@ function joinedWindow(
 /**
  * The transcript followed until interrupted, each page told as it is read:
  * the window this host held of it at once where it holds one, and
- * otherwise the newest page, read while the transcript is sealed; then the
- * page past that one's cursor once the subscription stands, the next at
+ * otherwise the newest page, read beside the transcript's live read; then
+ * the page past that one's cursor once the live read stands, the next at
  * once while the last came back full, and otherwise once the turns,
- * titles, or workers move, their subscription stops or opens again, or the
- * clock reaches the edge the service named; meanwhile each message the
+ * titles, or workers move, or the clock reaches the edge the service named; meanwhile each message the
  * window's rows draw anew is told at once, beside what the last page said
  * of the agent, as caught up. A held cursor the service refuses is let go
  * for the newest page, as a follow holding nothing opens with. One the
  * account does not reach is told not found, which ends the follow and lets
- * go of what was held of it, as does a seal the service stopped answering,
- * told as a page that could not be read and let go, so a follow after it
- * seals anew; a page the service did not answer is told as such and read
+ * go of what was held of it, as does a live read the service stopped
+ * answering or that stopped for good, told as a page that could not be read
+ * and let go, so a follow after it reads anew; a page the service did not
+ * answer is told as such and read
  * again after `RESEAL`. Every page told is kept in `memory`.
  */
 export function followTranscript<Key>(
@@ -371,14 +347,14 @@ export function followTranscript<Key>(
           toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
           return Effect.andThen(toldNotFound ? memory.forget : Effect.void, tell(answer));
         }),
-        // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as a seal is, and then ends the follow on the failure told, so the window offers Try again.
+        // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as the live read is, and then ends the follow on the failure told, so the window offers Try again.
         Effect.repeat({
           schedule: Schedule.spaced(RESEAL),
           times: RESEALS,
           until: (answer) => !unanswered(answer),
         }),
       );
-      // Note that a window held is told before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the seal, not after it, its cursor what makes following on from it safe.
+      // Note that a window held is told before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the live read, not after it, its cursor what makes following on from it safe.
       const held = yield* memory.recall;
       if (Option.isSome(held)) {
         yield* tell({ ...held.value, newest: true, held: true, caughtUp: false });
@@ -463,7 +439,7 @@ export function followTranscript<Key>(
           window = { ...window, messages: applyMessagesPage(window.messages, fresh), cursor };
           yield* memory.keep(window);
         });
-      // Note that the newest page may have been read before the subscription stood, so the page past it is read once its first rows land.
+      // Note that the newest page may have been read before the live read stood, so the page past it is read once its first rows land.
       let wake: Effect.Effect<unknown> = SubscriptionRef.changes(state).pipe(
         Stream.filter(movedFrom({ kind: LIVE_STATE.WAITING })),
         Stream.runHead,
@@ -473,7 +449,7 @@ export function followTranscript<Key>(
       while (true) {
         yield* wake;
         const was = yield* SubscriptionRef.get(state);
-        if (was.kind === LIVE_STATE.UNSEALED) {
+        if (was.kind === LIVE_STATE.BROKEN) {
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }

@@ -8,17 +8,20 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent, latestTurnsOfReached } from "@luke/database/models/coding-agent-store";
+import {
+  createCodingAgent,
+  hasRepository,
+  latestTurnsOfReached,
+} from "@luke/database/models/coding-agent-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
   deviceAgentRequestsWaiting,
 } from "@luke/database/models/device-agent-store";
 import { registerDevice } from "@luke/database/models/device-store";
-import { removeHost } from "@luke/database/models/host-store";
+import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { device } from "@luke/database/schemas/device";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
@@ -26,15 +29,25 @@ import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_REQUEST_KIND,
-  DEVICE_KIND,
   DEVICE_LAUNCH_REFUSAL,
+  deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Layer, Option, Redacted } from "effect";
+import { Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { LINK_OUTCOME } from "../../github/github-installations.js";
+import {
+  connectWorkspaceGitHub,
+  GITHUB_FIXTURE_BOT,
+  githubReaching,
+  type InstallationFixture,
+  NO_GITHUB,
+} from "../../testing/github-app-fake.js";
+import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { checkOutAgentRepository, deepenAgentCheckout } from "../coder-host/checkout.js";
 import { ranDirectlyFolderOf } from "../coder-host/status.js";
 import { claimedDeviceAgentLine, settledDeviceAgentLine } from "../device-agent.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
@@ -59,33 +72,56 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: Redacted.make(RING),
 };
 
-/** An account with a Mac that just registered, and an agent pinned to it whose conversation runs in a session. */
-const openLocalAgent = Effect.gen(function* () {
-  const db = yield* Database;
-  const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const deviceId = randomUUID();
-  yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
-  const task = yield* startTask(userId, { name: "Invitations" });
-  const started = yield* createCodingAgent(userId, {
-    taskId: task.id,
-    idempotencyKey: randomUUID(),
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    planSnapshot: "# Invitations\n",
-    prompt: null,
-    repository: null,
-    machine: CODING_AGENT_MACHINE.DEVICE,
-    deviceId,
+/** The repository an agent works in where a test gives it one, and the installation reaching it. */
+const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
+const RELAY_INSTALLATION: InstallationFixture = {
+  id: 31,
+  login: RELAY.owner,
+  repositories: [RELAY],
+};
+
+/**
+ * An account with a Mac that just registered, and an agent pinned to it
+ * whose conversation runs in a session: in no repository, or in the one the
+ * installation given reaches, connected to the task's workspace.
+ */
+const openLocalAgentIn = (installation?: InstallationFixture) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    const deviceId = randomUUID();
+    yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+    const reached = installation?.repositories[0];
+    const repository = reached === undefined ? null : `${reached.owner}/${reached.name}`;
+    const task = yield* startTask(userId, { name: "Invitations", repository });
+    if (installation !== undefined) {
+      assert.equal(
+        yield* connectWorkspaceGitHub(task.workspaceId, installation),
+        LINK_OUTCOME.LINKED,
+      );
+    }
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Invitations\n",
+      prompt: null,
+      repository,
+      machine: CODING_AGENT_MACHINE.DEVICE,
+      deviceId,
+    });
+    const { agent } = Option.getOrThrow(started);
+    const session = `cc-${randomUUID()}`;
+    yield* db
+      .update(conversations)
+      .set({ runtimeSessionId: session })
+      .where(eq(conversations.id, agent.conversationId));
+    return { userId, deviceId, agent, session };
   });
-  const { agent } = Option.getOrThrow(started);
-  const session = `cc-${randomUUID()}`;
-  yield* db
-    .update(conversations)
-    .set({ runtimeSessionId: session })
-    .where(eq(conversations.id, agent.conversationId));
-  return { userId, deviceId, agent, session };
-});
+
+const openLocalAgent = openLocalAgentIn();
 
 /** The runner launched in the agent's place, found by its session as a relaunch finds it. */
 const launched = (opened: Effect.Success<typeof openLocalAgent>) =>
@@ -112,7 +148,7 @@ const untilAsked = (userId: string, deviceId: string) =>
     return Option.getOrThrow(Option.fromNullishOr(request));
   });
 
-it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT)))(
+it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT), NO_GITHUB))(
   "a local agent's machine",
   (it) => {
     it.effect(
@@ -120,9 +156,12 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
       () =>
         Effect.gen(function* () {
           const { userId, deviceId, agent } = yield* openLocalAgent;
-          const db = yield* Database;
-          // The Mac the agent is pinned to is made a host and removed, as Settings › Hosts removes one.
-          yield* db.update(device).set({ kind: DEVICE_KIND.HOST }).where(eq(device.id, deviceId));
+          // The Mac the agent is pinned to is enrolled and removed, as Settings › Machines removes one.
+          yield* enrollOwnDevice(userId, {
+            id: deviceId,
+            version: "0.1.0",
+            secretHash: `secret-${randomUUID()}`,
+          });
           const machine = yield* deviceMachine;
           const unregistered = yield* Effect.flip(
             machine.layout({ ...agent, deviceId: randomUUID() }),
@@ -175,6 +214,39 @@ it.layer(Layer.merge(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT))
         assert.ok(Option.isNone(second), "a line is claimed once");
         assert.equal(after?.sealed, null, "the claim clears the row's copy");
       }),
+    );
+
+    it.effect(
+      "a launch in a repository carries who the agent's commits are by, as the cloud's checkout sets it",
+      () =>
+        Effect.gen(function* () {
+          const opened = yield* openLocalAgentIn(RELAY_INSTALLATION);
+          const github = githubReaching([RELAY_INSTALLATION]);
+          const { handle } = yield* launched(opened).pipe(Effect.provide(github.layer));
+          const db = yield* Database;
+          const [row] = yield* db
+            .select({ payload: deviceAgentLine.payload })
+            .from(deviceAgentLine)
+            .where(eq(deviceAgentLine.id, handle.command));
+          const payload = Schema.decodeUnknownSync(deviceAgentLaunchPayloadSchema)(row?.payload);
+          // The same agent's checkout in a cloud sandbox, deepened as its first write deepens it.
+          const { agent } = opened;
+          assert.ok(hasRepository(agent));
+          const target = { userId: opened.userId, conversationId: agent.conversationId };
+          const sandbox = sandboxDouble(() => undefined);
+          yield* Effect.andThen(
+            checkOutAgentRepository(target, agent, sandbox),
+            deepenAgentCheckout(target, agent, sandbox),
+          ).pipe(Effect.provide(github.layer));
+
+          // A member with no GitHub sign-in writes as the App's bot, at the noreply address GitHub links to it.
+          const bot = {
+            name: GITHUB_FIXTURE_BOT.login,
+            email: `${GITHUB_FIXTURE_BOT.id}+${GITHUB_FIXTURE_BOT.login}@users.noreply.github.com`,
+          };
+          assert.deepEqual(payload.identity, bot);
+          assert.deepEqual(sandbox.identities, [bot]);
+        }),
     );
 
     it.effect("a read waits for its Mac's answer, and is unavailable while the Mac is away", () =>

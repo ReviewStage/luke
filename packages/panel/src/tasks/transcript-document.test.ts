@@ -18,6 +18,7 @@ import {
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { viewerPlace } from "../testing/viewer-place.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { InboxPictures } from "./inbox-pictures.js";
 import { LoneLinkCards } from "./lone-link-card.js";
@@ -273,7 +274,7 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
     assert.ok(card, "the viewer is open");
     return [
       card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
-      card.querySelector(".attachment-viewer-place")?.textContent ?? "alone",
+      viewerPlace(card) ?? "alone",
     ];
   };
   const key = (name: string) =>
