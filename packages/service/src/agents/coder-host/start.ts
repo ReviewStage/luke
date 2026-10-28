@@ -23,7 +23,7 @@ import {
   type StoredTask,
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
-import { storeWriter } from "@luke/database/models/writer";
+import { AUTOMATION_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
@@ -1029,10 +1029,12 @@ const openingLine = (
           attachments: files,
           mentioned,
           // An automation's run says its prompt as the automation, as its later lines do (`automation-runs.ts`).
-          sender:
-            automation === undefined
-              ? { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId }
-              : { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+          ...(automation === undefined
+            ? { sender: { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId } }
+            : {
+                sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+                metadata: AUTOMATION_LINE_METADATA,
+              }),
         },
         Effect.succeed(true),
       ),

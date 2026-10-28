@@ -27,7 +27,7 @@ import {
   codingAgentWakeupStands,
   deleteCodingAgentWakeup,
 } from "@luke/database/models/coding-agent-wakeups";
-import { storeWriter } from "@luke/database/models/writer";
+import { LUKE_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -79,6 +79,7 @@ const deliver = (eveFor: EveForAccount, wakeup: ClaimedCodingAgentWakeup) =>
         text: wakeup.prompt,
         clientKey: wakeupKey(wakeup),
         sender: { kind: MESSAGE_SENDER.LUKE },
+        metadata: LUKE_LINE_METADATA,
       },
     );
     yield* deleteCodingAgentWakeup(wakeup.id);

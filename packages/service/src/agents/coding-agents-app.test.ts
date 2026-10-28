@@ -38,7 +38,7 @@ import {
 import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { registerDevice } from "@luke/database/models/device-store";
 import { childConversationId } from "@luke/database/models/ids";
-import { sentLineStands } from "@luke/database/models/message-reads";
+import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -6482,14 +6482,15 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     }) as const;
 
   it.effect(
-    "over a browser's session cookie an answer to an item and a message on its thread reach its agent as the deployment acting for the cookie's account",
+    "over a browser's session cookie an answer to an item and a message on its thread reach its agent as the deployment acting for the cookie's account, each line kept as the thread's",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, ask, post, sessionId } = yield* openInbox(eve);
+        const { owner, ask, post, sessionId, target } = yield* openInbox(eve);
         const posted = yield* post(QUESTION);
         assert.ok(Result.isSuccess(posted));
         const cookie = sessionCookieOf(owner);
+        const keys = { answer: randomUUID(), message: randomUUID() };
 
         const answered = yield* ask(
           request(INBOX_MESSAGES, undefined, {
@@ -6498,7 +6499,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             cookie,
             body: {
               text: "Keep it short.",
-              clientKey: randomUUID(),
+              clientKey: keys.answer,
               answers: { ask: openAskOf(posted.success), reply: INBOX_REPLY.ANSWERED },
             },
           }),
@@ -6508,7 +6509,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             method: "POST",
             id: posted.success.id,
             cookie,
-            body: { text: "Say when it expires, too.", clientKey: randomUUID() },
+            body: { text: "Say when it expires, too.", clientKey: keys.message },
           }),
         );
 
@@ -6519,6 +6520,26 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [
             [deploymentFor(owner), sessionId],
             [deploymentFor(owner), sessionId],
+          ],
+        );
+        const metadataOf = (clientKey: string) =>
+          Effect.map(
+            readMessageByClientId(owner, target.conversationId, {}, sentLineId(clientKey)),
+            (read) => {
+              const line = read.ok ? read.value[0]?.message : undefined;
+              return line !== undefined && "metadata" in line ? line.metadata : undefined;
+            },
+          );
+        assert.deepEqual(
+          [yield* metadataOf(keys.answer), yield* metadataOf(keys.message)],
+          [
+            { author: "developer", channel: "thread", event: "answer", item_id: posted.success.id },
+            {
+              author: "developer",
+              channel: "thread",
+              event: "message",
+              item_id: posted.success.id,
+            },
           ],
         );
       }),

@@ -15,7 +15,15 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_BOUNDS, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import {
+  EXCESS_KEYS,
+  GITHUB_LINE_BOUNDS,
+  GITHUB_LINE_EVENT,
+  type GitHubLineMetadata,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  type UnparsedWireValue,
+} from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -575,6 +583,54 @@ function agentWakeText(
   }
 }
 
+/** What each wake's line says GitHub did, in the line's metadata. */
+const LINE_EVENT_OF_WAKE = {
+  [AGENT_WAKE.REVIEW]: GITHUB_LINE_EVENT.REVIEW,
+  [AGENT_WAKE.COMMENT]: GITHUB_LINE_EVENT.COMMENT,
+  [AGENT_WAKE.CHECK_FAILED]: GITHUB_LINE_EVENT.CHECK_FAILED,
+  [AGENT_WAKE.CHECKS_COMPLETED]: GITHUB_LINE_EVENT.CHECKS_COMPLETED,
+} as const;
+
+/** What GitHub's author wrote, trimmed as the line reads it, and cut to the metadata's bound. */
+function boundWords(words: string): string {
+  return words.trim().slice(0, GITHUB_LINE_BOUNDS.WORDS_CHARS);
+}
+
+/**
+ * What the line `agentWakeText` writes says carried it: the wake as GitHub
+ * told it, its words and the inline comments read beside it, so a window
+ * draws the line from these rather than from the text. Note that the words
+ * are kept whole up to GitHub's own bound rather than cut as the text cuts
+ * them, because the text is held to what the model reads and these are not.
+ */
+function githubLine(
+  wake: AgentWake,
+  inline: Option.Option<readonly GitHubReviewLineComment[]>,
+): GitHubLineMetadata {
+  const words = boundWords(wake.words ?? "");
+  const comments = Option.getOrElse(inline, () => [])
+    .slice(0, GITHUB_LINE_BOUNDS.COMMENTS)
+    .map((comment) => ({
+      path: comment.path,
+      ...(comment.line === undefined ? {} : { line: comment.line }),
+      url: comment.url,
+      body: boundWords(comment.body),
+    }));
+  return {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.GITHUB,
+    event: LINE_EVENT_OF_WAKE[wake.kind],
+    repository: wake.repository,
+    ...(wake.pullRequest === undefined ? {} : { number: wake.pullRequest }),
+    url: wake.url,
+    by: wake.by,
+    ...(wake.verdict === undefined || wake.verdict === "" ? {} : { verdict: wake.verdict }),
+    ...(words === "" ? {} : { words }),
+    ...(comments.length === 0 ? {} : { comments }),
+    ...(wake.sha === undefined ? {} : { sha: wake.sha }),
+  };
+}
+
 /**
  * A review's inline comments, read on the pull-request token of the agent
  * given, as the agent's tab reads its pull request; nothing to read for a
@@ -754,6 +810,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
           text: agentWakeText(wake, agent.branch, inline, failing, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
+          metadata: githubLine(wake, inline),
         });
         return true;
       }).pipe(

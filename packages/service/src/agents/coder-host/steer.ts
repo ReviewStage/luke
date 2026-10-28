@@ -125,8 +125,9 @@ import { codingAgentStatusOf } from "./status.js";
 /**
  * The developer's words, the files they attached where they did, the key the
  * send is made under, which a repeat carries again, and what sent them, which
- * the row keeps and eve is not told; and who the row says wrote it, the
- * developer's typed ask unless another agent's message names its sender.
+ * the row keeps and eve is not told; and what the row says carried it, the
+ * developer's typed ask unless the caller names another agent's message, a
+ * thread, GitHub, Luke, or an automation's run, which eve is not told either.
  */
 export interface SteerLine {
   readonly text: string;

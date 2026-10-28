@@ -17,8 +17,11 @@ import { causeKind } from "@luke/runtime/effect";
 import {
   type AgentMessageMetadata,
   type AssistantMessageMetadata,
+  type AutomationLineMetadata,
+  type GitHubLineMetadata,
   isWireString,
   jsonRoundTrip,
+  type LukeLineMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -26,6 +29,7 @@ import {
   type SchemaRefusal,
   type SpokenAskMetadata,
   type StoredMessageMetadata,
+  type ThreadLineMetadata,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnOrigin,
@@ -380,9 +384,10 @@ function senderNameOf(sender: LineSender | undefined): string | null {
 /**
  * The line to a coding agent as the message route and the queue's drain
  * write it: its words, the files attached to it, each image with what was
- * kept of it, the client's key for the send, what sent it, and who the row
- * says wrote it, the developer's typed ask where it names no one else, or
- * another coding agent's message.
+ * kept of it, the client's key for the send, what sent it, and what the row
+ * says carried it: the developer's typed ask where it names nothing else,
+ * or another coding agent's message, a thread, GitHub, Luke, or an
+ * automation's run.
  */
 interface AwaitingLineWrite {
   readonly text: string;
@@ -394,13 +399,31 @@ interface AwaitingLineWrite {
   readonly metadata?: AwaitingLineMetadata | undefined;
 }
 
-/** Who an awaiting line says wrote it. */
-export type AwaitingLineMetadata = TypedAskMetadata | AgentMessageMetadata;
+/** What an awaiting line says carried it. */
+export type AwaitingLineMetadata =
+  | TypedAskMetadata
+  | AgentMessageMetadata
+  | ThreadLineMetadata
+  | GitHubLineMetadata
+  | LukeLineMetadata
+  | AutomationLineMetadata;
 
-/** An awaiting line naming no author is the developer's typed ask. */
+/** An awaiting line naming no channel is the developer's typed ask. */
 const TYPED_LINE_METADATA: TypedAskMetadata = {
   author: MESSAGE_AUTHOR.DEVELOPER,
   channel: MESSAGE_CHANNEL.TYPED,
+};
+
+/** A line Luke sent the agent on its own. */
+export const LUKE_LINE_METADATA: LukeLineMetadata = {
+  author: MESSAGE_AUTHOR.DEVELOPER,
+  channel: MESSAGE_CHANNEL.LUKE,
+};
+
+/** An automation's run's prompt. */
+export const AUTOMATION_LINE_METADATA: AutomationLineMetadata = {
+  author: MESSAGE_AUTHOR.DEVELOPER,
+  channel: MESSAGE_CHANNEL.AUTOMATION,
 };
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */

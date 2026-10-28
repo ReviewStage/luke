@@ -43,11 +43,49 @@ export const MESSAGE_AUTHOR = {
   AGENT: "agent",
 } as const;
 
-/** How a developer's ask arrived, or that another coding agent's message carried the line. */
+/**
+ * How a developer's ask arrived, or what else carried a line steered into a
+ * coding agent: another coding agent's message, a thread's reply, answer or
+ * close, GitHub's word on its pull request, a line Luke sent, or an
+ * automation's run.
+ */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
   VOICE: "voice",
   AGENT_MESSAGE: "agent_message",
+  THREAD: "thread",
+  GITHUB: "github",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+} as const;
+
+/** What a member did on a thread that a line steered into its agent carries. */
+export const THREAD_LINE_EVENT = {
+  MESSAGE: "message",
+  ANSWER: "answer",
+  CLOSE: "close",
+} as const;
+
+/** What GitHub said on a pull request that a line steered into its agent carries. */
+export const GITHUB_LINE_EVENT = {
+  REVIEW: "review",
+  COMMENT: "comment",
+  CHECK_FAILED: "check_failed",
+  CHECKS_COMPLETED: "checks_completed",
+} as const;
+
+/**
+ * The most a GitHub line's metadata holds: words and an inline comment's body
+ * within the most GitHub lets one body spell, as many inline comments as Luke
+ * reads of a review, and every name or address within a bound far past what
+ * GitHub mints, so nothing it sends is refused.
+ */
+export const GITHUB_LINE_BOUNDS = {
+  WORDS_CHARS: 65_536,
+  COMMENTS: 300,
+  PATH_CHARS: 4_096,
+  URL_CHARS: 8_192,
+  NAME_CHARS: 256,
 } as const;
 
 /**
@@ -93,10 +131,11 @@ const nonNegativeInteger = EffectSchema.Finite.check(
 const spanInstant = nonNegativeInteger;
 
 /**
- * A user row is one of four things, and the shape says which: the
- * developer's typed ask, a spoken ask cut from a voice session, another
- * coding agent's message steered into a coding agent, or an observation the brain wrote down
- * for itself. Four structs rather than one with every field optional, so an
+ * A user row is one of these things, and the shape says which: the
+ * developer's typed ask, a spoken ask cut from a voice session, a line
+ * steered into a coding agent by what carried it (another coding agent's
+ * message, a thread, GitHub, Luke, or an automation), or an observation the
+ * brain wrote down for itself. A struct each rather than one with every field optional, so an
  * observation carrying a channel has no shape to arrive in. A typed ask
  * names a voice session only where it was typed into that call, with the
  * instant on the call's clock it was typed at, so the voice's reply to it
@@ -155,6 +194,79 @@ const AGENT_MESSAGE_METADATA = EffectSchema.Struct({
 
 export type AgentMessageMetadata = EffectSchema.Schema.Type<typeof AGENT_MESSAGE_METADATA>;
 
+/**
+ * A thread line is a member's reply on a thread, their answer to its ask, or
+ * their close of it, steered into the thread's agent: the item it is on.
+ */
+const THREAD_LINE_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.THREAD),
+  event: EffectSchema.Literals(Object.values(THREAD_LINE_EVENT)),
+  item_id: identifier,
+});
+
+export type ThreadLineMetadata = EffectSchema.Schema.Type<typeof THREAD_LINE_METADATA>;
+
+/** A name or an address GitHub minted, within the bound given. */
+const githubName = (chars: number) => trimmedText.check(EffectSchema.isMaxLength(chars));
+
+/** What GitHub's author wrote, as written: empty where they wrote nothing. */
+const githubBody = EffectSchema.String.check(
+  EffectSchema.isMaxLength(GITHUB_LINE_BOUNDS.WORDS_CHARS),
+);
+
+/** One inline comment of a review: the file and line it is on, its page, and what it says. */
+const GITHUB_LINE_COMMENT = EffectSchema.Struct({
+  path: githubName(GITHUB_LINE_BOUNDS.PATH_CHARS),
+  line: EffectSchema.optional(nonNegativeInteger),
+  url: githubName(GITHUB_LINE_BOUNDS.URL_CHARS),
+  body: githubBody,
+});
+
+/**
+ * A GitHub line is what GitHub said on an agent's pull request, steered into
+ * the agent: a review with its verdict, words and inline comments, a comment
+ * with its words, a failed check, or every check finished on a commit; the
+ * repository, the pull request where GitHub named it, the page, and who
+ * caused it, by their login. The words are the reviewer's, never the
+ * developer's, whatever `author` says until it is reworked.
+ */
+const GITHUB_LINE_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.GITHUB),
+  event: EffectSchema.Literals(Object.values(GITHUB_LINE_EVENT)),
+  repository: githubName(GITHUB_LINE_BOUNDS.NAME_CHARS),
+  number: EffectSchema.optional(nonNegativeInteger),
+  url: githubName(GITHUB_LINE_BOUNDS.URL_CHARS),
+  by: githubName(GITHUB_LINE_BOUNDS.NAME_CHARS),
+  verdict: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
+  words: EffectSchema.optional(githubBody),
+  comments: EffectSchema.optional(
+    EffectSchema.Array(GITHUB_LINE_COMMENT).check(
+      EffectSchema.isMaxLength(GITHUB_LINE_BOUNDS.COMMENTS),
+    ),
+  ),
+  sha: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
+});
+
+export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
+
+/** A Luke line is one Luke sent the agent on its own: a wakeup it set, or an operator's opening or wake. */
+const LUKE_LINE_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.LUKE),
+});
+
+export type LukeLineMetadata = EffectSchema.Schema.Type<typeof LUKE_LINE_METADATA>;
+
+/** An automation line is an automation's run's prompt, the agent's first line or a later one. */
+const AUTOMATION_LINE_METADATA = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.AUTOMATION),
+});
+
+export type AutomationLineMetadata = EffectSchema.Schema.Type<typeof AUTOMATION_LINE_METADATA>;
+
 /** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.BRAIN),
@@ -167,6 +279,10 @@ export type UserMessageMetadata =
   | TypedAskMetadata
   | SpokenAskMetadata
   | AgentMessageMetadata
+  | ThreadLineMetadata
+  | GitHubLineMetadata
+  | LukeLineMetadata
+  | AutomationLineMetadata
   | ObservationMetadata;
 
 /** What a user row says about itself. */
@@ -174,6 +290,10 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
   TYPED_ASK_METADATA,
   SPOKEN_ASK_METADATA,
   AGENT_MESSAGE_METADATA,
+  THREAD_LINE_METADATA,
+  GITHUB_LINE_METADATA,
+  LUKE_LINE_METADATA,
+  AUTOMATION_LINE_METADATA,
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
