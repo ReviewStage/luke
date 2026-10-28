@@ -379,6 +379,31 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
   assert.equal(shownTitle(on), "Memory");
 });
 
+test("the sidebar lists Machines under Account after Agents, and its search finds it, only while the account has Local agents on", async () => {
+  const off = mount(createElement(SettingsHarness));
+  assert.deepEqual(pageGroups(off)[1]?.rows, PAGE_GROUPS[1]?.rows);
+  assert.deepEqual(foundUnder(off, "Linux servers"), []);
+
+  const experiments = experimentsOn(EXPERIMENT.LOCAL_AGENTS);
+  handState(experiments);
+  const on = mount(createElement(SettingsHarness, { stored: settingsView({ experiments }) }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(pageGroups(on)[1]?.rows, [
+    "Account",
+    "Agents",
+    "Machines",
+    "Integrations",
+    "Skills",
+    "Experimental",
+  ]);
+  openPage(on, "Machines");
+  assert.equal(shownTitle(on), "Machines");
+  assert.deepEqual(foundUnder(on, "Linux servers"), ["Machines"]);
+});
+
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
   openPage(page, "Workspace");

@@ -3,7 +3,7 @@ import { actProcedure, exactInput } from "./base.js";
 import { THIS_MAC_HOST_ACT_KIND } from "./kinds.js";
 
 /**
- * this-mac-host.ts -- This Mac's `luke-host` as Settings › Agents › Machines draws it: where it stands, and turning it on again, as procedures.
+ * this-mac-host.ts -- This Mac's `luke-host` as Settings › Machines draws it: where it stands, and turning it on again, as procedures.
  *
  * The host answers both (`compose-this-mac-host.ts`): the standing it last
  * found, read again every few seconds while the Local agents experiment is

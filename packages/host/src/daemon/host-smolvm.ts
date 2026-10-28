@@ -18,7 +18,7 @@ import { HOST_SMOLVM, type HostSmolvmSource } from "./host-os.js";
 const VERSION_WITHIN = Duration.seconds(30);
 
 /** What the box's operator runs to put the pinned release in place. */
-const REINSTALL = "Run the install command again (Settings › Agents › Machines) to install it.";
+const REINSTALL = "Run the install command again (Settings › Machines) to install it.";
 
 /** The `smolvm` a host runs its agents' VMs with, or the line it refuses to start with. */
 type HostSmolvm = Result.Result<string | AgentToolPin, string>;
@@ -76,7 +76,7 @@ export const hostSmolvm = (
   if (smolvm.length === 0) {
     return Effect.succeed<HostSmolvm>(
       Result.fail(
-        `Luke host: ${source.variable} names no smolvm, so it will not start. Run the install command again (Settings › Agents › Machines) to set this box's service up.`,
+        `Luke host: ${source.variable} names no smolvm, so it will not start. Run the install command again (Settings › Machines) to set this box's service up.`,
       ),
     );
   }

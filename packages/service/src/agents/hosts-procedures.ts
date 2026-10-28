@@ -1,5 +1,5 @@
 /**
- * hosts-procedures.ts -- the account's enrolled machines as Settings › Agents › Machines reads and changes them: listed, removed, and the install tokens that add Linux servers kept and revoked.
+ * hosts-procedures.ts -- the account's enrolled machines as Settings › Machines reads and changes them: listed, removed, and the install tokens that add Linux servers kept and revoked.
  *
  * A machine is any device of the account's that holds a device secret, a
  * Linux box that traded an install token and a Mac its desktop enrolled

@@ -12,6 +12,7 @@ import { agoText, momentText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   Badge,
   BUTTON_VARIANT,
@@ -62,7 +63,7 @@ import {
 } from "./this-mac-host-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Agents › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
+ * hosts-section.tsx -- Settings › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@luke/features/host-wire`): a Linux server that ran the install command
@@ -89,7 +90,8 @@ import {
  * a coding agent follows to install them, and is gone once the dialog closes.
  * Revoke this command stops new servers enrolling with it, and none it
  * already enrolled. The section stands nowhere while the local agents
- * experiment is off, which hosts sit behind as This Mac does.
+ * experiment is off, which hosts sit behind as This Mac does, and neither
+ * does its page (`settings-rows.ts`'s `PAGE_EXPERIMENT`).
  */
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */
@@ -107,7 +109,6 @@ const MINUTE_MS = 60_000;
 const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
-  TITLE: "Machines",
   ADD: "Add Linux servers",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
@@ -320,7 +321,7 @@ function AddHostsDialog({
   );
 }
 
-/** The Machines group: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
+/** The Machines page's one group, untitled under the page's own title: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
@@ -431,7 +432,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const listedMac =
     thisMacId === undefined ? undefined : hosts?.find((host) => host.id === thisMacId);
   return (
-    <SettingsSection title={WORDS.TITLE}>
+    <SettingsSection anchor={SETTINGS_SEARCH_ROW.ADD_HOSTS}>
       {!signedIn ? (
         <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
       ) : hosts !== undefined && installScriptUrl !== undefined ? (

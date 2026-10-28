@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Agents › Machines draws it: nothing beyond the machine's own line while it runs, and otherwise getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
+ * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Machines draws it: nothing beyond the machine's own line while it runs, and otherwise getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
  *
  * The host keeps where it stands (`@luke/host`'s `compose-this-mac-host.ts`)
  * and Machines reads it every `READ_EVERY_MS` while it is drawn, so a Mac

@@ -15,6 +15,7 @@ import { AccountSection } from "./account-section.js";
 import { AppearanceSection } from "./appearance-page.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 import { ExperimentalPage } from "./experimental-page.js";
+import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
@@ -121,6 +122,8 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
+
+      {view === SETTINGS_VIEW.MACHINES ? <HostsSection signedIn={signedIn} /> : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />

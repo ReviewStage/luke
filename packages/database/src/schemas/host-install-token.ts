@@ -5,7 +5,7 @@ import { user } from "./auth.js";
 /**
  * host-install-token.ts -- the install tokens an account minted to add its hosts, each kept as a hash.
  *
- * A member mints one in Settings › Agents › Hosts, and it enrolls any number
+ * A member mints one in Settings › Machines, and it enrolls any number
  * of boxes under that member (`./device.ts`, kind host) until it expires,
  * twenty-four hours after it was minted, or the member revokes it. Each box
  * trades it once for a device secret of its own, so an expired or revoked

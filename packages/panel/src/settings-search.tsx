@@ -319,6 +319,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // The Machines page's one group, drawn once an account is signed in, which Add Linux servers heads: the machines themselves are read from the service and listed under it.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
+          label: "Add Linux servers",
+          page: SETTINGS_VIEW.MACHINES,
+          haystack: ["Add Linux servers", "machine host server mac install luke-host"],
+        }
+      : undefined,
     // The Workspace page's groups, as it draws them for the workspace it
     // shows: the invite only where the reader may invite, and the leave
     // only where the reader may leave.

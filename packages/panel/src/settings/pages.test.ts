@@ -29,19 +29,20 @@ test("a link to the Keyboard shortcuts page shows it on the desktop and Profile 
   );
 });
 
-test("a link to the Memory page shows Memory only while the account has the Memory experiment on, and Profile otherwise", () => {
-  const memoryOn = { [EXPERIMENT.MEMORY]: true };
-
-  assert.equal(
-    shownSettingsView(SETTINGS_VIEW.MEMORY, DESKTOP_CAPABILITIES, memoryOn),
-    SETTINGS_VIEW.MEMORY,
-  );
-  assert.equal(
-    shownSettingsView(SETTINGS_VIEW.MEMORY, DESKTOP_CAPABILITIES, NO_EXPERIMENTS),
-    SETTINGS_VIEW.ACCOUNT,
-  );
-  assert.equal(
-    shownSettingsView(SETTINGS_VIEW.MEMORY, DESKTOP_CAPABILITIES, { [EXPERIMENT.MEMORY]: false }),
-    SETTINGS_VIEW.ACCOUNT,
-  );
-});
+test.each([
+  { name: "Memory", view: SETTINGS_VIEW.MEMORY, experiment: EXPERIMENT.MEMORY },
+  { name: "Machines", view: SETTINGS_VIEW.MACHINES, experiment: EXPERIMENT.LOCAL_AGENTS },
+])(
+  "a link to the $name page shows it only while the account has its experiment on, and Profile otherwise",
+  ({ view, experiment }) => {
+    assert.equal(shownSettingsView(view, DESKTOP_CAPABILITIES, { [experiment]: true }), view);
+    assert.equal(
+      shownSettingsView(view, DESKTOP_CAPABILITIES, NO_EXPERIMENTS),
+      SETTINGS_VIEW.ACCOUNT,
+    );
+    assert.equal(
+      shownSettingsView(view, DESKTOP_CAPABILITIES, { [experiment]: false }),
+      SETTINGS_VIEW.ACCOUNT,
+    );
+  },
+);
