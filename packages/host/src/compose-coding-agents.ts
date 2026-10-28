@@ -2,6 +2,7 @@ import type { HostedCodingAgentClient } from "@luke/features";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountItems,
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -96,6 +97,7 @@ import {
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
+import { type AccountItems, accountItems, followAccountItems } from "./account-items-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -130,7 +132,9 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
  * go. What waits across the account is followed the same way, on the
  * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
- * (`agent-notices.ts`). Behind a
+ * (`agent-notices.ts`). Every item the account reaches is followed whole
+ * on one read of its own (`account-items-follow.ts`), heard by a window as
+ * `ACCOUNT_ITEMS_CHANGED` events. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -200,6 +204,7 @@ export type CodingAgentClient = Pick<
   | "taskInboxLive"
   | "agentInboxLive"
   | "accountInboxLive"
+  | "accountInboxItemsLive"
   | "inboxAttachment"
   | "agentPicture"
 >;
@@ -220,7 +225,7 @@ export interface CodingAgentsDependencies {
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** Every transcript's, every plan's and agent's inbox's, and the account inbox's subscription let go, as a sign-out lets them go. */
+  /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
 
@@ -278,14 +283,21 @@ export function composeCodingAgents(
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
       txWaits,
     });
+    const items = yield* accountItems({
+      seal: (userId, since, poll, after) =>
+        asked(client.accountInboxItemsLive(userId, since, poll, after)),
+      txWaits,
+    });
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
+    const itemsFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
       http,
       { transcripts, followed, held },
       { inboxes, followed: inboxFollows, txWaits },
       { accounts, followed: accountFollow },
+      { items, followed: itemsFollow },
     );
   });
 }
@@ -311,6 +323,12 @@ interface AccountFollow {
   readonly followed: FiberHandle.FiberHandle;
 }
 
+/** The account's items' subscriptions, and the one follow the windows asked for. */
+interface ItemsFollow {
+  readonly items: AccountItems;
+  readonly followed: FiberHandle.FiberHandle;
+}
+
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
@@ -319,6 +337,8 @@ function composed(
   { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
+  /** Every item the account reaches, and the windows' one follow of them. */
+  { items, followed: itemsFollow }: ItemsFollow,
 ): CodingAgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
@@ -368,6 +388,10 @@ function composed(
         key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
       };
     });
+
+  /** The account's items as a window is told them. */
+  const tellItems = (told: CodingAgentAccountItems) =>
+    Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -960,16 +984,32 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
       Effect.as(FiberHandle.clear(accountFollow), {}),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () =>
+      Effect.gen(function* () {
+        const userId = dependencies.accountId();
+        const follow =
+          gate() && userId !== undefined
+            ? followAccountItems(items, userId, tellItems)
+            : tellItems(UNANSWERED);
+        yield* FiberHandle.run(itemsFollow, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW]: () =>
+      Effect.as(FiberHandle.clear(itemsFollow), {}),
   };
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* FiberMap.clear(inboxFollows);
     yield* FiberHandle.clear(accountFollow);
+    yield* FiberHandle.clear(itemsFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
+    for (const userId of yield* RcMap.keys(items)) yield* RcMap.invalidate(items, userId);
+    // Note that a window still holding the account's items is told there are none, so what it was told of the account that left is not kept for the next.
+    yield* tellItems(UNANSWERED);
   });
 
   return { methods, lifetime: Effect.void, reset };

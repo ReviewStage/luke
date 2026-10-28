@@ -376,6 +376,15 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
   /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
   CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
+  /**
+   * Every inbox item the account reaches, whole, followed from now until it
+   * is let go or the account signs out, on one held poll: heard as
+   * `ACCOUNT_ITEMS_CHANGED` events by the plans and agents that moved,
+   * never answered; following again starts over, told whole.
+   */
+  CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW: "codingAgents.accountItemsFollow",
+  /** The account's items let go: no more `ACCOUNT_ITEMS_CHANGED` events until they are followed again. */
+  CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW: "codingAgents.accountItemsUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -551,6 +560,8 @@ export const GATEWAY_EVENT = {
   INBOX_CHANGED: "inbox.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move while followed. */
+  ACCOUNT_ITEMS_CHANGED: "accountItems.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

@@ -62,6 +62,7 @@ import {
   type ChatGptSignInAnswerView,
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountItems,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
@@ -119,6 +120,7 @@ import {
   type CodingAgentWorkspaceListParams,
   chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
+  codingAgentAccountItemsSchema,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
@@ -876,6 +878,12 @@ export interface HostOperator {
   codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits across the followed account, or why there is none, each time it moves. */
   onAccountInboxChanged(listener: (answer: CodingAgentAccountInboxAnswerView) => void): () => void;
+  /** Every inbox item the account reaches, followed from now until let go or signed out, heard through `onAccountItemsChanged`; following again starts over, told whole. */
+  codingAgentAccountItemsFollow(): Effect.Effect<void>;
+  /** The account's items let go: nothing more is heard of them until they are followed again. */
+  codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
+  /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move. */
+  onAccountItemsChanged(listener: (told: CodingAgentAccountItems) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
   transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
@@ -2232,6 +2240,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             readEither(codingAgentAccountInboxAnswerViewSchema, { excess: EXCESS_KEYS.DROP })(
               payload,
             ),
+          ),
+        listener,
+      ),
+    codingAgentAccountItemsFollow: () =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW, {})),
+    codingAgentAccountItemsUnfollow: () =>
+      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW, {})),
+    onAccountItemsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentAccountItemsSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),
