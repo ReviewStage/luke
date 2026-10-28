@@ -16,8 +16,7 @@ import { MemorySection } from "./memory-page.js";
 /**
  * Settings › Memory over a bridge answering as the host would: the memories
  * of the workspace Settings shows are read for that workspace, listed in the
- * service's order with their words whole and whose words they are, and a
- * press on one says all it holds; the workspace's and the reader's own stand
+ * service's order with their words whole and whose words they are; the workspace's and the reader's own stand
  * on two sides of a switcher, each counting what the search leaves of it;
  * Forget is offered from a memory's ⋯, unavailable on one the reader may not
  * forget, asks first in the confirm dialog, and the memory leaves the list
@@ -184,7 +183,7 @@ const button = (within: Element, label: string) =>
 const dialog = () =>
   document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 
-/** A memory row's own press, which opens what it holds and is what ⌘ chooses. */
+/** A memory row's own press, which ⌘ chooses. */
 const pressOf = (page: HTMLElement, memory: MemorySummary) =>
   rowOf(page, memory).querySelector<HTMLButtonElement>("[data-card-press]") ??
   assert.fail("no press on the row");
@@ -239,7 +238,7 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
   await settle();
 }
 
-test("what Luke kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, a press saying when it was kept, and kept out of the screen recording", async () => {
+test("what Luke kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
   const { page } = await mount();
 
   assert.deepEqual(
@@ -257,11 +256,6 @@ test("what Luke kept in the workspace is read for it and listed in the service's
     rowOf(page, memory).querySelector(".luke-comment-head")?.textContent ?? "";
   assert.match(keeper(DEPLOYS), /^You/u);
   assert.match(keeper(TESTS), /^Dean/u);
-  act(() => pressOf(page, DEPLOYS).click());
-  assert.match(
-    rowOf(page, DEPLOYS).textContent ?? "",
-    /First kept\s*Oct 10, 2026.*Last kept\s*Oct 12, 2026, corrected or kept again/u,
-  );
   assert.ok(
     rowOf(page, DEPLOYS).closest(".ph-no-capture"),
     "the rows are under the unrecorded class",
@@ -385,15 +379,6 @@ test("the search keeps the memories whose words or keeper hold it, and each side
   await searchFor(page, "dean");
   assert.deepEqual(sides(page), ["Acme1", "Only you0"]);
   assert.deepEqual(words(page), [TESTS.text]);
-});
-
-test("a memory whose member's account is gone says so once pressed", async () => {
-  stored = [{ ...TESTS, keptBy: null }];
-  const { page } = await mount();
-
-  act(() => pressOf(page, TESTS).click());
-
-  assert.match(rowOf(page, TESTS).textContent ?? "", /A former member, whose account was deleted/u);
 });
 
 test("a memory the reader may not forget offers Forget unavailable, saying who may", async () => {

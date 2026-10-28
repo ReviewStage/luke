@@ -1,5 +1,4 @@
-import { MEMORY_BOUNDS, type MemorySummary } from "@luke/features/memory-wire";
-import { dayText } from "@luke/features/time-format";
+import type { MemorySummary } from "@luke/features/memory-wire";
 import {
   countWords,
   readFailedWords,
@@ -27,8 +26,6 @@ import {
   CornerDot,
   EmptyState,
   ErrorState,
-  Fact,
-  Facts,
   GAP,
   IconButton,
   Inline,
@@ -54,7 +51,7 @@ import {
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
-import { ACTOR_KIND, type Actor, actorName, personActor, ROLE_WORDS } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { GLYPH, ListFilterIcon } from "@luke/ui/icons";
 import { markdownTree } from "@luke/ui/markdown-words";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
@@ -69,7 +66,7 @@ import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
 
 /**
- * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, read whole, and forgotten one at a time or several at once.
+ * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
  *
  * A coding agent keeps a memory as it works without asking, and corrects one
  * in place when its developer says otherwise. Most are the workspace's: every
@@ -91,11 +88,8 @@ import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
  * Each memory reads as a note: its keeper's face and name, the name the
  * panel's person chip hanging their card, when it was last kept, and its
  * words whole at any width, drawn as the notes are, since a memory is
- * Markdown (`pnpm db:generate` in backticks). A press on it opens what the
- * page knows of it, which is all a memory holds: whose words they are, when
- * they were first and last kept (a correction, or an agent keeping the same
- * words again, moves the latter, which cannot tell the two apart), who
- * recalls it, who may forget it, and how long it is. Its ⋯ and a
+ * Markdown (`pnpm db:generate` in backticks). It opens nothing, so a plain
+ * press on it only marks where a run of ⇧-clicks starts. Its ⋯ and a
  * right-click offer Copy words and Forget, which stands unavailable, saying
  * who may, on a memory the reader may not forget: its words are theirs, or
  * they own or administer the workspace, or for a private one, it is theirs.
@@ -230,20 +224,7 @@ function keeperKey(memory: MemorySummary, actor: Actor): string {
   return memory.keptBy.userId;
 }
 
-/** Whose words a memory holds, said in full, as its details say it. */
-function wordsOf(actor: Actor, workspace: Workspace): string {
-  if (actor.kind === ACTOR_KIND.PERSON) {
-    const role = actor.role === undefined ? [] : [ROLE_WORDS[actor.role]];
-    const name = actor.you ? `${actor.name} (you)` : actor.name;
-    return [name, ...(actor.email === undefined ? [] : [actor.email]), ...role].join(" · ");
-  }
-  if (actor.kind === ACTOR_KIND.SOMEONE && actor.name !== undefined) {
-    return `${actor.name}, who left ${workspace.name}`;
-  }
-  return "A former member, whose account was deleted";
-}
-
-/** Who may forget a memory, as its details and its unavailable Forget say it. */
+/** Who may forget a memory, as its unavailable Forget says it. */
 function forgetterOf(memory: MemorySummary, actor: Actor): string {
   if (actor.kind === ACTOR_KIND.PERSON && actor.you) return "You: its words are yours";
   if (memory.forgettable) return "You, as an owner or admin of the workspace";
@@ -273,63 +254,31 @@ function MemoriesSkeleton({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** Everything the page knows of one memory, which is all a memory holds. */
-function MemoryFacts({
-  shown,
-  workspace,
-}: {
-  shown: ShownMemory;
-  workspace: Workspace;
-}): React.JSX.Element {
-  const { memory, actor } = shown;
-  const lastKept =
-    memory.updatedAt === memory.createdAt
-      ? "Not since"
-      : `${dayText(memory.updatedAt)}, corrected or kept again`;
-  return (
-    <Facts ruled>
-      <Fact label="Words are">{wordsOf(actor, workspace)}</Fact>
-      <Fact label="First kept">{dayText(memory.createdAt)}</Fact>
-      <Fact label="Last kept">{lastKept}</Fact>
-      <Fact label="Recalled by">
-        {memory.private ? "Only your agents" : `Every member's agents in ${workspace.name}`}
-      </Fact>
-      <Fact label="Who can forget it">{forgetterOf(memory, actor)}</Fact>
-      <Fact label="Length">
-        {`${String(memory.text.length)} of ${String(MEMORY_BOUNDS.MAX_CHARS)} characters`}
-      </Fact>
-    </Facts>
-  );
-}
-
 /** What a row chosen among several acts on: how many, and the bar's acts. */
 interface ChosenMemories {
   readonly count: number;
   readonly acts: readonly SelectionAct[];
 }
 
-/** One memory's row: its note, its details once pressed, and its ⋯ and right-click. */
+/** A plain press on a memory, which has nothing to open: it only marks where a run of ⇧-clicks starts. */
+function anchorOnly(): void {}
+
+/** One memory's row: its note, and its ⋯ and right-click. */
 function MemoryRow({
   shown,
-  workspace,
   found,
-  open,
   locked,
   chosen,
-  onOpen,
   onForget,
   onCopy,
 }: {
   shown: ShownMemory;
-  workspace: Workspace;
   /** The words the search asks for, lit where they landed. */
   found: readonly string[];
-  open: boolean;
   /** Whether a forget is out, which every Forget waits out. */
   locked: boolean;
   /** The selection the row stands in among several, whose acts its menu offers; none otherwise. */
   chosen: ChosenMemories | undefined;
-  onOpen: () => void;
   onForget: () => void;
   onCopy: () => void;
 }): React.JSX.Element {
@@ -353,7 +302,7 @@ function MemoryRow({
       <CardPress
         selectKey={memory.id}
         selectBox={SELECT_BOX_PLACE.GUTTER}
-        onPress={onOpen}
+        onPress={anchorOnly}
         contextMenu={menu.contextMenu()}
       >
         <VisuallyHidden>{wordsIn(markdownTree(memory.text))}</VisuallyHidden>
@@ -373,12 +322,9 @@ function MemoryRow({
             </span>
           }
         >
-          <Stack gap={GAP.FIELD}>
-            <div className={MEMORY_WORDS}>
-              <MarkdownMessage words={memory.text} className="memory-text" found={found} />
-            </div>
-            {open ? <MemoryFacts shown={shown} workspace={workspace} /> : null}
-          </Stack>
+          <div className={MEMORY_WORDS}>
+            <MarkdownMessage words={memory.text} className="memory-text" found={found} />
+          </div>
         </Comment>
       </div>
       {menu.drawn === undefined ? null : (
@@ -580,7 +526,6 @@ function MemoryList({
   const [query, setQuery] = useState("");
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [open, setOpen] = useState<string | undefined>(undefined);
   const [asked, setAsked] = useState<readonly MemorySummary[]>([]);
   const found = searchTokens(query);
   const all = memories.map((memory): ShownMemory => {
@@ -678,14 +623,11 @@ function MemoryList({
                 <MemoryRow
                   key={shown.memory.id}
                   shown={shown}
-                  workspace={workspace}
                   found={found}
-                  open={open === shown.memory.id}
                   locked={forgetting}
                   chosen={
                     several !== undefined && standing.has(shown.memory.id) ? several : undefined
                   }
-                  onOpen={() => setOpen(open === shown.memory.id ? undefined : shown.memory.id)}
                   onForget={() => askForget([shown.memory])}
                   onCopy={() => copyAll([shown.memory])}
                 />
