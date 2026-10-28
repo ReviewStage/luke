@@ -58,6 +58,7 @@ import {
   agentTranscriptKeySchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
+  type CodingAgentAccountItems,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -96,6 +97,7 @@ import {
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
+import { type AccountItems, accountItems, followSignedInItems } from "./account-items-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -107,6 +109,7 @@ import {
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
+import type { AgentRow, RowWrite } from "./task-list-collections.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -130,7 +133,9 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
  * go. What waits across the account is followed the same way, on the
  * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
- * (`agent-notices.ts`). Behind a
+ * (`agent-notices.ts`). Every item the account reaches is followed whole
+ * on one read of its own (`account-items-follow.ts`), heard by a window as
+ * `ACCOUNT_ITEMS_CHANGED` events. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -200,6 +205,7 @@ export type CodingAgentClient = Pick<
   | "taskInboxLive"
   | "agentInboxLive"
   | "accountInboxLive"
+  | "accountInboxItemsLive"
   | "inboxAttachment"
   | "agentPicture"
 >;
@@ -217,10 +223,16 @@ export interface CodingAgentsDependencies {
    * carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
+  /**
+   * A change to an agent's row of the task list, drawn at once and kept or
+   * taken back as the service answers it (`TasksComposer.writeAgent`); none
+   * writes alone, drawing nothing.
+   */
+  writeAgent?: RowWrite<AgentRow>;
 }
 
 export interface CodingAgentsComposer extends Composer {
-  /** Every transcript's, every plan's and agent's inbox's, and the account inbox's subscription let go, as a sign-out lets them go. */
+  /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
 
@@ -278,14 +290,21 @@ export function composeCodingAgents(
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
       txWaits,
     });
+    const items = yield* accountItems({
+      seal: (userId, since, poll, after) =>
+        asked(client.accountInboxItemsLive(userId, since, poll, after)),
+      txWaits,
+    });
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
+    const itemsFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
       http,
       { transcripts, followed, held },
       { inboxes, followed: inboxFollows, txWaits },
       { accounts, followed: accountFollow },
+      { items, followed: itemsFollow },
     );
   });
 }
@@ -311,6 +330,12 @@ interface AccountFollow {
   readonly followed: FiberHandle.FiberHandle;
 }
 
+/** The account's items' subscriptions, and the one follow the windows asked for. */
+interface ItemsFollow {
+  readonly items: AccountItems;
+  readonly followed: FiberHandle.FiberHandle;
+}
+
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: CodingAgentsDependencies,
@@ -319,11 +344,17 @@ function composed(
   { inboxes, followed: inboxFollows, txWaits }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
+  /** Every item the account reaches, and the windows' one follow of them. */
+  { items, followed: itemsFollow }: ItemsFollow,
 ): CodingAgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
   const listed = dependencies.listed ?? (() => Effect.void);
+  const writeAgent: RowWrite<AgentRow> =
+    dependencies.writeAgent ??
+    ((_agentId, _change, written) =>
+      Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer)));
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
   const memoryOf = (key: TranscriptKey): TranscriptMemory => {
@@ -368,6 +399,17 @@ function composed(
         key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
       };
     });
+
+  /** The account's items as a window is told them. */
+  const tellItems = (told: CodingAgentAccountItems) =>
+    Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
+  /** Whether a window follows the account's items, so a sign-out follows them again for whoever signs in next. */
+  let itemsFollowed = false;
+  const followItems = followSignedInItems(
+    items,
+    () => (gate() ? dependencies.accountId() : undefined),
+    tellItems,
+  );
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -647,8 +689,20 @@ function composed(
           params,
           "pinning an agent names the agent and whether it is pinned",
         );
-        const answer = yield* asked(client.pin(agentId, request));
-        if ("txid" in answer) yield* listed(answer.txid);
+        // A pin is drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it.
+        const answer = yield* writeAgent<AgentAgentAnswer>(
+          agentId,
+          (row) =>
+            request.pinned
+              ? {
+                  pinnedAt: row.pinnedAt ?? kernel.now(),
+                  pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
+                }
+              : { pinnedAt: null, pinPosition: null },
+          Effect.map(asked(client.pin(agentId, request)), (answered) =>
+            "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
+          ),
+        );
         return carried<AgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR]: (params) =>
@@ -958,16 +1012,32 @@ function composed(
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
       Effect.as(FiberHandle.clear(accountFollow), {}),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () =>
+      Effect.gen(function* () {
+        itemsFollowed = true;
+        yield* FiberHandle.run(itemsFollow, followItems);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW]: () =>
+      Effect.gen(function* () {
+        itemsFollowed = false;
+        yield* FiberHandle.clear(itemsFollow);
+        return {};
+      }),
   };
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* FiberMap.clear(inboxFollows);
     yield* FiberHandle.clear(accountFollow);
+    yield* FiberHandle.clear(itemsFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
+    for (const userId of yield* RcMap.keys(items)) yield* RcMap.invalidate(items, userId);
+    // Note that a window still following the account's items is told there are none, then the next account's whole once one signs in.
+    if (itemsFollowed) yield* FiberHandle.run(itemsFollow, followItems);
   });
 
   return { methods, lifetime: Effect.void, reset };

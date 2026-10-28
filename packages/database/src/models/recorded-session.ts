@@ -5,10 +5,9 @@
  * the eve session it runs in, where one has been recorded, and the
  * forward-only claim of a session for it. They stand apart from the
  * admission in `conversation.ts` on purpose. The admission reads the caller
- * through the door's authenticators, which import the eve package, and the
- * ask's bundle is the voice function, which talks to eve over HTTP and must
- * load nothing of eve's own code; a leaf with no path to the door is what
- * keeps that bundle free of it.
+ * through the door's authenticators, which import the eve package, and a
+ * caller that talks to eve over HTTP must load nothing of eve's own code; a
+ * leaf with no path to the door is what keeps such a bundle free of it.
  *
  * Who reaches a conversation is decided here too, for the same bundle: the
  * account that opened it, and every member of the workspace of the coding

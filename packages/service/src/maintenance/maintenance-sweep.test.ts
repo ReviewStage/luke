@@ -54,7 +54,6 @@ function sweepRequest(
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
   purged: number[];
-  purgedCalls: number[];
   abandoned: number[];
   deviceLeases: number[];
   sandboxed: number[];
@@ -76,7 +75,6 @@ interface Recorded {
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const recorded: Recorded = {
     purged: [],
-    purgedCalls: [],
     abandoned: [],
     deviceLeases: [],
     sandboxed: [],
@@ -102,11 +100,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.purged.push(now);
         return 2;
-      }),
-    purgeDeletedTaskCalls: (now) =>
-      Effect.sync(() => {
-        recorded.purgedCalls.push(now);
-        return 3;
       }),
     sweepAbandonedTurns: (now) =>
       Effect.sync(() => {
@@ -209,7 +202,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
     assert.deepEqual(recorded, {
       purged: [],
-      purgedCalls: [],
       abandoned: [],
       deviceLeases: [],
       sandboxed: [],
@@ -242,7 +234,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(missingAnswer.status, 401);
     assert.deepEqual(wrong.recorded, {
       purged: [],
-      purgedCalls: [],
       abandoned: [],
       deviceLeases: [],
       sandboxed: [],
@@ -262,7 +253,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
-      purgedCalls: [],
       abandoned: [],
       deviceLeases: [],
       sandboxed: [],
@@ -307,7 +297,6 @@ it.effect(
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
         purged: [instant],
-        purgedCalls: [instant],
         abandoned: [instant],
         deviceLeases: [instant],
         sandboxed: [instant],

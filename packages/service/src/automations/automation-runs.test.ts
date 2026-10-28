@@ -56,7 +56,7 @@ import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-c
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
-import { Clock, Duration, Effect, Layer, Option, Result, Stream } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -151,7 +151,6 @@ function fakeEve() {
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   });
   return { opened, sent, eveFor: (account: string) => Effect.succeed(sessions(account)) };
 }

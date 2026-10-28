@@ -30,7 +30,7 @@ import { agentName } from "@luke/features/model-label";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { sweepAutomations } from "../../automations/automation-sweep.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../../http/http-effect.js";
@@ -88,7 +88,6 @@ function recordingEve(refusing = false) {
     send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   /** The sessions opened over the conversation named. */
   const openedOver = (conversationId: string) =>

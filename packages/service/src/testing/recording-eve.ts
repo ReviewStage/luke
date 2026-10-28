@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -47,7 +47,6 @@ export function recordingEve(refusing = false) {
           }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { sent, eveFor: () => Effect.succeed(sessions) };
 }

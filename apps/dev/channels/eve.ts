@@ -1,6 +1,5 @@
 import {
   CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "@luke/service/agents/coder-host/channel";
@@ -28,7 +27,6 @@ export default eveChannel(
       secret: seams.deploymentSecret(),
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
-      streams: CODER_DEPLOYMENT_STREAMS,
     },
     // The end of a session eve tells the channel alone, run here on the edge's runner; the host logs its own failures.
     (sessionId) => runAgent(host.sessionEnded(sessionId)),

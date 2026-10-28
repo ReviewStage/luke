@@ -74,8 +74,6 @@
   "tests/vercel-functions.test.ts": 5216,
   "tests/vercel-ignore.test.ts": 6190,
   "tests/vercel-services.test.ts": 4366,
-  "tests/voice-schema.test.ts": 1444,
-  "tests/voice-session-record.test.ts": 1977,
   "tests/web-app-close.test.ts": 152,
   "tests/web-app-frame.test.ts": 1253,
   "tests/web-app-handoff.test.ts": 1266,

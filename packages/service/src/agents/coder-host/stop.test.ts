@@ -27,12 +27,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
 } from "../eve-host/eve-sessions.js";
-import {
-  CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
-  CODER_DEPLOYMENT_TURNS,
-  coderChannelInput,
-} from "./channel.js";
+import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type EveReach, eveFor } from "./stop.js";
 
 /**
@@ -109,7 +104,6 @@ const DOOR: EveChannelInput["auth"] = coderChannelInput(
     secret: Redacted.make(SECRET),
     admits: CODER_DEPLOYMENT_TURNS,
     presents: CODER_DEPLOYMENT_PRESENCE,
-    streams: CODER_DEPLOYMENT_STREAMS,
   },
   async () => undefined,
 ).auth;

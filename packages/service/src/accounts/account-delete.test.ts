@@ -18,7 +18,7 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted, Stream } from "effect";
+import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/eve-host/eve-sessions.js";
@@ -86,7 +86,6 @@ function retiringEve() {
         retired.push([caller, sessionId]);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
-    stream: () => Stream.empty,
   });
   return {
     retired,

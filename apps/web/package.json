@@ -31,7 +31,6 @@
     "@luke/database": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/host": "workspace:*",
-    "@luke/live": "workspace:*",
     "@luke/panel": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/service": "workspace:*",

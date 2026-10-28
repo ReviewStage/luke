@@ -484,34 +484,4 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         );
       }),
   );
-
-  it.effect(
-    "a withdrawn line eve coalesced beside a spoken ask with a line it did take is taken with that line",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
-        const writer = yield* storeWriter({ tools: TOOLS });
-        for (const [text, taken] of [
-          ["Rerun the tests.", false],
-          ["Push the branch.", true],
-        ] as const) {
-          yield* writer.writeAwaitingLine(
-            target,
-            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.LUKE } },
-            Effect.succeed(taken),
-          );
-        }
-        const turnId = randomUUID();
-        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.SPOKEN, eveTurnId: "t_0" });
-
-        const taken = yield* writer.takeAwaitingLine(target, {
-          text: "Check the deploy.\n\nRerun the tests.\n\nPush the branch.",
-          turnId,
-          beside: true,
-        });
-
-        assert.ok(Result.isSuccess(taken));
-        assert.equal(taken.success.length, 2);
-      }),
-  );
 });

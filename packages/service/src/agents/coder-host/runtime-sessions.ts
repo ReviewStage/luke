@@ -15,7 +15,7 @@
  *   handed to that harness's sessions acting for the agent's starter, whose
  *   plan pays for it, and a session it opens claims the conversation's
  *   record, which eve's own door claims for an eve session.
- * - `cancel`, `reset`, and `stream` name a session alone, so they are
+ * - `cancel` and `reset` name a session alone, so they are
  *   answered by the implementation that minted it (`native-runtime.ts`):
  *   eve's sessions go to eve exactly as before.
  *
@@ -38,7 +38,7 @@ import {
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { Clock, Context, Effect, Option, Stream } from "effect";
+import { Clock, Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -264,10 +264,6 @@ function routed<Turn extends EveHostTurn>(
       }
       return Effect.flatMap(reached.value, (each) => each.reset(sessionId));
     },
-
-    // A native runner posts its events to Luke itself, so there is no stream of its session to follow.
-    stream: (sessionId) =>
-      nativeRuntimeOfSession(sessionId) === undefined ? eve.stream(sessionId) : Stream.empty,
   };
   return sessions;
 }

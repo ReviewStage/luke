@@ -87,9 +87,7 @@ export const deviceAgentLine = pgTable(
  * One request of a local agent's tool to its Mac, under the id its caller
  * minted and waits on: a file to read, and once the Mac answered, what it
  * answered. A read's answer is `bytes`, null where the Mac read no such
- * file. `settled_at` is what says it was answered. `exit_code`, `stdout`,
- * and `stderr` held a command's answer while a tool could run one; nothing
- * writes them now.
+ * file. `settled_at` is what says it was answered.
  */
 export const deviceAgentRequest = pgTable(
   "device_agent_request",
@@ -109,12 +107,6 @@ export const deviceAgentRequest = pgTable(
     args: jsonb("args").$type<DeviceAgentObject>().notNull(),
     /** A read's file; null before the answer, and where the Mac read no such file. */
     bytes: bytea("bytes"),
-    /** A command's exit code, from when a tool could run one; nothing writes it now. */
-    exitCode: integer("exit_code"),
-    /** A command's stdout, from when a tool could run one; nothing writes it now. */
-    stdout: text("stdout"),
-    /** A command's stderr, from when a tool could run one; nothing writes it now. */
-    stderr: text("stderr"),
     createdAt: createdAt(),
     /** When the Mac took it; null while it waits. */
     claimedAt: timestamptz("claimed_at"),

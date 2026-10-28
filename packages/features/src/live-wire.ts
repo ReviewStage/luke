@@ -682,16 +682,20 @@ function inboxItemOfLiveRow(
   };
 }
 
-/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
-export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+/** Items as the held read orders a scope's: every open one, then the settled, each the latest changed first. */
+export function inboxInOrder(items: readonly InboxItem[]): readonly InboxItem[] {
   const ordered = latestFirst((item: InboxItem) => item.id);
-  const threads = groupedBy(rows.messages, (message) => message.itemId);
-  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
-  const items = rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf));
   return [
     ...items.filter((item) => item.status === INBOX_STATUS.OPEN).toSorted(ordered),
     ...items.filter((item) => item.status !== INBOX_STATUS.OPEN).toSorted(ordered),
   ];
+}
+
+/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
+export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
+  const threads = groupedBy(rows.messages, (message) => message.itemId);
+  const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
+  return inboxInOrder(rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf)));
 }
 
 /**
@@ -769,6 +773,12 @@ export const accountInboxItemsLiveRowsSchema = EffectSchema.Struct({
   stamps: EffectSchema.Array(inboxItemStampRowSchema),
   ...scopeInboxLiveRowsSchema.fields,
 });
+
+/** Each part's rows of the account's inbox items, decoded. */
+export type AccountInboxItemsLiveRows = typeof accountInboxItemsLiveRowsSchema.Type;
+
+/** Where one item stands as its stamp row carries it. */
+export type InboxItemStamp = AccountInboxItemsLiveRows["stamps"][number];
 
 /** Two keys compared in order: the first that differs decides. */
 function byKeys(...keys: readonly (readonly [number | string, number | string])[]): number {

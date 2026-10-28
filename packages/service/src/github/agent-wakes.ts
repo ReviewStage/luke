@@ -10,6 +10,8 @@ import {
   type OwnedAgent,
   readAgentPublished,
 } from "@luke/database/models/agent-store";
+import { linkedGitHubUserIds } from "@luke/database/models/github-token-store";
+import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_BOUNDS, AGENT_STATUS } from "@luke/features/agent-wire";
@@ -32,6 +34,7 @@ import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
+import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 import type { GitHubApp } from "./github-app.js";
 import {
   type GitHubReviewLineComment,
@@ -65,6 +68,21 @@ import {
  * developer's, and cut with a note where it would not fit a message. A
  * commit status that failed on a `luke/` branch is told as a failed check
  * is, since the pull request's checks count it beside the check runs.
+ *
+ * On a public repository anyone on GitHub may write a review or a comment,
+ * so the line says whether it carries words a person other than the told
+ * agent's owner wrote (`outside_words`), by GitHub's id of its author
+ * against the GitHub accounts the owner linked to Luke, and such a line
+ * takes `run_on_mac` from the agent (`mac-command-store.ts`'s
+ * `heardFromAnotherAccount`). An App's words never count, Luke's own, a
+ * deployment's, and a review bot's among them, told by the `[bot]` GitHub
+ * ends every App's login with and no person's login can spell: Dean's
+ * ruling of 2026-10-28, since an App comments only where the repository
+ * installed it, and Apps comment on nearly every pull request. Note that an
+ * App may quote an outsider's words, which is what that ruling accepts. A
+ * failed check and every check finished carry no one's words: the line is
+ * the service's own, naming the agent's own branch and commit, and what the
+ * agent reads next is its own checks' output on its own commit.
  *
  * The agents told are those standing on the pull request's branch, or, for
  * a comment, whose pull request GitHub last answered is the one commented
@@ -123,6 +141,8 @@ export interface AgentWake {
   readonly url: string;
   /** Who caused it: a person's or an App's login, a failed check's by the App that ran it. */
   readonly by: string;
+  /** GitHub's id of who wrote a review or a comment, as a linked account's row spells it; absent where GitHub named none. */
+  readonly byId?: string | undefined;
   /** When GitHub says it was made, in epoch milliseconds. */
   readonly at: number;
   /** A review's verdict, as GitHub spells it. */
@@ -166,7 +186,7 @@ const SHORT_SHA_CHARS = 7;
 /** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
 const AGENT_BRANCH_PREFIX = "luke/";
 
-/** What GitHub appends to an App's login, which a failed check is told by. */
+/** What GitHub appends to an App's login, which a failed check is told by and an App's words told apart by. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
 /** The most agents one delivery tells, newest started first, so a delivery answers inside GitHub's ten seconds. */
@@ -210,7 +230,7 @@ const FENCE_PREAMBLE =
 const AT_WORK: ReadonlySet<string> = new Set([AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING]);
 
 const RepositorySchema = Schema.Struct({ full_name: Schema.String });
-const SenderSchema = Schema.Struct({ login: Schema.String });
+const SenderSchema = Schema.Struct({ login: Schema.String, id: Schema.optionalKey(Schema.Number) });
 
 const ReviewDeliverySchema = Schema.Struct({
   action: Schema.String,
@@ -294,6 +314,11 @@ function instantOf(written: string | null, fallback: number): number {
   return Number.isNaN(at) ? fallback : at;
 }
 
+/** The author's GitHub id a wake keeps, where GitHub named one. */
+export function githubIdOf(author: { readonly id?: number | undefined }): Pick<AgentWake, "byId"> {
+  return author.id === undefined ? {} : { byId: String(author.id) };
+}
+
 /** A review submitted, as the agents on its pull request's branch are told of it. */
 function reviewWake(payload: UnparsedWireValue, now: number): AgentWake | undefined {
   const read = readDelivery(ReviewDeliverySchema, payload);
@@ -306,6 +331,7 @@ function reviewWake(payload: UnparsedWireValue, now: number): AgentWake | undefi
     pullRequest: pullRequest.number,
     url: review.html_url,
     by: sender.login,
+    ...githubIdOf(sender),
     at: instantOf(review.submitted_at, now),
     verdict: review.state.toLowerCase(),
     words: review.body ?? "",
@@ -331,6 +357,7 @@ function commentWake(payload: UnparsedWireValue, now: number): AgentWake | undef
     pullRequest: issue.number,
     url: comment.html_url,
     by: sender.login,
+    ...githubIdOf(sender),
     at: instantOf(comment.created_at, now),
     words: comment.body,
   };
@@ -603,6 +630,7 @@ function boundWords(words: string): string {
 function githubLine(
   wake: AgentWake,
   inline: Option.Option<readonly GitHubReviewLineComment[]>,
+  outsideWords: boolean,
 ): GitHubLineMetadata {
   const words = boundWords(wake.words ?? "");
   const comments = Option.getOrElse(inline, () => [])
@@ -624,7 +652,44 @@ function githubLine(
     ...(words === "" ? {} : { words }),
     ...(comments.length === 0 ? {} : { comments }),
     ...(wake.sha === undefined ? {} : { sha: wake.sha }),
+    outside_words: outsideWords,
   };
+}
+
+/**
+ * Whether the line a wake writes carries words its author chose: what a
+ * review or a comment says, or a review's inline comments, read or left for
+ * the agent to read itself. A failed check and every check finished carry
+ * none.
+ */
+function carriesWords(
+  wake: AgentWake,
+  inline: Option.Option<readonly GitHubReviewLineComment[]>,
+): boolean {
+  if (wake.kind !== AGENT_WAKE.REVIEW && wake.kind !== AGENT_WAKE.COMMENT) return false;
+  const said = (wake.words?.trim() ?? "") !== "";
+  return (
+    said || Option.match(inline, { onNone: () => true, onSome: (comments) => comments.length > 0 })
+  );
+}
+
+/**
+ * Whether the line a wake writes the agent of `userId` carries words a
+ * person other than that owner wrote: words at all (`carriesWords`), by no
+ * App, and by a GitHub account other than those the owner linked to Luke,
+ * told apart by GitHub's id, or by one GitHub named no id for.
+ */
+function outsideWordsFor(
+  wake: AgentWake,
+  inline: Option.Option<readonly GitHubReviewLineComment[]>,
+  userId: string,
+): TaskStoreEffect<boolean> {
+  const { byId } = wake;
+  if (!carriesWords(wake, inline) || wake.by.endsWith(BOT_LOGIN_SUFFIX)) {
+    return Effect.succeed(false);
+  }
+  if (byId === undefined) return Effect.succeed(true);
+  return Effect.map(linkedGitHubUserIds(userId), (linked) => !linked.includes(byId));
 }
 
 /**
@@ -802,11 +867,12 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
     return yield* Effect.forEach(woken, ({ userId, agent }) =>
       Effect.gen(function* () {
         const eve = yield* eveFor(userId);
+        const outside = yield* hostedStoreOrUnavailable(outsideWordsFor(wake, inline, userId));
         yield* steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
           text: agentWakeText(wake, agent.branch, inline, failing, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
-          metadata: githubLine(wake, inline),
+          metadata: githubLine(wake, inline, outside),
         });
         return true;
       }).pipe(

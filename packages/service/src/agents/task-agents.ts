@@ -2,6 +2,7 @@ import {
   type AgentLatestTurn,
   type AgentStoreEffect,
   awaitingLinesOfReached,
+  lastSettledTurnsOfReached,
   latestTurnsOfReached,
   listPublishedAgents,
   listPublishedAgentsById,
@@ -38,13 +39,13 @@ import {
 /**
  * task-agents.ts -- what each listed task's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
- * Four statements answer the whole list however many tasks it holds: the
+ * Five statements answer the whole list however many tasks it holds: the
  * agents of every task named with the pull request each last published,
- * their newest turns, which of them hold a line awaiting its turn, and the
- * names of the members who started them. An agent's status and its starter
- * are read exactly as its tab's are (`coder-host/status.ts`), and a pull
- * request is the one its row keeps as GitHub last answered, so
- * nothing here asks GitHub. A task with no agent carries nothing, so the
+ * their newest turns, when each last ended a turn, which of them hold a line
+ * awaiting its turn, and the names of the members who started them. An
+ * agent's status and its starter are read exactly as its tab's are
+ * (`coder-host/status.ts`), and a pull request is the one its row keeps as
+ * GitHub last answered, so nothing here asks GitHub. A task with no agent carries nothing, so the
  * list stays as small as it was for every task nobody has started an agent
  * on.
  */
@@ -69,6 +70,7 @@ function agentLine(
   held: PublishedAgentLine,
   turn: AgentLatestTurn | undefined,
   awaitingLineAt: Date | undefined,
+  lastSettledAt: Date | undefined,
   now: number,
   names: ReadonlyMap<string, string>,
 ): ReadAgent {
@@ -94,7 +96,7 @@ function agentLine(
       ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     },
     createdAt: agent.createdAt.getTime(),
-    activityAt: codingAgentActivityAt(turn, agent),
+    activityAt: codingAgentActivityAt(lastSettledAt, agent),
     archived: agent.archivedAt !== null,
     published: held.published,
   };
@@ -192,6 +194,7 @@ export function withTaskAgents(
     // The agents were read through the tasks' gate, and each conversation is its starter's, a teammate's as often as the account's.
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
+    const settled = yield* lastSettledTurnsOfReached(conversationIds);
     const names = yield* readAccountNames(held.map(({ agent }) => agent.userId));
     const now = yield* Clock.currentTimeMillis;
     const byTask = new Map<string, ReadAgent[]>();
@@ -203,6 +206,7 @@ export function withTaskAgents(
         agent,
         turns.get(conversationId),
         awaiting.get(conversationId),
+        settled.get(conversationId),
         now,
         names,
       );
@@ -238,6 +242,7 @@ export function listTasklessAgents(
     // The agents were read through their workspaces' gate, and each conversation is its starter's.
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
+    const settled = yield* lastSettledTurnsOfReached(conversationIds);
     // The member each was archived by or for is named too, as the agent's own page names them.
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
     const now = yield* Clock.currentTimeMillis;
@@ -250,7 +255,9 @@ export function listTasklessAgents(
         automationId: agent.automationId,
         workspaceId: agent.organizationId,
         repository: agent.repository,
-        activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
+        activityAt: codingAgentActivityAt(settled.get(agent.conversationId), {
+          createdAt: agent.createdAt,
+        }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
         ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),
         ...pullRequestOf(published.get(agent.id)),

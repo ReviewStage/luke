@@ -150,6 +150,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   settledAt: EffectSchema.NullOr(countedNumber),
   turnSessionEnded: EffectSchema.NullOr(EffectSchema.Boolean),
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
+  /** When the newest turn to end ended, the newest turn's own end being null while it runs; absent from a statement before it was carried. */
+  lastSettledAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   /** Whether the newest turn's reply is a member's operator's quiet reply alone; absent from a statement before heartbeats. */
   quietTurn: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Boolean)),
 });
@@ -222,10 +224,9 @@ function runStartedAt(row: AgentLiveRow, now: number): number | undefined {
   return turnOf(row) === undefined ? row.createdAt : (row.startedAt ?? row.queuedAt ?? undefined);
 }
 
-/** When the agent last did something settled: its start, its newest turn's start or queueing, or that turn's end, whichever is latest. */
+/** When the agent last did something settled, as the service's `codingAgentActivityAt` reads it: its start, or its newest turn to end's end, whichever is later; a turn's start is none. A statement from before that end was carried names the newest turn's own. */
 function activityAt(row: AgentLiveRow): number {
-  if (turnOf(row) === undefined) return row.createdAt;
-  return Math.max(row.createdAt, row.startedAt ?? row.queuedAt ?? 0, row.settledAt ?? 0);
+  return Math.max(row.createdAt, row.lastSettledAt ?? row.settledAt ?? 0);
 }
 
 /** Newest started first, and the first started among those of one instant, as the held read sums a plan's agents. */

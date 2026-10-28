@@ -10,7 +10,6 @@ export default defineConfig({
     projects: [
       "packages/runtime",
       "packages/wire",
-      "packages/live",
       "packages/gateway",
       "packages/settings",
       "packages/features",

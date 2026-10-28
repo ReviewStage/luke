@@ -16,7 +16,7 @@ import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -50,19 +50,12 @@ import {
   SESSION_STANDING,
 } from "../eve-host/conversation.js";
 import {
-  EVE_MOUNT,
-  type EveSessionsComposer,
-  eveSessionsComposer,
-} from "../eve-host/eve-sessions.js";
-import {
   foldedQuietly,
-  type RelayAskSeams,
   type RelayStanding,
   type RelayStateStore,
   StreamRelay,
 } from "../eve-host/relay.js";
 import { rotationSeedText } from "../eve-host/seed.js";
-import { carryStop } from "../eve-host/stop-carrier.js";
 import { newestLineIsAutomation } from "../memory-provenance.js";
 import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
@@ -124,10 +117,9 @@ import {
  * agent's, whose row names the model each step runs on, the repository its
  * sandbox checks out, and the plan its first message carried. The model is
  * read from the row at every step, so a later change to the row is the next
- * step's model. The relay into the store is the shared one, composed here
- * with no ask record: a message to a coding agent is written as a line
- * awaiting its turn by the message route, and the relay takes that line
- * into the turn that receives it, so nothing needs binding here. The
+ * step's model. The relay into the store is the shared one: a message to a
+ * coding agent is written as a line awaiting its turn by the message route,
+ * and the relay takes that line into the turn that receives it. The
  * agent's title is the host's one model call of its own: generated from its
  * opening as the relay writes it, and from its first exchange as one of its
  * first turns ends, written where no title stands yet, and never again, so
@@ -650,57 +642,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           Effect.orElseSucceed(() => false),
         );
 
-  /**
-   * The ask record every turn binds the voice's asks to: each ask eve delivered into the
-   * turn learns the turn it ran in, which is what ties the transcript's line
-   * to it and what the voice follows the answer by, and a Stop the ask took
-   * while it waited is carried the moment its turn starts, by the deployment
-   * acting for the agent's starter on the coder's mount, since the hook that
-   * sees the start holds no bearer; a deployment with no secret or no origin
-   * for eve reports the Stop it could not carry. A typed turn takes it too,
-   * since a call's ask joins one under way (`channel.ts`'s
-   * `CODER_DEPLOYMENT_PRESENCE`): at its start that costs a binding of its
-   * delivery and a read of the Stops on it, two statements.
-   */
-  const turnAsks = (writer: StoreWriter, compose: EveSessionsComposer): RelayAskSeams => ({
-    binding: askRecord(),
-    stopTurn: (target, sessionId, eveTurnId, turnId) =>
-      Effect.suspend(() => {
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        if (secret === undefined || origin === undefined) {
-          return Effect.logWarning(
-            `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
-          );
-        }
-        return carryStop(
-          {
-            // Composed to send no message at all: the deployment here cancels a turn and does nothing else.
-            eve: compose<never>({
-              origin,
-              caller: { secret, account: target.userId },
-              mount: EVE_MOUNT.CODER,
-            }),
-            writer,
-            now: seams.now,
-            report: (message) => console.warn(message),
-          },
-          target,
-          sessionId,
-          eveTurnId,
-          turnId,
-        );
-      }),
-  });
-
-  /** One event relayed through the shared relay, with the ask record beside it on the agent's own turns, which a call may join, and none on a worker's. */
+  /** One event relayed through the shared relay. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
     Effect.gen(function* () {
       const writer = yield* seams.writer();
-      const compose = yield* eveSessionsComposer;
       const relay = new StreamRelay({
         writer,
-        ...(standing.turn === RELAY_TURN.CHILD ? undefined : { asks: turnAsks(writer, compose) }),
         now: seams.now,
         report: (message) => console.warn(message),
       });

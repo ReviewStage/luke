@@ -26,7 +26,7 @@ import {
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import type { Task } from "@luke/features/task-wire";
+import { TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   HOST_LIVE,
   IDLE_TASKS_VIEW,
@@ -154,6 +154,13 @@ import {
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections } from "./sidebar-collections.js";
+import {
+  type AgentRow,
+  type PlanRow,
+  ROW_GONE,
+  type RowWrite,
+  taskListCollections,
+} from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import { TASK_RECORD_PART, type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import {
@@ -358,7 +365,17 @@ export interface TasksComposer extends Composer {
    * waits for nothing.
    */
   listed: (txid: string | undefined) => Effect.Effect<void>;
+  /**
+   * A change to an agent's row of the list, drawn at once and standing
+   * while `written` writes it: kept once the followed list carries its
+   * transaction, taken back where the service refused it, so the coding
+   * agents' own writes draw as the list's do (`task-list-collections.ts`).
+   */
+  writeAgent: RowWrite<AgentRow>;
 }
+
+/** The statuses a task stands finished in, which the service stamps `completedAt` as it enters. */
+const FINISHED: ReadonlySet<string> = new Set([TASK_STATUS.DONE, TASK_STATUS.CANCELED]);
 
 /**
  * How long a live follow waits before sealing again after a seal the
@@ -633,22 +650,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return held?.id === taskId ? held : undefined;
   }
 
-  /** A task's row of the list: everything but its document and what is written of it. */
   /** A task's row or document without the assignee it stood with. */
   function withoutAssignee<T extends { readonly assignee?: unknown }>(
     standing: T,
   ): Omit<T, "assignee"> {
     const { assignee: _assignee, ...rest } = standing;
     return rest;
-  }
-
-  function summaryOf({
-    document: _document,
-    agentEdits: _agentEdits,
-    lastEdit: _lastEdit,
-    ...summary
-  }: Task): TasksView["tasks"][number] {
-    return summary;
   }
 
   /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
@@ -664,19 +671,59 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     Effect.suspend(() => confirmWrite(listWait, txid));
 
   /**
+   * The account's task list in collections (`task-list-collections.ts`),
+   * from a launch or a sign-in until a sign-out closes their scope, so a
+   * write still out for the account signed out draws on nothing the next
+   * account sees. Each draw lays the list in the view, and what the service
+   * holds of the open task, its name, pin, status, assignee, and repository,
+   * reaches its document as the list carries it.
+   */
+  const openTaskList = Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const collections = yield* Scope.provide(scope)(
+      taskListCollections({
+        draw: ({ list, taskAgents, taskPullRequests, pendingTasks }) => {
+          const { pendingTasks: _held, ...rest } = view;
+          view = pendingTasks.length === 0 ? rest : { ...rest, pendingTasks };
+          write({
+            tasks: list.plans,
+            tasklessAgents: list.planlessAgents ?? [],
+            taskAgents,
+            taskPullRequests,
+          });
+          if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
+        },
+        txWait: () => listWait,
+      }),
+    );
+    return { scope, collections };
+  });
+  let taskList = yield* openTaskList;
+  yield* Effect.addFinalizer(() => Scope.close(taskList.scope, Exit.void));
+
+  /**
    * A task write run under the serial lock, its answer drawn there, then
    * confirmed once its transaction reaches the followed list, outside the
    * lock, so no other read or write waits on Realtime, and a newer row the
    * list publishes meanwhile is drawn over the answer rather than under it.
    */
   const writtenThenListed = <
-    Written extends readonly [answer: unknown, txid: string | undefined],
+    Written extends readonly [
+      answer: unknown,
+      txid: string | undefined,
+      held?: { readonly taskId: string; readonly fields: Partial<PlanRow> | typeof ROW_GONE },
+    ],
     E,
     R,
   >(
     write: Effect.Effect<Written, E, R>,
   ): Effect.Effect<Written[0], E, R> =>
-    Effect.flatMap(serial(write), ([answer, txid]) => Effect.as(listed(txid), answer));
+    Effect.flatMap(serial(write), ([answer, txid, held]) =>
+      Effect.as(
+        held === undefined ? listed(txid) : heldOverList(held.taskId, held.fields, txid),
+        answer,
+      ),
+    );
 
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
@@ -690,18 +737,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 ? sealed.answer
                 : { failure: sealed.failure, gone: sealed.failure === LIVE_SIGNED_OUT.failure },
             ),
-      publish: ({ list, taskAgents, taskPullRequests }) => {
-        write({
-          tasks: list.plans,
-          tasklessAgents: list.planlessAgents ?? [],
-          taskAgents,
-          taskPullRequests,
-          listStatus: TASKS_READ.READY,
-          live: HOST_LIVE.LIVE,
-        });
-        // What the service holds of the open task, its name, status, assignee, and repository, reaches its document as the list carries it.
-        if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
-      },
+      // Note that an answer's read standing rides the list it draws, so a window is told both at once.
+      take: (rows) =>
+        Effect.suspend(() => {
+          view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.LIVE };
+          return taskList.collections.answer(rows);
+        }),
       // A list that could not be read says so beside the tasks it already drew rather than emptying them.
       failed: () => write({ listStatus: TASKS_READ.FAILED, live: HOST_LIVE.OFFLINE }),
       // A list that may be behind keeps drawing what it had, and says it is catching up until the next lands.
@@ -1302,20 +1343,60 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     write({ document: { ...view.document, task } });
   }
 
+  /** The fields of a task's row of the list as the service answered the task. */
+  function planFieldsOf(task: Task): Partial<PlanRow> {
+    return {
+      workspaceId: task.workspaceId,
+      name: task.name,
+      repository: task.repository,
+      updatedAt: task.updatedAt,
+      ...(task.status === undefined ? undefined : { status: task.status }),
+      ...(task.priority === undefined ? undefined : { priority: task.priority }),
+      ...(task.number === undefined ? undefined : { number: task.number }),
+      assigneeId: task.assignee?.userId ?? null,
+      assigneeName: task.assignee?.name ?? null,
+      pinnedAt: task.pinnedAt ?? null,
+      pinPosition: task.pinPosition ?? null,
+      completedAt: task.completedAt ?? null,
+    };
+  }
+
   /**
-   * Draws `task` as the service answered it, in the list's row and in the
-   * open document where it is the one held. Note that the assignee standing
-   * is dropped first, because an answer names one only where the task has
-   * one, so an answer that names none is a task assigned to no one.
+   * Holds what a write's answer says of a task's row, or that it is gone,
+   * over the list until the list carries its transaction
+   * (`task-list-collections.ts`), so no draw meanwhile puts back the row as
+   * the list last answered it; outside the serial lock, as a list's wait is.
    */
-  function takeAnswered(task: Task): void {
-    const tasks = view.tasks.map((row) =>
-      row.id === task.id ? { ...withoutAssignee(row), ...summaryOf(task) } : row,
+  function heldOverList(
+    taskId: string,
+    fields: Partial<PlanRow> | typeof ROW_GONE,
+    txid: string | undefined,
+  ): Effect.Effect<void> {
+    return Effect.suspend(() =>
+      taskList.collections.writePlan(
+        taskId,
+        () => fields,
+        Effect.succeed({ answer: undefined, txid, fields }),
+      ),
     );
+  }
+
+  /**
+   * Draws `task` as the service answered it on the open document where it
+   * is the one held, and answers what it says of the task's row of the list,
+   * which the caller holds over the list (`heldOverList`). Note that the
+   * assignee standing is dropped first, because an answer names one only
+   * where the task has one, so an answer that names none is a task assigned
+   * to no one.
+   */
+  function takeAnswered(task: Task): {
+    readonly taskId: string;
+    readonly fields: Partial<PlanRow>;
+  } {
     write({
-      tasks,
       ...documentTook(task.id, task, (held) => ({ ...withoutAssignee(held), ...task })),
     });
+    return { taskId: task.id, fields: planFieldsOf(task) };
   }
 
   /**
@@ -1352,41 +1433,47 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Draws the pin `task` was answered with on its row of the
-   * list, and on the open document where it is the one held. Note that the
-   * row keeps what the list said of the task's coding agents, which only the
-   * list answers, and the held document keeps everything else it holds,
-   * because a draft drawn meanwhile may be ahead of the copy the service
-   * answered.
+   * Draws the pin `task` was answered with on the open document where it is
+   * the one held, which keeps everything else it holds, because a draft
+   * drawn meanwhile may be ahead of the copy the service answered.
    */
   function takeMarks(task: Task): void {
-    const tasks = view.tasks.map((row) =>
-      row.id !== task.id
-        ? row
-        : {
-            ...summaryOf(task),
-            ...(row.agents === undefined ? undefined : { agents: row.agents }),
-          },
-    );
     // Note that an open still reading takes the pin from the row once its read lands (`openedDocument`).
     if (view.activeTaskId === task.id) partWritten(OPENED_PART.MARKS);
     const held = heldTaskOf(task.id);
-    if (held === undefined) {
-      write({ tasks });
-      return;
+    if (held !== undefined) {
+      write({ document: { status: TASKS_READ.READY, task: withMarksOf(held, task) } });
     }
-    write({ tasks, document: { status: TASKS_READ.READY, task: withMarksOf(held, task) } });
   }
 
-  /** Pins or unpins one task on the service, and draws what it answered. */
+  /**
+   * Pins or unpins one task, drawn on its row at once, a pin newest pinned
+   * and standing where it was dragged, and kept once the list carries it
+   * (`task-list-collections.ts`); the open document takes the service's answer.
+   */
   function markTask(taskId: string, marks: TaskMarks) {
-    return writtenThenListed(
-      Effect.gen(function* () {
-        const marked = yield* served(client.mark(taskId, marks));
-        if (marked === undefined) return [{ changed: false }, undefined] as const;
-        takeMarks(marked.task);
-        return [{ changed: true }, marked.txid] as const;
-      }),
+    const pinned = (row: PlanRow): Partial<PlanRow> =>
+      marks.pinned
+        ? {
+            pinnedAt: row.pinnedAt ?? kernel.now(),
+            pinPosition: marks.pinPosition ?? (row.pinnedAt === null ? null : row.pinPosition),
+          }
+        : { pinnedAt: null, pinPosition: null };
+    return taskList.collections.writePlan(
+      taskId,
+      pinned,
+      serial(
+        Effect.gen(function* () {
+          const marked = yield* served(client.mark(taskId, marks));
+          if (marked === undefined) return { refused: { changed: false } };
+          takeMarks(marked.task);
+          return {
+            answer: { changed: true },
+            txid: marked.txid,
+            fields: planFieldsOf(marked.task),
+          };
+        }),
+      ),
     );
   }
 
@@ -1841,13 +1928,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const restored = yield* serial(
           Effect.gen(function* () {
             const answer = yield* served(client.restore(taskId, seq));
-            if (answer !== undefined) takeAnswered(answer.task);
-            return answer;
+            if (answer === undefined) return undefined;
+            return { ...answer, held: takeAnswered(answer.task) };
           }),
         );
         if (restored === undefined) return { restored: false };
-        // Note that the wait stands outside the serial reads, so no read waits on it.
-        yield* confirmWrite(historyTxWaits.get(taskId), restored.txid);
+        // Note that the waits stand outside the serial reads, so no read waits on them.
+        const { held, txid } = restored;
+        yield* Effect.all(
+          [
+            confirmWrite(historyTxWaits.get(taskId), txid),
+            heldOverList(held.taskId, held.fields, txid),
+          ],
+          { concurrency: "unbounded" },
+        );
         return { restored: true };
       }),
     // Leaving the task returns to the list, which was read when the tab
@@ -1926,19 +2020,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
             if (deleted === undefined) return [{ deleted: false }, undefined] as const;
-            const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _deleted, ...rest } = withoutPages(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
+              publish();
             }
-            write({ tasks });
-            return [{ deleted: true }, deleted.txid] as const;
+            return [{ deleted: true }, deleted.txid, { taskId, fields: ROW_GONE }] as const;
           }),
         );
       }),
-    // The service answers the task as renamed, so the list's row and the
-    // open document take it in place and nothing is read again.
+    // A name is drawn on the task's row at once and kept once the list
+    // carries it (`task-list-collections.ts`); the open document takes the
+    // service's answer in place, and nothing is read again.
     [GATEWAY_METHOD.TASKS_RENAME]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1948,28 +2042,34 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return { renamed: false };
         const { taskId, name } = read;
-        return yield* writtenThenListed(
-          Effect.gen(function* () {
-            const written = yield* served(client.rename(taskId, { name }));
-            if (written === undefined) return [{ renamed: false }, undefined] as const;
-            const renamed = written.task;
-            const tasks = view.tasks.map((task) =>
-              task.id === taskId ? { ...task, name: renamed.name } : task,
-            );
-            write({
-              tasks,
-              ...documentTook(taskId, renamed, (held) => ({
-                ...held,
-                name: renamed.name,
-                document: renamed.document,
-              })),
-            });
-            return [{ renamed: true }, written.txid] as const;
-          }),
+        return yield* taskList.collections.writePlan(
+          taskId,
+          () => ({ name }),
+          serial(
+            Effect.gen(function* () {
+              const written = yield* served(client.rename(taskId, { name }));
+              if (written === undefined) return { refused: { renamed: false } };
+              const answered = written.task;
+              write({
+                ...documentTook(taskId, answered, (held) => ({
+                  ...held,
+                  name: answered.name,
+                  document: answered.document,
+                })),
+              });
+              return {
+                answer: { renamed: true },
+                txid: written.txid,
+                fields: planFieldsOf(answered),
+              };
+            }),
+          ),
         );
       }),
-    // The service answers the task as changed, so the list's row and the open
-    // document take it in place and nothing is read again.
+    // Where a task stands is drawn on its row at once, a member assigned by
+    // the name the window knows them by, and kept once the list carries it
+    // (`task-list-collections.ts`); the open document takes the service's
+    // answer in place, and nothing is read again.
     [GATEWAY_METHOD.TASKS_SET_STANDING]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1978,14 +2078,45 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           "setting where a task stands names it and its status, priority, or assignee",
         );
         if (!gate()) return { changed: false };
-        const { taskId, ...standing } = read;
-        return yield* writtenThenListed(
-          Effect.gen(function* () {
-            const changed = yield* served(client.setStanding(taskId, standing));
-            if (changed === undefined) return [{ changed: false }, undefined] as const;
-            takeAnswered(changed.task);
-            return [{ changed: true }, changed.txid] as const;
+        const { taskId, assigneeName, ...standing } = read;
+        return yield* taskList.collections.writePlan(
+          taskId,
+          (row) => ({
+            ...(standing.status === undefined
+              ? undefined
+              : {
+                  status: standing.status,
+                  // Note that a task finished here is stamped now, as the service stamps it, so the recently finished find it.
+                  completedAt:
+                    standing.status === row.status
+                      ? (row.completedAt ?? null)
+                      : FINISHED.has(standing.status)
+                        ? kernel.now()
+                        : null,
+                }),
+            ...(standing.priority === undefined ? undefined : { priority: standing.priority }),
+            ...(standing.assigneeId === undefined
+              ? undefined
+              : {
+                  assigneeId: standing.assigneeId,
+                  assigneeName: standing.assigneeId === null ? null : (assigneeName ?? ""),
+                }),
           }),
+          serial(
+            Effect.gen(function* () {
+              const answered = yield* served(client.setStanding(taskId, standing));
+              if (answered === undefined) return { refused: { changed: false } };
+              const { task } = answered;
+              write({
+                ...documentTook(taskId, task, (held) => ({ ...withoutAssignee(held), ...task })),
+              });
+              return {
+                answer: { changed: true },
+                txid: answered.txid,
+                fields: planFieldsOf(task),
+              };
+            }),
+          ),
         );
       }),
     [GATEWAY_METHOD.TASKS_PIN]: (params) =>
@@ -2077,10 +2208,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 undefined,
               ] as const;
             }
-            takeAnswered(changed.answer.task);
             return [
               carried<TasksSetRepositoryAnswer>({ repository: changed.answer.task.repository }),
               changed.answer.txid,
+              takeAnswered(changed.answer.task),
             ] as const;
           }),
         );
@@ -2104,10 +2235,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             if (!moved.ok) {
               return [carried<TasksMoveAnswer>({ failure: moved.failure }), undefined] as const;
             }
-            takeAnswered(moved.answer.task);
             return [
               carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId }),
               moved.answer.txid,
+              takeAnswered(moved.answer.task),
             ] as const;
           }),
         );
@@ -2123,18 +2254,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksEditAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { taskId, edit } = read;
-        return yield* serial(
+        // Note that the row the edit answered is held over the list outside the serial reads, as a list's wait is.
+        const edited = yield* serial(
           Effect.gen(function* () {
-            const edited = yield* served(client.edit(taskId, edit));
-            if (!edited.ok) return carried<TasksEditAnswer>({ failure: edited.failure });
-            const answer = edited.answer;
+            const written = yield* served(client.edit(taskId, edit));
+            if (!written.ok)
+              return { answer: carried<TasksEditAnswer>({ failure: written.failure }) };
+            const answer = written.answer;
             if ("conflict" in answer)
-              return carried<TasksEditAnswer>({ conflict: answer.conflict });
-            if ("refused" in answer) return carried<TasksEditAnswer>({ failure: answer.refused });
-            takeAnswered(answer.plan);
-            return carried<TasksEditAnswer>({ saved: true });
+              return { answer: carried<TasksEditAnswer>({ conflict: answer.conflict }) };
+            if ("refused" in answer)
+              return { answer: carried<TasksEditAnswer>({ failure: answer.refused }) };
+            return {
+              answer: carried<TasksEditAnswer>({ saved: true }),
+              held: takeAnswered(answer.plan),
+            };
           }),
         );
+        if (edited.held !== undefined) {
+          yield* heldOverList(edited.held.taskId, edited.held.fields, undefined);
+        }
+        return edited.answer;
       }),
     // The browser connects or disconnects GitHub, so the panel coming
     // forward again reads the connection whatever the bound says.
@@ -2555,6 +2695,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     methods,
     snapshot: () => view,
     listed,
+    writeAgent: (agentId, change, written) =>
+      Effect.suspend(() => taskList.collections.writeAgent(agentId, change, written)),
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
@@ -2564,6 +2706,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
+      yield* Scope.close(taskList.scope, Exit.void);
+      taskList = yield* openTaskList;
       yield* FiberHandle.clear(workspacesFollow);
       yield* FiberHandle.clear(sidebarFollow);
       yield* FiberMap.clear(peopleFollows);

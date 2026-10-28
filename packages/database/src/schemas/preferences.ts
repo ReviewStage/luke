@@ -16,13 +16,12 @@ export const accountPreference = pgTable("account_preference", {
     .primaryKey()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  voice: text("voice"),
   /**
    * Where the account's Luke links open (`@luke/features/link-open`); null
    * until the account chooses, which reads as the browser. A part of the
-   * snapshot of its own rather than the shared preferences beside `voice`,
-   * so a build that predates it, writing that part whole, never clears it;
-   * written alone, it moves no `updated_at`.
+   * snapshot of its own rather than the shared preferences, so a build that
+   * predates it, writing that part whole, never clears it; written alone, it
+   * moves no `updated_at`.
    */
   linkOpen: text("link_open").$type<LinkOpen>(),
   /**
@@ -68,7 +67,7 @@ export const accountPreference = pgTable("account_preference", {
    * coding-agent choice opened. The desktop reads the instant's presence as
    * a snapshot to apply over its own settings, so a row with none written
    * must answer none, or a never-synced Mac would take an empty snapshot
-   * over the voice it holds.
+   * over the settings it holds.
    */
   updatedAt: timestamptz("updated_at"),
 });

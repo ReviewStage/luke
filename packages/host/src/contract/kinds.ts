@@ -196,6 +196,13 @@ export const AGENT_INBOX_ACT_KIND = {
    * is none.
    */
   CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  /**
+   * Every inbox item the account reaches, followed while the window holds
+   * the stream open: by the plans and agents with no task they are on,
+   * whole as the stream opens and then those that moved, or why there are
+   * none.
+   */
+  CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW: "codingAgents.accountItemsFollow",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",

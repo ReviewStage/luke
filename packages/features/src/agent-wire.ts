@@ -1117,7 +1117,7 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   automationId: agentPageSchema.fields.automationId,
   workspaceId: agentPageSchema.fields.workspaceId,
   repository: agentPageSchema.fields.repository,
-  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  /** Epoch milliseconds the agent last moved: its start, or its newest run to end's end, whichever is later; a run's start is none. */
   activityAt: countedNumber,
   /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),

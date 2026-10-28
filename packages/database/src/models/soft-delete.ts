@@ -1,10 +1,8 @@
-import { and, eq, inArray, isNotNull, isNull, lte, notExists, or } from "drizzle-orm";
+import { and, inArray, isNull, lte } from "drizzle-orm";
 import { DateTime, Duration, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
-import { task } from "../schemas/task.js";
-import { voiceSessions } from "../schemas/voice.js";
 import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
@@ -23,17 +21,10 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * A deleted agent's conversation is stamped the same way, by the same
  * statement (`stampConversationsDeleted`), so the two deletes keep one
  * promise about when the words go.
- *
- * A deleted task's calls are not stamped: the delete removes the ones that
- * had ended (`task-store.ts`), and the cron removes each one left once it
- * has ended too, the words said on it going with it by the cascade.
  */
 
 /** How long a cleared conversation's rows stand before the purge takes them. */
 export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(7));
-
-/** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
-const DELETED_TASK_CALLS_PER_SWEEP = 200;
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
@@ -121,49 +112,4 @@ export function stampConversationsDeleted(
       for (const id of level) seen.add(id);
     }
   });
-}
-
-/**
- * A call whose task is gone, once it has ended: recorded closed, or started
- * before `liveEdge`, past which no Live session still runs whatever its row
- * says. A call no task was ever named for is not one of a deleted task.
- */
-const purgeCallRows = SqlSchema.findAll({
-  Request: Schema.Date,
-  Result: IdRowSchema,
-  execute: (liveEdge) =>
-    Database.use((db) =>
-      db
-        .delete(voiceSessions)
-        .where(
-          inArray(
-            voiceSessions.id,
-            db
-              .select({ id: voiceSessions.id })
-              .from(voiceSessions)
-              .where(
-                and(
-                  isNotNull(voiceSessions.taskId),
-                  notExists(
-                    db.select({ id: task.id }).from(task).where(eq(task.id, voiceSessions.taskId)),
-                  ),
-                  or(isNotNull(voiceSessions.closedAt), lte(voiceSessions.startedAt, liveEdge)),
-                ),
-              )
-              .limit(DELETED_TASK_CALLS_PER_SWEEP),
-          ),
-        )
-        .returning({ id: voiceSessions.id }),
-    ),
-});
-
-/**
- * Removes the ended calls of tasks deleted since, across every account, at
- * most a sweep's worth; each call's segments cascade with it. Answers how
- * many calls went.
- */
-export function purgeDeletedTaskCalls(
-  liveEdge: Date,
-): Effect.Effect<number, StoreFailure, DatabaseServices> {
-  return Effect.map(purgeCallRows(liveEdge), (rows) => rows.length);
 }

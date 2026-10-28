@@ -52,17 +52,7 @@ import {
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq, sql } from "drizzle-orm";
-import {
-  Clock,
-  type Context,
-  Effect,
-  Layer,
-  Option,
-  Redacted,
-  Result,
-  Schema,
-  Stream,
-} from "effect";
+import { Clock, type Context, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
@@ -168,7 +158,6 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
       cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
       reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-      stream: () => Stream.empty,
     });
     // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
     const sessions = new Map(

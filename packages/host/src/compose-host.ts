@@ -173,6 +173,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       accountId,
       client: codingAgentClient,
       listed: tasks.listed,
+      writeAgent: tasks.writeAgent,
     });
     const automations = yield* composeAutomations({
       kernel,

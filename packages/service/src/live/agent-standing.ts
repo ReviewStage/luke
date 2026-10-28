@@ -1,5 +1,5 @@
 import { queryBuilder } from "@luke/database/core/query";
-import { newestAwaitingLineAt } from "@luke/database/models/message-reads";
+import { lastSettledTurnAt, newestAwaitingLineAt } from "@luke/database/models/message-reads";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { AGENT_FAILURE, AGENT_KIND, OPERATOR_QUIET_REPLY } from "@luke/features/agent-wire";
 import { UI_PART_TYPE } from "@luke/features/turn-run";
@@ -45,6 +45,11 @@ type LatestTurn = ReturnType<typeof latestTurnOf>;
 /** When the newest line of the developer's awaiting its turn in the conversation named was written, or null, as `awaitingLinesOfReached` reads it. */
 export function awaitingLineAtIn(conversationId: SQLWrapper): SQL<Date | null> {
   return newestAwaitingLineAt(sql`${conversationId}`);
+}
+
+/** When the newest turn to end in the conversation named ended, or null, as `lastSettledTurnsOfReached` reads it: what the list reads an agent's activity from. */
+export function lastSettledAtIn(conversationId: SQLWrapper): SQL<Date | null> {
+  return lastSettledTurnAt(sql`${conversationId}`);
 }
 
 /** What a reply may stand between, which is no word of it. */

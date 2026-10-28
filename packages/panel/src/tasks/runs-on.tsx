@@ -40,8 +40,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * on Cloud only where nothing is kept or that device is no longer listed. A
  * kept device that is offline, as a Mac is while Luke restarts on it, or
  * still getting ready or not set up, stays picked and says so, so its start
- * is refused by name rather than sent quietly to the cloud; it wears the Experimental
- * tag; it stands only while the member has a device to pick. The task's
+ * is refused by name rather than sent quietly to the cloud; it wears the
+ * experiment's flask, which says Experimental in its hint; it stands only while the member has a device to pick. The task's
  * chip stands with its status and priority, saying the device it runs on
  * and whether it is online, or that the device was removed, with no menu, and
  * its hint says it was set when the task was created. Both are
@@ -169,7 +169,7 @@ export function newTaskRunsOn(device: MacOffer | undefined): TaskRunsOnRequest {
     : { machine: AGENT_MACHINE.DEVICE, deviceId: device.deviceId };
 }
 
-/** New task's Runs on chip, with the Experimental tag after it: Cloud or the device picked, dropping the menu. */
+/** New task's Runs on chip, with the experiment's flask after it: Cloud or the device picked, dropping the menu. */
 export function NewTaskRunsOnChip({
   devices,
   device,
@@ -198,7 +198,7 @@ export function NewTaskRunsOnChip({
         disabled={disabled}
         onPick={(id) => onChoose(id === CLOUD_ROW ? undefined : id)}
       />
-      <ExperimentTag />
+      <ExperimentTag narrow />
     </span>
   );
 }

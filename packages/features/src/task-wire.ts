@@ -577,9 +577,9 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
   failed: EffectSchema.optionalKey(countedNumber),
   /**
    * Epoch milliseconds the plan's agents last did something settled, every
-   * agent's counted and not only those named: one started, handed a
-   * message, or its turn ended. It holds still while a turn streams. Absent
-   * from a service before it.
+   * agent's counted and not only those named: one started, or one's turn
+   * ended. A turn's start is none, so it holds still while a turn runs.
+   * Absent from a service before it.
    */
   activityAt: EffectSchema.optionalKey(countedNumber),
   agents: EffectSchema.Array(taskAgentLineSchema).check(

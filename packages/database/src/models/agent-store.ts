@@ -63,7 +63,6 @@ import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
-import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
@@ -77,6 +76,7 @@ import {
   awaitingLinesOf,
   awaitingLinesOfReached,
   type LatestTurn,
+  lastSettledTurnsOfReached,
   latestTurnsOf,
   latestTurnsOfReached,
   type TurnUsageRow,
@@ -252,6 +252,7 @@ export type AgentLatestTurn = LatestTurn;
 export {
   awaitingLinesOf,
   awaitingLinesOfReached,
+  lastSettledTurnsOfReached,
   latestTurnsOf,
   latestTurnsOfReached,
   type TurnUsageRow,
@@ -2114,47 +2115,10 @@ export interface AgentDeleteGuard<R> {
   ) => Effect.Effect<void, StoreFailure, R>;
 }
 
-/** Every call into the agent, open or ended, locked against a segment its voice writes meanwhile, which waits and then finds the conversation stamped (`voice-writer.ts`). */
-const lockAgentCalls = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: IdRowSchema,
-  execute: (agentId) =>
-    Database.use((db) =>
-      db
-        .select({ id: voiceSessions.id })
-        .from(voiceSessions)
-        .where(eq(voiceSessions.agentId, agentId))
-        .for("update"),
-    ),
-});
-
-/**
- * The words said on every call into the agent, open or ended; the calls
- * themselves stay, their agent set null by the delete, since the admin's
- * activity and cost pages read them.
- */
-const deleteAgentCallWords = SqlSchema.void({
-  Request: Schema.String,
-  execute: (agentId) =>
-    Database.use((db) =>
-      db
-        .delete(voiceTranscriptSegments)
-        .where(
-          inArray(
-            voiceTranscriptSegments.voiceSessionId,
-            db
-              .select({ id: voiceSessions.id })
-              .from(voiceSessions)
-              .where(eq(voiceSessions.agentId, agentId)),
-          ),
-        ),
-    ),
-});
-
 /**
  * Deletes the agent for good: its row, which takes its pins, its inbox, and
  * its pull request polls with it and leaves what else named it naming no
- * one; the words said on its calls; and its conversation stamped deleted, so
+ * one; and its conversation stamped deleted, so
  * the purge takes its transcript seven days on, as a task's delete does
  * for each of its agents. Answers the transaction its row went in, as a
  * task's delete does; none where the account reaches no such agent.
@@ -2188,9 +2152,6 @@ export function deleteAgent<R = never>(
         if (Option.isNone(agent)) return Option.none();
         if (!(yield* guard.standsStopped(agent.value))) return yield* new TaskAgentUnstopped();
         yield* guard.beforeDelete([agent.value.conversationId]);
-        // Note that the calls are locked before their words go, so a call still open writes no word between.
-        yield* lockAgentCalls(agentId);
-        yield* deleteAgentCallWords(agentId);
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return Option.none();
         yield* stampConversationsDeleted([deleted.conversationId]);
