@@ -252,14 +252,14 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
  * the start adds to its environment; the name, platform, and architecture
  * the device is offered under at Start; and the scripts that make an
  * agent's own repository and check it for unsaved work
- * (`@luke/host/node`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
+ * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that
- * built them could not load in a browser. Only the local agents concern asks
- * for it.
+ * built them could not load in a browser. Only the follower asks for it, as
+ * `luke-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
  */
 export interface LocalAgentPlatformSeam {
-  /** The process a runner is started as, given what it runs and the environment made for it: `smolvm machine exec` into the agent's VM, through the desktop's launcher on a Mac. */
+  /** The process a runner is started as, given what it runs and the environment made for it: `smolvm machine exec` into the agent's VM. */
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
@@ -284,7 +284,7 @@ export interface LocalAgentPlatformSeam {
   }) => string;
   /**
    * The script that says what a discard would lose from the agent's worktree
-   * (`@luke/host/node`'s `agentUnsavedWorkScript`): it prints a line naming
+   * (`node/open-on-mac.ts`'s `agentUnsavedWorkScript`): it prints a line naming
    * the work at risk, nothing where there is none, and exits non-zero where it
    * could not tell, which keeps the folder. A discard on a device that names
    * none removes the folder unconditionally, as a host's does, whose folder

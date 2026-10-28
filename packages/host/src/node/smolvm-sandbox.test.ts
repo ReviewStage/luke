@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { AgentToolPin } from "@luke/agent-runner/pins";
@@ -461,18 +461,21 @@ it.effect(
 );
 
 it.effect(
-  "a Mac's sandbox is ready only once its pinned smolvm checks out against the pin and the image is pulled, once, through its launcher; a smolvm whose digest is not the pin's never runs",
+  "a Mac's sandbox is ready only once its pinned smolvm checks out against the pin and the image is pulled, once; a smolvm whose digest is not the pin's never runs",
   () =>
     Effect.gen(function* () {
       const root = yield* temporaryDirectoryScoped("luke-smolvm-pinned-");
       const stateRoot = `${root}/state`;
-      // Note that the launcher stands in for the Mac's, writing down each command it is handed rather than starting it.
-      const launcher = `${root}/launcher`;
+      // Note that the released smolvm writes down each command it is handed rather than running it.
       const calls = `${root}/calls`;
-      writeFileSync(launcher, `#!/bin/sh\necho "$@" >> '${calls}'\n`);
-      chmodSync(launcher, 0o755);
       mkdirSync(`${root}/release/smolvm-9.9.9`, { recursive: true });
-      writeFileSync(`${root}/release/smolvm-9.9.9/smolvm`, "#!/bin/sh\n", { mode: 0o755 });
+      writeFileSync(
+        `${root}/release/smolvm-9.9.9/smolvm`,
+        `#!/bin/sh\necho "$0 $@" >> '${calls}'\n`,
+        {
+          mode: 0o755,
+        },
+      );
       execFileSync("tar", ["-czf", `${root}/smolvm.tgz`, "-C", `${root}/release`, "smolvm-9.9.9"]);
       const archive = readFileSync(`${root}/smolvm.tgz`);
       const pin: AgentToolPin = {
@@ -487,7 +490,6 @@ it.effect(
       };
       const vm = smolvmSandbox({
         smolvm: pin,
-        through: launcher,
         stateRoot,
         runnerFolder: RUNNER_FOLDER,
         user: USER,
@@ -517,7 +519,7 @@ it.effect(
       assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n"), [
         `${smolvm} machine run --net --image ${IMAGE} -- true`,
       ]);
-      // Every command of an agent's runs the very smolvm that was checked, through the launcher.
+      // Every command of an agent's runs the very smolvm that was checked.
       const runner = vm.launch({
         agentId: AGENT_ID,
         folder: `${root}/agent`,
@@ -526,8 +528,8 @@ it.effect(
         bundle: RUNNER_BUNDLE,
         env: {},
       });
-      assert.equal(runner.command, launcher);
-      assert.deepEqual(runner.args.slice(0, 3), [smolvm, "machine", "exec"]);
+      assert.equal(runner.command, smolvm);
+      assert.deepEqual(runner.args.slice(0, 2), ["machine", "exec"]);
     }).pipe(
       Effect.scoped,
       Effect.provide(

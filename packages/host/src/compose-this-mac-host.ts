@@ -11,7 +11,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
-import type { LocalAgentsComposer } from "./compose-local-agents.js";
 import type { Composer } from "./composer.js";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "./contract/this-mac-host.js";
 import {
@@ -25,21 +24,25 @@ import { followerLockHeld } from "./follower-lock.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import { readHostDevice, writeHostDevice } from "./host-device-record.js";
 import type { HostKernel } from "./host-kernel.js";
+import {
+  localAgentDeviceOf,
+  localAgentLaunchesHanded,
+  localAgentOwnerOf,
+} from "./local-agent-state.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-this-mac-host.ts -- This Mac's local agents run by `luke-host`, the same host program a Linux box runs, as the desktop app turns it on and off and shows where it stands; the app's own follower stopped.
+ * compose-this-mac-host.ts -- This Mac's local agents run by `luke-host`, the same host program a Linux box runs, as the desktop app turns it on and off and shows where it stands.
  *
  * Turning Run agents on this Mac on, with the Local agents experiment, is
- * one sequence, in order: the app's own follower is stopped (`idle`), so it
- * never follows beside `luke-host`, which the machine's lease holds anyway
- * (`follower-lock.ts`); the Mac is enrolled on the member's own sign-in
- * under the device id the app already registered for the account
- * (`enrollOwn`), which converts its device in place, so its agents, folders
- * and VMs carry over, and a Mac that never registered is registered once as
- * preparing and enrolled again; its record is written where `luke-host`
- * reads it, the app's own state folder (`host-device-record.ts`); and its
- * login item is registered (`ThisMacHost`). Turning the switch off
+ * one sequence, in order: the Mac is enrolled on the member's own sign-in
+ * under the device id the account has on this Mac (`local-agent-state.ts`),
+ * minted the first time (`enrollOwn`), which converts its device in place,
+ * so its agents, folders and VMs carry over; its record is written where
+ * `luke-host` reads it, the app's own state folder
+ * (`host-device-record.ts`); the launches kept under the account are handed
+ * to the device, whose follower settles them; and its login item is
+ * registered (`ThisMacHost`). Turning the switch off
  * unregisters the login item and keeps the record, so turning it on again
  * only registers it again: the switch is the pause.
  *
@@ -51,11 +54,11 @@ import type { RunMode } from "./run-mode.js";
  * member's own act does, Turn on again (`THIS_MAC_HOST_TURN_ON`) or the
  * switch turned off and on while the app watches. A turn-on that failed
  * says why and waits for the same act, Retry; the app never follows the
- * queue itself in its place.
+ * queue itself.
  *
  * Where it stands is read again every `IDLE` while the account is signed
- * in: running while another follower holds the machine's lease, which only
- * `luke-host` can be once the app's is stopped, and otherwise as its login
+ * in: running while a follower holds the machine's lease, which only
+ * `luke-host` can on a Mac, and otherwise as its login
  * item answers, registered and starting, or waiting for approval in System
  * Settings.
  */
@@ -79,7 +82,7 @@ const FAILED_WORDS = {
 } as const;
 
 export interface ThisMacHostDependencies {
-  kernel: Pick<HostKernel, "stateRoot" | "hostedServiceBaseUrl"> & {
+  kernel: Pick<HostKernel, "stateRoot" | "hostedServiceBaseUrl" | "createId"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
   account: Pick<AccountComposer, "capabilitiesActive">;
@@ -87,11 +90,6 @@ export interface ThisMacHostDependencies {
   accountId: () => string | undefined;
   /** Whether Run agents on this Mac and the account's Local agents experiment are both on. */
   switchedOn: Effect.Effect<boolean>;
-  /** The app's own follower, stopped before `luke-host` is registered, which keeps the account's device ids. */
-  follower: Pick<
-    LocalAgentsComposer,
-    "idle" | "deviceIdOf" | "handedToDevice" | "ownerOf" | "registeredPreparing"
-  >;
   client: Pick<HostedDeviceAgentClient, "enrollOwn">;
 }
 
@@ -145,7 +143,7 @@ export function composeThisMacHost(
     const { report } = yield* Reporter;
     const host = yield* ThisMacHost;
     const services = yield* Effect.context<ThisMacHostServices>();
-    const { kernel, account, follower, client } = dependencies;
+    const { kernel, account, client } = dependencies;
     const standing = yield* Ref.make<ThisMacHostStanding>(standingOf(THIS_MAC_HOST_STANDING.OFF));
     /** Whether the switch was on as it was last read; none before the first read, so an app start is no turn-on. */
     const lastOn = yield* Ref.make<boolean | undefined>(undefined);
@@ -167,26 +165,17 @@ export function composeThisMacHost(
         );
 
     /**
-     * The sequence: the app's follower stopped, the Mac enrolled under the
-     * account's device id, registered once as preparing where Luke knew no
-     * such device, its record written, and its login item registered; where
-     * it then stands, or why it failed.
+     * The sequence: the Mac enrolled under the account's device id, its
+     * record written, its launches handed to the device, and its login item
+     * registered; where it then stands, or why it failed.
      */
     const turnOn = (userId: string) =>
       Effect.gen(function* () {
         yield* set(standingOf(THIS_MAC_HOST_STANDING.TURNING_ON));
-        yield* follower.idle;
-        const deviceId = yield* follower.deviceIdOf(userId);
+        const deviceId = yield* localAgentDeviceOf(kernel.stateRoot, userId, kernel.createId);
         const version = yield* host.version;
         if (Result.isFailure(version)) return failed(`${FAILED_WORDS.VERSION}: ${version.failure}`);
-        let outcome = yield* enrolled(deviceId, version.success);
-        // Note that a device Luke never saw is registered once and enrolled once more, so no other not-found loops.
-        if (
-          outcome.outcome === OWN_ENROLL_OUTCOME.NOT_FOUND &&
-          (yield* follower.registeredPreparing(deviceId))
-        ) {
-          outcome = yield* enrolled(deviceId, version.success);
-        }
+        const outcome = yield* enrolled(deviceId, version.success);
         if (outcome.outcome !== OWN_ENROLL_OUTCOME.ENROLLED) return failed(enrollFailure(outcome));
         const saved = yield* Effect.result(
           writeHostDevice(kernel.stateRoot, {
@@ -197,7 +186,9 @@ export function composeThisMacHost(
         );
         if (Result.isFailure(saved)) return failed(FAILED_WORDS.NOT_SAVED);
         // Note that the launches the app kept are the device's only once it holds its secret, so a failed enroll strands none of them.
-        yield* follower.handedToDevice(userId, deviceId);
+        if (!(yield* localAgentLaunchesHanded(kernel.stateRoot, userId, deviceId))) {
+          report("the local agents' state could not be saved");
+        }
         const registered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.REGISTER);
         if (Result.isFailure(registered)) {
           return failed(`${FAILED_WORDS.LOGIN_ITEM}: ${registered.failure}`);
@@ -241,7 +232,7 @@ export function composeThisMacHost(
           const on = yield* dependencies.switchedOn;
           const record = yield* readHostDevice(kernel.stateRoot);
           const owner = Option.isSome(record)
-            ? yield* follower.ownerOf(record.value.deviceId)
+            ? yield* localAgentOwnerOf(kernel.stateRoot, record.value.deviceId)
             : undefined;
           // Note that another account's Mac is neither turned on nor off from here.
           if (Option.isSome(record) && owner !== userId) {

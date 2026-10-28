@@ -3,7 +3,6 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@luke/credentials/node";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { DEVICE_ARCH, DEVICE_ISOLATION, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -17,7 +16,6 @@ import {
   AppIdentity,
   Environment,
   IdSource,
-  LocalAgentPlatform,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -38,7 +36,6 @@ import {
 } from "./host-concerns.js";
 import { oauthAccountSourceLayer } from "./oauth-account-source.js";
 import { runModeFor } from "./run-mode.js";
-import { fakeSandbox } from "./testing/fake-sandbox.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
@@ -143,19 +140,6 @@ describe("the host's platform concerns", () => {
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
             Layer.succeed(SignInConsent, { open: loopbackConsent }),
-            Layer.succeed(LocalAgentPlatform, {
-              launch: ({ env }) => ({ command: "/usr/bin/false", args: [], env }),
-              runnerBundle: "/usr/bin/false",
-              runnerEnv: {},
-              sandbox: fakeSandbox().sandbox,
-              formerlyDirect: true,
-              deviceName: "Fixture Mac",
-              devicePlatform: DEVICE_PLATFORM.DARWIN,
-              deviceArch: DEVICE_ARCH.ARM64,
-              deviceIsolation: DEVICE_ISOLATION.SANDBOX,
-              deviceCapabilities: [],
-              worktreeScript: () => "exit 1",
-            }),
             Layer.succeed(ThisMacHost, {
               loginItem: () => Effect.succeed(Result.fail("no login item in a fixture")),
               version: Effect.succeed(Result.fail("no luke-host in a fixture")),
