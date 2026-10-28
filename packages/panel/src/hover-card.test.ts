@@ -58,6 +58,16 @@ interface HeadWords {
   readonly corner: string | undefined;
 }
 
+/** What a corner says to a reader: its text, or, where it holds marks alone, as a task's does, their words. */
+function cornerWords(corner: Element | null): string | undefined {
+  if (corner === null) return undefined;
+  if (corner.textContent !== "") return corner.textContent;
+  const marks = [...corner.querySelectorAll('[role="img"][aria-label]')].filter(
+    (each) => each.parentElement?.closest('[aria-hidden="true"]') === null,
+  );
+  return marks.map((each) => each.getAttribute("aria-label")).join(", ");
+}
+
 /** The one head of the card drawn in `within`, read part by part. */
 function headOf(within: ParentNode): HeadWords {
   const heads = within.querySelectorAll(".luke-hover-card > .luke-hover-card-head");
@@ -72,7 +82,7 @@ function headOf(within: ParentNode): HeadWords {
     sub:
       head.querySelector(":scope > .luke-hover-card-title > .luke-hover-card-sub")?.textContent ??
       undefined,
-    corner: head.querySelector(":scope > .luke-hover-card-corner")?.textContent ?? undefined,
+    corner: cornerWords(head.querySelector(":scope > .luke-hover-card-corner")),
   };
 }
 
@@ -153,19 +163,18 @@ test("a working agent's card says only how long its run has gone at its corner, 
 test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {
   const task = drawn(
     createElement(TaskCard, {
-      task: SUMMARY,
+      task: { ...SUMMARY, number: 42 },
+      workspaceName: "Acme",
       models: [],
-      pictures: false,
       now: STARTED_AT + 3 * 3_600_000,
-      onOpenGitHub: ignore,
       onShowAgent: ignore,
     }),
   );
   assert.deepEqual(headOf(task), {
-    glyph: false,
+    glyph: true,
     name: "Teammate invitations",
-    sub: undefined,
-    corner: "3h",
+    sub: "ACME-42 · acme/relay · 3h",
+    corner: "Priority: No priority, Assignee: No assignee",
   });
 
   const agent = drawn(
@@ -265,7 +274,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   );
 });
 
-test("a plan's card says in its corner when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
+test("a plan's card says under its name when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {
   const worked: TaskSummary = {
     ...SUMMARY,
     agents: {
@@ -281,11 +290,9 @@ test("a plan's card says in its corner when the task last saw activity, its agen
     createElement(TaskCard, {
       task: worked,
       models: [],
-      pictures: false,
       now: STARTED_AT + 3 * 3_600_000,
-      onOpenGitHub: ignore,
       onShowAgent: ignore,
     }),
   );
-  assert.equal(headOf(card).corner, "1h");
+  assert.equal(headOf(card).sub, "acme/relay · 1h");
 });
