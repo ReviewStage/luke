@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
+import { DurationSharding } from "../../scripts/lib/test-shards.mjs";
 import { redirectOf } from "./scripts/build-table.mjs";
 
 /**
@@ -34,5 +35,7 @@ export default defineConfig({
     setupFiles: ["src/testing/resize-observer.ts", "src/testing/match-media.ts"],
     css: { include: [PANEL_STYLESHEETS] },
     server: { deps: { inline: ["streamdown", "@pierre/diffs"] } },
+    // CI's shards split the files by their recorded time (`scripts/lib/test-shards.mjs`).
+    sequence: { sequencer: DurationSharding },
   },
 });
