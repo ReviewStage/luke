@@ -1416,6 +1416,7 @@ export const PlanBody = memo(function PlanBody({
               <TaskStandingChips
                 task={task}
                 onSet={taskStanding.onSet}
+                repository={taskStanding.repository}
                 devices={taskStanding.devices}
               />
             )}

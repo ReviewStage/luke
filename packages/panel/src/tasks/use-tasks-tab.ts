@@ -1482,6 +1482,36 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (viewed.activeTaskId !== undefined) onRenamePins(viewed.activeTaskId, pinLabels);
   }, [viewed.activeTaskId, pinLabels, onRenamePins]);
+  // A Plan tab an earlier version pinned to the sidebar on this Mac becomes
+  // the task's own pin on the account, since the Plan tab's Pin is the
+  // task's now (`task-actions.tsx`), once the list names the task, and
+  // leaves this Mac's pins only once the account's pin landed, so a refusal
+  // keeps it for the next launch to try again; one the list does not name
+  // yet waits there too, drawn nowhere (`desktop-sidebar.tsx`). A task
+  // already pinned only lets the tab's pin go. Note that each task is asked
+  // once a launch, and that the mark is read as the effect runs, so it is
+  // the newest, as a press's would be.
+  const markTaskNow = useRef<(taskId: string, mark: TaskMark) => Promise<boolean>>(() =>
+    Promise.resolve(false),
+  );
+  const migratedPins = useRef(new Set<string>());
+  const { onUnpin } = sidePanel;
+  useEffect(() => {
+    for (const pin of sidePanel.pins) {
+      if (pin.tab !== SIDE_PANEL_TAB.PLAN || migratedPins.current.has(pin.task)) continue;
+      const pinned = tasks.tasks.find((each) => each.id === pin.task);
+      if (pinned === undefined) continue;
+      migratedPins.current.add(pin.task);
+      const { tab } = pin;
+      if (pinned.pinnedAt !== undefined) {
+        onUnpin(pin.task, tab);
+        continue;
+      }
+      markTaskNow.current(pinned.id, TASK_MARK.PIN).then((changed) => {
+        if (changed) onUnpin(pin.task, tab);
+      });
+    }
+  }, [sidePanel.pins, tasks.tasks, onUnpin]);
   // Main hears which agent's tab, or which task's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the task's
   // place, the side panel fills the window over the column, or the column
@@ -1746,12 +1776,14 @@ export function useTasksTab(input: {
   // A fixture's tasks are marked nowhere, as they are read from nowhere. A
   // pin says nothing once it lands, since the row it moves is in sight; a
   // refusal puts back the mark it drew only while no later press replaced
-  // it, and says so in a toast, since the menu that asked has closed.
-  const markTask = (taskId: string, mark: TaskMark) => {
-    if (fixture !== undefined) return;
+  // it, and says so in a toast, since the menu that asked has closed. It
+  // answers whether the service kept the mark, which the pin migration
+  // above waits on.
+  const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
     const next = markAsked(marks, viewed, taskId, mark, Date.now());
     setMarks((held) => new Map(held).set(taskId, next));
-    act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
+    return act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
       .catch(() => false)
       .then((changed) => {
         if (!changed) {
@@ -1762,8 +1794,10 @@ export function useTasksTab(input: {
             hold: TOAST_HOLD.FAILED,
           });
         }
+        return changed;
       });
   };
+  markTaskNow.current = markTask;
   // A fixture's repositories are pinned nowhere, as its tasks are marked
   // nowhere. Main draws a pin at once and puts the group back where the
   // service refused it (`@luke/host`'s `sidebar-collections.ts`); a pin says

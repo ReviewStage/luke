@@ -110,7 +110,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The open task's tab, read by Dana, the task as given open and listed. */
+/** The open task's tab, read by Dana, the task as given open and listed, its side panel showing the plan. */
 function openTab(
   task: Task,
   workspaces: readonly Workspace[],
@@ -125,10 +125,11 @@ function openTab(
     workspaces,
     workspace: workspaces.find((workspace) => workspace.id === task.workspaceId),
     onMoveTask,
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   });
 }
 
-/** Mounts the tab's toolbar and opens its ⋯ menu. */
+/** Mounts the task's page and opens the Plan tab's ⋯ menu, the task's own. */
 function openMenu(tasks: TasksControl): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -137,8 +138,8 @@ function openMenu(tasks: TasksControl): void {
     root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
   );
   const more =
-    container.querySelector<HTMLButtonElement>('[aria-label="Task actions"]') ??
-    assert.fail("the toolbar draws the plan's ⋯");
+    container.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button") ??
+    assert.fail("the Plan tab draws the task's ⋯");
   act(() => more.click());
 }
 

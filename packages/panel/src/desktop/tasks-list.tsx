@@ -131,7 +131,7 @@ import { useTasksWaiting } from "./places-waiting.js";
 import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -706,6 +706,7 @@ function TaskListRow({
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();

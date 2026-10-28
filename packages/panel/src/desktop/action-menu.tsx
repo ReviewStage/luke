@@ -38,6 +38,12 @@ interface MenuSubmenu {
 /** One line of a menu: an action, or a submenu of them. */
 export type MenuEntry = MenuAction | MenuSubmenu;
 
+/** What a menu draws beyond its items: what it acts on, which heads it as a phone's sheet, and a foot under the items, as a task's menu says who created and last edited it. */
+export interface MenuEnds {
+  readonly subject?: MenuSubject | undefined;
+  readonly footer?: React.ReactNode;
+}
+
 /** The shared item for one of the window's, its command's chord as its hint. */
 function sharedAction({ command, ...action }: MenuAction): SharedMenuAction {
   if (command === undefined) return action;
@@ -63,14 +69,11 @@ export function rowMenu(
 export function ActionMenu({
   groups,
   ...props
-}: {
+}: MenuEnds & {
   label: string;
   /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
   menu: DrawnMenu;
-  /** What it acts on, which heads it as a phone's sheet. */
-  subject?: MenuSubject | undefined;
   heading?: React.ReactNode;
-  footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
