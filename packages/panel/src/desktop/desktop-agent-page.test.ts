@@ -184,8 +184,6 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 let openedOnGitHub: string[] = [];
 /** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
 let pages: CodingAgentPageAnswerView[] = [];
-/** The operator an ensure answers, wherever the account has Luke on. */
-let ensured = AGENT_ID;
 /** Every agent whose page was read, in order. */
 let read: string[] = [];
 /** Whether a read of the agent's page is held open until the test answers it with `answerHeld`. */
@@ -240,7 +238,6 @@ let takeDownTerminal: (() => void) | undefined;
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
-  ensured = AGENT_ID;
   read = [];
   holdPage = false;
   answerHeld = () => undefined;
@@ -383,10 +380,6 @@ beforeEach(() => {
           agent: { ...PAGE, id: STARTED_ID, status: CODING_AGENT_STATUS.STARTING },
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      // Note that the page's agent is the account's operator, Luke, wherever the account has him on.
-      if (request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agentId: ensured } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
@@ -1583,10 +1576,14 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show ter
   ]);
 });
 
-test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete", async () => {
-  handState(experimentsOn(EXPERIMENT.OPERATOR), {
-    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
-  });
+test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete, while the account has the experiment off too", async () => {
+  pages = [{ agent: { ...PAGE, kind: CODING_AGENT_KIND.OPERATOR } }];
+  handState(
+    {},
+    {
+      run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
+    },
+  );
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1602,7 +1599,6 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
 
 test("a Luke a Reset retired is still known by his kind: titled Luke, offering neither Rename, Unarchive, nor Permanently delete", async () => {
   pages = [{ agent: { ...PAGE, kind: CODING_AGENT_KIND.OPERATOR, archivedAt: 2 } }];
-  ensured = "0e9d8c7b-0000-4000-8000-0000000000ff";
   handState(experimentsOn(EXPERIMENT.OPERATOR), {
     run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
   });

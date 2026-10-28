@@ -271,14 +271,9 @@ export function agentSubject(
   };
   const name = line === undefined ? TAB_WORDS.CODING_AGENT : agentName(line, agents.models);
   const tile: Actor =
-    line?.status === undefined
-      ? {
-          kind: ACTOR_KIND.AGENT,
-          name,
-          provider: line === undefined ? undefined : providerOf(line.model),
-          state: ACTOR_STATE.REST,
-        }
-      : agentActor({ model: line.model, status: line.status }, name);
+    line === undefined
+      ? { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST }
+      : agentActor(line, name);
   return { name, tile, read: () => reading };
 }
 

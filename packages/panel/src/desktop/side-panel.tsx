@@ -7,6 +7,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
@@ -438,9 +439,6 @@ type DrawnCloudBrowser = { readonly id: string; readonly owner: CloudBrowserOwne
 
 /** No cloud Browser tab on the task, the same array every render. */
 const NO_CLOUD_BROWSERS: readonly DrawnCloudBrowser[] = [];
-
-/** Whose browser a cloud Browser tab of the task's own is in. */
-const LUKE_NAME = "Luke";
 
 /** What a draft of a tab in an agent's browser is called, until it opens a page. */
 const NEW_CLOUD_TAB = "New tab";
@@ -2422,7 +2420,10 @@ export function SidePanel({
   const cloudBrowsers = useMemo(() => {
     const ownerOf = (agentId: string | null): CloudBrowserOwner => {
       if (agentId === null) {
-        return { name: LUKE_NAME, icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} /> };
+        return {
+          name: OPERATOR_NAME,
+          icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />,
+        };
       }
       const subject = agentSubject(agents, agentId, drawnTranscripts, false);
       return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };

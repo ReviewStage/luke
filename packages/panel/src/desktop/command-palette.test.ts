@@ -2779,6 +2779,7 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           title: "Orla",
+          kind: CODING_AGENT_KIND.OPERATOR,
           createdAt: 1,
           status: CODING_AGENT_STATUS.COMPLETED,
           turnId: null,

@@ -79,7 +79,6 @@ import {
   automationTrail,
   useAutomationRunPlace,
 } from "./automation-agent-run.js";
-import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
 import {
@@ -170,7 +169,6 @@ function AgentPageBar({
   shown,
   terminals,
   onClose,
-  luke,
   phone,
   trail,
   steps,
@@ -185,25 +183,20 @@ function AgentPageBar({
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
-  /** Whether the agent is Luke, the account's operator, who is named Luke and is neither renamed, archived, nor deleted from here. */
-  luke: boolean;
   /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
   phone?: AgentPagePhone | undefined;
 }): React.JSX.Element {
-  const label = luke ? LUKE_NAME : agentName(agent, agents.models);
+  const label = agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
-  const doors = luke
-    ? { ...actions.doors, onRename: undefined, archive: undefined, deletion: undefined }
-    : actions.doors;
   const groups = contentActionGroups({
     chosen: true,
     onClose: undefined,
     onCloseOthers: undefined,
     pin: undefined,
-    ...doors,
+    ...actions.doors,
   });
-  const rename = luke ? undefined : actions.rename;
+  const { rename } = actions;
   const title =
     rename?.editing === true ? (
       <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="luke-toolbar-title">
@@ -332,8 +325,6 @@ export function DesktopAgentPage({
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
   );
   const { act } = useAct();
-  // Luke's page is an agent's page in every way but his name and the actions he does not offer.
-  const operator = useLukeOperator({ accountId: tasks.me, workspaceId: tasks.workspace?.id });
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -358,10 +349,6 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
-  // Note that Luke is known by his kind, so one a Reset retired is still drawn as Luke, never as an agent to rename or delete.
-  const luke =
-    operator !== undefined &&
-    (operator.agentId === agentId || (agent !== undefined && isLuke(agent, operator)));
   useTaskAgentsFollow(tasks, agentId, agent);
   // Its Call names the agent's own task, or none, and an archived agent takes none.
   const calls = useAgentCallDoors(tasks.calls, {
@@ -549,12 +536,7 @@ export function DesktopAgentPage({
             draftShown === undefined
               ? away
               : {
-                  label:
-                    agent === undefined
-                      ? AGENT
-                      : luke
-                        ? LUKE_NAME
-                        : agentName(agent, control.models),
+                  label: agent === undefined ? AGENT : agentName(agent, control.models),
                   onPress: () => setDrafting(undefined),
                 },
           onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
@@ -578,7 +560,6 @@ export function DesktopAgentPage({
         shown={tasks.shown}
         terminals={terminalDoors}
         onClose={tasks.agentView.onClose}
-        luke={luke}
         phone={phoneHead}
         trail={automationTrail(agent, tasks)}
         steps={
@@ -667,7 +648,7 @@ export function DesktopAgentPage({
                         >
                           <AgentPane
                             call={calls}
-                            label={luke ? LUKE_NAME : agentName(agent, control.models)}
+                            label={agentName(agent, control.models)}
                             tabbed={false}
                             tab={paneTab}
                             agents={control}
@@ -703,7 +684,7 @@ export function DesktopAgentPage({
                             away === undefined || agent === undefined
                               ? undefined
                               : {
-                                  back: luke ? LUKE_NAME : agentName(agent, control.models),
+                                  back: agentName(agent, control.models),
                                   onBack: sidePanel.onToggle,
                                 }
                           }
