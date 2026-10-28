@@ -249,7 +249,8 @@ it as a button.
 - Fixed a message to a cloud agent answering "Luke didn't hear back." while
   the agent was still starting or its sandbox was stopping
   ([#5728](https://github.com/ReviewStage/luke/pull/5728),
-  [#5816](https://github.com/ReviewStage/luke/pull/5816))
+  [#5816](https://github.com/ReviewStage/luke/pull/5816),
+  [#5838](https://github.com/ReviewStage/luke/pull/5838))
 - Fixed a Claude Code or Codex agent's turn failing after it lost touch with
   Luke for about ten minutes
   ([#5708](https://github.com/ReviewStage/luke/pull/5708))
