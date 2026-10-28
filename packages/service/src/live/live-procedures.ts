@@ -34,7 +34,8 @@
  * each by its id (`../agents/mac-commands-procedures.ts`).
  *
  * `GET /api/live/sidebar` answers the account's sidebar sections, the tasks
- * in them, and its pinned repositories as three.
+ * and agents in them, and its pinned repositories as four, woken by a write
+ * to any of them (`sidebarLive`).
  *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
@@ -75,8 +76,6 @@ import { boardLiveStatement } from "@luke/database/models/board-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
-import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
-import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import {
   isWorkspaceMember,
@@ -121,6 +120,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { sidebarLive } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
@@ -437,13 +437,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const statements = Option.zipWith(
-        taskSectionsLiveStatements(context.userId),
-        repositoryPinsLiveStatement(context.userId),
-        (sections, pins) => ({ ...sections, pins }),
-      );
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(sidebarLive, { userId: context.userId }, input);
     }),
     workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
