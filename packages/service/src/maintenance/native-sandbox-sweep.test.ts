@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { INPUT_LINE } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
+import { claimCodingAgentRunnerLease } from "@luke/database/models/coding-agent-runner-lease";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
@@ -541,6 +542,30 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       assert.equal(done.status, "stopped");
       assert.equal(gone.status, "stopped");
     }),
+  );
+
+  it.effect(
+    "a sandbox a message resumed and is relaunching into, its runner lease held, keeps running",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        // Resumed with no runner tagged yet, as a send's relaunch stands before its launch is recorded.
+        const resumed = nativeSandbox(agent.id);
+        api.sandboxes.push(resumed);
+        const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.ok(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), NOW, heldUntil));
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.equal(outcome.stopped, 0);
+        assert.deepEqual([api.stopped, api.policies], [[], []]);
+        assert.equal(resumed.status, "running");
+      }),
   );
 
   it.effect(
