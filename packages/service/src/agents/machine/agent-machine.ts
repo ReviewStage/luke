@@ -284,11 +284,11 @@ export interface AgentMachineService {
   readonly stop: (place: MachinePlace) => Effect.Effect<void, SandboxUnavailable>;
   /** The found place thrown away, with whatever runs in it. */
   readonly discard: (found: FoundPlace) => Effect.Effect<void, SandboxUnavailable>;
-  /** Files written into the running place, as the machine's default user, before a later line names them. */
+  /** Files written into the running place, as the machine's default user, before a later line names them; refused (`LaunchRefused`'s `deviceAway`) where they would go to a device that is away, as the line naming them would be. */
   readonly writeFiles: (
     place: MachinePlace,
     files: readonly SandboxFile[],
-  ) => Effect.Effect<void, SandboxUnavailable>;
+  ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /** The runner launched in the place once `ready` is done, recorded, and handed its first lines; ended again where they were not taken. */
   readonly launchRunner: <A, E, R, EL, RL>(
     place: MachinePlace,
