@@ -12,7 +12,9 @@ import { agoText, momentText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  ANNOUNCE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -23,11 +25,12 @@ import {
   DIALOG_SIZE,
   Dialog,
   DialogActions,
+  ErrorLine,
   ErrorState,
   GAP,
+  PlusIcon,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
-  SettingsRow,
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
@@ -62,7 +65,7 @@ import {
 } from "./this-mac-host-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Agents › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
+ * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@luke/features/host-wire`): a Linux server that ran the install command
@@ -89,7 +92,8 @@ import {
  * a coding agent follows to install them, and is gone once the dialog closes.
  * Revoke this command stops new servers enrolling with it, and none it
  * already enrolled. The section stands nowhere while the local agents
- * experiment is off, which hosts sit behind as This Mac does.
+ * experiment is off, which hosts sit behind as This Mac does, and neither
+ * does its page (`settings-rows.ts`'s `PAGE_EXPERIMENT`).
  */
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */
@@ -107,12 +111,11 @@ const MINUTE_MS = 60_000;
 const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
-  TITLE: "Machines",
-  ADD: "Add Linux servers",
+  ADD: "Add hosts",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
-  READ_FAILED: "Could not read your machines.",
-  SIGNED_OUT: "Sign in to see your machines.",
+  READ_FAILED: "Could not read your hosts.",
+  SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
@@ -126,11 +129,13 @@ const WORDS = {
   REVOKE: "Revoke this command",
 } as const;
 
-/** The rows that stand while the machines are read: Add Linux servers, and a machine with its ⋯. */
+/** The row that stands while the machines are read: a machine with its ⋯. */
 const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
-  { described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
 ];
+
+/** Add hosts' own line under the list, the button stretched to the rows' width and its failure under it. */
+const ADD_LINE = "grid";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** A remove or a revoke the service did not take, said in the dialog that asked. */
@@ -200,7 +205,7 @@ function HostRow({
   return (
     <>
       <MenuRow
-        thing="Machine"
+        thing="Host"
         alone
         actions={[
           {
@@ -252,7 +257,7 @@ function HostRow({
   );
 }
 
-/** The dialog Add Linux servers opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -320,7 +325,7 @@ function AddHostsDialog({
   );
 }
 
-/** The Machines group: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
+/** The Hosts page's one group, untitled under the page's own title: the member's machines, read when the page opens, or why they cannot be drawn, and Add hosts under them. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
@@ -430,62 +435,72 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const thisMacId = thisMac.standing?.deviceId;
   const listedMac =
     thisMacId === undefined ? undefined : hosts?.find((host) => host.id === thisMacId);
+  const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
+  const ordered =
+    hosts === undefined || listedMac === undefined
+      ? (hosts ?? [])
+      : [listedMac, ...hosts.filter((host) => host !== listedMac)];
+  const thisMacAlone = listedMac === undefined && thisMac.line !== null;
   return (
-    <SettingsSection title={WORDS.TITLE}>
-      {!signedIn ? (
-        <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
-      ) : hosts !== undefined && installScriptUrl !== undefined ? (
-        <>
-          <SettingsRow label={WORDS.ADD} error={addFailed ? WORDS.ADD_FAILED : undefined}>
-            {() => (
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                busy={adding}
-                busyLabel={WORDS.ADDING}
-                onClick={add}
-              >
-                {WORDS.ADD}
-              </Button>
-            )}
-          </SettingsRow>
-          {listedMac === undefined && thisMac.line !== null ? (
-            <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
-          ) : null}
-          {(listedMac === undefined
-            ? hosts
-            : [listedMac, ...hosts.filter((host) => host !== listedMac)]
-          ).map((host) => (
-            <HostRow
-              key={host.id}
-              host={host}
-              book={book}
-              now={now}
-              installScriptUrl={installScriptUrl}
-              onRemove={remove}
-              thisMac={host === listedMac ? thisMac : undefined}
-            />
-          ))}
-          {shown === undefined ? null : (
-            <AddHostsDialog
-              shown={shown}
-              onRevoke={revoke}
-              onClose={() => {
-                setShown(undefined);
-                // The list is read again, so a server that joined while the dialog stood is drawn.
-                setAttempt((count) => count + 1);
-              }}
-            />
+    <>
+      {loaded && ordered.length === 0 && !thisMacAlone ? null : (
+        // Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member.
+        <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
+          {!signedIn ? (
+            <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
+          ) : loaded ? (
+            <>
+              {thisMacAlone && thisMac.line !== null ? (
+                <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
+              ) : null}
+              {ordered.map((host) => (
+                <HostRow
+                  key={host.id}
+                  host={host}
+                  book={book}
+                  now={now}
+                  installScriptUrl={installScriptUrl}
+                  onRemove={remove}
+                  thisMac={host === listedMac ? thisMac : undefined}
+                />
+              ))}
+            </>
+          ) : readFailed ? (
+            <SettingsLine>
+              <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+                {WORDS.READ_FAILED}
+              </ErrorState>
+            </SettingsLine>
+          ) : (
+            <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
           )}
-        </>
-      ) : readFailed ? (
-        <SettingsLine>
-          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
-            {WORDS.READ_FAILED}
-          </ErrorState>
-        </SettingsLine>
-      ) : (
-        <SettingsRowsSkeleton label={readingWords("your machines")} rows={HOSTS_SKELETON} />
+        </SettingsSection>
       )}
-    </SettingsSection>
+      {signedIn ? (
+        <div className={ADD_LINE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.ADD_HOSTS)}>
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<PlusIcon />}
+            busy={adding}
+            busyLabel={WORDS.ADDING}
+            onClick={add}
+          >
+            {WORDS.ADD}
+          </Button>
+          <ErrorLine level={ANNOUNCE.ALERT}>{addFailed ? WORDS.ADD_FAILED : null}</ErrorLine>
+        </div>
+      ) : null}
+      {shown === undefined ? null : (
+        <AddHostsDialog
+          shown={shown}
+          onRevoke={revoke}
+          onClose={() => {
+            setShown(undefined);
+            // The list is read again, so a server that joined while the dialog stood is drawn.
+            setAttempt((count) => count + 1);
+          }}
+        />
+      )}
+    </>
   );
 }

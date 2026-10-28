@@ -13,10 +13,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 
 /**
- * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Agents › Machines draws it: nothing beyond the machine's own line while it runs, and otherwise getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
+ * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
  *
  * The host keeps where it stands (`@luke/host`'s `compose-this-mac-host.ts`)
- * and Machines reads it every `READ_EVERY_MS` while it is drawn, so a Mac
+ * and Hosts reads it every `READ_EVERY_MS` while it is drawn, so a Mac
  * approved in System Settings, or one `luke-host` just started following,
  * reads so within seconds. Turn on again and Retry are the member's own act,
  * the only one that enrolls a removed Mac again or starts `luke-host` again.
@@ -24,7 +24,7 @@ import { useAct } from "../act.js";
  * of this.
  */
 
-/** How often Machines reads where `luke-host` stands while it is drawn. */
+/** How often Hosts reads where `luke-host` stands while it is drawn. */
 const READ_EVERY_MS = 5_000;
 
 /** What a row says for each standing, its tint, and the act it offers where it offers one. */
@@ -70,7 +70,7 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
   }
 }
 
-/** This Mac as Machines draws it: where it stands and the line for it, none before the first read or in a browser tab, and the member's own Turn on again or Retry. */
+/** This Mac as Hosts draws it: where it stands and the line for it, none before the first read or in a browser tab, and the member's own Turn on again or Retry. */
 export interface ThisMacHost {
   readonly standing: ThisMacHostStanding | undefined;
   readonly line: ThisMacLine | null;

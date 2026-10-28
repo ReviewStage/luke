@@ -20,7 +20,7 @@ class RunnerLeaseBusy extends Data.TaggedError("RunnerLeaseBusy") {}
 
 /**
  * The agent's runner lease taken, waiting behind another call's for at most
- * `CODER.RUNNER_LEASE.WAIT`: the holder's id, which lets it go. Run where
+ * `wait`: the holder's id, which lets it go. Run where
  * nothing interrupts, so a claim that landed is always handed back to be let
  * go; only the waits between claims are given to `restore`, so a caller's
  * deadline interrupts a call waiting behind another's lease at once, holding
@@ -28,6 +28,7 @@ class RunnerLeaseBusy extends Data.TaggedError("RunnerLeaseBusy") {}
  */
 const claimRunnerLease = (
   agentId: string,
+  wait: Duration.Duration,
   restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
@@ -39,7 +40,7 @@ const claimRunnerLease = (
       if (yield* claimAgentRunnerLease(agentId, holder, new Date(now), new Date(now + hold))) {
         return holder;
       }
-      if (now - startedAt >= Duration.toMillis(CODER.RUNNER_LEASE.WAIT)) {
+      if (now - startedAt >= Duration.toMillis(wait)) {
         return yield* new RunnerLeaseBusy();
       }
       yield* restore(Effect.sleep(CODER.RUNNER_LEASE.POLL));
@@ -53,13 +54,19 @@ const released = (agentId: string, holder: string) =>
   );
 
 /**
- * The body run holding the agent's runner lease, let go as it ends however
- * it ends, an interruption included.
+ * The body run holding the agent's runner lease, waiting behind another
+ * call's for at most `wait` (`CODER.RUNNER_LEASE.WAIT` unless the caller
+ * names longer, as work past a request's answer may), let go as it ends
+ * however it ends, an interruption included.
  */
-export const holdingRunner = <A, E, R>(agentId: string, body: Effect.Effect<A, E, R>) =>
+export const holdingRunner = <A, E, R>(
+  agentId: string,
+  body: Effect.Effect<A, E, R>,
+  wait: Duration.Duration = CODER.RUNNER_LEASE.WAIT,
+) =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const holder = yield* claimRunnerLease(agentId, restore);
+      const holder = yield* claimRunnerLease(agentId, wait, restore);
       return yield* restore(body).pipe(Effect.ensuring(released(agentId, holder)));
     }),
   );

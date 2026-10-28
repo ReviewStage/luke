@@ -2177,6 +2177,104 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "messages sent while another call holds the lease, as a launch does, are answered at once and read by the launch after its first, in the order sent",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // Another instance's call holds the lease, as a launch elsewhere does.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        const kept = keptAfterResponse();
+        yield* updateAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
+
+        const answers = yield* Effect.forEach(["Now the emails.", "And the docs."], (text) =>
+          sessions.send(opened.sessionId, message(agent, text)).pipe(Effect.provide(kept.layer)),
+        );
+
+        assert.deepEqual(
+          answers.map((answer) => answer.outcome),
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: 3,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        // The developer's words close each message, the turn's own words ahead of them on the first
+        // alone, and the agent's model as it stands now goes ahead of each message queued behind.
+        const model = {
+          type: INPUT_LINE.MODEL,
+          model: "claude-sonnet-5-5",
+          fast: false,
+          effort: "low",
+        };
+        assert.deepEqual(
+          read.map((line) => {
+            const parsed = JSON.parse(line.text) as InputLine;
+            return parsed.type === INPUT_LINE.MESSAGE ? parsed.content.at(-1) : parsed;
+          }),
+          [
+            { type: "text", text: "Fix the invitations." },
+            model,
+            { type: "text", text: "Now the emails." },
+            model,
+            { type: "text", text: "And the docs." },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a message queued behind another call's lease whose session has no place once the lease frees is taken back, so no launch reads it later",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* runnerTook(agent.id);
+        // The session's place is gone, as a reset leaves it.
+        yield* sessions.reset(opened.sessionId);
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        const kept = keptAfterResponse();
+
+        const answer = yield* sessions
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
+        yield* kept.run;
+
+        assert.equal(answer.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: 4,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        assert.deepEqual(read, []);
+      }),
+  );
+  it.effect(
     "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
     () =>
       Effect.gen(function* () {
@@ -2499,10 +2597,18 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       );
 
       const sent = yield* mySessions.send(opened.sessionId, message(mine.agent, "Not yours."));
+      // A send queued behind another call's lease is told the same, and queues nothing.
+      const now = new Date(yield* Clock.currentTimeMillis);
+      const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+      assert.equal(yield* claimAgentRunnerLease(mine.agent.id, randomUUID(), now, until), true);
+      const queuedBehind = yield* mySessions
+        .send(opened.sessionId, message(mine.agent, "Still not yours."))
+        .pipe(Effect.provide(keptAfterResponse().layer));
       const cancelled = yield* mySessions.cancel(opened.sessionId, "turn_0");
       const reset = yield* mySessions.reset(opened.sessionId);
 
       assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
+      assert.deepEqual(queuedBehind, { outcome: EVE_SEND_OUTCOME.RETIRED });
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.equal(reset.outcome, EVE_RESET_OUTCOME.NO_ACTIVE_SESSION);
       assert.equal(api.sandboxes[0]?.deleted, false);

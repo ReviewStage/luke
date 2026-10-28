@@ -117,7 +117,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   /**
-   * The account's hosts as Settings › Agents › Hosts reads and changes
+   * The account's hosts as Settings › Hosts reads and changes
    * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
    * window that minted the token keeps it and shows it once), and one revoked.
    */
@@ -443,7 +443,7 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's `luke-host` as Settings › Agents reaches it
+ * This Mac's `luke-host` as Settings › Hosts reaches it
  * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
  * an explicit turn-on, which enrolls the Mac again where Luke removed it or
  * the last turn-on failed. Answered by the host, which runs it.

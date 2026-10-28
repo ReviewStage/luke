@@ -319,6 +319,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
+    // The Hosts page's Add hosts button, drawn once an account is signed in, under the machines the service lists.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
+          label: "Add hosts",
+          page: SETTINGS_VIEW.HOSTS,
+          haystack: ["Add hosts", "machine host server linux mac install luke-host"],
+        }
+      : undefined,
     // The Workspace page's groups, as it draws them for the workspace it
     // shows: the invite only where the reader may invite, and the leave
     // only where the reader may leave.

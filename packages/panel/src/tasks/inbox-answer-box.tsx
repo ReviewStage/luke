@@ -122,8 +122,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * line asks to start a thread and Send reads "Start thread"; the words and
  * files go as the thread's first message, its first line standing for its
  * title, and the box unticks once the thread is started, so the next send
- * is a reply again. It stands only where no question's controls do, since
- * a thread started there would leave the question waiting.
+ * is a reply again. It stands under an open question too: ticked, the
+ * question's controls step aside, since nothing picked there goes with the
+ * thread, and come back as they were once it is unticked or the thread is
+ * started, the question still waiting on its own thread.
  */
 
 /** Whether the box holds neither words nor files. */
@@ -462,12 +464,12 @@ function AnswerCard({
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   const draft = control.draftOf(item);
-  const asks = controls !== undefined;
-  // Note that the checkbox stands only where no question's controls do, and unticks once its thread is started.
+  // Note that the checkbox unticks once its thread is started, and while ticked a question's controls step aside, the question left waiting.
   const [asNew, setAsNew] = useState(false);
   const [starting, setStarting] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
-  const starts = newThread !== undefined && !asks && asNew;
+  const starts = newThread !== undefined && asNew;
+  const asks = controls !== undefined && !starts;
   // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
   const standing = useRef(draft);
   standing.current = draft;
@@ -569,7 +571,7 @@ function AnswerCard({
         field={field}
         asks={asks}
         messages
-        controls={controls}
+        controls={asks ? controls : undefined}
         chips={
           <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         }
@@ -619,7 +621,7 @@ function AnswerCard({
           else message();
         }}
       />
-      {newThread === undefined || asks ? null : (
+      {newThread === undefined ? null : (
         <NewThreadChoice offer={newThread} checked={asNew} held={sending} onChange={setAsNew} />
       )}
       {quotes ? (
