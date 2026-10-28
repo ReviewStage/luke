@@ -30,8 +30,6 @@
 import { createHash } from "node:crypto";
 import type { CodingAgentContextRow } from "@luke/database/models/coding-agent-store";
 import type { StoredTask } from "@luke/database/models/task-store";
-import { boardText } from "@luke/features/board-text";
-import type { Board } from "@luke/features/board-wire";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import {
   PLAN_FIELD_BAR,
@@ -164,22 +162,17 @@ export function contentKey(text: string): string {
 
 /**
  * The address of what a turn hands of the task beyond its plan, as the
- * model reads it: its name, brief, linked issues, open comment threads
- * (`openThreadsText`), and whiteboard (`boardText`), so a change the model
- * would not see, a resolved thread's or a drawing's own fields, hands the
- * task again no sooner. Note that the saved document, the agents' notes,
- * and the sections the developer wrote are left out, because every save of
- * the plan changes them, the agent's own among them; whether someone else
- * saved is read from the plan's revisions (`savedByAnotherSince`).
+ * model reads it: its name, brief, and open comment threads
+ * (`openThreadsText`), so a change the model would not see, a resolved
+ * thread's own fields, hands the task again no sooner. Note that the saved
+ * document, the agents' notes, and the sections the developer wrote are left
+ * out, because every save of the plan changes them, the agent's own among
+ * them; whether someone else saved is read from the plan's revisions
+ * (`savedByAnotherSince`).
  */
-export function taskKey(
-  stored: StoredTask,
-  board: Board,
-  comments: readonly PlanCommentThread[],
-): string {
+export function taskKey(stored: StoredTask, comments: readonly PlanCommentThread[]): string {
   const { name } = stored.task;
-  const read = [name, stored.brief ?? null, stored.issueLinks, openThreadsText(comments)];
-  return contentKey(JSON.stringify([...read, boardText(board)]));
+  return contentKey(JSON.stringify([name, stored.brief ?? null, openThreadsText(comments)]));
 }
 
 /** The line a turn opens with where its kind is the last turn's, or a typed or unheard one follows spoken ones. */

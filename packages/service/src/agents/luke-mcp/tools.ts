@@ -72,8 +72,6 @@ import type {
   WorkspaceLinearConnect,
 } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
-import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
-import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
 import {
   type CommentToolName,
   READ_COMMENTS_TOOL,
@@ -94,7 +92,6 @@ import {
   runWithdrawQuestion,
   WITHDRAW_QUESTION_TOOL,
 } from "../../tasks/queue-question.js";
-import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
   CREATE_AUTOMATION_TOOL,
@@ -117,12 +114,10 @@ import {
 import {
   type AgentDoorSeams,
   type AgentToolCall,
-  runAgentBoard,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
-  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -163,7 +158,6 @@ import {
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
-import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
@@ -184,10 +178,9 @@ export type LukeMcpServices =
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
 type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
 
-/** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
+/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
 interface LukeMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
-  readonly repository: RepositorySandboxDoor;
   readonly callKey: Effect.Effect<string, StoreFailure, DatabaseServices>;
   readonly seams: AgentDoorSeams;
 }
@@ -313,14 +306,6 @@ const isLooked = Schema.is(
   }),
 );
 
-/** A look at the whiteboard that answered its image, a PNG as base64. */
-const isBoardLooked = Schema.is(
-  Schema.Struct({ status: Schema.Literal(LOOK_AT_BOARD_STATUS.LOOKED), image: Schema.String }),
-);
-
-/** The type the whiteboard's image is drawn in (`../../tasks/board-look.ts`). */
-const BOARD_IMAGE_TYPE = "image/png";
-
 /**
  * A look's text block where it looked: its status alone, as JSON. Note that
  * the transcript keeps a Luke tool's text blocks alone
@@ -331,14 +316,6 @@ const LOOKED_TEXT: McpContent = {
   type: "text",
   text: JSON.stringify({ status: PICTURE_LOOK_STATUS.LOOKED }),
 };
-
-/** What the agent is shown of a look at the whiteboard: its status and its image, as an image, where it looked; its JSON otherwise. */
-function lookedBoardContent(result: LukeMcpToolResult): readonly McpContent[] {
-  if (isBoardLooked(result)) {
-    return [LOOKED_TEXT, { type: "image", data: result.image, mimeType: BOARD_IMAGE_TYPE }];
-  }
-  return [{ type: "text", text: JSON.stringify(result) }];
-}
 
 /** What the agent is shown of a look: its status and the picture itself, as an image, where it looked; its JSON otherwise. */
 function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
@@ -481,18 +458,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
     runAgentShowPage(admitted, input, sandbox),
   ),
   agentTool(READ_PAGE_TOOL),
-  entry(SHOW_CODE_TOOL, (admitted, input, { repository }) =>
-    runAgentShowCode(admitted, input, repository),
-  ),
-  // The task's whiteboard.
-  entry(DRAW_ON_BOARD_TOOL, (admitted, input) =>
-    runAgentBoard(admitted, CODER_TOOL.DRAW_ON_BOARD, input),
-  ),
-  entry(
-    LOOK_AT_BOARD_TOOL,
-    (admitted, input) => runAgentBoard(admitted, CODER_TOOL.LOOK_AT_BOARD, input),
-    lookedBoardContent,
-  ),
   // The workspace's agents.
   agentTool(START_AGENT_TOOL),
   agentTool(STOP_AGENT_TOOL),
@@ -502,7 +467,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
   agentTool(LIST_OPEN_ASKS_TOOL),
-  // Tasks, sections, and issues.
+  // Tasks and sections.
   agentTool(LIST_TASKS_TOOL),
   agentTool(READ_TASK_TOOL),
   agentTool(CREATE_TASK_TOOL),

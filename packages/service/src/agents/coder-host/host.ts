@@ -73,13 +73,10 @@ import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import {
   type AgentToolCall,
-  type BoardTool,
-  runAgentBoard,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
-  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -416,23 +413,6 @@ export interface CoderHost extends HostAdmission {
     name: CommentToolName,
     input: UnparsedWireValue,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /**
-   * Runs one `show_code` call (`../../tasks/show-code.ts`): lines of the
-   * checkout the session's sandbox opened with, read through the door given,
-   * and journaled with the call on the agent's own conversation, whatever
-   * kind of turn made it.
-   */
-  showCode(
-    admitted: AdmittedConversation,
-    input: UnparsedWireValue,
-    sandbox: () => Promise<RepositorySandbox>,
-  ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /** Runs one call of the whiteboard's tools (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`) on the agent's task, as the member whose turn it is. */
-  board(
-    admitted: AdmittedConversation,
-    tool: BoardTool,
-    input: UnparsedWireValue,
-  ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
@@ -478,7 +458,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-export type { AgentToolCall, BoardTool } from "./agent-doors.js";
+export type { AgentToolCall } from "./agent-doors.js";
 export type { InboxCall, ThreadToolResult } from "./inbox-door.js";
 export type { CoderTurnMessage } from "./turn-message.js";
 
@@ -975,10 +955,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),
-
-    showCode: (admitted, input, sandbox) => runAgentShowCode(admitted, input, sandbox),
-
-    board: (admitted, tool, input) => runAgentBoard(admitted, tool, input),
 
     showImage: (admitted, input, sandbox) => runAgentShowImage(admitted, input, sandbox),
 

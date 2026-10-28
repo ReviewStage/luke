@@ -641,14 +641,6 @@ function openedPullRequestView(
   };
 }
 
-/** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
-function shownLines(input: WireValue | undefined): string {
-  const path = stringAt(input, "path") ?? "";
-  const startLine = isRecord(input) && isWireNumber(input.startLine) ? input.startLine : undefined;
-  const endLine = isRecord(input) && isWireNumber(input.endLine) ? input.endLine : startLine;
-  return fileRefText({ path, startLine, endLine });
-}
-
 /** A brain call whose input is one field the row names it by, its answer as its JSON. */
 function namedCall(
   kind: CallKind,
@@ -913,15 +905,6 @@ const AGENT_TOOL_VIEWS = {
     namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question"),
   [AGENT_TOOL.WITHDRAW_QUESTION]: ({ input, output }) =>
     namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question"),
-  [AGENT_TOOL.SHOW_CODE]: ({ input, output }) => ({
-    ...namedCall(CALL_KIND.SHOW_CODE, input, output, undefined),
-    subject: shownLines(input),
-  }),
-  [AGENT_TOOL.DRAW_ON_BOARD]: ({ input, output }) =>
-    namedCall(CALL_KIND.DRAW_ON_BOARD, input, output, undefined),
-  // A look at the board answers with an image of it, which is nothing to read.
-  [AGENT_TOOL.LOOK_AT_BOARD]: ({ input }) =>
-    namedCall(CALL_KIND.LOOK_AT_BOARD, input, undefined, undefined),
   [AGENT_TOOL.LOOK_AT_PICTURE]: ({ input, output }) =>
     namedCall(CALL_KIND.LOOK_AT_PICTURE, input, output, undefined),
   [AGENT_TOOL.END_CALL]: ({ input, output }) =>
@@ -1107,9 +1090,10 @@ const AGENT_TOOL_VIEWS = {
 } as const satisfies Record<AgentTool, ToolReader>;
 
 /**
- * The retired tools a row reads by name: every one but Chat's four, whose
- * calls, with no Chat left to open, draw as any other call does, by the
- * tool's name and what it was handed and answered.
+ * The retired tools a row reads by name: every one but Chat's four and the
+ * code and whiteboard tools, whose calls, with no Chat, Code tab, or Board
+ * left to open, draw as any other call does, by the tool's name and what it
+ * was handed and answered.
  */
 type RetiredTool = Exclude<
   (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
@@ -1117,6 +1101,9 @@ type RetiredTool = Exclude<
   | typeof RETIRED_TOOL.READ_CHAT
   | typeof RETIRED_TOOL.RESOLVE_ASK
   | typeof RETIRED_TOOL.EDIT_CHANNEL
+  | typeof RETIRED_TOOL.SHOW_CODE
+  | typeof RETIRED_TOOL.DRAW_ON_BOARD
+  | typeof RETIRED_TOOL.LOOK_AT_BOARD
 >;
 
 /** How each tool no agent is offered now reads, as a transcript written while it was offered still names it, under the name it had then. */
@@ -1255,7 +1242,6 @@ interface TargetedCall {
   readonly output: WireValue | undefined;
 }
 
-const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
@@ -1323,19 +1309,6 @@ function openedPullRequest(call: TargetedCall): ToolTarget | undefined {
   return url === undefined ? undefined : { kind: TOOL_TARGET.PULL_REQUEST, url };
 }
 
-/** The lines `show_code` put on screen, as a reference a File tab lights. */
-function shownCode(call: TargetedCall): ToolTarget | undefined {
-  const path = stringAt(call.input, "path");
-  if (path === undefined || path === "" || !isRecord(call.input)) return undefined;
-  const { startLine, endLine } = call.input;
-  const ref: CodeRef = {
-    path,
-    ...(isWireNumber(startLine) ? { startLine } : undefined),
-    ...(isWireNumber(endLine) ? { endLine } : undefined),
-  };
-  return { kind: TOOL_TARGET.SHOWN_CODE, call: call.callId, ref };
-}
-
 /**
  * What each tool's call opens, read from the call alone; a tool not listed
  * opens nothing, and its row folds its input and answer open in place. A
@@ -1353,8 +1326,6 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
   [AGENT_TOOL.READ_PAGE, readPage],
-  [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
-  [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.READ_AGENT, namedAgent],
   [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
@@ -1369,7 +1340,6 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => TASK_TARGET],
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
-  [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],
   [RETIRED_TOOL.POST_TO_INBOX, namedThread],
@@ -1383,9 +1353,9 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
 /**
  * Whether a call's answer says it did nothing. Note that it is told by the
  * reason it answers beside its status rather than by the status's word,
- * because every refusal among these tools answers why (`rejected`, the
- * board's `not-drawn` and `not-looked`), each tool in words of its own the
- * renderer cannot reach, and no answer that did what was asked carries one.
+ * because every refusal among these tools answers why, each tool in words
+ * of its own the renderer cannot reach, and no answer that did what was
+ * asked carries one.
  */
 function refused(output: WireValue | undefined): boolean {
   return stringAt(output, "reason") !== undefined;

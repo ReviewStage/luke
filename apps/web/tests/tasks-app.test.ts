@@ -67,7 +67,6 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import type { WebServices } from "@luke/service/runtime";
-import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
 import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
 import { taskFilesProcedures } from "@luke/service/tasks/task-files-procedures";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
@@ -455,11 +454,6 @@ const NOTE = {
   text: "Rate limit invites",
   fontFamily: 5,
 } as const;
-
-/** Luke's drawing of one labelled box. */
-const DRAW_API = {
-  elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
-};
 
 it.layer(getTestDB())("the plan routes", (it) => {
   it.effect("a started plan lists, and opens with what its notes saved", () =>
@@ -1549,10 +1543,6 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         assert.deepEqual(yield* ask(request(BOARD(taskId), other)), notFound);
         assert.deepEqual(yield* save(other, { elements: [NOTE], appliedDrawing: 0 }), notFound);
-        assert.equal(
-          (yield* runDrawOnBoard({ userId: other, taskId: taskId }, unparsedWire(DRAW_API))).status,
-          DRAW_ON_BOARD_STATUS.NOT_DRAWN,
-        );
         assert.deepEqual(
           yield* save(owner, { elements: [{ ...NOTE, type: "image" }], appliedDrawing: 0 }),
           invalid,

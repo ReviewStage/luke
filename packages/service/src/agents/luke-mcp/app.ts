@@ -302,7 +302,6 @@ function callLukeTool(
     const sandbox = doors.sandbox(admitted);
     const context = {
       sandbox: sandbox.files,
-      repository: sandbox.repository,
       callKey: lukeMcpCallKey(admitted, name, input),
       seams,
     };

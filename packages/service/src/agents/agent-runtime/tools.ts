@@ -36,17 +36,11 @@ const { CODER, CODER_WORKER } = AGENT_ROLE;
  * call's own tools, `queue_question`, `withdraw_question`, and `end_call`, on
  * every turn, so its tools are the same whatever kind of turn it runs, and refused off a call
  * (`../coder-host/tool-set.ts`'s `runCallTool`), since they mean something
- * only while someone is listening. `show_code` is every agent's on every
- * turn, a coding agent's where it has a repository to read
- * (`repositoryToolsOf`), and the board's two every agent's on a task
- * (`taskToolsOf`).
+ * only while someone is listening.
  */
 const TOOL_ROLES = {
   [AGENT_TOOL.QUEUE_QUESTION]: [CODER],
   [AGENT_TOOL.WITHDRAW_QUESTION]: [CODER],
-  [AGENT_TOOL.SHOW_CODE]: [CODER],
-  [AGENT_TOOL.DRAW_ON_BOARD]: [CODER],
-  [AGENT_TOOL.LOOK_AT_BOARD]: [CODER],
   [AGENT_TOOL.LOOK_AT_PICTURE]: [CODER],
   [AGENT_TOOL.LIST_AGENTS]: [CODER],
   [AGENT_TOOL.READ_AGENT]: [CODER],

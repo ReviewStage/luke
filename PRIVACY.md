@@ -475,20 +475,17 @@ any answer from our service holds the token again, and we never log it or send
 it to our analytics, crash reports, or screen recordings. Removing it in
 Settings, or deleting your account, deletes it.
 
-**A task's whiteboard.** You and the task's coding agents can both draw on a
-task's whiteboard. Our service stores it with the task, as drawn and readable
-by our own operators: every shape, arrow, line, stroke, and piece of text and
-where it stands, and the agents' latest drawing. Luke on your Mac
-sends the whole board each time it changes and, with a save holding a new
-drawing of the model's or one the model is waiting to look at, a picture of
-the board as your Mac draws it, at most 1,200 pixels a side, kept in place of
-the last one. The model reads the board as text at the start of a turn and
-may look at that picture to check what it drew, which sends the picture to
-the model; our service does not copy it into the agent's transcript,
-though the model's session history may keep it (see "Who we send it to").
-Each drawing call, with what it drew, is stored in the agent's transcript.
-You cannot put an image or a file on the board. Deleting the task deletes its
-whiteboard.
+**A task's whiteboard.** You can draw on a task's whiteboard. Our service
+stores it with the task, as drawn and readable by our own operators: every
+shape, arrow, line, stroke, and piece of text and where it stands, and, from
+before coding agents stopped drawing on and looking at the board, their latest
+drawing and the last picture of the board your Mac drew for them, at most
+1,200 pixels a side. Luke on your Mac sends the whole board each time it
+changes. No model reads the board or that picture now; a drawing call an agent
+made before then, with what it drew, stays in the agent's transcript, and the
+model's session history may keep a picture it looked at then (see "Who we send
+it to"). You cannot put an image or a file on the board. Deleting the task
+deletes its whiteboard.
 
 **How agents read your repository.** A task names a GitHub
 repository of the Luke GitHub App installation connected to the task's

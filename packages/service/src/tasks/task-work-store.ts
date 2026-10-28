@@ -5,7 +5,7 @@ import type { TaskShownCode } from "@luke/features/tasks-view";
 import { Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { isStoredToolPart, storedToolName } from "../core.js";
-import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
+import { SHOW_CODE_TOOL_NAME, shownCodeOf } from "./show-code.js";
 
 /**
  * task-work-store.ts -- every code the task's agents showed on it.
@@ -27,7 +27,7 @@ const JOURNAL_READ_CONCURRENCY = 3;
 function shownCodeIn(journals: readonly StoredMessageRecord[], agentId: string): TaskShownCode[] {
   return journals.flatMap((journal) =>
     journal.message.parts.filter(isStoredToolPart).flatMap((part) => {
-      const code = storedToolName(part) === SHOW_CODE_TOOL.name ? shownCodeOf(part) : undefined;
+      const code = storedToolName(part) === SHOW_CODE_TOOL_NAME ? shownCodeOf(part) : undefined;
       return code === undefined
         ? []
         : [
@@ -60,7 +60,7 @@ const agentsShownCode = Effect.fnUntraced(function* (userId: string, taskId: str
           agent.userId,
           agent.conversationId,
           CODER_TOOL_SET,
-          SHOW_CODE_TOOL.name,
+          SHOW_CODE_TOOL_NAME,
         ),
         (journals) => (journals.ok ? shownCodeIn(journals.value, agent.id) : []),
       ),

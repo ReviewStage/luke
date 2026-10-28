@@ -40,7 +40,6 @@ import {
   userMetadataOf,
 } from "../../core.js";
 import { isRemoteToolName, storedRemoteCall } from "../../integrations/connection-tools.js";
-import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../tasks/board-look.js";
 import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { BROWSER_TOOL, storedBrowserOutput } from "../browser/browser-tool.js";
@@ -661,8 +660,8 @@ function heldCallName(state: RelayState, eveTurnId: string, callId: string): str
 }
 
 /**
- * A look's result as the conversation keeps it, a look at the board or at
- * one of the plan's pictures without the image, and a browser call's
+ * A look's result as the conversation keeps it, a look at one of the
+ * plan's pictures without the image, and a browser call's
  * without the model's copy of each screenshot; nothing for any other call.
  * Note that a look's image went to the model once and is not kept, because
  * it is no record of the plan, and that a browser call's screenshots are
@@ -671,8 +670,6 @@ function heldCallName(state: RelayState, eveTurnId: string, callId: string): str
  */
 function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireValue | undefined {
   switch (toolName) {
-    case LOOK_AT_BOARD_TOOL.name:
-      return storedLookOutput(output);
     case LOOK_AT_PICTURE_TOOL.name:
       return storedPictureLookOutput(output);
     case BROWSER_TOOL.name:

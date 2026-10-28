@@ -110,20 +110,6 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
   },
   {
-    name: "a drawing opens the Board",
-    tool: "draw_on_board",
-    input: { elements: [] },
-    output: ACCEPTED,
-    target: { kind: TOOL_TARGET.BOARD },
-  },
-  {
-    name: "a look at the board opens the Board",
-    tool: "look_at_board",
-    input: {},
-    output: { status: "looked", image: "data:image/png;base64,AA" },
-    target: { kind: TOOL_TARGET.BOARD },
-  },
-  {
     name: "a read of an agent opens its tab",
     tool: "read_coding_agent",
     input: { agentId: "agent-7" },
@@ -143,17 +129,6 @@ const OPENING_CALLS: readonly {
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
     target: { kind: TOOL_TARGET.PLAN },
-  },
-  {
-    name: "code shown opens its file at its lines",
-    tool: "show_code",
-    input: { path: "src/invoice.ts", startLine: 12, endLine: 40 },
-    output: ACCEPTED,
-    target: {
-      kind: TOOL_TARGET.SHOWN_CODE,
-      call: "call-show_code",
-      ref: { path: "src/invoice.ts", startLine: 12, endLine: 40 },
-    },
   },
   {
     name: "a post to the inbox opens the Inbox",
@@ -266,11 +241,11 @@ const FOLDING_CALLS: readonly {
     part: toolPart("show_page", { title: "Pricing explorer" }),
   },
   {
-    name: "a drawing the board refused",
+    name: "a page its tool refused",
     part: toolPart(
-      "draw_on_board",
-      { elements: [] },
-      { status: "not-drawn", reason: "Not drawn: an arrow names an id the diagram does not hold." },
+      "show_page",
+      { title: "Pricing explorer", path: "pricing.html" },
+      { status: "rejected", reason: "Not shown: no such file in your sandbox." },
     ),
   },
   {

@@ -23,7 +23,7 @@ import {
   WITHDRAW_QUESTION_TOOL,
   withdrawnQuestionOf,
 } from "../tasks/queue-question.js";
-import { SHOW_CODE_TOOL, shownCodeOf } from "../tasks/show-code.js";
+import { SHOW_CODE_TOOL_NAME, shownCodeOf } from "../tasks/show-code.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
@@ -119,7 +119,7 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   if (name === END_CALL_TOOL.name) {
     return endsCall(part) ? { kind: TURN_EVENT_KIND.CALL_ENDING } : undefined;
   }
-  if (name === SHOW_CODE_TOOL.name) {
+  if (name === SHOW_CODE_TOOL_NAME) {
     const shown = shownCodeOf(part);
     return shown === undefined
       ? undefined

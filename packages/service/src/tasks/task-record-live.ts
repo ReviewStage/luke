@@ -15,7 +15,7 @@ import { toolPartType } from "@luke/features/brain";
 import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 import { ACTION_RESULT_STATUS, TOOL_PART_STATE } from "../core.js";
-import { SHOW_CODE_TOOL } from "./show-code.js";
+import { SHOW_CODE_TOOL_NAME } from "./show-code.js";
 
 /**
  * task-record-live.ts -- where an open task's plan, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move rather than when a call's activity or end suggests they might have.
@@ -47,7 +47,7 @@ export interface TaskRecordLiveStatements {
 
 /** A `show_code` part as an accepted answer stands in a journal, as the code's held read takes one (`shownCodeOf`). */
 const ANSWERED_SHOW_CODE = {
-  type: toolPartType(SHOW_CODE_TOOL.name),
+  type: toolPartType(SHOW_CODE_TOOL_NAME),
   state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
   output: { status: ACTION_RESULT_STATUS.ACCEPTED },
 } as const;

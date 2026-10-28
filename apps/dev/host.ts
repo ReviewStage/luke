@@ -18,7 +18,6 @@ import type { DeepenDoor } from "@luke/service/agents/coder-host/deepen";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
-  type BoardTool,
   type CoderHost,
   type CoderTurnMessage,
   coderHost,
@@ -60,14 +59,12 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { memoryOnFor } from "@luke/service/agents/memory-tools";
-import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
 import type { WebServices } from "@luke/service/runtime";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
-import { showCodeRejected } from "@luke/service/tasks/show-code";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -465,33 +462,6 @@ export function runShowPageTool(
 ): Promise<WireRecord> {
   return admitted(auth, sessionId, showPageRejected, (session) =>
     host.showPage(session, input, sandbox),
-  );
-}
-
-/** One `show_code` call run under the agent's session, its lines read from the checkout through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
-export function runShowCodeTool(
-  auth: SessionAuth,
-  sessionId: string,
-  input: UnparsedWireValue,
-  sandbox: () => Promise<RepositorySandbox>,
-): Promise<WireRecord> {
-  return admitted(auth, sessionId, showCodeRejected, (session) =>
-    host.showCode(session, input, sandbox),
-  );
-}
-
-/** One call of the whiteboard's tools run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
-export function runBoardTool(
-  auth: SessionAuth,
-  sessionId: string,
-  tool: BoardTool,
-  input: UnparsedWireValue,
-): Promise<WireRecord> {
-  return admitted(
-    auth,
-    sessionId,
-    (reason): WireRecord => ({ status: ACTION_RESULT_STATUS.REJECTED, reason }),
-    (session) => host.board(session, tool, input),
   );
 }
 

@@ -13,7 +13,6 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
   readNativeHanded,
@@ -24,7 +23,6 @@ import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import { readTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
@@ -121,19 +119,17 @@ const taskOf = (
   Effect.gen(function* () {
     const { taskId } = agent;
     if (taskId === null) return undefined;
-    const [stored, board, comments, since] = yield* Effect.all(
+    const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
-        readBoard(admitted.caller, taskId),
         readPlanCommentThreads(admitted.caller, taskId),
         previousTurnStart(admitted.target, turn.turnId),
       ],
       { concurrency: "unbounded" },
     );
     if (Option.isNone(stored)) return undefined;
-    const drawn = Option.getOrElse(board, () => EMPTY_BOARD);
     const threads = Option.getOrElse(comments, () => []);
-    const key = taskKey(stored.value, drawn, threads);
+    const key = taskKey(stored.value, threads);
     // Note that a turn opened on a spoken line, heard or not, carries no task in its message.
     const opening =
       since === undefined &&
@@ -148,7 +144,7 @@ const taskOf = (
       );
     if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
     const clock = { now, timeZone: admitted.timeZone };
-    const text = taskWithLead(standingContext(stored.value, drawn, clock, threads));
+    const text = taskWithLead(standingContext(stored.value, clock, threads));
     return { key, text };
   }).pipe(
     Effect.tapError(logStoreFailure),
@@ -185,7 +181,7 @@ export function coderTurnMessage<R>(
       { concurrency: "unbounded" },
     );
     const clock = { now, timeZone: admitted.timeZone };
-    const standing = task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, clock));
+    const standing = task?.text ?? timeWithLead(standingContext(undefined, clock));
     // An operator's desk is handed again only where its standing work changed since the session
     // last handed it, or where it carries notices, which are marked read once delivered.
     const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);

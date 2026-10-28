@@ -4,16 +4,13 @@
  * What the brain is handed every turn and a coding agent on each spoken
  * turn, and on a typed one where its plan changed since its last turn
  * (`../coder-host/turn-context.ts`): the developer's own time, the task's
- * name, brief, and linked issues, its saved document, the agents' recent
- * notes on it, the sections the developer wrote, the
- * open comment threads, and the whiteboard. It is data, read again as each
- * turn opens and remembered by none, so a turn reads what was saved and
- * drawn since the last one rather than a stale copy.
+ * name and brief, its saved document, the agents' recent notes on it, the
+ * sections the developer wrote, and the open comment threads. It is data,
+ * read again as each turn opens and remembered by none, so a turn reads
+ * what was saved since the last one rather than a stale copy.
  */
 
 import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-store";
-import { boardText } from "@luke/features/board-text";
-import type { Board } from "@luke/features/board-wire";
 import { dateLabel } from "@luke/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
@@ -28,7 +25,6 @@ const DEVELOPER_TIME_MARKER = "[the developer's time]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const BRIEF_MARKER = "[the developer's brief for the task]";
-const ISSUE_LINKS_MARKER = "[issues the task links]";
 /** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
 const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -84,25 +80,6 @@ function developerFieldsText(stored: StoredTask): readonly string[] {
 function briefText(stored: StoredTask): readonly string[] {
   if (stored.brief === undefined) return [];
   return [BRIEF_MARKER, JSON.stringify(stored.brief)];
-}
-
-/**
- * The issues the task links, oldest linked first, as JSON: each one's
- * provider, key, title, and page, which keyword its pull requests write,
- * and its description as it read when it was linked; nothing for a task
- * that links none.
- */
-function issueLinksText(stored: StoredTask): readonly string[] {
-  if (stored.issueLinks.length === 0) return [];
-  const links = stored.issueLinks.map(({ provider, key, title, url, relation, description }) => ({
-    provider,
-    key,
-    title,
-    url,
-    relation,
-    description,
-  }));
-  return [ISSUE_LINKS_MARKER, JSON.stringify(links)];
 }
 
 /** The zone a turn reads the day in where the developer's window named none. */
@@ -165,19 +142,16 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
 /**
  * What a turn about a task is handed beside its instructions: the
  * developer's own time and today (`developerTimeText`), the plan's name, the
- * developer's brief where they wrote one as they started it, the issues it
- * links, the saved document as JSON, the newest saves coding agents made on it (so Luke
- * can raise what an agent asked or decided), the sections
- * the developer last wrote themselves (so Luke treats them as decided), the
- * plan's open comment threads (so Luke can raise what a member asked), and the
- * whiteboard as the model reads it (`board-text.ts`), each read again every
- * turn so what Luke saved and what the developer drew is what the
- * next turn reads. A task that no longer stands gets the heading and the
- * developer's time alone.
+ * developer's brief where they wrote one as they started it, the saved
+ * document as JSON, the newest saves coding agents made on it (so Luke can
+ * raise what an agent asked or decided), the sections the developer last
+ * wrote themselves (so Luke treats them as decided), and the plan's open
+ * comment threads (so Luke can raise what a member asked), each read again
+ * every turn so what Luke saved is what the next turn reads. A task that no
+ * longer stands gets the heading and the developer's time alone.
  */
 export function standingContext(
   stored: StoredTask | undefined,
-  board: Board,
   clock: TurnClock,
   comments: readonly PlanCommentThread[] = [],
 ): string {
@@ -191,12 +165,10 @@ export function standingContext(
     heading,
     `Name: ${task.name}`,
     ...briefText(stored),
-    ...issueLinksText(stored),
     DOCUMENT_MARKER,
     JSON.stringify(task.document),
     ...agentEditsText(stored.agentEdits),
     ...developerFieldsText(stored),
     ...openThreadsText(comments),
-    boardText(board),
   ].join("\n");
 }

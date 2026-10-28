@@ -22,13 +22,10 @@ import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
-import { ACTION_RESULT_STATUS } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
-import { runLookAtBoard } from "../../tasks/board-look.js";
-import { runDrawOnBoard } from "../../tasks/board-tool.js";
 import {
   COMMENT_TOOL_REFUSAL,
   type CommentToolName,
@@ -42,7 +39,6 @@ import {
   pictureNotLooked,
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
-import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
   runCreateAutomation,
@@ -69,11 +65,6 @@ import {
 } from "../coding-agent-tools.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
-import {
-  REPOSITORY_REFUSAL,
-  RepositoryRefusal,
-  type RepositorySandbox,
-} from "../repository-shell.js";
 import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
@@ -157,20 +148,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.REMEMBER]: runAgentRemember,
   [CODER_TOOL.RECALL]: runAgentRecall,
 } as const;
-
-/** The whiteboard's tools, by the name a call of one is made under. */
-export type BoardTool = typeof CODER_TOOL.DRAW_ON_BOARD | typeof CODER_TOOL.LOOK_AT_BOARD;
-
-/** Why a call of the whiteboard's tools drew or looked at nothing, in words the model can act on. */
-const BOARD_REFUSAL = {
-  TASKLESS: "Not run: you work on no task, so there is no whiteboard to draw on or look at.",
-  UNAVAILABLE: "Not run: the whiteboard could not be reached just now. The call may be made again.",
-} as const;
-
-/** A call of the whiteboard's tools that ran nothing, and why. */
-function boardRejected(reason: string): WireRecord {
-  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
 
 /** The agent a read found, or the refusal that the conversation is none. */
 function foundOrRefused<A>(found: Option.Option<A>) {
@@ -378,59 +355,5 @@ export function runAgentTools(
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
-  );
-}
-
-/**
- * Runs one `show_code` call (`../../tasks/show-code.ts`): lines of the
- * checkout the agent's sandbox holds, read through the door given, and
- * journaled with the call on the agent's own conversation.
- */
-export function runAgentShowCode(
-  admitted: AdmittedConversation,
-  input: UnparsedWireValue,
-  sandbox: () => Promise<RepositorySandbox>,
-): Effect.Effect<WireRecord, never, DatabaseServices> {
-  return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
-    if (Result.isFailure(found)) return showCodeRejected(found.failure);
-    const { repository } = found.success;
-    // Note that eve offers the tool to no agent with no repository (`repositoryToolsOf`); a harness is offered it always, and this refuses it.
-    // The sandbox opened with the checkout standing (`checkOut`), so the lines are read where it stands.
-    const checkout =
-      repository === null
-        ? Effect.fail(new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY }))
-        : Effect.tryPromise({
-            try: sandbox,
-            catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
-          }).pipe(Effect.map((opened) => ({ sandbox: opened, repository })));
-    return yield* showCodeIn(checkout, input);
-  }).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(showCodeRejected(SHOW_CODE_REFUSAL.READ_FAILED))),
-  );
-}
-
-/** Runs one call of the whiteboard's tools (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`) on the agent's task, as the member whose turn it is. */
-export function runAgentBoard(
-  admitted: AdmittedConversation,
-  tool: BoardTool,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, DatabaseServices> {
-  return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
-    if (Result.isFailure(found)) return boardRejected(found.failure);
-    const { taskId } = found.success;
-    if (taskId === null) return boardRejected(BOARD_REFUSAL.TASKLESS);
-    // The board is drawn and read as the member whose turn this is, as `editPlan` writes the plan.
-    const binding = { userId: admitted.caller, taskId };
-    const ran =
-      tool === CODER_TOOL.DRAW_ON_BOARD
-        ? runDrawOnBoard(binding, input)
-        : runLookAtBoard(binding, input);
-    return { ...(yield* ran) };
-  }).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(boardRejected(BOARD_REFUSAL.UNAVAILABLE))),
   );
 }

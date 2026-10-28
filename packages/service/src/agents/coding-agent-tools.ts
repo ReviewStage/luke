@@ -27,7 +27,6 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
-import { listTaskIssues, type TaskIssueLink } from "@luke/database/models/task-issue-store";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   listTasks,
@@ -107,7 +106,6 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../integrations/integration-connect.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -156,16 +154,6 @@ import {
   TASK_ASSIGNEE_INPUT,
   taskAssigneeWrittenSchema,
 } from "./task-assignee.js";
-import {
-  issueChangesOf,
-  issueChangesStand,
-  issuesAnswered,
-  TASK_ISSUE_REFUSAL,
-  TASK_ISSUES_TO_LINK,
-  TASK_ISSUES_TO_RELATE,
-  TASK_ISSUES_TO_UNLINK,
-  writeIssueChanges,
-} from "./task-issue-tools.js";
 import {
   AGENT_LIST_INPUT,
   type AgentTask,
@@ -320,8 +308,8 @@ export const UPDATE_TASK_REFUSAL = {
     `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
     "repository as owner/name or null, pinned, a sectionId or null, a status " +
     `(${Object.values(TASK_STATUS).join(", ")}), a priority ` +
-    `(${Object.values(TASK_PRIORITY).join(", ")}), an assignee as a member's mention link or ` +
-    "null, or issues to link, unlink, or relate.",
+    `(${Object.values(TASK_PRIORITY).join(", ")}), or an assignee as a member's mention link or ` +
+    "null.",
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
@@ -518,13 +506,12 @@ export interface CodingAgentCall {
   readonly summaryModel?: SummaryModelOf | undefined;
 }
 
-/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, the catalog a start's choice is checked against, and the workspace's Linear a task's issue is read through. */
+/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
 export type CodingAgentToolServices =
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
-  | ModelCatalog
-  | WorkspaceLinearConnect;
+  | ModelCatalog;
 
 const AGENT_ID = describeWire(
   wireUuidSchema,
@@ -729,9 +716,6 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "under Tasks.",
     ),
   ),
-  linkIssues: Schema.optionalKey(TASK_ISSUES_TO_LINK),
-  unlinkIssues: Schema.optionalKey(TASK_ISSUES_TO_UNLINK),
-  relateIssues: Schema.optionalKey(TASK_ISSUES_TO_RELATE),
 });
 
 /**
@@ -850,17 +834,15 @@ export const UPDATE_TASK_TOOL = {
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
     "(its status) or how much it matters (its priority), assign it to a member of the " +
-    "workspace or to no one, pin or unpin it in their sidebar, " +
-    "or link, unlink, or relate its GitHub or Linear issues, each " +
-    "issue to link read from its provider first; name at least one change, and several go in " +
-    "one call. Mark a task whose work is " +
+    "workspace or to no one, or pin or unpin it in their sidebar; name at least one change, " +
+    "and several go in one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
     "merged, or one the developer asked you to clean up; never a teammate's " +
     "task still in use unless the developer asked for it, and as the developer's operator never " +
     "a teammate's task at all, which is refused. A task is never archived: a settled " +
     `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. Answers \`accepted\` with the task as ` +
-    "it now stands, the issues it links where the call changed them, `already` true where every " +
-    "change named already stood, or `rejected` and why. Then say which tasks you changed and how.",
+    "it now stands, `already` true where every change named already stood, or `rejected` and " +
+    "why. Then say which tasks you changed and how.",
   inputSchema: UPDATE_TASK_INPUT,
 } as const;
 
@@ -1916,7 +1898,6 @@ const taskUpdateAnswer = (
   task: StoredTask["task"],
   already: boolean,
   section: TaskSectionReading | null | undefined,
-  issues?: readonly TaskIssueLink[],
 ) =>
   Effect.map(
     workspaceNamingOf(userId, task.workspaceId),
@@ -1932,7 +1913,6 @@ const taskUpdateAnswer = (
         ...(section === undefined
           ? undefined
           : { section: section === null ? null : { ...section } }),
-        ...(issues === undefined ? undefined : { issues: issuesAnswered(issues) }),
       },
       already,
     }),
@@ -2047,30 +2027,14 @@ export function runUpdateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
-  const {
-    taskId,
-    sectionId,
-    linkIssues,
-    unlinkIssues,
-    relateIssues,
-    assignee,
-    archived,
-    ...named
-  } = asked.success;
+  const { taskId, sectionId, assignee, archived, ...named } = asked.success;
   const assigneeId =
     assignee === undefined ? undefined : assignee === null ? null : assigneeIdOf(assignee);
   if (assignee !== undefined && assigneeId === undefined) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.NOT_MEMBER));
   }
   const changes = assigneeId === undefined ? named : { ...named, assigneeId };
-  const issuesAsked = { linkIssues, unlinkIssues, relateIssues };
-  const relinking = [linkIssues, unlinkIssues, relateIssues].some((each) => each !== undefined);
-  if (
-    Object.keys(changes).length === 0 &&
-    archived === undefined &&
-    sectionId === undefined &&
-    !relinking
-  ) {
+  if (Object.keys(changes).length === 0 && archived === undefined && sectionId === undefined) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
   const { caller } = call;
@@ -2126,30 +2090,7 @@ export function runUpdateTask(
               githubAccess: repository.success.githubAccess,
             }),
       };
-      // Every issue to link is read from its provider before anything is written; `#N` names a link
-      // of the repository the task stands on now, and an issue to link of the one the call leaves it on.
-      const relinked = relinking
-        ? yield* issueChangesOf(
-            userId,
-            workspace.value,
-            read.value.issueLinks,
-            {
-              standing: read.value.task.repository,
-              changed:
-                repository === undefined
-                  ? read.value.task.repository
-                  : repository.success.repository,
-            },
-            issuesAsked,
-          )
-        : undefined;
-      if (relinked !== undefined && Result.isFailure(relinked)) {
-        return agentToolRejected(relinked.failure);
-      }
-      const already =
-        changesStand(read.value, asWritten) &&
-        (placing?.success.stands ?? true) &&
-        (relinked === undefined || issueChangesStand(relinked.success));
+      const already = changesStand(read.value, asWritten) && (placing?.success.stands ?? true);
       // The task's change and its place in the sidebar are one transaction, so a place refused, its
       // section deleted meanwhile, takes the change back with it.
       const writing = Effect.gen(function* () {
@@ -2166,10 +2107,6 @@ export function runUpdateTask(
           });
           if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
         }
-        // The task's links change after it does, so a call that brings it back relinks it too.
-        if (Option.isSome(task) && relinked !== undefined) {
-          yield* writeIssueChanges(userId, taskId, relinked.success);
-        }
         return task;
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -2184,9 +2121,6 @@ export function runUpdateTask(
         Effect.catchTag("TaskPlaceRefused", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
         ),
-        Effect.catchTag("TaskIssuesFull", () =>
-          Effect.succeed(Result.fail(TASK_ISSUE_REFUSAL.FULL)),
-        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
@@ -2195,7 +2129,6 @@ export function runUpdateTask(
         changed.success.value,
         already,
         placing?.success.section,
-        relinking ? yield* listTaskIssues(userId, taskId) : undefined,
       );
     }),
   );
