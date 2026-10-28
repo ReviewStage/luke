@@ -6,11 +6,10 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import { applySectionWrite, memberOf } from "@luke/features/task-section-writes";
 import { describe, it } from "vitest";
 import {
-  applySectionWrite,
   entryMoveWrites,
-  memberOf,
   NO_TASK_SECTIONS,
   placeAllWrites,
   placeWrites,

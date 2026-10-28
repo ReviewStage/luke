@@ -416,22 +416,6 @@ const PLATFORM = {
   github: null,
 };
 
-test("a repository pin still waiting on the service is let go with a sign-out, so the next account never wears it", () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    // The service never answers, as when the window signs out with the pin still out.
-    { [ACT_KIND.TASKS_PIN_REPOSITORY]: () => new Promise<boolean>(() => undefined) },
-  );
-
-  act(() => tab.control().onPinRepository("acme/secret", true));
-  const pending = tab.control().pinnedRepositories;
-  tab.stand({ signedIn: false, tasks: IDLE_TASKS_VIEW });
-  tab.stand({ signedIn: true, tasks: { ...OPEN, repositoryPins: [] } });
-
-  assert.deepEqual(pending, ["acme/secret"]);
-  assert.deepEqual(tab.control().pinnedRepositories, []);
-});
-
 test("a task's name, pin, and status still waiting on the service are let go with a sign-out, so the next account never wears them", async () => {
   // The service never answers, as when the window signs out with the presses still out.
   const never = () => new Promise<boolean>(() => undefined);
@@ -2731,44 +2715,28 @@ test("a pin dragged to a new place stands there at once, and goes back with what
   assert.equal(newestToastSays(), "The pin could not be moved. Try again.");
 });
 
-test("a change to the sections is drawn at once, sent after the one before it, and a refused one goes back with a toast", async () => {
-  const answers: ((changed: boolean) => void)[] = [];
+test("a drag's changes to the sections go to main as one ask, and a refused one says so in a toast", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_WRITE_SECTION]: () =>
-        new Promise((resolve) => {
-          answers.push(resolve);
-        }),
-    },
+    { [ACT_KIND.TASKS_WRITE_SECTION]: () => Promise.resolve(false) },
   );
-  const sent = () => tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_WRITE_SECTION);
-  const titles = () => tab.control().taskSections.sections.map((section) => section.title);
   const make = (id: string, title: string) => ({
     kind: TASK_SECTION_WRITE.CREATE,
     id,
     workspaceId: "workspace-1",
     title,
   });
+  const writes = [
+    make("0a1b2c3d-0000-4000-8000-000000000001", "Launch"),
+    make("0a1b2c3d-0000-4000-8000-000000000002", "Later"),
+  ];
 
-  await act(async () =>
-    tab
-      .control()
-      .onWriteSections([
-        make("0a1b2c3d-0000-4000-8000-000000000001", "Launch"),
-        make("0a1b2c3d-0000-4000-8000-000000000002", "Later"),
-      ]),
+  await act(async () => tab.control().onWriteSections(writes));
+
+  assert.deepEqual(
+    tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_WRITE_SECTION),
+    [{ kind: ACT_KIND.TASKS_WRITE_SECTION, payload: { writes } }],
   );
-  const drawn = titles();
-  const sentFirst = sent().length;
-  await act(async () => answers[0]?.(true));
-  const sentSecond = sent().length;
-  await act(async () => answers[1]?.(false));
-
-  assert.deepEqual(drawn, ["Launch", "Later"]);
-  assert.deepEqual([sentFirst, sentSecond], [1, 2]);
-  // Main's view never carried either, as this test stands no answer in it, so both go once settled.
-  assert.deepEqual(titles(), []);
   assert.equal(newestToastSays(), "Your sections could not be changed. Try again.");
 });
 

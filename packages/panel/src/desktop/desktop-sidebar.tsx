@@ -8,6 +8,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import type { TaskSectionWrite } from "@luke/features/task-section-wire";
+import { isAgentEntry, type SectionMember } from "@luke/features/task-section-writes";
 import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import type { UpdateControl } from "@luke/settings/settings-controls";
@@ -107,10 +108,8 @@ import {
   taskRowTime,
 } from "@luke/ui/task-list-model";
 import {
-  isAgentEntry,
   memberSection,
   placeWrites,
-  type SectionMember,
   sectionOrder,
   unplaceAllWrites,
   workspaceSections,

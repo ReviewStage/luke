@@ -1,7 +1,7 @@
 import {
-  type SidebarRead,
+  type SidebarRows,
   sidebarLiveRowsSchema,
-  sidebarOfLiveRows,
+  sidebarRowsOfLive,
 } from "@luke/features/sidebar-live";
 import type {
   TasksWorkspaceInvitationsAnswer,
@@ -19,8 +19,14 @@ import {
   workspacesOfLiveRows,
 } from "@luke/features/workspace-live";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { type Effect, type Schema, Stream } from "effect";
-import { decodedLiveRows, type LiveBroken, type SealedRead, type TxWait } from "./live-follow.js";
+import { Effect, Option, Schema, Stream } from "effect";
+import {
+  decodedLiveRows,
+  LiveBroken,
+  liveRows,
+  type SealedRead,
+  type TxWait,
+} from "./live-follow.js";
 
 /**
  * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's people and pending invitations, followed by the host over the service's held poll.
@@ -95,10 +101,56 @@ export function invitationsMoves(
   }));
 }
 
-/** The account's sidebar sections, the tasks and agents in them, and its pins each time their rows change, as the held reads would answer them. */
-export function sidebarMoves(
-  dependencies: LiveReadDependencies<SealedRead<"sections" | "entries" | "agentEntries" | "pins">>,
-  first: SealedRead<"sections" | "entries" | "agentEntries" | "pins">,
-): Stream.Stream<SidebarRead, LiveBroken> {
-  return liveMoves(dependencies, first, sidebarLiveRowsSchema, sidebarOfLiveRows);
+/** The sidebar read's parts: its sections, the tasks and the agents in them, and its pinned repositories. */
+type SidebarPart = "sections" | "entries" | "agentEntries" | "pins";
+
+const decodeSidebarRows = Schema.decodeUnknownOption(sidebarLiveRowsSchema);
+
+/** An answer's rows decoded, every part's; none where it carries none inline, and failed where a row does not decode. */
+function sidebarRowsOf(read: SealedRead<SidebarPart>): Option.Option<SidebarRows> | "undecoded" {
+  const { sections, entries, agentEntries, pins } = read.queries;
+  if ([sections, entries, agentEntries, pins].some((part) => part.rows === undefined)) {
+    return Option.none();
+  }
+  const rows = decodeSidebarRows({
+    sections: sections.rows,
+    entries: entries.rows,
+    agentEntries: agentEntries.rows,
+    pins: pins.rows,
+  });
+  return Option.isSome(rows) ? Option.some(sidebarRowsOfLive(rows.value)) : "undecoded";
+}
+
+/**
+ * The account's sidebar followed until it is gone, each answer's rows,
+ * every part's, decoded and handed to `take` the moment its poll answers,
+ * before the follow carries the answer's txids on to a write waiting for
+ * them. So a write confirmed on the sidebar finds its rows already taken
+ * (`sidebar-collections.ts`), where a reader of the follow's stream may
+ * not have taken them yet. An answer whose rows do not decode is a failed
+ * poll, asked again; a first one fails the follow, which the caller seals
+ * again.
+ */
+export function followSidebarRows(
+  dependencies: LiveReadDependencies<SealedRead<SidebarPart>>,
+  first: SealedRead<SidebarPart>,
+  take: (rows: SidebarRows) => void,
+): Effect.Effect<void, LiveBroken> {
+  const taken = (read: SealedRead<SidebarPart>) => {
+    const rows = sidebarRowsOf(read);
+    if (rows === "undecoded") return false;
+    if (Option.isSome(rows)) take(rows.value);
+    return true;
+  };
+  return Effect.gen(function* () {
+    if (!taken(first)) return yield* new LiveBroken({ reason: "a row did not decode" });
+    const poll = (after: string | undefined) =>
+      Effect.map(dependencies.poll(after), (read) =>
+        "failure" in read || taken(read) ? read : { failure: "a row did not decode" },
+      );
+    const { onTxWait } = dependencies;
+    yield* Stream.runDrain(
+      liveRows({ poll, ...(onTxWait === undefined ? undefined : { onTxWait }) }, first),
+    );
+  });
 }
