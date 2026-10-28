@@ -39,10 +39,16 @@ import {
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Context, Effect, Option, Stream } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import { HOSTED_REFUSAL, type HostedRefusal, planLimitReached } from "../../http/http-effect.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  localAgentRefused,
+  planLimitReached,
+} from "../../http/http-effect.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
@@ -332,8 +338,9 @@ export const runnerHalted = (
  * plan refusing the launch, said by name, whose sign-in is signed in again
  * or whose provider is asked again later, and never turned to another
  * payer; the starter's API key gone or unreadable, said by name, which only
- * saving it again mends; or the service down, as every other failure of
- * eve's or a harness's reads.
+ * saving it again mends; an agent's device away, refused as a Start on it
+ * is; or the service down, as every other failure of eve's or a harness's
+ * reads.
  */
 export function failedCallRefusal(failed: {
   readonly status: number;
@@ -359,5 +366,9 @@ export function failedCallRefusal(failed: {
   }
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.DEVICE_REMOVED)
     return HOSTED_REFUSAL.DEVICE_REMOVED;
+  // Note that an away device refuses a message as it refuses a Start, so the words are the same.
+  if (failed.runtimeRefusal === RUNTIME_REFUSAL.DEVICE_AWAY) {
+    return localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY);
+  }
   return HOSTED_REFUSAL.UNAVAILABLE;
 }

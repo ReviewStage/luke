@@ -715,6 +715,9 @@ export const runnerSessions = <
           ...(failure instanceof LaunchRefused && failure.deviceRemoved === true
             ? { runtimeRefusal: RUNTIME_REFUSAL.DEVICE_REMOVED }
             : undefined),
+          ...(failure instanceof LaunchRefused && failure.deviceAway === true
+            ? { runtimeRefusal: RUNTIME_REFUSAL.DEVICE_AWAY }
+            : undefined),
         } as const,
       );
 
@@ -899,7 +902,8 @@ export const runnerSessions = <
             .pipe(
               Effect.as(true),
               Effect.catchIf(
-                (failure) => failure.status === NOT_FOUND_STATUS,
+                (failure) =>
+                  failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
                 () => Effect.succeed(false),
               ),
             );
