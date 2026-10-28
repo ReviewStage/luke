@@ -234,8 +234,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 ### New task
 
 One composer card whose words start a coding agent: the repository chip in
-its head row, the Issue chip beside it, and at its foot the model chip on
-the account's default, Dictate, and Start.
+its head row, and at its foot the model chip on the account's default,
+Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
@@ -244,8 +244,8 @@ the account's default, Dictate, and Start.
    listing the repositories the workspace's GitHub reaches. An agent needs a
    repository, so Start is held without one, and the card says so.
 2. **Start**, the round button; Return presses it. It starts the task with
-   an empty plan and no call, named by its issue where one was picked and
-   Untitled until the agent names it, and the agent on the words, the files,
+   an empty plan and no call, Untitled until the agent names it, and the
+   agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
    which needs no repository. There is no Plan mode: starting a task never

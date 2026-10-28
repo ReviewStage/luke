@@ -1622,7 +1622,7 @@ export function useMentionPicker({
   const wantsAgents = agentsRead === undefined || agentsRead.words !== words;
   const agentsFailed =
     agentsRead !== undefined && agentsRead.words === words && agentsRead.agents === undefined;
-  // Note that words are asked of the service once the typing rests on them, as the issue pickers' are, rather than letter by letter.
+  // Note that words are asked of the service once the typing rests on them, rather than letter by letter.
   const rested = useRested(wordAt, words);
   useEffect(() => {
     if (!wantsAgents || readAgents === undefined || wordAt === undefined || !rested) return;

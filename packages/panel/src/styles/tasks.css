@@ -2284,22 +2284,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--luke-color-text-muted);
 }
 
-/* A task's linked issues under its status and priority
-   (`task-issue-links.tsx`): a row of chips in the status chip's own look,
-   wrapping where the page is narrow, each its issue's mark, its key in the
-   code face, and its title cut short at a chip's widest, and Link issue,
-   quiet, at the row's end. What did not land is said under the row. */
-.task-issue-link .issue-mark {
-  width: var(--luke-icon-12);
-  height: var(--luke-icon-12);
-}
-
-.task-issue-link-unread > svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
 /* The pull request's row pinned over the composer, a card of one row
    (`@luke/ui`'s List). The lines it adds and removes read in the success
    green and the danger red, in tabular numerals so a count does not shift as

@@ -1,7 +1,5 @@
 import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
 import type {
-  TasksGitHubIssuesAnswer,
-  TasksGitHubIssuesParams,
   TasksLinearIssuesAnswer,
   TasksLinearIssuesParams,
   TasksWorkspaceAnswer,
@@ -79,7 +77,6 @@ export interface WorkspaceProceduresDependencies {
     workspaceSentryDisconnect(
       params: TasksWorkspaceSentryDisconnectParams,
     ): Effect.Effect<TasksWorkspaceSentryAnswer>;
-    tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
     workspaceMembers(
       params: TasksWorkspaceMembersParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -316,15 +313,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       const answer = yield* host.workspaceSentryDisconnect(input);
       if ("sentry" in answer) return answer.sentry;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-    }),
-    // A repository's issues, or that its installation grants none, which the picker says rather than listing none.
-    [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.tasksGitHubIssues(input);
-      if ("failure" in answer) return yield* Effect.fail(errors.REFUSED());
-      return answer;
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ

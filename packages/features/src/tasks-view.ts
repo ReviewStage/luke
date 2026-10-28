@@ -10,14 +10,12 @@ import {
   tasklessAgentSchema,
 } from "./coding-agent-wire.js";
 import {
-  GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
   githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
   githubRepositoryIssueAnswerSchema,
-  githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
@@ -44,11 +42,9 @@ import {
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
 import {
-  taskIssueChoiceSchema,
   taskIssueLinkAnswerSchema,
   taskIssueLinkChangedAnswerSchema,
   taskIssueLinksAnswerSchema,
-  taskIssueRelationSchema,
   taskIssueUnlinkAnswerSchema,
 } from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
@@ -620,30 +616,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/**
- * A repository's issues, as New task's picker asks the host for them: the
- * workspace whose installation reaches the repository, the repository, and
- * the words to search for or the number of the one issue asked, its open
- * issues where neither is named.
- */
-export const tasksGitHubIssuesParamsSchema = EffectSchema.Struct({
-  ...repositoryPlaceFields,
-  query: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_QUERY_CHARS)),
-  ),
-  number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
-});
-
-export type TasksGitHubIssuesParams = typeof tasksGitHubIssuesParamsSchema.Type;
-
-/** A repository's issues, as the window hears them: the issues, that the installation grants none, or that the service did not answer. */
-export const tasksGitHubIssuesAnswerSchema = EffectSchema.Union([
-  githubRepositoryIssuesAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksGitHubIssuesAnswer = typeof tasksGitHubIssuesAnswerSchema.Type;
-
 /** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, or Linear unread. */
 const TASK_ISSUE_CALL_FAILURES = [
   TASK_CALL_FAILURE.UNANSWERED,
@@ -656,13 +628,6 @@ export type TaskIssueCallFailure = (typeof TASK_ISSUE_CALL_FAILURES)[number];
 const taskIssueCallFailed = EffectSchema.Struct({
   failure: EffectSchema.Literals(TASK_ISSUE_CALL_FAILURES),
 });
-
-/** A task's linked issues, as its page asks the host for them: the task. */
-export const tasksIssueLinksParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
-
-export type TasksIssueLinksParams = typeof tasksIssueLinksParamsSchema.Type;
 
 /** A task's linked issues as the window hears them, each with where it stands now, or why there are none. */
 export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
@@ -745,14 +710,6 @@ export const taskBrowserTabsFollowedSchema = EffectSchema.Struct({
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
 
-/** An issue to link to a task, as its page names it: by what its provider finds it by, with its relation. */
-export const tasksIssueLinkParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  issue: taskIssueChoiceSchema,
-});
-
-export type TasksIssueLinkParams = typeof tasksIssueLinkParamsSchema.Type;
-
 /** A link made, why the service made none, or why there is no answer. */
 export const tasksIssueLinkAnswerSchema = EffectSchema.Union([
   taskIssueLinkAnswerSchema,
@@ -761,15 +718,6 @@ export const tasksIssueLinkAnswerSchema = EffectSchema.Union([
 
 export type TasksIssueLinkAnswer = typeof tasksIssueLinkAnswerSchema.Type;
 
-/** A link's keyword to change: the task, the link, and the keyword. */
-export const tasksIssueRelateParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  linkId: EffectSchema.NonEmptyString,
-  relation: taskIssueRelationSchema,
-});
-
-export type TasksIssueRelateParams = typeof tasksIssueRelateParamsSchema.Type;
-
 /** A link as it stands once changed, or why there is no answer. */
 export const tasksIssueRelateAnswerSchema = EffectSchema.Union([
   taskIssueLinkChangedAnswerSchema,
@@ -777,14 +725,6 @@ export const tasksIssueRelateAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksIssueRelateAnswer = typeof tasksIssueRelateAnswerSchema.Type;
-
-/** A link to let go: the task and the link. */
-export const tasksIssueUnlinkParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  linkId: EffectSchema.NonEmptyString,
-});
-
-export type TasksIssueUnlinkParams = typeof tasksIssueUnlinkParamsSchema.Type;
 
 /** That the link was let go, or why there is no answer. */
 export const tasksIssueUnlinkAnswerSchema = EffectSchema.Union([
