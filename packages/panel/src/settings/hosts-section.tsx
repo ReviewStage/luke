@@ -63,7 +63,7 @@ import {
 } from "./this-mac-host-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
+ * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@luke/features/host-wire`): a Linux server that ran the install command
@@ -109,7 +109,7 @@ const MINUTE_MS = 60_000;
 const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
-  ADD: "Add Linux servers",
+  ADD: "Add hosts",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
   READ_FAILED: "Could not read your machines.",
@@ -127,7 +127,7 @@ const WORDS = {
   REVOKE: "Revoke this command",
 } as const;
 
-/** The rows that stand while the machines are read: Add Linux servers, and a machine with its ⋯. */
+/** The rows that stand while the machines are read: Add hosts, and a machine with its ⋯. */
 const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
@@ -253,7 +253,7 @@ function HostRow({
   );
 }
 
-/** The dialog Add Linux servers opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -321,7 +321,7 @@ function AddHostsDialog({
   );
 }
 
-/** The Machines page's one group, untitled under the page's own title: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
+/** The Hosts page's one group, untitled under the page's own title: Add hosts and the member's machines, read when the page opens, or why they cannot be drawn. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();

@@ -666,7 +666,7 @@ const DEVICE_WAKE = {
 
 /** How a device whose setup failed tries it again, by its platform: Retry under This Mac in its app, or a Linux server's own Luke started again. */
 const SETUP_RETRY = {
-  [DEVICE_PLATFORM.DARWIN]: "Choose Retry under This Mac in Settings › Machines on it",
+  [DEVICE_PLATFORM.DARWIN]: "Choose Retry under This Mac in Settings › Hosts on it",
   [DEVICE_PLATFORM.LINUX]: "Run sudo systemctl restart luke-host on that host",
 } as const satisfies Record<DevicePlatform, string>;
 

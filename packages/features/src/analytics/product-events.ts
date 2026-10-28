@@ -154,7 +154,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   CONNECTIONS: "connections",
   MEMORY: "memory",
   CODING_AGENTS: "coding_agents",
-  MACHINES: "machines",
+  HOSTS: "hosts",
   INTEGRATIONS: "integrations",
   SKILLS: "skills",
   API_KEYS: "api_keys",

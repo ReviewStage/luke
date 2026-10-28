@@ -465,7 +465,7 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
   [LOCAL_AGENT_REFUSAL.PREPARING]:
     "Not started: the device this task runs its agents on is still getting ready for local agents, downloading its sandbox. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
-    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to choose Retry under This Mac in Settings › Machines on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
+    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string

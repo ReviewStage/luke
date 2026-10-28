@@ -49,7 +49,7 @@ function refusalReport(
   const script = `${serviceOrigin}${HOST_WIRE.INSTALL_SCRIPT_PATH}`;
   return refusal === HOST_STANDING.UPGRADE_NEEDED
     ? `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: ${hostUpgradeCommand(script)}`
-    : "Luke host: Luke refused this box's secret, so it was removed in Settings › Machines. Stopping its agents. Add it again with Add Linux servers, and rerun the install command it shows.";
+    : "Luke host: Luke refused this box's secret, so it was removed in Settings › Hosts. Stopping its agents. Add it again with Add hosts, and rerun the install command it shows.";
 }
 
 /** The host's standing with Luke, as its calls heard it, and the client every call of its goes through. */

@@ -384,8 +384,8 @@ const SERVICE_KEEP_OF_PAGE = {
   [SETTINGS_PAGE.SHORTCUTS]: null,
   [SETTINGS_PAGE.MEMORY]: SETTING_KEEP.WORKSPACE,
   [SETTINGS_PAGE.CODING_AGENTS]: SETTING_KEEP.ACCOUNT,
-  // Note that Machines stands under its title alone, with no line saying where it is kept.
-  [SETTINGS_PAGE.MACHINES]: null,
+  // Note that Hosts stands under its title alone, with no line saying where it is kept.
+  [SETTINGS_PAGE.HOSTS]: null,
   [SETTINGS_PAGE.INTEGRATIONS]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.SKILLS]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.WORKSPACE]: SETTING_KEEP.WORKSPACE,

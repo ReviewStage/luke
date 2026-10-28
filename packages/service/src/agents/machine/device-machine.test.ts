@@ -162,7 +162,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
       () =>
         Effect.gen(function* () {
           const { userId, deviceId, agent } = yield* openLocalAgent;
-          // The Mac the agent is pinned to is enrolled and removed, as Settings › Machines removes one.
+          // The Mac the agent is pinned to is enrolled and removed, as Settings › Hosts removes one.
           yield* enrollOwnDevice(userId, {
             id: deviceId,
             version: "0.1.0",
@@ -377,7 +377,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           );
           const launch = yield* Effect.flip(launched(opened));
           yield* machine.writeLine(handle, '{"type":"stop","launch":4}\n');
-          // The Mac is enrolled and removed, as Settings › Machines removes one.
+          // The Mac is enrolled and removed, as Settings › Hosts removes one.
           yield* enrollOwnDevice(opened.userId, {
             id: opened.deviceId,
             version: "0.1.0",

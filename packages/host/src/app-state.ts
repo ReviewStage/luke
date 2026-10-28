@@ -71,8 +71,8 @@ export const RUN_PROFILE = {
   SETTINGS_WORKSPACE: "settings-workspace",
   /** The same account, Settings on Agents: its Claude plan connected and its ChatGPT sign-in expired. */
   SETTINGS_AGENTS: "settings-agents",
-  /** The same account, Settings on Machines: a server online, one to upgrade, and one offline. */
-  SETTINGS_MACHINES: "settings-machines",
+  /** The same account, Settings on Hosts: a server online, one to upgrade, and one offline. */
+  SETTINGS_HOSTS: "settings-hosts",
   /** The same account, Settings on Integrations: some connected, some with their sign-in expired. */
   SETTINGS_INTEGRATIONS: "settings-integrations",
   /** The same account, Settings on Skills: its team's and its own. */
