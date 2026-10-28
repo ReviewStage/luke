@@ -463,10 +463,11 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     }),
     /**
      * The calls into the agent: none, since Luke takes no calls. A released
-     * desktop still asks on every agent tab, so the read still answers.
+     * desktop still asks on every agent tab, so the read still answers, for
+     * an agent the caller reaches and as not found for any other.
      */
-    calls: signedIn.calls.effect(function* ({ input }) {
-      yield* pathUuid(input.id);
+    calls: signedIn.calls.effect(function* ({ input, context }) {
+      yield* reachedAgentById(context.userId, input.id);
       return { transcript: { calls: [], earlierOmitted: false } };
     }),
     /**
