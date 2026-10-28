@@ -30,10 +30,12 @@
  * in the workspace, with no repository, that hands every run to the
  * operator on weekdays at nine and five in the member's time zone, the zone
  * the client sent with the ensure where it reads, and UTC otherwise, since
- * the service keeps none for an account. A Reset re-aims every automation of
- * the member's aimed at the operator it retired, the heartbeat among them,
- * rather than making a second, and makes one only where none was aimed. A
- * repeat ensure makes none, so a heartbeat the member deleted stays deleted.
+ * the service keeps none for an account. It first re-aims every automation
+ * of the member's aimed at any of their archived operators in the
+ * workspace, the heartbeat among them, whether a Reset retired that one or
+ * the member archived it by hand, rather than making a second, and makes
+ * one only where none was aimed. A repeat ensure makes none, so a heartbeat
+ * the member deleted stays deleted.
  *
  * Only a member of the workspace who turned the operator experiment on
  * (`EXPERIMENT.OPERATOR`) ensures one; anyone else is answered as though
@@ -133,7 +135,6 @@ const aimedItsHeartbeat = (
   userId: string,
   workspaceId: string,
   operator: CodingAgent,
-  retired: CodingAgent | undefined,
   timeZone: string | undefined,
 ) =>
   Effect.gen(function* () {
@@ -141,7 +142,7 @@ const aimedItsHeartbeat = (
     const trigger = heartbeatTrigger(timeZone, now);
     const aimed = yield* aimOperatorHeartbeat(userId, {
       operatorId: operator.id,
-      retiredId: retired?.id,
+      workspaceId,
       heartbeat: {
         taskId: null,
         organizationId: workspaceId,
@@ -232,7 +233,7 @@ const restoredOperator = Effect.fnUntraced(function* <R>(
   if (Option.isNone(restored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, txid, retiredId } = restored.value;
   const retired = Option.isSome(standing) && retiredId !== undefined ? standing.value : undefined;
-  yield* aimedItsHeartbeat(userId, workspaceId, agent, retired, ensure.timeZone);
+  yield* aimedItsHeartbeat(userId, workspaceId, agent, ensure.timeZone);
   const answer: OperatorEnsured = { agent, created: false, retired };
   return txid === undefined ? answer : { ...answer, txid };
 });
@@ -290,7 +291,7 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   // Only the ensure that made the operator aims its heartbeat and opens it, so a repeat ensure does neither again.
   if (started.created) {
-    yield* aimedItsHeartbeat(userId, workspaceId, started.agent, retired, ensure.timeZone);
+    yield* aimedItsHeartbeat(userId, workspaceId, started.agent, ensure.timeZone);
     yield* openedOnItsOpening(eve, started.agent);
   }
   return { ...started, retired };
