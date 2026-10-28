@@ -98,8 +98,9 @@ it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) =
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const place = yield* openAgent;
-        // The database as it stood before the migration: no sync capture yet, whose triggers name the columns undone.
-        for (const statement of [...syncCaptureTakenOff(), ...UNDO]) yield* sql.unsafe(statement);
+        // The database as it stood before the migration: no sync capture yet, and the migration undone.
+        for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
+        for (const statement of UNDO) yield* sql.unsafe(statement);
 
         // Written as a deployment from before the migration writes them, naming none of its columns.
         // Note that the view columns a later migration dropped are left out, since only this migration is undone.
