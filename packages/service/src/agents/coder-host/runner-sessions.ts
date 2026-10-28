@@ -839,18 +839,21 @@ export const runnerSessions = <
      * so it is ended and launched again on the same session with the line as
      * its first, as a stale warm runner is. The relaunch mints a new bearer,
      * so nothing the ended launch posts late, an ACCEPTED of the line
-     * included, is taken, and the line is delivered once. A line taken,
-     * withdrawn, or written before the newest turn's Stop, which ended it, is
-     * left as it stands; so is one whose launch ended or was replaced since,
-     * as by a Stop's force.
+     * included, is taken, and the line is delivered once. A line whose launch
+     * ended or was replaced since without taking it, as by a Stop's force
+     * that came after it was written, is handed on as a send hands a line,
+     * to the runner running now or a relaunch. A line taken, withdrawn, or
+     * written before the newest turn's Stop, which ended it, is left as it
+     * stands.
      */
     const redelivered = (
       sessionId: string,
       agent: CodingAgent,
+      message: EveMessage<Turn>,
       layout: MachineLayout,
       sent: RunnerMessage,
       launch: number,
-    ) =>
+    ): Effect.Effect<void, { readonly _tag: string }, RunnerServices> =>
       Effect.andThen(
         Effect.sleep(CODER.MESSAGE_ACCEPT),
         holdingRunner(
@@ -871,7 +874,10 @@ export const runnerSessions = <
             const found = yield* firstPlace(machine, sessionId);
             if (Option.isNone(found) || found.value.agentId !== agent.id) return;
             const live = yield* liveRunner(machine, found.value);
-            if (live === undefined || live.mark.firstSequence !== launch) return;
+            if (live === undefined || live.mark.firstSequence !== launch) {
+              yield* sendHolding(sessionId, message, layout, sent);
+              return;
+            }
             yield* Effect.logWarning(
               `A ${harness.name} runner took no message within its deadline, and was launched again`,
             );
@@ -968,7 +974,7 @@ export const runnerSessions = <
             if (Option.isSome(after) && message.lineId !== undefined) {
               yield* afterResponse(
                 `A ${harness.name} message's deadline`,
-                redelivered(sessionId, agent, layout, sent, running.mark.firstSequence),
+                redelivered(sessionId, agent, message, layout, sent, running.mark.firstSequence),
               );
             }
             // The installation token lives an hour, so each message sets a fresh one, after the

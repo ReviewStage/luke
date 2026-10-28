@@ -1118,7 +1118,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a Stop its runner never confirms ends that runner and settles the turn cancelled once its bound is up",
+    "a Stop its runner never confirms ends that runner and settles the turn cancelled once its bound is up, and a message sent meanwhile is still delivered",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1141,19 +1141,43 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           { userId, conversationId: agent.conversationId },
           { turnId, at: yield* DateTime.nowAsDate },
         );
-        const forcing = yield* Effect.forkChild(kept.run);
+        // A message sent after the Stop and before its force, to the runner that hears neither.
+        yield* TestClock.adjust("1 second");
+        const clientKey = `after-stop-${randomUUID()}`;
+        const lineId = sentLineId(clientKey);
+        const sent = sessions
+          .send(opened.sessionId, message(agent, "Then run the tests.", lineId))
+          .pipe(Effect.provide(kept.layer));
+        yield* writer.writeAwaitingLine(
+          { userId, conversationId: agent.conversationId },
+          {
+            text: "Then run the tests.",
+            clientKey,
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.map(sent, (answer) => answer.outcome === EVE_SEND_OUTCOME.ACCEPTED).pipe(
+            Effect.orElseSucceed(() => false),
+          ),
+        );
+        const afterAnswers = yield* Effect.forkChild(kept.run);
         yield* turnsPass;
         yield* TestClock.adjust(Duration.subtract(CODER.STOP_CONFIRM, Duration.seconds(1)));
         yield* turnsPass;
         const before = yield* newestTurn(agent);
         yield* TestClock.adjust("1 second");
-        yield* across(Fiber.join(forcing), CODER.RUNNER_LEASE.POLL, 5);
+        yield* turnsPass;
+        yield* TestClock.adjust(CODER.MESSAGE_ACCEPT);
+        yield* across(Fiber.join(afterAnswers), CODER.RUNNER_LEASE.POLL, 5);
 
         assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
         assert.equal(before.status, TURN_STATUS.QUEUED);
         assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.CANCELLED);
-        assert.equal(api.commands.length, 1);
         assert.notEqual(api.commands[0]?.exitCode, null, "the runner was ended");
+        // The message the ended runner never took is the first line of the next launch.
+        assert.equal(api.commands.length, 2);
+        const [, first] = linesOf(api.commands[1]) as InputLine[];
+        assert.ok(first?.type === INPUT_LINE.MESSAGE);
+        assert.equal(first.uuid, lineId);
       }),
   );
 
