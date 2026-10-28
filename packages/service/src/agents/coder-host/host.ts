@@ -11,7 +11,6 @@ import {
   recordAgentStep,
   updateAgentBranch,
 } from "@luke/database/models/agent-store";
-import { askRecord } from "@luke/database/models/asks";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
