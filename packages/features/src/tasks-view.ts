@@ -3,7 +3,6 @@ import {
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
 } from "./agent-browser-tab-wire.js";
-import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
   codingAgentSummarySchema,
@@ -296,8 +295,6 @@ export const tasksViewSchema = EffectSchema.Struct({
    * the call has ended.
    */
   callActivity: EffectSchema.optionalKey(taskActivitySchema),
-  /** The active task's whiteboard as last read or saved; absent with no task open or before its first read lands. */
-  board: EffectSchema.optionalKey(boardSchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
@@ -402,14 +399,6 @@ export const tasksMoveParamsSchema = EffectSchema.Struct({
 });
 
 export type TasksMoveParams = typeof tasksMoveParamsSchema.Type;
-
-/** A task's board as the panel asks it saved: the whole scene, and the number of Luke's drawing it holds. */
-export const tasksBoardSaveParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  ...boardSaveRequestSchema.fields,
-});
-
-export type TasksBoardSaveParams = typeof tasksBoardSaveParamsSchema.Type;
 
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {

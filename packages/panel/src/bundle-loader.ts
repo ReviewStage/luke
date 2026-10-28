@@ -9,14 +9,13 @@ import type { FileTreeModule } from "./file-tree/contract.js";
 import type { PlanEditorModule } from "./plan-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import type { TerminalModule } from "./terminal/contract.js";
-import type { WhiteboardModule } from "./whiteboard/contract.js";
 
 /**
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
  *
- * The panel's editors (`plan-editor/`), the whiteboard (`whiteboard/`), a File
- * tab's tree (`file-tree/`), a Terminal tab's screen (`terminal/`), a plan's
- * diagrams (`diagram/`), and a Files changed diff (`diff-view/`) are each
+ * The panel's editors (`plan-editor/`), a File tab's tree (`file-tree/`), a
+ * Terminal tab's screen (`terminal/`), a plan's diagrams (`diagram/`), and a
+ * Files changed diff (`diff-view/`) are each
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. A bundle that landed is
@@ -35,7 +34,6 @@ export type BundleImporter<A> = () => Promise<A>;
 /** How each bundle of the panel's own is reached. */
 export interface SideBundleImporters {
   readonly planEditor: BundleImporter<PlanEditorModule>;
-  readonly whiteboard: BundleImporter<WhiteboardModule>;
   readonly fileTree: BundleImporter<FileTreeModule>;
   readonly terminal: BundleImporter<TerminalModule>;
   readonly diagram: BundleImporter<DiagramModule>;
@@ -48,9 +46,6 @@ export type SideBundles = {
     AsyncResult.AsyncResult<Awaited<ReturnType<SideBundleImporters[Bundle]>>, Error>
   >;
 };
-
-/** What the whiteboard says where its bundle failed to load. */
-export const BOARD_LOAD_FAILED = "The board could not be opened.";
 
 /** What a File tab's tree and breadcrumbs say where their bundle failed to load; a type icon keeps its placeholder. */
 export const TREE_LOAD_FAILED = "The files could not be shown.";
@@ -67,7 +62,6 @@ export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 /** Why each bundle could not be had, where its import failed. */
 const LOAD_FAILED = {
   planEditor: "The editor could not be loaded.",
-  whiteboard: BOARD_LOAD_FAILED,
   fileTree: TREE_LOAD_FAILED,
   terminal: TERMINAL_LOAD_FAILED,
   diagram: DIAGRAM_REFUSED_LINE,
@@ -77,11 +71,6 @@ const LOAD_FAILED = {
 /** Each bundle's entry, imported where the bundler put it. */
 const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   planEditor: () => import("./plan-editor/index.js").then((entry) => entry.planEditor),
-  // Note that Excalidraw is told where its fonts are before any of it runs.
-  whiteboard: () =>
-    import("./whiteboard/asset-path.js")
-      .then(() => import("./whiteboard/index.js"))
-      .then((entry) => entry.whiteboard),
   fileTree: () => import("./file-tree/index.js").then((entry) => entry.fileTree),
   terminal: () => import("./terminal/index.js").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index.js").then((entry) => entry.diagram),
@@ -117,7 +106,6 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
   const reach: SideBundleImporters = { ...SIDE_BUNDLE_IMPORTERS, ...importers };
   return {
     planEditor: bundleAtom(reach.planEditor, LOAD_FAILED.planEditor),
-    whiteboard: bundleAtom(reach.whiteboard, LOAD_FAILED.whiteboard),
     fileTree: bundleAtom(reach.fileTree, LOAD_FAILED.fileTree),
     terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
     diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),

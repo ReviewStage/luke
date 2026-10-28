@@ -76,8 +76,8 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The task open in the window, holding a board, so its panel has a tab to show. */
-const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: { [SIDE_PANEL_TAB.BOARD]: true } };
+/** The task open in the window, holding a comment, so its panel has a tab to show. */
+const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: { [SIDE_PANEL_TAB.COMMENTS]: true } };
 
 /** The desktop's window at its usual width. */
 const WIDE = 1280;

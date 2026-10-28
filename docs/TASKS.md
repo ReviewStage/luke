@@ -54,12 +54,11 @@ A reviewer can hold the build to these as easily as to the layout:
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
 - The work column is the agents'. Each agent started on the task stands in
-  a tab of its own, and any of them takes a call; everything else, the plan's document, the task's Inbox, the
-  whiteboard ("Whiteboard" below), and the code its agents put on screen, stands
+  a tab of its own, and any of them takes a call; everything else, the plan's document, the task's Inbox,
+  and the code its agents put on screen, stands
   in a side panel ("Side panel" below) that the developer opens and closes.
-  A task opens with the panel shown on its plan; only a first drawing, first
-  code, or an Inbox item not yet seen opens it on its own, and there are no
-  second documents.
+  A task opens with the panel shown on its plan; only first code or an Inbox
+  item not yet seen opens it on its own, and there are no second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -354,39 +353,6 @@ the account's default, Dictate, and Start.
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
 
-### Whiteboard
-
-Each task has one whiteboard, an Excalidraw scene that the task's agents and
-the developer both draw on. It shows in the side panel's Board tab, beside
-the document.
-
-- **An agent draws whole diagrams.** Its `draw_on_board` tool
-  sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
-  text, and arrows between ids. It replaces the previous drawing an agent
-  made and leaves what the developer drew. The service only stores it
-  (`packages/service/src/tasks/board-tool.ts`). The voice hands a request to
-  draw to the agent the call speaks into, as it does any other request.
-- **The Mac converts it.** The canvas turns the agents' drawing into
-  Excalidraw elements with Excalidraw's own converter, marks them as the
-  agents', and puts them in place of the previous ones, then saves the
-  scene. An element of theirs that the developer moved goes back where the
-  next drawing says.
-- **The developer draws with Excalidraw's own tools.** Images, embeds, and
-  export are left out. The scene is saved whole once the canvas pauses, and
-  the last write wins.
-- **An agent reads the board.** A turn opens with the scene as text under
-  `[board]` (`board-text.ts`) where it changed since the agent was last
-  handed it, so whatever the developer drew is in front of the agent on its
-  next turn, and `look_at_board` lets it check what it drew.
-- **The Mac reads the board** when a task opens, when the tab shows, and when
-  the call's activity says a drawing just settled.
-- **Excalidraw is its own bundle** (`whiteboard.js`), loaded the first time a
-  board is shown, with its fonts shipped beside it. The bundle every window
-  parses never carries it.
-- **The board is never recorded.** Its root is left out of the screen
-  recording, because a canvas draws its words as pixels that the recording's
-  text masking cannot reach.
-
 ### Side panel
 
 The open task's supporting views stand in a panel at the window's right,
@@ -394,7 +360,7 @@ beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 - **Tabs.** `Plan`, the task's document; `Inbox`, what its agents need of
-  the developer; `Board`, the task's whiteboard; and `Comments`, the plan's
+  the developer; and `Comments`, the plan's
   threads. After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
@@ -411,8 +377,8 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   read at the commit the agent named instead. File tabs are kept nowhere.
   The strip scrolls where the agents overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
-  A closed panel opens on its own only for an agent's first drawing on the
-  task's board, once per task (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
+  A closed panel opens on its own only for a page an agent shows on a call
+  (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
   transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
@@ -1055,9 +1021,7 @@ changes when a check is run, not when one is planned.
   and the microphone row
   have never been seen running. `./scripts/evidence.sh` captures the window
   on the Tasks tab over a synthetic task
-  (`app-smoke-tasks.png`, from `--profile tasks`), on the
-  task's whiteboard (`app-smoke-tasks-board.png`, from
-  `--profile tasks-board`), on its plan beside a call in the task's column
+  (`app-smoke-tasks.png`, from `--profile tasks`), on its plan beside a call in the task's column
   (`app-smoke-tasks-transcript.png` and `app-smoke-tasks-work.png`, from
   `--profile tasks-transcript` and `--profile tasks-work`),
   and over

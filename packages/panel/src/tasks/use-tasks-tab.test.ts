@@ -2,8 +2,6 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
-import type { Board } from "@luke/features/board-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -639,18 +637,6 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
-/** A board holding Luke's drawing of one box, numbered as his `number`th. */
-function _drawnBoard(number: number): Board {
-  return {
-    elements: [],
-    appliedDrawing: number - 1,
-    drawing: {
-      number,
-      elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
-    },
-  };
-}
-
 /** A line of a file of the task's repository, as a place names it to open. */
 const FILE_REF = { path: "src/invite.ts", startLine: 1, endLine: 1 };
 
@@ -689,10 +675,9 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   const column = () => tab.control().mainTabs;
   const file = { file: FILE_REF.path };
   // The plan stands first.
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onOpenFile(FILE_REF));
-  const strip = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.COMMENTS, file];
+  const strip = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS, file];
   assert.deepEqual(panel().strip, strip);
   assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
@@ -700,14 +685,13 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN]);
   // The column with no tab left opens a new agent's draft in their place.
   const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
   assert.deepEqual(column().tabs, [draft]);
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, file]);
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN, file]);
   assert.deepEqual(panel().tab, file);
   assert.deepEqual(
     panel().files.map((each) => [each.path, each.range]),
@@ -884,8 +868,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.COMMENTS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -893,8 +877,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.equal(tab.control().boundFor, TASK.id);
 
   tab.stand({ tasks: OPEN });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS]);
 });
 
 test("in a narrow room a task opened from a list lands on its plan, the side panel standing on the plan's tab whichever tab it last showed or shut, and on the desktop's width it opens as it was left", () => {
@@ -904,7 +888,7 @@ test("in a narrow room a task opened from a list lands on its plan, the side pan
       { shown: true, tasks: OPEN, room },
       { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
     );
-    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
     tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
     act(() => tab.control().sidePanel.onSetOpen(false));
 
@@ -924,9 +908,9 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS]);
 
   act(() => tab.control().onSelect(OTHER_TASK_ID));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
@@ -937,8 +921,8 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
   await settle();
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD], "the plan's tab stays closed");
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS], "the plan's tab stays closed");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
 test("in a narrow room a Luke link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
@@ -963,10 +947,8 @@ test("in a narrow room a Luke link to another task's panel item opens that item,
 test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, and a plan's own tab stands from a first launch, the panel shown on it", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 
@@ -1467,8 +1449,7 @@ test("a section shown is let go, so the plan opened again later opens where it w
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
   for (let close = 0; close < 20; close += 1) {
     act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
     act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
@@ -1484,8 +1465,8 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
   assert.equal(reopened, 20);
   assert.deepEqual(
     panel().tabs,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS],
-    "the Board, closed first, is not kept",
+    [SIDE_PANEL_TAB.COMMENTS],
+    "the plan's tab, closed first, is not kept",
   );
 });
 
@@ -1516,8 +1497,8 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
@@ -1532,7 +1513,7 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
   act(() => tab.control().onReopenClosedTab?.());
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
@@ -1548,14 +1529,14 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   };
   const tab = mount({ shown: true, tasks: { ...OPEN, pages: [page] } });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onChoose({ page: page.id }));
   act(() => panel().onClose({ page: page.id }));
   tab.stand({ tasks: { ...OPEN, pages: [] } });
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
 });
 
@@ -3746,10 +3727,10 @@ it.effect(
       act(() => panel().onOpenFile(FILE_REF));
       act(() => panel().onChoose(pulls));
       act(() => panel().onPin(pulls, "Pull request"));
-      act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+      act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;
-      assert.deepEqual(strip, [SIDE_PANEL_TAB.PLAN, file, pulls, SIDE_PANEL_TAB.BOARD]);
+      assert.deepEqual(strip, [SIDE_PANEL_TAB.PLAN, file, pulls, SIDE_PANEL_TAB.COMMENTS]);
 
       yield* passing(Duration.hours(23));
       assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
@@ -3757,10 +3738,10 @@ it.effect(
       yield* passing(Duration.hours(1));
       assert.deepEqual(
         panel().strip,
-        [SIDE_PANEL_TAB.PLAN, pulls, SIDE_PANEL_TAB.BOARD],
+        [SIDE_PANEL_TAB.PLAN, pulls, SIDE_PANEL_TAB.COMMENTS],
         "the file's tab closed; the fixed tabs, the pinned Pull request, and the tab shown stay",
       );
-      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 
       act(() => tab.control().onReopenClosedTab?.());
       assert.deepEqual(panel().strip, strip, "⇧⌘T stands it back where it stood");

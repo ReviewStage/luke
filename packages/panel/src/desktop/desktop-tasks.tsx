@@ -818,8 +818,6 @@ function PlanDocument({
           setInboxAsk({ taskId, key: target.key, agentId: from });
         }
         return openPanelTab(SIDE_PANEL_TAB.INBOX);
-      case TOOL_TARGET.BOARD:
-        return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
@@ -1391,7 +1389,6 @@ function PlanDocument({
                         holder={SIDE_PANEL_HOLDER.TASK}
                         taskId={task.id}
                         repository={task.repository}
-                        board={tasks.board}
                         pages={tasks.pages}
                         agents={agents}
                         openAgents={mainTabs.openAgents}

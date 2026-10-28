@@ -1,5 +1,4 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -645,8 +644,6 @@ export interface TasksControl {
   sidePanel: SidePanelControl;
   /** The side panel's tabs holding something that arrived while the panel showed another, and the agents' tabs that ended unseen, each until it is shown. */
   unreadTabs: readonly StripTab[];
-  /** The open task's whiteboard as main holds it; absent before its first read lands. */
-  board: Board | undefined;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
@@ -1143,19 +1140,14 @@ function secondCallNote(placeName: string): string {
 }
 
 /**
- * What the open task holds of each fixed tab's kind, each unknown until its
- * read lands: its plan always, of its Inbox whether it may draw one, an
- * agent held, an archived one among them, or an item waiting (`inbox`).
+ * What the open task holds of each fixed tab's kind: its plan always, and of
+ * its Inbox whether it may draw one, an agent held, an archived one among
+ * them, or an item waiting (`inbox`).
  */
-function taskHolds(view: Pick<TasksView, "board">, inbox: boolean): TaskHolds {
-  const { board } = view;
+function taskHolds(inbox: boolean): TaskHolds {
   return {
     [SIDE_PANEL_TAB.PLAN]: true,
     [SIDE_PANEL_TAB.INBOX]: inbox,
-    [SIDE_PANEL_TAB.BOARD]:
-      board === undefined
-        ? undefined
-        : board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0,
   };
 }
 
@@ -1588,7 +1580,7 @@ export function useTasksTab(input: {
           bare: true,
         }
       : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
+        ? { id: viewed.activeTaskId, holds: taskHolds(inboxHeld) }
         : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
@@ -2330,7 +2322,6 @@ export function useTasksTab(input: {
     // panel, so the plan's visit ends, and what it gained meanwhile counts as
     // seen.
     taskId: fixture === undefined ? (pageAgent ?? tasks.activeTaskId) : undefined,
-    board: pageAgent === undefined ? tasks.board : undefined,
     pages: pageAgent === undefined && live ? (tasks.pages ?? NO_PAGES) : undefined,
     panel: sidePanel,
   });
@@ -3281,7 +3272,6 @@ export function useTasksTab(input: {
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
-    board: tasks.board,
     pages: tasks.pages,
     agents,
     history: {

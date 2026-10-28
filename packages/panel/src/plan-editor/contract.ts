@@ -5,8 +5,8 @@
  * editors, a Markdown document's text (a plan's, and any other document the
  * panel edits, `../tasks/markdown-editor.tsx`) and an agent's message box, ship as one bundle of
  * their own (`plan-editor.js`, built from `./index.ts`) that the panel starts
- * loading after its first paint (`../bundle-loader.ts`), as the whiteboard
- * and a File tab's tree load the first time they are shown. That bundle exports
+ * loading after its first paint (`../bundle-loader.ts`), as a File tab's tree
+ * loads the first time it is shown. That bundle exports
  * one module, `planEditor`, and this file is the whole of what the
  * two share. Nothing here imports a value, so the panel carries none of the
  * editor's libraries, and the voice window, which loads the panel's bundle,

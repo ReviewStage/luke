@@ -305,7 +305,6 @@
   "src/tasks/skill-picker.test.ts": 225,
   "src/tasks/starting-agent-tab.test.ts": 160,
   "src/tasks/subagent-tab.test.ts": 877,
-  "src/tasks/task-board.test.ts": 13,
   "src/tasks/task-issue-links.test.ts": 2598,
   "src/tasks/task-key-chips.test.ts": 369,
   "src/tasks/task-link-chips.test.ts": 612,
@@ -358,8 +357,5 @@
   "src/use-visual-viewport.test.ts": 338,
   "src/voice-notice-toast.test.ts": 583,
   "src/voice-presses.test.ts": 516,
-  "src/whiteboard/fit-view.test.ts": 5,
-  "src/whiteboard/font-addresses.test.ts": 42,
-  "src/whiteboard/opening-view.test.ts": 4,
   "src/window-zoom.test.ts": 231
 }

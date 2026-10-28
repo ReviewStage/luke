@@ -690,7 +690,6 @@ export function DesktopAgentPage({
                           holder={SIDE_PANEL_HOLDER.AGENT}
                           taskId={agentId}
                           repository={agentRepository ?? null}
-                          board={undefined}
                           pages={tasks.agentView.pages}
                           agents={control}
                           openAgents={openAgents}

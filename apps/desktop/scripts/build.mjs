@@ -4,10 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import {
-  EXCALIDRAW_UNUSED,
-  EXCALIDRAW_UNUSED_MODULE,
-  excalidrawFontsLocal,
-  excalidrawLeftOut,
   HIGHLIGHT_WORKER_BUILD,
   LUCIDE_WHOLE,
   lucideWholeModule,
@@ -46,9 +42,8 @@ const DOCK_ICON_IMAGES = {
 
 // The imports the panel's build table (`@luke/panel/build-table`) answers
 // differently from how they are written: Streamdown's HTML parser and Pierre's
-// diff writer, each redirected to a module of the panel's own, and the parts
-// of Excalidraw the board never uses, each answered with an empty module.
-// The table says why each is answered as it is; this is esbuild's shape of it.
+// diff writer, each redirected to a module of the panel's own. The table says
+// why each is answered as it is; this is esbuild's shape of it.
 const panelRedirects = {
   name: "panel-redirects",
   setup(build) {
@@ -56,20 +51,6 @@ const panelRedirects = {
       const target = redirectOf(args.path, args.importer);
       return target === undefined ? undefined : { path: target };
     });
-  },
-};
-const excalidrawTrim = {
-  name: "excalidraw-trim",
-  setup(build) {
-    build.onResolve({ filter: EXCALIDRAW_UNUSED }, (args) =>
-      excalidrawLeftOut(args.path, args.importer)
-        ? { path: args.path, namespace: "excalidraw-unused" }
-        : undefined,
-    );
-    build.onLoad({ filter: /.*/, namespace: "excalidraw-unused" }, () => ({
-      contents: EXCALIDRAW_UNUSED_MODULE,
-      loader: "js",
-    }));
   },
 };
 
@@ -107,12 +88,8 @@ const lucideWholeOnDemand = {
 // answered with a module that links the built file from beside the chunk
 // that imports it, which is where the renderer's chunks all stand. A bundler
 // that loads a chunk's stylesheets itself, as Vite does, needs none of this.
-const WHITEBOARD_STYLESHEET = path.join(appRoot, "../../packages/panel/src/whiteboard/index.css");
 const TERMINAL_STYLESHEET = path.join(appRoot, "../../packages/panel/src/terminal/index.css");
-const SIDE_STYLESHEETS = new Map([
-  [WHITEBOARD_STYLESHEET, "whiteboard.css"],
-  [TERMINAL_STYLESHEET, "terminal.css"],
-]);
+const SIDE_STYLESHEETS = new Map([[TERMINAL_STYLESHEET, "terminal.css"]]);
 const sideStylesheetsLinked = {
   name: "side-stylesheets-linked",
   setup(build) {
@@ -206,16 +183,15 @@ const WINDOW_ENTRIES = {
 
 // The bundles too large for any window's entry, each reached through a
 // dynamic `import()` of its own entry (`@luke/panel`'s `bundle-loader.ts`), so no
-// window parses one before it is needed: the editors (TipTap), the whiteboard
-// (Excalidraw), a File tab's tree (Pierre's tree), a Terminal tab's screen
-// (xterm.js), a plan's diagrams (Mermaid), a Files changed diff (Pierre's
-// diffs and Shiki), and session replay's recorder (rrweb). Each is an entry rather than a chunk, so
+// window parses one before it is needed: the editors (TipTap), a File tab's
+// tree (Pierre's tree), a Terminal tab's screen (xterm.js), a plan's diagrams
+// (Mermaid), a Files changed diff (Pierre's diffs and Shiki), and session
+// replay's recorder (rrweb). Each is an entry rather than a chunk, so
 // it keeps a name of its own; what each reaches
 // through dynamic imports of its own, a diagram type's layout or a language's
 // grammar, is a chunk of its own, loaded when it is drawn.
 const SIDE_BUNDLE_ENTRIES = {
   "plan-editor": "../../packages/panel/src/plan-editor/index.ts",
-  whiteboard: "../../packages/panel/src/whiteboard/index.tsx",
   "file-tree": "../../packages/panel/src/file-tree/index.ts",
   terminal: "../../packages/panel/src/terminal/index.ts",
   diagram: "../../packages/panel/src/diagram/index.ts",
@@ -254,14 +230,7 @@ const rendererBuild = build({
   jsx: "automatic",
   minify: true,
   conditions: ["production"],
-  plugins: [
-    panelRedirects,
-    lucideWholeOnDemand,
-    excalidrawTrim,
-    excalidrawFontsLocal,
-    sideStylesheetsLinked,
-    ...sentryPlugins(),
-  ],
+  plugins: [panelRedirects, lucideWholeOnDemand, sideStylesheetsLinked, ...sentryPlugins()],
   // Every map is written beside its file and named by none: the maps stay
   // out of the app (`electron-builder-config.mjs`), so a comment would point
   // at a file that is not there. The upload finds each by `<file>.map`.
@@ -342,19 +311,8 @@ await Promise.all([
     sourcemap: "external",
     logLevel: "info",
   }),
-  // The stylesheets the whiteboard's and a Terminal tab's entries import,
-  // each linked as its entry runs (`sideStylesheetsLinked` above).
-  build({
-    entryPoints: [WHITEBOARD_STYLESHEET],
-    outfile: path.join(outputRoot, "renderer", SIDE_STYLESHEETS.get(WHITEBOARD_STYLESHEET)),
-    bundle: true,
-    target: "chrome140",
-    conditions: ["production"],
-    // Its `url(./fonts/...)` stay as written, and reach the fonts copied beside it below.
-    external: ["*.woff2"],
-    minify: true,
-    logLevel: "info",
-  }),
+  // The stylesheet a Terminal tab's entry imports, linked as its entry runs
+  // (`sideStylesheetsLinked` above).
   build({
     entryPoints: [TERMINAL_STYLESHEET],
     outfile: path.join(outputRoot, "renderer", SIDE_STYLESHEETS.get(TERMINAL_STYLESHEET)),
@@ -383,7 +341,7 @@ await Promise.all(
   ),
 );
 
-// The panel's static files, Excalidraw's fonts and the harness marks, copied
+// The panel's static files, the harness marks and the voice clips, copied
 // beside the bundle, which is the desktop's asset base
 // (`desktop-platform.ts`), so the panel loads nothing from the network and the
 // bundle carries none of their bytes.

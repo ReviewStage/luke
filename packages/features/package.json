@@ -134,7 +134,6 @@
     "./brain/tool-set": "./src/brain/tool-set.js",
     "./task-agents-model": "./src/task-agents-model.js",
     "./attachment-model": "./src/attachment-model.js",
-    "./board-scene": "./src/board-scene.js",
     "./turn-rows": "./src/turn-rows.js",
     "./plan-diff": "./src/plan-diff.js",
     "./dictation-keywords": "./src/dictation-keywords.js",

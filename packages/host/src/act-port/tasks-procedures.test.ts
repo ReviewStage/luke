@@ -96,7 +96,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.ADMIN_FAVORITE]: "Could not star that account on this system.",
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
   [TASKS_ACT_KIND.TASKS_TALK]: "Could not call that agent on this system.",
-  [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
   [TASKS_ACT_KIND.TASKS_SET_STANDING]: "Could not change where that task stands on this system.",
   [TASKS_ACT_KIND.TASKS_FILE]: "Could not read that file on this system.",
   [TASKS_ACT_KIND.TASKS_TREE]: "Could not list that folder on this system.",
@@ -126,7 +125,6 @@ type AnyPayload = PortActPayload<PortActKind>;
 
 const TASK = { taskId: TASK_ID };
 const EDIT = { ...TASK, edit: { document: { base: "", value: "Invites expire." } } };
-const BOARD = { ...TASK, elements: [], appliedDrawing: 0 };
 
 /** A comment thread's id, as the service spells one. */
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
@@ -231,7 +229,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.ADMIN_FAVORITE, payload: { id: ADMIN_ACCOUNT_ID, favorite: true } },
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_TALK, payload: { agentId: AGENT_ID } },
-  { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
   { kind: TASKS_ACT_KIND.TASKS_SET_STANDING, payload: { ...TASK, status: "done" } },
   {
     kind: TASKS_ACT_KIND.TASKS_FILE,
@@ -340,8 +337,6 @@ function windowPort(
         `edit:${params.taskId}:${"document" in params.edit ? params.edit.document.value : ""}`,
         () => ({ saved: true }) as const,
       ),
-    tasksBoardSave: (params) =>
-      ask(`board:${params.taskId}:${params.appliedDrawing}`, () => undefined),
     githubConnect: () =>
       ask(
         "github-connect",
@@ -570,7 +565,6 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     { answer: { workspaceId: "workspace-relay" } },
   );
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_EDIT, EDIT), { answer: { saved: true } });
-  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_BOARD_SAVE, BOARD), { answer: undefined });
 
   assert.deepEqual(asked, [
     "refresh",
@@ -585,7 +579,6 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     `repository:${TASK_ID}:acme/relay`,
     `move:${TASK_ID}:workspace-relay`,
     `edit:${TASK_ID}:Invites expire.`,
-    `board:${TASK_ID}:0`,
   ]);
 });
 

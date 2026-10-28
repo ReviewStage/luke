@@ -29,8 +29,7 @@
   --comment-margin-gap: var(--luke-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
-     reaches them, since the stage is one stacking context under them all;
-     inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
+     reaches them, since the stage is one stacking context under them all. */
 }
 
 /* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
@@ -106,13 +105,6 @@ body,
   *:hover,
   *:focus-within {
     scrollbar-color: var(--luke-color-scrollbar) transparent;
-  }
-
-  /* The board is Excalidraw's, which draws its own thin thumbs on no track. */
-  .excalidraw,
-  .excalidraw * {
-    scrollbar-color: auto;
-    scrollbar-width: auto;
   }
 }
 

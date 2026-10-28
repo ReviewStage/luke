@@ -259,7 +259,7 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
 
 test("the column's toolbar draws one ⋯, the task's own, on every tab", async () => {
   for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
-    const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.BOARD });
+    const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.INBOX });
     const toolbar = bars(container).main;
     assert.deepEqual(
       [...toolbar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
@@ -275,7 +275,6 @@ test("the column's toolbar draws one ⋯, the task's own, on every tab", async (
 
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
-    { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.BOARD },
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.INBOX },
     { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
     { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },
@@ -362,7 +361,7 @@ test("each tab whose thing has a link offers Copy link in its right-click and it
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
     [
-      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.BOARD },
+      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX },
       "main",
       `${task}/agent/${AGENT.id}`,
     ],

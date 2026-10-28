@@ -269,7 +269,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/",
     "/sign-in.html",
     "/favicon.svg",
-    "/app/fonts/x.woff2",
+    "/app/marks/codex-16.png",
     "/acme/plans/x",
     "/acme/issue/i1",
     "/acme",
