@@ -1070,7 +1070,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams as GitHub holds them now. */
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams as GitHub holds them now. */
   reviewOptions(
     agentId: string,
   ): Effect.Effect<CodingAgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
