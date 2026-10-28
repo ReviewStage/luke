@@ -84,10 +84,12 @@ test("a Luke link to an agent of the item's own task reads beside the item, unde
     undefined,
   );
   assert.equal(inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}`, PLACE), undefined);
+  // An archived agent, held by the item's task though no longer one of its tabs, still opens its Changes beside the item.
   assert.deepEqual(
     inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}/changes`, {
       ...PLACE,
-      agentIds: [AGENT],
+      agentIds: [],
+      heldIds: [AGENT],
     }),
     { kind: INBOX_PANEL_TARGET.CHANGES, agentId: AGENT },
   );
