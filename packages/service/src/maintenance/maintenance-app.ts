@@ -77,8 +77,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     cronSecret: environment.cronSecret,
     monitor: sentryCronCheckIns(SWEEP_MONITOR),
     purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
-    // No call runs any more, so every call a deleted task kept has ended.
-    purgeDeletedTaskCalls: (now) => hostedStore().retention.purgeDeletedTaskCalls(new Date(now)),
     sweepAbandonedTurns: (now) =>
       Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),

@@ -30,7 +30,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Effect, Option, Stream } from "effect";
+import { Effect, Option } from "effect";
 import { test } from "vitest";
 import {
   type AgentSessions,
@@ -161,7 +161,6 @@ function fakeEve() {
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { sent, eveFor: () => Effect.succeed(sessions) };
 }

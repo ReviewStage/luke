@@ -142,43 +142,6 @@ const tasksDocumentSchema = EffectSchema.Struct({
 
 export type TasksDocument = typeof tasksDocumentSchema.Type;
 
-/**
- * The two waits on the voice side that no live status names: the voice model
- * delegated an ask the brain has not yet taken, or words are queued
- * for Luke that his voice has not begun to say.
- */
-export const VOICE_PHASE = {
-  HANDING_OFF: "handing_off",
-  ABOUT_TO_ANSWER: "about_to_answer",
-} as const;
-
-export type VoicePhase = (typeof VOICE_PHASE)[keyof typeof VOICE_PHASE];
-
-/** The most of the brain's pending command an activity carries; the service cuts it there. */
-export const TASK_ACTIVITY_ACTION_MAX_CHARS = 120;
-
-/**
- * What each part of Luke is doing on a task call, whole, as the service's
- * `task.activity` frame says it: the voice's wait where it is in one, the
- * brain while it works on an ask with the command it is running
- * where one is pending. Nothing of the ask, and no tool's output.
- */
-export const taskActivitySchema = EffectSchema.Struct({
-  voice: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(VOICE_PHASE))),
-  // Note that the key keeps the wire's legacy spelling, renamed with the wire in the follow-up.
-  planner: EffectSchema.optionalKey(
-    EffectSchema.Struct({
-      action: EffectSchema.optionalKey(
-        EffectSchema.String.check(EffectSchema.isMaxLength(TASK_ACTIVITY_ACTION_MAX_CHARS)),
-      ),
-    }),
-  ),
-  // Note that no notetaker writes beside a call any more and no desktop draws one, so the key is optional here, never removed: this release parses a frame with or without it, while the service keeps sending `notes: false` for the earlier desktops that still require it.
-  notes: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
-
-export type TaskActivity = typeof taskActivitySchema.Type;
-
 /** One run of a line in one colour per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,

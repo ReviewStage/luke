@@ -13,7 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { Context, Effect, Layer, Option, Redacted, Stream } from "effect";
+import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -142,7 +142,6 @@ function recordingHarness(
             write("reset", sessionId);
             return { outcome: EVE_RESET_OUTCOME.RESET };
           }),
-        stream: () => Stream.empty,
         retune: (sessionId) =>
           Effect.sync(() => {
             write("retune", sessionId);

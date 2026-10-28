@@ -101,7 +101,7 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { causeKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import { Clock, Context, DateTime, Duration, Effect, Option, Stream } from "effect";
+import { Clock, Context, DateTime, Duration, Effect, Option } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
 import {
@@ -1286,9 +1286,6 @@ export const runnerSessions = <
             ? ({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
             : ({ outcome: EVE_RESET_OUTCOME.RESET } as const);
         }).pipe(Effect.catch(unavailable("reset")), Effect.provideContext(context)),
-
-      // The runner posts its events to Luke itself, so there is no stream of a session's to follow here.
-      stream: () => Stream.empty,
 
       halt: (sessionId, conversationId) =>
         Effect.gen(function* () {

@@ -22,8 +22,7 @@
     "apps/web/server/seed-clients.ts",
     "apps/web/src/app/web-root.tsx",
     "packages/agent-runner/src/main.ts",
-    "tools/claude-code-probe/src/cli.ts",
-    "tools/trace-export/src/cli.ts"
+    "tools/claude-code-probe/src/cli.ts"
   ],
   "runShims": [
     "apps/dev/evals/coder.eval.ts",

@@ -29,7 +29,6 @@ import {
 } from "../eve-host/eve-sessions.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./channel.js";
@@ -109,7 +108,6 @@ const DOOR: EveChannelInput["auth"] = coderChannelInput(
     secret: Redacted.make(SECRET),
     admits: CODER_DEPLOYMENT_TURNS,
     presents: CODER_DEPLOYMENT_PRESENCE,
-    streams: CODER_DEPLOYMENT_STREAMS,
   },
   async () => undefined,
 ).auth;

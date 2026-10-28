@@ -49,7 +49,7 @@ export const EVE_HOST_ATTRIBUTE = {
   ACCOUNT: "luke:account",
   /** The current request's time zone, where it named one a zone stands under; the turn's standing context reads it. */
   TIME_ZONE: "luke:time-zone",
-  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, the voice brain's steer of a coding agent and a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
+  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
   CARRIER: "luke:carrier",
 } as const;
 
@@ -57,8 +57,7 @@ export const EVE_HOST_ATTRIBUTE = {
  * The authenticator names the door admits a principal under: an account's
  * own bearer, or the deployment acting for an account it names under the
  * deployment's one secret. The deployment's name is one name whatever role
- * it acts in — the voice service's, or the voice brain's messaging a coding
- * agent — because one secret proves no more than that something holding it acted;
+ * it acts in, because one secret proves no more than that something holding it acted;
  * which role is the turn kind on the principal, recorded as such, and never
  * a name the credential cannot support.
  */
@@ -82,17 +81,9 @@ export const EVE_HOST_PRINCIPAL_TYPE = {
 /** The one principal id the deployment acts under; the account it acts for is its attribute, never its id. */
 export const EVE_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
 
-/**
- * What kind of turn a request opens, as the header names it. An unheard turn
- * is a spoken line whose answer no one hears: the developer's last line a
- * call hands over once it has ended. It is recorded as the spoken line it
- * is, so the transcript's row is its line, but the agent is neither told
- * its words are heard nor runs the call's own tools on it.
- */
+/** What kind of turn a request opens, as the header names it. */
 export const EVE_HOST_TURN = {
   TYPED: "typed",
-  SPOKEN: "spoken",
-  UNHEARD: "unheard",
 } as const;
 
 export type EveHostTurn = (typeof EVE_HOST_TURN)[keyof typeof EVE_HOST_TURN];
@@ -116,58 +107,20 @@ export const RELAY_TURN = {
 
 export type RelayTurn = (typeof RELAY_TURN)[keyof typeof RELAY_TURN];
 
-/**
- * Where the developer's line of a turn stands on the record. Eve's received
- * message is the brain's input: for a typed ask it is the developer's own
- * words and the relay writes it as the user row. A spoken ask is the
- * exception: the developer's line is the voice session's
- * transcript, cut at the delegation and written by the voice writer under the
- * delegation's id, while eve's input is the question the service composed
- * around it, already on record on the ask. Writing that input as a user row
- * too would leave two developer lines for one utterance, read back to the
- * brain twice, so the relay writes none for a spoken ask's line and instead
- * ties the transcript's row, which shares the ask's client id, to the turn,
- * whether the ask opened a spoken turn or joined a typed one under way.
- */
-export const RECEIVED_LINE = {
-  /** The relay writes eve's received message as the turn's user row. */
-  RELAY: "relay",
-  /** The transcript's row, another writer's under the ask's own id, is the line; the relay writes none and ties that row to the turn. */
-  TRANSCRIPT: "transcript",
-} as const;
-
-export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
-
-/** The run stream's origin and trigger for each kind of turn the relay records, and whose row the line that opens it is; a line that joins the turn under way is told apart as it arrives (`relay.ts`'s `#received`). */
+/** The run stream's origin and trigger for each kind of turn the relay records. */
 export const EVE_HOST_TURN_KIND = {
   [EVE_HOST_TURN.TYPED]: {
     origin: RUN_TURN_ORIGIN.TYPED,
     trigger: TURN_TRIGGER.ASK,
-    receivedLine: RECEIVED_LINE.RELAY,
-  },
-  [EVE_HOST_TURN.SPOKEN]: {
-    origin: RUN_TURN_ORIGIN.SPOKEN,
-    trigger: TURN_TRIGGER.ASK,
-    receivedLine: RECEIVED_LINE.TRANSCRIPT,
-  },
-  [EVE_HOST_TURN.UNHEARD]: {
-    origin: RUN_TURN_ORIGIN.SPOKEN,
-    trigger: TURN_TRIGGER.ASK,
-    receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
   // The task the brain handed the subagent is the child turn's received line.
   [RELAY_TURN.CHILD]: {
     origin: RUN_TURN_ORIGIN.CHILD,
     trigger: TURN_TRIGGER.CHILD_TASK,
-    receivedLine: RECEIVED_LINE.RELAY,
   },
 } as const satisfies Record<
   RelayTurn,
-  {
-    readonly origin: RunTurnOrigin;
-    readonly trigger: TurnTrigger;
-    readonly receivedLine: ReceivedLine;
-  }
+  { readonly origin: RunTurnOrigin; readonly trigger: TurnTrigger }
 >;
 
 /** The environment the host reads beside the names every hosted route already honours. */

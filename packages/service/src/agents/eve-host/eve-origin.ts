@@ -19,8 +19,7 @@ const VERCEL_ENVIRONMENT = {
 const DEPLOYMENT_ENVIRONMENT = { PRODUCTION: "production" } as const;
 
 /**
- * The origin eve answers on for a caller with no request in hand, which is
- * how the voice function composes its exchange once per instance: the one the
+ * The origin eve answers on for a caller with no request in hand: the one the
  * environment names, or the project's production domain where this deployment
  * is the production one, or the deployment's own host, or nothing on a machine
  * that is neither configured nor deployed.

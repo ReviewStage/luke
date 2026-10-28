@@ -3,20 +3,15 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
-import { storeWriter } from "@luke/database/models/writer";
 import { conversations } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
-import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Schema } from "effect";
 import { afterAll } from "vitest";
 
 /**
- * The ask record over the real migrations, and the two compositions that
- * stand on it: the ask accepted over the real record rather than a memory
- * one, and the relay binding eve's deliveries to the turn that ran them.
- * Every row here belongs to an account the test created, because on CI this
+ * The ask record over the real migrations. Every row here belongs to an account the test created, because on CI this
  * file shares one database with every other store file.
  */
 
@@ -38,13 +33,6 @@ const asks = {
     dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
   ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
   cancelRequested: (id: string, at: Date) => database.run(askEffects.cancelRequested(id, at)),
-  bindDeliveries: (
-    target: Parameters<typeof askEffects.bindDeliveries>[0],
-    deliveryIds: Parameters<typeof askEffects.bindDeliveries>[1],
-    turnId: string,
-  ) => database.run(askEffects.bindDeliveries(target, deliveryIds, turnId)),
-  stoppedOn: (target: Parameters<typeof askEffects.stoppedOn>[0], turnId: string) =>
-    database.run(askEffects.stoppedOn(target, turnId)),
 };
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
@@ -102,83 +90,5 @@ it.effect(
       );
       assert.equal(await asks.latestSession(owner, conversationId), "wrun_02_newer");
       assert.equal(await asks.latestSession(other, conversationId), undefined);
-    }),
-);
-
-it.effect(
-  "a fresh call reads back the conversation's spoken asks from any earlier call that are neither told to their end nor stopped, inside the window, for the account alone",
-  () =>
-    Effect.promise(async () => {
-      const owner = await database.createUser();
-      const other = await database.createUser();
-      const conversationId = await conversation(owner);
-      const spoken = (voiceSessionId: string, at: number) =>
-        asks.record({
-          ...write(owner, conversationId),
-          origin: ASK_ORIGIN.SPOKEN,
-          createdAt: new Date(at),
-          voice: { sessionId: voiceSessionId, revision: 1 },
-        });
-      const old = await spoken("voice-a", NOW - 60_000);
-      const told = await spoken("voice-a", NOW);
-      const stopped = await spoken("voice-a", NOW + 1);
-      const running = await spoken("voice-b", NOW + 2);
-      await asks.record({ ...write(owner, conversationId), createdAt: new Date(NOW + 3) });
-      await database.run(askEffects.told(told.id, { seq: 4, endAt: new Date(NOW + 10) }));
-      await asks.cancelRequested(stopped.id, new Date(NOW + 10));
-      const since = new Date(NOW - 1_000);
-
-      const unended = await database.run(askEffects.unendedSpoken(owner, conversationId, since));
-      assert.deepEqual(
-        unended.map((ask) => ask.id),
-        [running.id],
-      );
-      assert.ok(!unended.some((ask) => ask.id === old.id));
-      assert.deepEqual(
-        await database.run(askEffects.unendedSpoken(other, conversationId, since)),
-        [],
-      );
-    }),
-);
-
-it.effect(
-  "a re-attached call reads back which of its asks a line typed into the call made, by the typed row standing under the ask's id, and which a delegation made",
-  () =>
-    Effect.promise(async () => {
-      const owner = await database.createUser();
-      const conversationId = await conversation(owner);
-      const target = { userId: owner, conversationId };
-      const writer = await database.run(storeWriter({ tools: {} }));
-      await database.run(
-        writer.writeTypedCallLine(target, {
-          clientId: "typed-line-1",
-          text: "Use the fixture branch.",
-          metadata: {
-            channel: MESSAGE_CHANNEL.TYPED,
-            voice_session_id: randomUUID(),
-            from_ms: 900,
-          },
-          sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
-        }),
-      );
-      const spoken = (clientId: string, revision: number) =>
-        asks.record({
-          ...write(owner, conversationId),
-          clientId,
-          origin: ASK_ORIGIN.SPOKEN,
-          createdAt: new Date(NOW + revision),
-          voice: { sessionId: "voice-typed", revision },
-        });
-      await spoken("item_delegated", 1);
-      await spoken("typed-line-1", 2);
-
-      const asked = await database.run(askEffects.spokenIn(owner, "voice-typed"));
-      assert.deepEqual(
-        asked.map((ask) => [ask.clientId, ask.typed]),
-        [
-          ["item_delegated", false],
-          ["typed-line-1", true],
-        ],
-      );
     }),
 );

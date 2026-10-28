@@ -49,7 +49,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Layer, Option, Redacted, Result, Stream } from "effect";
+import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
@@ -182,10 +182,6 @@ function recording(sessionPrefix: string) {
         calls.push(`reset:${sessionId}`);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
-    stream: (sessionId) => {
-      calls.push(`stream:${sessionId}`);
-      return Stream.empty;
-    },
   };
   return { calls, messages, answers, sessions };
 }
@@ -292,7 +288,6 @@ const everyCall = (sessions: AgentSessions, agent: CodingAgent) =>
     yield* sessions.send(opened.sessionId, messageTo(agent, "And the emails."));
     yield* sessions.cancel(opened.sessionId, "turn-1");
     yield* sessions.reset(opened.sessionId);
-    yield* Stream.runDrain(sessions.stream(opened.sessionId));
     return opened.sessionId;
   });
 
@@ -356,7 +351,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Effect.provide(native),
           );
           const eveSession = yield* everyCall(sessions, onEve);
-          assert.deepEqual(heard(eve), ["open", "send", "cancel", "reset", "stream"]);
+          assert.deepEqual(heard(eve), ["open", "send", "cancel", "reset"]);
           assert.deepEqual(eve.messages, [messageTo(onEve), messageTo(onEve, "And the emails.")]);
           assert.ok(
             eve.calls.every(
@@ -367,7 +362,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           const nativeSession = yield* everyCall(sessions, onClaudeCode);
           assert.deepEqual(heard(claudeCode), ["open", "send", "cancel", "reset"]);
-          assert.equal(eve.calls.length, 5);
+          assert.equal(eve.calls.length, 4);
           // A launch and a message act for the agent's starter, whose plan pays; a cancel or reset for the caller, as eve's does.
           assert.deepEqual(actingFor, [owner, owner, teammate, teammate]);
           // The session the harness opened is the conversation's record, as eve's door records eve's.

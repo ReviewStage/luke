@@ -27,12 +27,7 @@ import {
 } from "../eve-host/bounds.js";
 import { EVE_HOST_TURN_POLICY } from "../eve-host/channel.js";
 import { CODER } from "./bounds.js";
-import {
-  CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
-  CODER_DEPLOYMENT_TURNS,
-  coderChannelInput,
-} from "./channel.js";
+import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { CODER_HARNESS, coderInstructions, coderWorkerInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
@@ -91,7 +86,6 @@ function coderChannel() {
       secret: Redacted.make(SECRET),
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
-      streams: CODER_DEPLOYMENT_STREAMS,
     },
     async () => undefined,
   );

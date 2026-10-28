@@ -10,7 +10,6 @@ import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import type { WebStoreRun } from "../run.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
-  CODER_DEPLOYMENT_STREAMS,
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./coder-host/channel.js";
@@ -90,7 +89,6 @@ const doorFrom = (variables: {
         secret: coder.deploymentSecret(),
         admits: CODER_DEPLOYMENT_TURNS,
         presents: CODER_DEPLOYMENT_PRESENCE,
-        streams: CODER_DEPLOYMENT_STREAMS,
       },
       async () => undefined,
     ).auth;

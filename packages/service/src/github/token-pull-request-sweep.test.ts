@@ -13,7 +13,7 @@ import { getTestDB, startTask } from "@luke/database/testing";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
-import { Effect, Option, Result, Stream } from "effect";
+import { Effect, Option, Result } from "effect";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -76,7 +76,6 @@ function fakeEve() {
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { sent, eveFor: () => Effect.succeed(sessions) };
 }

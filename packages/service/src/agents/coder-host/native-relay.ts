@@ -23,7 +23,7 @@
 
 import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
-import { Effect, Layer, Option, Redacted, Result, Schema, Stream } from "effect";
+import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -47,7 +47,7 @@ import { NativeAgentSessions, type NativeSessions, RUNNER_CHOICE } from "./runti
 /** The path the web function answers a relayed call on. */
 export const NATIVE_RELAY_PATH = "/api/agents/native-sessions";
 
-/** The calls a harness takes by name; `stream` is none, since a runner posts its own events. */
+/** The calls a harness takes by name. */
 export const NATIVE_RELAY_CALL = {
   OPEN: "open",
   SEND: "send",
@@ -258,8 +258,6 @@ function relayOver(
         post({ call: NATIVE_RELAY_CALL.RESET, ...named, sessionId }),
         readAnswer(ResetSchema),
       ),
-    // A runner posts its events to Luke itself, so there is no stream of its session to follow.
-    stream: () => Stream.empty,
     // A change the route did not answer with the runner's own word is said as failed; the row already holds it.
     retune: (sessionId, conversationId) =>
       post({ call: NATIVE_RELAY_CALL.RETUNE, ...named, sessionId, conversationId }).pipe(

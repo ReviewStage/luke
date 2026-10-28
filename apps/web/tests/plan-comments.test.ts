@@ -54,17 +54,7 @@ import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake"
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sql } from "drizzle-orm";
-import {
-  Clock,
-  type Context,
-  DateTime,
-  Effect,
-  Layer,
-  Option,
-  Queue,
-  Result,
-  Stream,
-} from "effect";
+import { Clock, type Context, DateTime, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 
 /**
@@ -135,7 +125,6 @@ const fakeEve = (): AgentSessions => ({
     }),
   cancel: () => Effect.die(new Error("this suite cancels nothing")),
   reset: () => Effect.die(new Error("this suite retires no session")),
-  stream: () => Stream.empty,
 });
 
 /** The services a request runs on: the test's own database and clock, and no GitHub or model catalog. */

@@ -25,8 +25,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
  * will. A task deleted seven days ago has its conversation purged, a
- * deleted task's call that was still open when the task went is removed
- * once it has ended, a turn whose end eve never told the relay is settled as
+ * turn whose end eve never told the relay is settled as
  * abandoned, a local agent's open run is taken from a device that stopped
  * beating for its lease, its turn ended naming the device, the Vercel
  * Sandboxes of the eve sessions Luke let go of are deleted, a coding agent's
@@ -55,8 +54,6 @@ type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
-  /** Removes the ended calls of tasks deleted since, a sweep's worth, answering how many went. */
-  purgeDeletedTaskCalls: (now: number) => SweepRead<number>;
   /** Settles every turn still running past its kind's bound, an hour for a brain turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Takes every open launch of the devices that have not beaten within their lease from them, a sweep's worth, its turn ended naming the device. */
@@ -111,8 +108,6 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
   purged: Swept<number>;
-  /** Ended calls of deleted tasks removed. */
-  purgedCalls: Swept<number>;
   /** Turns still running past their kind's bound, settled as failed for abandonment. */
   abandoned: Swept<number>;
   /** What the sweep over the devices whose lease lapsed did. */
@@ -180,7 +175,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   const now = yield* Clock.currentTimeMillis;
   return {
     purged: yield* isolated("purgeCleared", sweeps.purgeCleared(now)),
-    purgedCalls: yield* isolated("purgeDeletedTaskCalls", sweeps.purgeDeletedTaskCalls(now)),
     abandoned: yield* isolated("sweepAbandonedTurns", sweeps.sweepAbandonedTurns(now)),
     deviceLeases: yield* isolated("sweepDeviceLeases", sweeps.sweepDeviceLeases(now)),
     sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),

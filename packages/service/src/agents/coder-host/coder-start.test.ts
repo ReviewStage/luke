@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { askRecord } from "@luke/database/models/asks";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
@@ -14,7 +13,7 @@ import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automat
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
@@ -77,7 +76,6 @@ function fakeEve() {
     send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { opened, eve: Effect.succeed(sessions) };
 }
@@ -130,7 +128,6 @@ const openedThroughRelay = (owner: string, conversationId: string, opened: reado
     assert.ok(handed !== undefined && typeof handed.message === "string");
     const relay = new StreamRelay({
       writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
-      asks: { binding: askRecord(), stopTurn: () => Effect.void },
       now: () => Date.UTC(2026, 9, 23),
       report: () => undefined,
     });

@@ -29,9 +29,8 @@ import {
  * current request's. Neither is a permission: the host reads them back and
  * checks the conversation's owner against the principal before anything runs.
  *
- * The deployment itself is the other caller. The voice function holds no
- * account's bearer by the time a delegation arrives, so it reaches eve under
- * the deployment's own secret and
+ * The deployment itself is the other caller. A caller that holds no
+ * account's bearer reaches eve under the deployment's own secret and
  * names the account it acts for in a header; the door mints a principal of
  * another type for it — the deployment's one id, the account as its
  * attribute, the kind of turn as the role it acted in — admitted for exactly
@@ -44,20 +43,15 @@ import {
  * answer, so the deployment can open a turn only on a conversation the named
  * account owns, and the deployment's secret can open only the turns the
  * table admits, a row for each of the two things a message does, opening a
- * session or following one up: a spoken ask for the voice function on the
- * brain channel, with the typed ask a comment sent from a browser hands
- * Luke, and on the coder channel (`coder-host/channel.ts`) the typed line
- * the voice brain sends a coding agent and the typed opening that starts
- * one. A typed message presents the account's own principal on either
- * channel (`DEPLOYMENT_PRESENCE`), so it steers, waits, and folds into a
- * turn exactly as the developer's own bearer would: the line steers the
- * agent's running turn, and the ask of Luke never joins a call's spoken one.
+ * session or following one up: on the coder channel (`coder-host/channel.ts`)
+ * the typed line sent a coding agent and the typed opening that starts one.
+ * A typed message presents the account's own principal
+ * (`DEPLOYMENT_PRESENCE`), so it steers, waits, and folds into a turn exactly
+ * as the developer's own bearer would: the line steers the agent's running
+ * turn.
  * Ownership is not scope: the kinds of turn the credential may open are the
  * table's, decided before any principal exists. The two other things the
- * secret may do are stop a turn and retire a session. The Stop a spoken ask
- * takes reaches eve as the deployment's cancel, from the voice function or
- * from the hook that carries a waiting ask's Stop at its turn's start, and
- * neither holds a bearer of the account's. A retire is eve's reset of a
+ * secret may do are stop a turn and retire a session. A retire is eve's reset of a
  * session for good, which a task's delete and an account's deletion ask of
  * every session of what they delete (`agents/retire-sessions.ts`). Both
  * also come from a hosted route a browser reached on its session cookie,
@@ -124,16 +118,9 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
  * presents otherwise: minted as the developer's own tuple, with the
  * deployment named as its carrier in an attribute, which eve's identity
  * does not read and the record keeps, it joins and waits behind a turn
- * exactly as the developer's own bearer would. That is the voice brain's
- * steer of a coding agent's turn, which runs under the developer's bearer,
- * and the ask of Luke a comment sent from a browser hands over, which waits
- * behind a call's spoken turn as the desktop's does. Everything else
- * presents the channel's own: the brain channel's deployment presents
- * itself, so a spoken ask opens or joins a spoken turn alone and nothing of
- * the voice's joins a typed one, and the coder channel's presents the
- * account, so a call's spoken ask joins an agent's running typed turn at
- * its next step and a line typed to the agent joins a spoken one, each as
- * the developer's own word (`coder-host/channel.ts`).
+ * exactly as the developer's own bearer would. Everything else, a cancel and
+ * a reset, presents the channel's own; the coder channel's presents the
+ * account (`coder-host/channel.ts`).
  */
 export const DEPLOYMENT_PRESENCE = {
   /** A principal of the deployment's own type, the account as its attribute. */
@@ -157,27 +144,23 @@ export type DeploymentTurnTable = Readonly<
   Record<DeploymentAct, Readonly<Record<EveHostTurn, boolean>>>
 >;
 
-/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, whose identity it presents for all but a typed message, which presents the account's, and whether it may read a session's stream. */
+/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, and whose identity it presents for all but a typed message, which presents the account's. */
 export interface DeploymentActor {
   /** The deployment's own secret (`EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`), sealed; nothing while the environment names none, which admits no request. */
   readonly secret: Redacted.Redacted | undefined;
   readonly admits: DeploymentTurnTable;
   readonly presents: DeploymentPresence;
-  /** Whether the deployment may read a session's event stream, which the voice function follows a spoken ask's turn on; a flag of its own, since the coder channel's presents the account and is followed all the same. */
-  readonly streams: boolean;
 }
 
 /**
  * The routes a deployment actor may reach: a message opening a session or
- * following one up, a cancel of a turn in a session, a reset retiring a
- * session for good, and, for an actor admitted to (`streams`), a read of a
- * session's event stream; no other.
+ * following one up, a cancel of a turn in a session, and a reset retiring a
+ * session for good; no other.
  */
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
 const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
 const RESET_ROUTE = /^\/eve\/v1\/session\/[^/]+\/reset\/?$/;
-const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
 
 /**
  * The route authenticator for the deployment acting for an account, minted
@@ -186,16 +169,11 @@ const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message, a cancel, a reset, or a stream read, or is a message naming a kind
+ * message, a cancel, or a reset, or is a message naming a kind
  * of turn the table does not admit for what it does is refused here, before
  * any later authenticator could admit it as something else. A cancel and a
  * reset are posted on a session the door's ownership check holds to one the
- * named account reaches, on every channel alike. The stream read is the
- * voice function hearing a spoken ask's turn as eve writes it rather than
- * reading the record on a timer, so it is admitted to an actor whose
- * channel a call speaks into (`streams`) and no other, and the door's
- * ownership check still holds it to a session the named account reaches.
- * A typed message, and everything an actor that
+ * named account reaches, on every channel alike. A typed message, and everything an actor that
  * presents the account is admitted for, is minted as the account's own
  * principal instead, the deployment named as its carrier, so the ownership
  * check reads the same account either way.
@@ -220,8 +198,7 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
       actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
     const reset = posted && RESET_ROUTE.test(pathname);
-    const stream = actor.streams && request.method === "GET" && STREAM_ROUTE.test(pathname);
-    if (!message && !cancel && !reset && !stream) {
+    if (!message && !cancel && !reset) {
       throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     // Note that a typed message presents the account whatever the channel presents, because it

@@ -313,9 +313,7 @@ export const automationRunSync = defineSyncTable(automationRun, {
  * A revision of a task's plan, on the task's topic. Note that its text is
  * ignored, because every save folded into a revision rewrites it, and the
  * same save moves `at` and `changes` beside it, which the history reads, so
- * a save still notifies. The call it was written on (`live_session_id`) is
- * set once and watched; the cut of voice calls drops it, re-rendering this
- * capture as it does.
+ * a save still notifies.
  */
 export const planRevisionSync = defineSyncTable(planRevision, {
   topics: [{ kind: TOPIC.TASK, column: planRevision.taskId }],
