@@ -75,7 +75,11 @@ const settledTurn = (
   agent: CodingAgent,
   status: TurnStatus,
   at: number,
-  patch: { readonly failure?: string; readonly cancelRequestedBy?: string } = {},
+  patch: {
+    readonly failure?: string;
+    readonly cancelRequestKey?: string;
+    readonly cancelRequestedBy?: string;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -132,6 +136,12 @@ const UNTOLD = [
     kind: CODING_AGENT_KIND.CODER,
     end: ({ starter, agent }: { starter: CodingAgent; agent: CodingAgent }) =>
       settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestedBy: starter.id }),
+  },
+  {
+    name: "a Stop under a call's key from before a Stop named its agent",
+    kind: CODING_AGENT_KIND.CODER,
+    end: ({ agent }: { agent: CodingAgent }) =>
+      settledTurn(agent, TURN_STATUS.CANCELLED, T0 + 1_000, { cancelRequestKey: "call_stop" }),
   },
   {
     name: "an archive by the starter itself",

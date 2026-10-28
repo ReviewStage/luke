@@ -22,7 +22,7 @@
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -100,6 +100,20 @@ function answeringStarter() {
   );
 }
 
+/**
+ * A Stop the starter did not make: one no agent made, the developer's or
+ * Luke's, or one another agent made. Note that a Stop under a tool call's
+ * key that names no agent is left out, because only a Stop from before
+ * `cancel_requested_by` was written stands so, and its caller, which may
+ * be the starter, is unknown.
+ */
+function stoppedByAnother() {
+  return or(
+    and(isNull(turns.cancelRequestedBy), isNull(turns.cancelRequestKey)),
+    and(isNotNull(turns.cancelRequestedBy), ne(turns.cancelRequestedBy, starter.id)),
+  );
+}
+
 const findEndedTurns = SqlSchema.findAll({
   Request: Window,
   Result: DueNoticeSchema,
@@ -124,10 +138,7 @@ const findEndedTurns = SqlSchema.findAll({
             lte(turns.settledAt, until),
             or(
               eq(turns.status, TURN_STATUS.FAILED),
-              and(
-                eq(turns.status, TURN_STATUS.CANCELLED),
-                sql`${turns.cancelRequestedBy} is distinct from ${starter.id}`,
-              ),
+              and(eq(turns.status, TURN_STATUS.CANCELLED), stoppedByAnother()),
             ),
             answeringStarter(),
           ),
