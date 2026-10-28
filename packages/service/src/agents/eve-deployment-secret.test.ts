@@ -8,14 +8,6 @@ import { afterEach, vi } from "vitest";
 import { hostedEnvironment } from "../environment.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import type { WebStoreRun } from "../run.js";
-import { actedForAccount } from "./brain-host/auth.js";
-import {
-  BRAIN_HOST_ENVIRONMENT,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_TURN,
-  type BrainHostTurn,
-} from "./brain-host/bounds.js";
-import type { SessionOwnership } from "./brain-host/door.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
   CODER_DEPLOYMENT_STREAMS,
@@ -23,6 +15,14 @@ import {
   coderChannelInput,
 } from "./coder-host/channel.js";
 import { productionCoderHostSeams } from "./coder-host/production.js";
+import { actedForAccount } from "./eve-host/auth.js";
+import {
+  EVE_HOST_ENVIRONMENT,
+  EVE_HOST_HEADER,
+  EVE_HOST_TURN,
+  type EveHostTurn,
+} from "./eve-host/bounds.js";
+import type { SessionOwnership } from "./eve-host/door.js";
 
 /**
  * The secret the eve service's door admits the deployment acting for an
@@ -80,7 +80,7 @@ const doorFrom = (variables: {
   Effect.gen(function* () {
     yield* Effect.sync(() => {
       vi.stubEnv(CRON_ENVIRONMENT.CRON_SECRET, variables.cron);
-      vi.stubEnv(BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET, variables.eve);
+      vi.stubEnv(EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET, variables.eve);
     });
     const coder = yield* Effect.provide(productionCoderHostSeams(noStore), hostedEnvironment);
     return coderChannelInput(
@@ -101,15 +101,15 @@ function underAuthorization(
   authorization: string,
   route: string,
   method: string,
-  turn?: BrainHostTurn,
+  turn?: EveHostTurn,
 ): Request {
   return new Request(new URL(route, ORIGIN), {
     method,
     headers: {
       authorization,
-      [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT,
-      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION,
-      ...(turn === undefined ? undefined : { [BRAIN_HOST_HEADER.TURN]: turn }),
+      [EVE_HOST_HEADER.ACCOUNT]: ACCOUNT,
+      [EVE_HOST_HEADER.CONVERSATION]: CONVERSATION,
+      ...(turn === undefined ? undefined : { [EVE_HOST_HEADER.TURN]: turn }),
     },
   });
 }
@@ -120,8 +120,8 @@ function underAuthorization(
  */
 function deploymentAsks(authorization: string): readonly Request[] {
   return [
-    underAuthorization(authorization, "/eve/v1/session", "POST", BRAIN_HOST_TURN.TYPED),
-    underAuthorization(authorization, `/eve/v1/session/${SESSION}`, "POST", BRAIN_HOST_TURN.TYPED),
+    underAuthorization(authorization, "/eve/v1/session", "POST", EVE_HOST_TURN.TYPED),
+    underAuthorization(authorization, `/eve/v1/session/${SESSION}`, "POST", EVE_HOST_TURN.TYPED),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/cancel`, "POST"),
     underAuthorization(authorization, `/eve/v1/session/${SESSION}/reset`, "POST"),
   ];

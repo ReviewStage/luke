@@ -12,17 +12,17 @@ import { EXPERIMENT, experimentChoicesFrom } from "./experiments.js";
 describe("a choice of experiments read from the store or the wire", () => {
   test("keeps a known experiment's on and off, and passes over a key or a value it does not know", () => {
     const read = experimentChoicesFrom(
-      unparsedWire({ [EXPERIMENT.BROWSER]: true, graduated: true, newer: false }),
+      unparsedWire({ [EXPERIMENT.MEMORY]: true, graduated: true, newer: false }),
     );
-    assert.deepEqual(read, { [EXPERIMENT.BROWSER]: true });
-    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.BROWSER]: false })), {
-      [EXPERIMENT.BROWSER]: false,
+    assert.deepEqual(read, { [EXPERIMENT.MEMORY]: true });
+    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.MEMORY]: false })), {
+      [EXPERIMENT.MEMORY]: false,
     });
-    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.BROWSER]: "on" })), {});
+    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.MEMORY]: "on" })), {});
   });
 
   test("refuses only what is not a record of choices at all", () => {
-    for (const value of [null, "browser", 1, [EXPERIMENT.BROWSER]]) {
+    for (const value of [null, "browser", 1, [EXPERIMENT.MEMORY]]) {
       assert.equal(experimentChoicesFrom(unparsedWire(value)), undefined, JSON.stringify(value));
     }
   });

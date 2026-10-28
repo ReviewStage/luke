@@ -92,6 +92,8 @@ export interface AgentMenuDoors {
   section?: MenuEntry | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
+  onOpenInTask?: (() => void) | undefined;
   /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Deletes the agent for good, asked first (`agent-delete.tsx`). */
@@ -103,16 +105,19 @@ export interface AgentMenuDoors {
 /**
  * The agent's menu, built once for every surface that draws it, in the
  * groups every menu of the window keeps: Copy link and the transcript's two
- * copies; Rename and the read mark; Pin and Move to section; Show terminal;
- * Archive or Unarchive; and last and alone, Permanently delete. The copies,
- * Show terminal, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, and ⌘⌫ only
- * where the menu is the chosen tab's or the agent's page's, since each chord
- * acts on that agent; the read mark and Pin print U and P there too, and on
- * a sidebar row, whose focus the letters act on (`rowKeys`). A group with nothing in it is left out, so a surface
+ * copies; Rename and the read mark; Pin and Move to section; Show terminal,
+ * and Open in task, for an agent drawn apart from its task; Archive or
+ * Unarchive; and last and alone, Permanently delete. The copies, Show
+ * terminal, Open in task, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, ⌘O,
+ * and ⌘⌫ only where the menu is the chosen tab's or the agent's page's,
+ * since each chord acts on that agent; the read mark and Pin print U and P
+ * there too, and on a sidebar row, whose focus the letters act on
+ * (`rowKeys`). A group with nothing in it is left out, so a surface
  * with few doors draws the few groups it has in the same order.
  */
 export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
-  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal } = doors;
+  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
+    doors;
   const { archive, deletion } = doors;
   const chosen = doors.chosen === true;
   const lettered = chosen || doors.rowKeys === true;
@@ -149,10 +154,14 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
         ]),
     ...(section === undefined ? [] : [section]),
   ];
-  const opened: MenuEntry[] =
-    onOpenTerminal === undefined
+  const opened: MenuEntry[] = [
+    ...(onOpenTerminal === undefined
       ? []
-      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, chosen)];
+      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, chosen)]),
+    ...(onOpenInTask === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.OPEN_IN_TASK, onOpenInTask, chosen)]),
+  ];
   return [
     copies,
     named,

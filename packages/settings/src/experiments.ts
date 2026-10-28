@@ -8,8 +8,6 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
-  /** A Browser tab in the side panel: an agent's cloud browser beside the plan, watched and taken over. */
-  BROWSER: "browser",
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
@@ -76,15 +74,6 @@ export const EXPERIMENTS = [
       "and tells you what needs you.",
     owner: "Dean",
     since: "2026-10-22",
-  },
-  {
-    key: EXPERIMENT.BROWSER,
-    name: "Browser tab",
-    detail:
-      "Watch your agents' cloud browsers in a tab beside your plan, and take one over to " +
-      "sign in or steer.",
-    owner: "Dean",
-    since: "2026-10-16",
   },
 ] as const satisfies readonly ExperimentEntry[];
 

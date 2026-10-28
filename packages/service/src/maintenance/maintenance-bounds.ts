@@ -19,7 +19,7 @@ export const CRON_ENVIRONMENT = {
    * Vercel sends this as the bearer on every scheduled call once it is set.
    * It guards the maintenance routes alone, the sweep and the rewrap asked by
    * hand: the deployment acts for an account at eve's door under a secret of
-   * its own (`BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET`), never this one.
+   * its own (`EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET`), never this one.
    */
   CRON_SECRET: "CRON_SECRET",
 } as const;

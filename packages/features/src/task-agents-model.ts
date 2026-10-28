@@ -5,21 +5,17 @@ import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
  * task-agents-model.ts -- how a task's coding agents stand, in the one status its row wears.
  *
  * A row wears at most one status, as a devtool's sidebar does: the one
- * thing that matters most about its agents. A question waiting on the
- * reader comes first, since only they can move it; then an agent that
- * failed; then one at work; then the pull request that matters most, an
+ * thing that matters most about its agents. An agent that failed comes
+ * first; then one at work; then the pull request that matters most, an
  * open or draft one before a merged one, and a merged one before a closed
  * one. A task whose agents finished with nothing published wears none.
  *
- * Note that the questions waiting on the reader are handed in apart from
- * the agents' summary, as the Inbox counts them live with the window's own
- * answers laid over them, so the row's icon, the Tasks page's badge, and the
- * sidebar's Inbox count read one number and never disagree.
+ * Note that a question waiting on the reader is no status here, because the
+ * Tasks page's badge and the sidebar's Inbox count already say how many wait.
  */
 
 /** Where a task's agents stand, most pressing first. */
 export const TASK_AGENTS_STATUS = {
-  WAITING_ON_YOU: "waiting-on-you",
   FAILED: "failed",
   WORKING: "working",
   PULL_REQUEST: "pull-request",
@@ -27,7 +23,6 @@ export const TASK_AGENTS_STATUS = {
 } as const;
 
 export type TaskAgentsStatus =
-  | { readonly kind: typeof TASK_AGENTS_STATUS.WAITING_ON_YOU }
   | { readonly kind: typeof TASK_AGENTS_STATUS.FAILED }
   | { readonly kind: typeof TASK_AGENTS_STATUS.WORKING }
   | {
@@ -56,12 +51,8 @@ function markedPullRequest(
   return undefined;
 }
 
-/** The one status a task's row wears for what its agents are doing, the questions `waiting` on the reader, and what they published. */
-export function taskAgentsStatus(
-  agents: TaskAgentsSummary | undefined,
-  waiting: number,
-): TaskAgentsStatus {
-  if (waiting > 0) return { kind: TASK_AGENTS_STATUS.WAITING_ON_YOU };
+/** The one status a task's row wears for what its agents are doing and what they published. */
+export function taskAgentsStatus(agents: TaskAgentsSummary | undefined): TaskAgentsStatus {
   if (agents === undefined) return NO_STATUS;
   if ((agents.failed ?? 0) > 0) return { kind: TASK_AGENTS_STATUS.FAILED };
   if (agents.working > 0) return { kind: TASK_AGENTS_STATUS.WORKING };

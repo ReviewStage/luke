@@ -10,7 +10,10 @@
  * statements read, each a synced table's declaration
  * (`@luke/database/sync/sync-table`), so a read can't wait on a table nothing
  * captures, the topics those params wake it on, and the statements
- * themselves, built as the read's builder always built them.
+ * themselves, built as the read's builder always built them. A read whose
+ * topics its params don't name, such as the reader's workspaces, looks them
+ * up on each request: the rows it reads move when they change, so the next
+ * request after such a change looks them up again.
  *
  * In `LIVE_MODE.SNAPSHOT` a wake runs the read again and answers it whole
  * where its digest moved. In `LIVE_MODE.CURSOR` the parts a reader follows
@@ -58,19 +61,28 @@ interface LiveCursorRead<Param extends string, Part extends string> {
   ): Effect.Effect<LiveCursorStanding, StoreFailure, DatabaseServices>;
 }
 
+/** The topics a read is woken on: named by its params alone, or looked up from them. */
+export type LiveTopics =
+  | readonly SyncTopic[]
+  | Effect.Effect<readonly SyncTopic[], StoreFailure, DatabaseServices>;
+
 /**
  * One live read's definition. Note that `topics` and `statements` are
  * methods, so a definition over its own params stands in the registry
  * beside every other.
  */
-export interface LiveQuery<Param extends string = string, Part extends string = string> {
+export interface LiveQuery<
+  Param extends string = string,
+  Part extends string = string,
+  Topics extends LiveTopics = LiveTopics,
+> {
   readonly name: LiveReadName;
   /** The params the procedure binds, each an id or a list as its query spells it. */
   readonly params: readonly Param[];
   /** The synced tables the statements read. */
   readonly reads: readonly SyncTable[];
-  /** The topics a write to the read's rows notifies, for the params bound. */
-  topics(params: LiveParams<Param>): readonly SyncTopic[];
+  /** The topics a write to the read's rows notifies, for the params bound, or how to look them up. */
+  topics(params: LiveParams<Param>): Topics;
   /**
    * The read's statements, a part each, as its builder builds them, its
    * cursor parts past `past` where a cursor is named; none where they can't
@@ -89,9 +101,11 @@ export interface LiveQuery<Param extends string = string, Part extends string = 
  * Defines a live read Luke Sync wakes. Fails where it reads no table, since
  * nothing could wake it, and where its mode and its cursor parts disagree.
  */
-export function defineLiveQuery<const Param extends string, Part extends string>(
-  query: LiveQuery<Param, Part>,
-): LiveQuery<Param, Part> {
+export function defineLiveQuery<
+  const Param extends string,
+  Part extends string,
+  Topics extends LiveTopics,
+>(query: LiveQuery<Param, Part, Topics>): LiveQuery<Param, Part, Topics> {
   if (query.reads.length === 0) throw new Error(`the live read ${query.name} reads no table`);
   const followsCursor = query.cursor !== undefined && query.cursor.parts.length > 0;
   if (followsCursor !== (query.mode === LIVE_MODE.CURSOR)) {

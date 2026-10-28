@@ -164,7 +164,6 @@ import {
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
-import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -248,7 +247,13 @@ import {
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
-import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import { CODER } from "./coder-host/bounds.js";
+import { instancePublishedCache } from "./coder-host/published.js";
+import { REPLAY_BOUNDS } from "./coder-host/replay.js";
+import type { SummaryModelOf } from "./coder-host/replay-summary.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { codingAgentsApp } from "./coding-agents-app.js";
+import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -256,13 +261,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   EveUnreachable,
-} from "./brain-host/eve-sessions.js";
-import { CODER } from "./coder-host/bounds.js";
-import { instancePublishedCache } from "./coder-host/published.js";
-import { REPLAY_BOUNDS } from "./coder-host/replay.js";
-import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { codingAgentsApp } from "./coding-agents-app.js";
+} from "./eve-host/eve-sessions.js";
 import { messagesProcedures } from "./messages-procedures.js";
 import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
@@ -286,8 +285,9 @@ const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 const AGENT_NEWEST = "/api/agents/messages-newest";
 const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
 const AGENT_STARTS = "/api/agents/agents";
+/** A Start in a workspace with no task, by the workspace's id. */
+const WORKSPACE_STARTS = "/api/workspaces/agents";
 const AGENT = "/api/agents/agent";
-const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
@@ -540,6 +540,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
+  ["/api/workspaces/agents", (id: string) => `/api/workspaces/${id}/agents`],
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
@@ -1097,7 +1098,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             authorization: `Bearer ${owner}`,
             message: {
               conversationId: stored.value.conversationId,
-              turn: BRAIN_HOST_TURN.TYPED,
+              turn: EVE_HOST_TURN.TYPED,
               message: SNAPSHOT,
             },
             sessionId: eve.opened[0]?.sessionId ?? "",
@@ -1289,6 +1290,58 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
         assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
+
+  it.effect(
+    "a workspace's Start makes an agent on no task in that workspace, in the repository it names or in none, and one of a workspace the account is not in is not found",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, eve, ask } = yield* openTask();
+        const startIn = (bearer: string, body: WireBoundaryInput) =>
+          ask(request(WORKSPACE_STARTS, bearer, { method: "POST", id: task.workspaceId, body }));
+        const placeOf = (answer: Answer) =>
+          Effect.gen(function* () {
+            const { agent } = readAnswer(
+              codingAgentAnswerSchema,
+              HOSTED_HTTP_STATUS.CREATED,
+              answer,
+            );
+            const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+            return [stored.taskId, stored.organizationId, stored.repository];
+          });
+
+        const inRepository = yield* startIn(owner, {
+          idempotencyKey: randomUUID(),
+          task: "Sweep the flaky tests.",
+          repository: RELAY_FULL_NAME,
+        });
+        const inNone = yield* startIn(owner, {
+          idempotencyKey: randomUUID(),
+          task: "Talk the release through.",
+        });
+        const stranger = yield* startIn(other, {
+          idempotencyKey: randomUUID(),
+          task: "Sweep the flaky tests.",
+        });
+        // A Start from an agent goes by that agent's own path, never into a workspace place it may not stand in.
+        const fromAgent = yield* startIn(owner, {
+          idempotencyKey: randomUUID(),
+          from: { agentId: randomUUID() },
+          repository: RELAY_FULL_NAME,
+        });
+
+        assert.deepEqual(yield* placeOf(inRepository), [null, task.workspaceId, RELAY_FULL_NAME]);
+        assert.deepEqual(yield* placeOf(inNone), [null, task.workspaceId, null]);
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          fromAgent,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(eve.opened.length, 2);
       }),
   );
 
@@ -2484,35 +2537,6 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           { startedAt: spoken.startedAt, model: spoken.model, sentAt: spoken.sentAt },
           { startedAt: undefined, model: undefined, sentAt: call.startedAt + 1_500 },
         );
-      }),
-  );
-
-  it.effect(
-    "an agent's calls read as none by a member of its workspace, since Luke takes no calls, and as not found by anyone outside it or for an agent that is none",
-    () =>
-      Effect.gen(function* () {
-        const { owner, task, ask } = yield* openTask({ repository: null });
-        const outsider = yield* openTask();
-        const agent = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
-        ).agent;
-        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-
-        assert.deepEqual(
-          readAnswer(
-            taskTranscriptAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(AGENT_CALLS, owner, { id: agent.id })),
-          ),
-          { transcript: { calls: [], earlierOmitted: false } },
-        );
-        assert.deepEqual(
-          yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
-          notFound,
-        );
-        assert.deepEqual(yield* ask(request(AGENT_CALLS, owner, { id: randomUUID() })), notFound);
       }),
   );
 });
@@ -5962,7 +5986,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               sessionId,
               {
                 conversationId: eve.opened[0]?.message.conversationId,
-                turn: BRAIN_HOST_TURN.TYPED,
+                turn: EVE_HOST_TURN.TYPED,
                 message: "Use the helper.",
               },
             ],

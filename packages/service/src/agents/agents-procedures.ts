@@ -89,7 +89,6 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
-import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { ensureOperator } from "./coder-host/operator.js";
 import {
   agentPullRequestReach,
@@ -103,6 +102,7 @@ import {
   acceptedAgentChoice,
   placeOfAgent,
   requestedChoice,
+  type StartWhere,
   startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
@@ -125,6 +125,7 @@ import {
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
@@ -379,6 +380,29 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       return startAnswer(started);
     }),
     /**
+     * An agent started in the workspace the path names with no task, in the
+     * repository the body names or in none, on the one start path, which
+     * refuses a workspace the account is not a member of as not found and a
+     * repository its installation does not reach.
+     */
+    startInWorkspace: signedIn.startInWorkspace.effect(function* ({ input, context }) {
+      // Note that a workspace's id is no UUID, so one the account is no member of is refused as the landing reads it.
+      const organizationId = input.params.id;
+      const { repository, ...request } = input.body;
+      const place: StartWhere =
+        repository === undefined
+          ? { taskId: null, organizationId, repository: null }
+          : { taskId: null, organizationId, repository };
+      const started = yield* startRequestedAgent(
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        context.userId,
+        place,
+        request,
+        yield* summaryModelOf,
+      );
+      return startAnswer(started);
+    }),
+    /**
      * An agent started from the one the path names, which the body's `from`
      * must name too, in that agent's own place: its task, or its workspace
      * and repository where it has none, on the one start path, so the reach,
@@ -460,15 +484,6 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           macs,
         ),
       };
-    }),
-    /**
-     * The calls into the agent: none, since Luke takes no calls. A released
-     * desktop still asks on every agent tab, so the read still answers, for
-     * an agent the caller reaches and as not found for any other.
-     */
-    calls: signedIn.calls.effect(function* ({ input, context }) {
-      yield* reachedAgentById(context.userId, input.id);
-      return { transcript: { calls: [], earlierOmitted: false } };
     }),
     /**
      * The agent changed for what follows, answered as it then stands. A

@@ -15,7 +15,7 @@ import { TOOL_PART_STATE, UNKNOWN_ACTION_STATUS } from "../../core.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
-import { BRAIN_HOST_TURN } from "./bounds.js";
+import { EVE_HOST_TURN } from "./bounds.js";
 import {
   foldedQuietly,
   JOURNAL_WRITE_INTERVAL_MS,
@@ -56,7 +56,7 @@ const setUp = Effect.gen(function* () {
   const standing: RelayStanding = {
     sessionId: `wrun_${randomUUID()}`,
     target: { userId, conversationId },
-    turn: BRAIN_HOST_TURN.TYPED,
+    turn: EVE_HOST_TURN.TYPED,
     model: "scripted-model",
     state: memoryRelayState(),
   };

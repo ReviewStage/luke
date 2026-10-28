@@ -1068,7 +1068,7 @@ test("Keep mine in the open editor over a teammate's change to another section l
 
 test("words left waiting on a conflict are kept and said, and the toast's Keep mine saves them beside Luke's", async () => {
   const lukes = `${BODY}Luke's.\n`;
-  const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: true };
+  const by = { actor: PLAN_ACTOR.NOTETAKER, at: Date.now(), duringCall: false };
   const lukesNote = "Luke changed this section while you were editing.";
   const { container, sent, render } = mount([{ conflict: { current: lukes, by } }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };

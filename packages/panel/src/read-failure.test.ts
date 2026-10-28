@@ -303,7 +303,7 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
 
 const REVISION: PlanRevisionLine = {
   seq: 2,
-  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true },
+  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: false },
   startedAt: 20,
   changes: 2,
 };

@@ -598,24 +598,3 @@ test("the log draws while the agent's pull request is still read, and its dock l
   });
   assert.ok(container.querySelector(".agent-published-dock"), "the dock lands over the box");
 });
-
-test("the log first draws once the calls its lines were said on are read, so no call's divider lands between rows already drawn", async () => {
-  const CALL = "call-session-1";
-  const said: CodingAgentMessage = {
-    id: "m-said",
-    role: MESSAGE_ROLE.USER,
-    parts: [{ type: "text", text: "Ship it." }],
-    metadata: { channel: "typed", voice_session_id: CALL, from_ms: 20_000 },
-  };
-  const { follower } = following(page([message(0), message(1), said, message(3)]));
-  const calls = handed<Awaited<ReturnType<CodingAgentsControl["readCalls"]>>>();
-  const { container } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower, readCalls: calls.read }),
-  );
-  assert.equal(drawnRows(container).length, 0, "no line is drawn while the calls are read");
-
-  await calls.hand({ failure: "unanswered" } as Awaited<
-    ReturnType<CodingAgentsControl["readCalls"]>
-  >);
-  assert.ok(drawnRows(container).length > 0, "a read that did not answer lets the lines draw");
-});

@@ -311,9 +311,9 @@ export function nextFailedRunExpiry(
  * An open task's plan, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
  * and carries none of their words: the plan's last save (`plan`), the pages agents showed (`pages`), the
- * calls about the task (`calls`), and the code its agents showed (`code`),
- * which answers no rows now that no agent shows code but stands because a
- * released desktop requires it. The desktop reads a part again once its mark moves,
+ * calls about the task (`calls`) and the code its agents showed (`code`),
+ * which this build no longer reads but a released desktop still requires.
+ * The desktop reads a part again once its mark moves,
  * rather than when a call's activity or end suggests it might have. The
  * service answers `not-found` for a task the account does not reach, and
  * `unavailable` where its deployment's Realtime is misconfigured, which the
@@ -343,30 +343,16 @@ const taskPageLiveRowSchema = EffectSchema.Struct({
   version: EffectSchema.Finite,
 });
 
-/** One call about the task as its row delivers it: when and how it ended, null while it stands; what it metered and its model; its last fragment; and how many rows the voice wrote for it. */
-const taskCallLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  closedAt: EffectSchema.NullOr(EffectSchema.Finite),
-  closeReason: EffectSchema.NullOr(EffectSchema.String),
-  usage: EffectSchema.NullOr(
-    EffectSchema.Struct({ seconds: EffectSchema.Finite, confirmed: EffectSchema.Boolean }),
-  ),
-  model: EffectSchema.NullOr(EffectSchema.String),
-  lastSegment: EffectSchema.Finite,
-  spoken: EffectSchema.Finite,
-});
-
 /** One journal of an agent on the task as its row delivered it while agents showed code: the ids of the calls that showed it, as JSON text. None is delivered now. */
 const taskCodeLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   calls: EffectSchema.String,
 });
 
-/** The task's plan, pages, calls, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
+/** The task's plan, pages, and agents' code as Realtime delivers them, a part's rows each: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
   plan: EffectSchema.Array(taskPlanLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),
-  calls: EffectSchema.Array(taskCallLiveRowSchema),
   code: EffectSchema.Array(taskCodeLiveRowSchema),
 });
 
@@ -814,17 +800,21 @@ export const taskHistoryLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskHistoryLiveAnswer = typeof taskHistoryLiveAnswerSchema.Type;
 
-/** One revision as its row delivers it: who wrote it, the member and the agent as their rows name them now, the call it was written on, and its instants in epoch milliseconds. */
+/**
+ * One revision as its row delivers it: who wrote it, the member and the
+ * agent as their rows name them now, and its instants in epoch
+ * milliseconds. Note that the row still carries `liveSessionId` and
+ * `callId`, always null, for a released desktop that decodes them; this
+ * build reads neither.
+ */
 const taskHistoryLiveRowSchema = EffectSchema.Struct({
   seq: planRevisionSeqSchema,
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
   editorId: EffectSchema.NullOr(EffectSchema.String),
   editorName: EffectSchema.NullOr(EffectSchema.String),
-  liveSessionId: EffectSchema.NullOr(EffectSchema.String),
   agentId: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.NullOr(EffectSchema.String),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
-  callId: EffectSchema.NullOr(EffectSchema.String),
   changes: countedNumber,
   restoredFrom: EffectSchema.NullOr(planRevisionSeqSchema),
   at: countedNumber,
@@ -853,10 +843,9 @@ function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
         : undefined),
       ...(row.agentId === null ? undefined : { agentId: row.agentId }),
       at: row.at,
-      duringCall: row.liveSessionId !== null,
+      duringCall: false,
     },
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.callId === null ? undefined : { callId: row.callId }),
     startedAt: row.startedAt,
     changes: row.changes,
     ...(row.restoredFrom === null || row.restoredAt === null

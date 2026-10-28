@@ -14,7 +14,6 @@ import {
   type CodingAgentTranscriptPage,
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
-  codingAgentCallsAnswerViewSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
@@ -202,11 +201,6 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
     .input(exactInput(codingAgentPageParamsSchema))
     .output(EffectSchema.flip(codingAgentPageAnswerViewSchema)),
-  [AGENT_ACT_KIND.CODING_AGENTS_CALLS]: actProcedure(
-    "Could not read the agent's calls on this system.",
-  )
-    .input(exactInput(codingAgentPageParamsSchema))
-    .output(EffectSchema.flip(codingAgentCallsAnswerViewSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actProcedure(
     "Could not read the agent's pull request on this system.",
   )

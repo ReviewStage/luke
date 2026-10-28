@@ -35,6 +35,7 @@ import {
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import type { TasksFileParams } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -317,6 +318,8 @@ class InboxWorld {
   readMarkRefused = false;
   /** The listed workspace's members, as a read of them answers. */
   members: readonly WorkspaceMember[] = [];
+  /** Every read of a file's lines, in order, each answered with as many numbered lines as it asks for. */
+  fileReads: TasksFileParams[] = [];
 }
 
 export const world = new InboxWorld();
@@ -401,6 +404,7 @@ beforeEach(() => {
   world.readMarks = [];
   world.readMarkRefused = false;
   world.members = [];
+  world.fileReads = [];
   world.main = followedInboxes((scope) =>
     scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id),
   );
@@ -459,6 +463,27 @@ beforeEach(() => {
               branch: "main",
               entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
               truncated: false,
+            },
+          },
+        });
+      }
+      if (request.kind === ACT_KIND.TASKS_FILE) {
+        world.fileReads.push(request.payload);
+        const { path, firstLine, lastLine } = request.payload;
+        const lines = Array.from(
+          { length: lastLine - firstLine + 1 },
+          (_, at) => `line ${firstLine + at}`,
+        );
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: {
+            file: {
+              path,
+              repository: "acme/relay",
+              branch: "main",
+              firstLine,
+              lineCount: 40,
+              lines,
             },
           },
         });

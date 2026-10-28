@@ -232,10 +232,12 @@ const askTask = (options: {
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
   readonly after?: string;
+  /** The client the live statements run on; the test's database's own where left out. */
+  readonly sql?: SqlClient.SqlClient;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(SqlClient.SqlClient, options.sql ?? (yield* SqlClient.SqlClient)),
       Layer.succeed(Database, yield* Database),
       // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
@@ -430,6 +432,118 @@ it.layer(getTestDB())("a task's live reads", (it) => {
   );
 });
 
+/** A row a statement answered, column by column. */
+type KeptRow = Readonly<Record<string, unknown>>;
+
+/**
+ * The test's database client, keeping every row a statement run on it as
+ * text (`unsafe`, which a poll's sealer reads through) answers, so a test
+ * sees what left the database rather than how often it was asked.
+ */
+function keepingRows(sql: SqlClient.SqlClient, kept: KeptRow[]): SqlClient.SqlClient {
+  return new Proxy(sql, {
+    get: (target, key, receiver) =>
+      key === "unsafe"
+        ? (text: string, params?: ReadonlyArray<unknown>) =>
+            Effect.tap(target.unsafe<KeptRow>(text, params), (rows) =>
+              Effect.sync(() => kept.push(...rows)),
+            )
+        : Reflect.get(target, key, receiver),
+  });
+}
+
+/** The rows kept that carry a column of the read's own, rather than a look's digest alone. */
+const rowsOfTheRead = (kept: readonly KeptRow[]) =>
+  kept.filter((row) => Object.keys(row).some((column) => column !== "digest"));
+
+it.layer(getTestDB())("a held live read's looks", (it) => {
+  const path = "/api/live/task-pages";
+
+  /** One page shown on the task, so its pages read has a row to carry. */
+  const showPage = (userId: string, taskId: string) =>
+    Effect.map(
+      writePage(
+        userId,
+        taskPageOwner(taskId),
+        { title: "Invite funnel", html: "<p>One</p>" },
+        { kind: PAGE_SHOWER.LUKE },
+      ),
+      Option.getOrThrow,
+    );
+
+  it.effect(
+    "a poll held over rows that never move carries none of them off the database: it looks at their digests alone to the hold's end, and answers unchanged",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        yield* showPage(dana, started.id);
+        const kept: KeptRow[] = [];
+        const sql = keepingRows(yield* SqlClient.SqlClient, kept);
+
+        const first = yield* askTask({ bearer: dana, taskId: started.id, path, sql });
+        const seen = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body);
+        assert.equal(rowsOfTheRead(kept).length, 1, "a first read carries the page's row");
+        const digest = liveDigestOf(seen.queries);
+        assert.ok(digest !== undefined);
+
+        const looked = kept.length;
+        const unchanged = yield* Effect.forkChild(
+          askTask({ bearer: dana, taskId: started.id, path, sql, poll: true, after: digest }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+          (yield* Fiber.join(unchanged)).body,
+        );
+        assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
+        assert.equal(liveDigestOf(held.queries), digest);
+        const hold = kept.slice(looked);
+        assert.ok(hold.length > 0, "the hold looked at the rows' digests");
+        assert.deepEqual(rowsOfTheRead(hold), [], "no row of the read left the database");
+      }),
+  );
+
+  it.effect(
+    "a poll whose rows moved is answered them with the digest they stand at, so a reader that holds it is held again rather than answered at once",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const poll = (after: string) =>
+          askTask({ bearer: dana, taskId: started.id, path, poll: true, after });
+        const first = yield* askTask({ bearer: dana, taskId: started.id, path });
+        const digest = liveDigestOf(
+          Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body).queries,
+        );
+        assert.ok(digest !== undefined);
+
+        const moved = yield* Effect.forkChild(poll(digest));
+        yield* TestClock.adjust(Duration.seconds(3));
+        const shown = yield* showPage(dana, started.id);
+        yield* TestClock.adjust(Duration.seconds(3));
+        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+          (yield* Fiber.join(moved)).body,
+        );
+        assert.deepEqual(
+          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+            pages: answer.queries.pages.rows,
+          }).pages.map((page) => [page.id, page.version]),
+          [[shown.id, 1]],
+        );
+        const standing = liveDigestOf(answer.queries);
+        assert.ok(standing !== undefined && standing !== digest);
+
+        const again = yield* Effect.forkChild(poll(standing));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
+          (yield* Fiber.join(again)).body,
+        );
+        assert.equal(held.queries.pages.rows, undefined, "the rows answered stand at their digest");
+        assert.equal(liveDigestOf(held.queries), standing);
+      }),
+  );
+});
+
 /** The procedures answering an agent's transcript's live read as `bearer`, the worker's where `call` names one. */
 const askTranscript = (options: {
   readonly bearer: string;
@@ -576,20 +690,29 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
       }),
   );
 
-  it.effect("a polled statement's rows in another order digest alike", () =>
-    Effect.gen(function* () {
-      const sealer = pollSealer(yield* SqlClient.SqlClient);
-      const one = yield* sealer.seal({
-        sql: "select * from (values (1), (2)) as rows(n) order by n",
-        params: [],
-      });
-      const other = yield* sealer.seal({
-        sql: "select * from (values (1), (2)) as rows(n) order by n desc",
-        params: [],
-      });
-      assert.notDeepEqual(one.rows, other.rows);
-      assert.equal(one.digest, other.digest);
-    }),
+  it.effect(
+    "a polled statement's rows in another order digest alike, and a look at its digest alone reads the digest its rows are answered with, none included",
+    () =>
+      Effect.gen(function* () {
+        const sealer = pollSealer(yield* SqlClient.SqlClient);
+        const ascending = {
+          sql: "select * from (values (1), (2)) as rows(n) order by n",
+          params: [],
+        };
+        const one = yield* sealer.seal(ascending);
+        const other = yield* sealer.seal({
+          sql: "select * from (values (1), (2)) as rows(n) order by n desc",
+          params: [],
+        });
+        assert.notDeepEqual(one.rows, other.rows);
+        assert.equal(one.digest, other.digest);
+        assert.equal((yield* sealer.digest(ascending)).digest, one.digest);
+
+        const none = { sql: "select * from (values (1)) as rows(n) where n > $1", params: [1] };
+        const empty = yield* sealer.seal(none);
+        assert.deepEqual(empty.rows, []);
+        assert.equal((yield* sealer.digest(none)).digest, empty.digest);
+      }),
   );
 
   it.effect(

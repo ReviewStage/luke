@@ -8,7 +8,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import type { SessionAuth } from "eve/context";
 import { actedForAccount, conversationIdOf, timeZoneOf } from "./auth.js";
-import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
+import { EVE_HOST_REFUSAL, type EveHostRefusal } from "./bounds.js";
 
 export {
   claimRuntimeSession,
@@ -50,7 +50,7 @@ export interface AdmittedConversation {
 }
 
 /** The conversation the session was admitted to, or the one word for why it was not. */
-export type ConversationAdmission = Result.Result<AdmittedConversation, BrainHostRefusal>;
+export type ConversationAdmission = Result.Result<AdmittedConversation, EveHostRefusal>;
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type ConversationFailure = QueryError | Schema.SchemaError;
@@ -110,26 +110,26 @@ export function admitConversation(
   const current = auth.current;
   const account = actedForAccount(current);
   if (!current || account === undefined) {
-    return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NO_PRINCIPAL));
+    return Effect.succeed(Result.fail(EVE_HOST_REFUSAL.NO_PRINCIPAL));
   }
   const initiator = auth.initiator ?? current;
   const conversationId = conversationIdOf(initiator);
-  if (!conversationId) return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION));
+  if (!conversationId) return Effect.succeed(Result.fail(EVE_HOST_REFUSAL.NO_CONVERSATION));
   return Effect.gen(function* () {
     const found = yield* findConversation(conversationId);
-    if (Option.isNone(found)) return Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION);
+    if (Option.isNone(found)) return Result.fail(EVE_HOST_REFUSAL.NO_CONVERSATION);
     const row = found.value;
     // Note that a caller who does not reach the conversation is refused for the seat it took:
     // in a session another account opened, or in one it opened itself over another's row.
     if (!(yield* reaches(account, conversationId))) {
       return Result.fail(
         actedForAccount(initiator) === account
-          ? BRAIN_HOST_REFUSAL.NOT_OWNER
-          : BRAIN_HOST_REFUSAL.NOT_INITIATOR,
+          ? EVE_HOST_REFUSAL.NOT_OWNER
+          : EVE_HOST_REFUSAL.NOT_INITIATOR,
       );
     }
     if (session.standing === SESSION_STANDING.CURRENT && row.runtimeSessionId !== session.id) {
-      return Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION);
+      return Result.fail(EVE_HOST_REFUSAL.NOT_CURRENT_SESSION);
     }
     return Result.succeed({
       caller: account,

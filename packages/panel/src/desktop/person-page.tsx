@@ -105,7 +105,6 @@ import {
   SectionSkeleton,
 } from "./person-frame.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
-import { useTasksWaiting } from "./places-waiting.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
@@ -617,7 +616,6 @@ function TaskRows({
 }): React.JSX.Element {
   const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
   const drawn = useLeaving(shown, taskKey);
-  const waitingOn = useTasksWaiting(tasks);
   return (
     <>
       {drawn.map(({ key, value: task }) => (
@@ -628,7 +626,6 @@ function TaskRows({
           now={now}
           face={false}
           unread={unread(task)}
-          waiting={waitingOn.get(task.id) ?? 0}
           onOpen={() => tasks.onSelect(task.id)}
         />
       ))}

@@ -5,10 +5,10 @@ import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments"
 import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
+import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";

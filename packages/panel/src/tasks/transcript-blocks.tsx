@@ -173,8 +173,7 @@ import { WorkingTime } from "./working-time.js";
  * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on a coding agent's tab and a subagent's alike.
  *
  * Each tab decides what its rows say from its own wire
- * (`transcript-model.ts`, `coding-agent-model.ts` with
- * `tool-call-model.ts`); how a block of each kind looks is decided here
+ * (`coding-agent-model.ts` with `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
  * markdown at the panel's scale with a web link opening in the browser, reasoning folded under one quiet line
  * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
@@ -1689,39 +1688,29 @@ function TurnFold({
   );
 }
 
-/** One row of a turn: a block drawn by its tab, a run of calls, or a folded lead, with what trails the turn inside it where it is a fold. */
+/** One row of a turn: a block drawn by its tab, a run of calls, or a folded lead. */
 function TurnRowView<B>({
   row,
-  trailer,
   children,
 }: {
   row: TurnRow<B>;
-  trailer: ReactNode;
   children: (block: B) => ReactNode;
 }): ReactNode {
   switch (row.kind) {
     case TURN_ROW.BLOCK:
-      return (
-        <>
-          {children(row.block)}
-          {trailer}
-        </>
-      );
+      return children(row.block);
     case TURN_ROW.GROUP:
       return (
         <TurnFold summary={row.summary} running={row.running} failed={row.failed} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
-          {trailer}
         </TurnFold>
       );
     case TURN_ROW.FOLDED:
       return (
         <TurnFold summary={row.summary} running={false} failed={row.failed}>
-          <TranscriptRows rows={row.rows} trailer={trailer}>
-            {children}
-          </TranscriptRows>
+          <TranscriptRows rows={row.rows}>{children}</TranscriptRows>
         </TurnFold>
       );
   }
@@ -1738,28 +1727,21 @@ const SteadyTurnRow = memo(TurnRowView, (a, b) =>
 
 /**
  * A turn's rows (`turn-rows.ts`): each block drawn by its tab, a run of
- * calls and a folded lead drawn here. What trails the turn, as a spoken
- * turn's "Worked for" line does, is drawn inside its last row where that
- * row is a fold, so a folded turn keeps to its one line, and after it
- * otherwise.
+ * calls and a folded lead drawn here.
  */
 export function TranscriptRows<B>({
   rows,
-  trailer,
   children,
 }: {
   rows: readonly TurnRow<B>[];
-  /** What follows the rows, drawn inside the last fold where the rows end on one; nothing where the tab draws it itself. */
-  trailer?: ReactNode;
   /** How the tab draws one of its own blocks. */
   children: (block: B) => ReactNode;
 }): ReactNode {
   // Note that a group is keyed by whether it opens, because the fold reads `defaultOpen` once, and a group that stops being the turn's latest work has to fold.
-  return rows.map((row, index) => (
+  return rows.map((row) => (
     <SteadyTurnRow
       key={row.kind === TURN_ROW.GROUP ? `${row.key}-${String(row.open)}` : row.key}
       row={row}
-      trailer={index === rows.length - 1 ? trailer : null}
     >
       {children}
     </SteadyTurnRow>

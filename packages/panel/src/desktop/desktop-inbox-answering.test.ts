@@ -158,14 +158,14 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   const sent = takenCloses();
   const ellipsis = () =>
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Inbox item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
 
   act(() => ellipsis().click());
   assert.deepEqual(menuWords(), [
-    "Mark as unreadU",
-    "—",
     "Copy link",
+    "—",
+    "Mark as unreadU",
     "—",
     "Resolve without answering",
   ]);
@@ -198,7 +198,7 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   act(() => ellipsis().click());
   assert.deepEqual(
     menuWords(),
-    ["Mark as unreadU", "—", "Copy link"],
+    ["Copy link", "—", "Mark as unreadU"],
     "a settled item offers no Close",
   );
 });
@@ -264,7 +264,7 @@ function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: bo
 async function closeFromPane(page: HTMLElement): Promise<void> {
   const ellipsis =
     itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Item actions"]',
+      '.luke-toolbar button[aria-label="Inbox item actions"]',
     ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
   act(() => ellipsis.click());
   act(() => menuItem("Resolve without answering").click());

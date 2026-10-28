@@ -26,15 +26,15 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "../brain-host/eve-sessions.js";
-import { memoryRelayState, StreamRelay } from "../brain-host/relay.js";
+} from "../eve-host/eve-sessions.js";
+import { memoryRelayState, StreamRelay } from "../eve-host/relay.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -137,7 +137,7 @@ const openedThroughRelay = (owner: string, conversationId: string, opened: reado
     const standing = {
       sessionId: `wrun_${randomUUID()}`,
       target,
-      turn: BRAIN_HOST_TURN.TYPED,
+      turn: EVE_HOST_TURN.TYPED,
       state: memoryRelayState(),
     };
     const turn = { turnId: "turn_0", sequence: 0 };

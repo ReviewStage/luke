@@ -16,7 +16,6 @@ import {
   distinctActors,
   type EditReader,
   editActor,
-  editCallOwner,
   githubActor,
   identityHue,
   identityLetter,
@@ -126,18 +125,14 @@ function said(activity: ActorActivity | undefined): string | undefined {
   return activity === undefined ? undefined : activityWords(activity);
 }
 
-test("a plan's edit is named by who wrote it: a member as the members read them, Luke with whose call it was, an agent by its name, and nobody before history", () => {
-  const onDanasCall = { actor: PLAN_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: true };
+test("a plan's edit is named by who wrote it: a member as the members read them, Luke, an agent by its name, and nobody before history", () => {
+  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
   const byAgent = { actor: PLAN_ACTOR.AGENT, label: "Fix auth flow", at: 0, duringCall: false };
   const byDana = { actor: PLAN_ACTOR.DEVELOPER, by: DANA_REF, at: 0, duringCall: false };
 
   assert.equal(editActor(byDana, SAM_READS)?.kind, ACTOR_KIND.PERSON);
   assert.equal(called(editActor(byDana, { ...SAM_READS, readerId: DANA.userId })), "You");
-  assert.deepEqual(editActor(onDanasCall, SAM_READS), LUKE_ACTOR);
-  assert.equal(called(editCallOwner(onDanasCall, SAM_READS), true), "Dana Reyes’s");
-  assert.equal(editCallOwner(byDana, SAM_READS), undefined);
-  const { by: _named, ...onUnnamedCall } = onDanasCall;
-  assert.equal(editCallOwner(onUnnamedCall, SAM_READS), undefined);
+  assert.deepEqual(editActor(byLuke, SAM_READS), LUKE_ACTOR);
   assert.deepEqual(
     editActor(byAgent, SAM_READS, { provider: "anthropic", state: ACTOR_STATE.WORKING }),
     {
@@ -164,7 +159,7 @@ test("what someone last did in a plan is the sections whose last change is their
   const edits = [
     edit("", 1),
     edit("Goal", 5),
-    { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: 9, duringCall: true },
+    { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: 9, duringCall: false },
     edit("Rollout", 3, { userId: SAM.userId, name: SAM.name }),
   ];
   const dana = personActor(DANA_REF, [DANA, SAM], SAM.userId);

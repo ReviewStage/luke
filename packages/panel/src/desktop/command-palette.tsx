@@ -195,12 +195,11 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { useCapability, useExperiment, useExperimentChoices } from "../use-app-state.js";
+import { useCapability, useExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
-import { useTasksWaiting } from "./places-waiting.js";
 import {
   ADD_SECTION,
   inboxOffered,
@@ -758,8 +757,7 @@ function taskDetail(
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`, its
- * questions waiting on the reader by `waitingOn`),
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`),
  * leads with its key and says its repository by its name, as the Tasks
  * list's row does, and is found by its key, its assignee's name, and its
  * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
@@ -773,7 +771,6 @@ function taskRows(
   openAgent: (agentId: string) => void,
   showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
-  waitingOn: ReadonlyMap<string, number>,
 ): readonly UndrawnRow[] {
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
@@ -838,7 +835,7 @@ function taskRows(
         endMark: (
           <>
             {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-            <TaskRowStatus task={task} waiting={waitingOn.get(task.id) ?? 0} />
+            <TaskRowStatus task={task} />
           </>
         ),
         people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
@@ -905,10 +902,9 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
   show();
 }
 
-/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals, and whether the Browser tab experiment is on. */
+/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
-  readonly browsers: boolean;
 }
 
 /**
@@ -967,7 +963,6 @@ function agentRows(
         agents: tasks.agents,
         pages,
         onNewTerminal: doors.onNewTerminal,
-        browsers: doors.browsers,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
         cards: {
@@ -1188,6 +1183,7 @@ const OPEN_THING_COMMANDS: readonly AppCommand[] = [
   APP_COMMAND.MENTION_LINES,
   APP_COMMAND.INSERT_PICTURE,
   APP_COMMAND.TOGGLE_READ,
+  APP_COMMAND.OPEN_IN_TASK,
   APP_COMMAND.MARK_TASK_DONE,
 ];
 
@@ -2114,7 +2110,6 @@ export function CommandPalette({
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
-  const waitingOn = useTasksWaiting(tasks);
   const { members } = membersRead;
   // Note that the tasks' rows are built once for what they say rather than on every render, and
   // only while a filter that lists them stands open, because a key, an arrow, or the pointer
@@ -2131,10 +2126,9 @@ export function CommandPalette({
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
             (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,
-            waitingOn,
           )
         : [],
-    [tasksShown, listedTasks, members, onTasks, tasks, originOf, waitingOn],
+    [tasksShown, listedTasks, members, onTasks, tasks, originOf],
   );
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
@@ -2154,7 +2148,6 @@ export function CommandPalette({
     onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
       ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
-    browsers: useExperiment(EXPERIMENT.BROWSER),
   };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;

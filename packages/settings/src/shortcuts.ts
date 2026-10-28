@@ -43,6 +43,7 @@ export const APP_COMMAND = {
   OPEN_ON_GITHUB: "open-on-github",
   TOGGLE_READ: "toggle-read",
   PIN: "pin",
+  OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
   NEXT_TASK: "next-plan",
   TOGGLE_SIDEBAR: "toggle-sidebar",
@@ -459,6 +460,8 @@ export const APP_SHORTCUTS = {
     label: "Permanently delete",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
+  // Note that ⌘O opens the focused thing in its full place, as Mail and Finder open the selection: an agent beside the Inbox in its task, an Inbox item in its task or its agent's page.
+  [APP_COMMAND.OPEN_IN_TASK]: { label: "Open in task", chord: { key: SHORTCUT_KEY.O } },
   [APP_COMMAND.PREVIOUS_TASK]: {
     label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
@@ -826,6 +829,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.VERSION_HISTORY,
       APP_COMMAND.OPEN_ON_GITHUB,
       APP_COMMAND.DELETE,
+      APP_COMMAND.OPEN_IN_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.ASK_LUKE,
       APP_COMMAND.INBOX,

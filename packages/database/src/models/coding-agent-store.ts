@@ -61,7 +61,7 @@ import {
   type StoredPullRequest,
   type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
-import { asks, conversations, messages, turns } from "../schemas/storage.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
@@ -129,8 +129,8 @@ import type { ConversationTarget } from "./writer.js";
  * the pair under the child and the tabs read the worker's transcript under
  * the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
- * which is kept on the delegation for that. Note that nothing here reaches the brain host's modules,
- * because the routes bundle this module and the brain host's modules reach
+ * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
+ * because the routes bundle this module and the eve host's modules reach
  * eve, which runs in a service of its own (`function-bundles.ts`). The
  * title is written two ways: filled where none stands, which is how the
  * one generated as the agent starts lands without ever covering a name the
@@ -3748,71 +3748,6 @@ export function linePlacesOf(
     findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
     (rows) =>
       new Map(rows.map(({ id, journalId, afterStep }) => [id, { journalId, afterStep }] as const)),
-  );
-}
-
-/**
- * The turn an ask the voice handed on ran in, as its binding names it: the
- * turn, and for an ask that joined a typed turn under way how many of that
- * turn's steps had begun before it (`asks.joined_after_step`), from which
- * its answer is read.
- */
-export interface AskTurn {
-  readonly turnId: string;
-  readonly afterStep?: number;
-}
-
-const findAskTurns = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    clientIds: Schema.Array(Schema.String),
-  }),
-  Result: Schema.Struct({
-    clientId: Schema.String,
-    turnId: Schema.String,
-    afterStep: Schema.NullOr(Schema.Int),
-  }),
-  execute: ({ userId, conversationId, clientIds }) =>
-    Database.use((db) =>
-      db
-        .select({
-          clientId: asks.clientId,
-          turnId: sql<string>`${asks.turnId}::text`,
-          afterStep: asks.joinedAfterStep,
-        })
-        .from(asks)
-        .where(
-          and(
-            eq(asks.userId, userId),
-            eq(asks.conversationId, conversationId),
-            inArray(asks.clientId, [...clientIds]),
-            isNotNull(asks.turnId),
-          ),
-        ),
-    ),
-});
-
-/**
- * The turn each of these asks of the account's conversation ran in, by the
- * ask's client id, for the asks that have learned one: an ask still unbound,
- * and one of another conversation or account, names none. None asked, none
- * read.
- */
-export function askTurnsOf(
-  target: ConversationTarget,
-  clientIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, AskTurn>> {
-  if (clientIds.length === 0) return Effect.succeed(new Map());
-  return Effect.map(
-    findAskTurns({ userId: target.userId, conversationId: target.conversationId, clientIds }),
-    (rows) =>
-      new Map(
-        rows.map(({ clientId, turnId, afterStep }) => [
-          clientId,
-          afterStep === null ? { turnId } : { turnId, afterStep },
-        ]),
-      ),
   );
 }
 

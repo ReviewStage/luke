@@ -47,7 +47,7 @@ export type InboxPanelTarget =
       readonly number?: number;
     };
 
-/** What holds the item: its task, none for an agent with no task, the task's repository, each of its agents' pull requests by its page on GitHub, and its agents, the first of which shows any other pull request of the repository. */
+/** What holds the item: its task, none for an agent with no task, the task's repository or the agent's own where it has none, each of its agents' pull requests by its page on GitHub, and its agents, the first of which shows any other pull request of the task's repository. */
 export interface InboxPanelPlace {
   readonly taskId: string | undefined;
   readonly repository: string | null;
@@ -60,8 +60,8 @@ export interface InboxPanelPlace {
  * window opens it, leaving the Inbox or for the browser: a Luke link to a
  * page or an agent's Pull request tab of the item's own task, the page on
  * GitHub of a pull request one of its agents opened, or a file of the
- * task's repository on GitHub. Note that a file is the task's alone, since
- * the panel reads a file through the task it stands for.
+ * item's repository on GitHub, which the panel reads through the task it
+ * stands for, or through the workspace and repository of an agent with none.
  */
 export function inboxPanelTarget(
   href: string,
@@ -87,11 +87,11 @@ export function inboxPanelTarget(
   if (agentId !== undefined) {
     return { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId };
   }
-  if (place.taskId === undefined || place.repository === null) return undefined;
+  if (place.repository === null) return undefined;
   const number = repositoryPullRequestOf(href, place.repository);
   const first = place.agentIds?.[0];
   if (number !== undefined) {
-    return first === undefined
+    return first === undefined || place.taskId === undefined
       ? undefined
       : { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId: first, number };
   }

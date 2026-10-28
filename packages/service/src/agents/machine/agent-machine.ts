@@ -38,9 +38,9 @@ import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
 import type { DeviceIsolation, DeviceSignedIn } from "@luke/features/device-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
-import type { KeyRefusal, PlanRefusal } from "../brain-host/eve-sessions.js";
 import type { CheckoutServices } from "../coder-host/checkout.js";
 import type { RunnerBundle } from "../coder-host/runner-bundle.js";
+import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 

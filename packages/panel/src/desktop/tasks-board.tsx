@@ -466,11 +466,7 @@ function TaskBoardCard({
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskAgentsMark
-              agents={task.agents}
-              waiting={waiting}
-              size={TASK_AGENTS_MARK_SIZE.MEDIUM}
-            />
+            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
         <span className="tasks-board-card-more pointer-events-auto flex flex-none">

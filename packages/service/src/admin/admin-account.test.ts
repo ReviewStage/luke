@@ -227,7 +227,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       userId,
       codingAgentModel: "anthropic/claude-opus-5.5",
       codingAgentEffort: "high",
-      experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.BROWSER]: false },
+      experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.OPERATOR]: false },
     });
     const [made] = yield* db
       .insert(automation)

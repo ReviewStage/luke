@@ -92,13 +92,13 @@ import {
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import {
@@ -204,7 +204,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * The member's operator is the one blank Start with no task: in a workspace
  * the account is a member of, on no repository, from no other agent and
  * with no prompt or note, and no other Start is an operator's. Every other
- * Start with no task still names a repository and a prompt. The store
+ * Start with no task still names a prompt, and a repository where it works
+ * in one; one that names none works in none, as the operator does. The store
  * answers the operator already standing where there is one
  * (`createCodingAgent`), so a Start of it is an ensure.
  * An eve that did not take the opening leaves no agent behind, so the retry
@@ -505,11 +506,9 @@ const landingOf = Effect.fnUntraced(function* (
         startedFrom: undefined,
       };
     }
-    // An agent with no plan has only words to be handed, and a repository to work them in, so a
-    // Start that names either none starts nothing.
-    if (brief === undefined || place.repository === null) {
-      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    }
+    // An agent with no plan has only words to be handed, so a Start that names none starts
+    // nothing; one that names no repository works in none, as a blank agent on a task with none does.
+    if (brief === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     const handed = yield* handedOf(brief, place, fitter, noteFiles);
     return {
       workspaceId: place.organizationId,
@@ -1162,7 +1161,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
-        turn: BRAIN_HOST_TURN.TYPED,
+        turn: EVE_HOST_TURN.TYPED,
         message: eveContent(handed, files, mentioned),
         lineId: line,
       })

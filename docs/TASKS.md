@@ -374,7 +374,7 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 Each agent started on the task has a tab of its own in the task's column
 (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`, `tasks/agent-tab.tsx`,
 `tasks/use-coding-agents.ts`), opened and selected the moment its Start
-lands, and showing its transcript, its calls, and its composer. The column's
+lands, and showing its transcript and its composer. The column's
 strip is the side panel's: tabs drag and step among themselves, close by ×,
 Delete, ⌘W, or Close and Close others, hang their cards, and pin to the
 sidebar. A column whose last tab closes is back on the plan. The tab each
@@ -406,31 +406,13 @@ subagent's tab stays in the side panel.
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the AI
   Elements components: the plan or prompt it was handed, the developer's
   messages, and each of its turns with its text as Markdown, its reasoning
-  folded, and each tool call one row. The lines said on its calls (channel
-  `voice`) stand among them in the order said, the developer's in a bubble
-  and the agent's as its messages, and each call begins at a divider saying
-  its day and time, marked `Live` while it stands, and closes, once it has
-  ended, on a line saying how long it ran that hangs the call's card
-  (`tasks/call-card.tsx`). Where each call begins and ends is read from the
-  agent's calls, `GET /api/agents/{id}/calls` (`tasks/use-agent-calls.ts`),
-  read as the tab opens, as a call into the agent ends, and for a call its
-  lines name that the read does not hold.
-- **The call standing.** Its lines are written into the transcript as they
-  are first heard, and the voice window reports them too
-  (`VoiceView.callTranscript`); those the transcript does not hold yet grow
-  at its foot under the call's divider, so a line is drawn once, from the
-  record once the record holds it (`callPlaces`). Each call opens at a
-  labelled rule, "Call started" and when, with a Live mark that keeps it
-  pinned to the transcript's top while the call stands, and closes at one,
-  "Call ended", how long it ran, and when (`call-card.tsx`). While the call
-  stands, its tab's composer holds the speaker, the microphone, and End
-  call.
+  folded, and each tool call one row. The lines said on its past calls
+  (channel `voice`) stand among them in the order said, as ordinary lines:
+  the developer's in a bubble and the agent's as its messages.
 - **Live.** While the tab shows and the agent is starting or running, the
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
   the service's held long-poll (`tasks/use-agent-transcript.ts`), ending on
-  its own when the agent ends. A call writes its lines whether or not the
-  agent still works, so while a call into the agent stands the tab reads it
-  through again for each line heard, and once more as the call ends.
+  its own when the agent ends.
 - **When it ends.** Main keeps a ledger of where each agent stands
   (`packages/host/src/agent-notices.ts`) and marks an agent that moves from writing
   to completed or failed once, unless the window is focused on that agent's
@@ -499,13 +481,11 @@ points to Settings › Skills.
 
 ### Transcript
 
-What is said on a call is drawn in the transcript of the agent the call
-speaks into ("Agent tabs" above). The service keeps each call's words as
-timed fragments (`voice_transcript_segments`) and each line as a row of the
-agent's conversation with channel `voice`, and answers an agent's calls,
-each with its lines and its record, at `GET /api/agents/{id}/calls`. The
-lines are drawn with AI Elements, the AI SDK's chat components, copied into
-`packages/panel/src/ai-elements/` and restyled to the panel's tokens.
+An agent's transcript is its conversation's rows ("Agent tabs" above),
+drawn with AI Elements, the AI SDK's chat components, copied into
+`packages/panel/src/ai-elements/` and restyled to the panel's tokens. A
+line said on a past call is a row with channel `voice`, drawn as an
+ordinary line.
 
 ### Agents' notes
 

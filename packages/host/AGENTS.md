@@ -50,7 +50,7 @@ cut off.**
 
 ## The live session is the service's exchange, held open from here
 
-**The host reaches no brain and writes no record for a voice session.** The
+**The host reaches no eve host and writes no record for a voice session.** The
 exchange stands on the voice service: every spoken ask is admitted through
 `acceptAsk` there, every reply is appended there over the same socket the
 relay pipes, and the account's record is the service's. What this package

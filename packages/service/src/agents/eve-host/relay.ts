@@ -44,8 +44,8 @@ import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/pictu
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { BROWSER_TOOL, storedBrowserOutput } from "../browser/browser-tool.js";
 import {
-  BRAIN_HOST_TURN,
-  BRAIN_HOST_TURN_KIND,
+  EVE_HOST_TURN,
+  EVE_HOST_TURN_KIND,
   RECEIVED_LINE,
   RELAY_TURN,
   type RelayTurn,
@@ -209,7 +209,7 @@ export interface RelayStanding {
 /**
  * What the relay and every seam it reaches answer: the store's own effect
  * over the client the request holds, which is the fiber eve's event arrived
- * on. The relay runs nothing: `brainHost`'s `relay` composes this into the
+ * on. The relay runs nothing: `eveHost`'s `relay` composes this into the
  * effect it already answers, and a test runs it on its own database.
  */
 type RelayEffect<Value> = Effect.Effect<Value, QueryError | Schema.SchemaError, DatabaseServices>;
@@ -246,9 +246,9 @@ interface StreamRelaySeams {
 
 /** The task's turn origin for each kind of turn a request opens, as the queued row records it. */
 const TURN_ORIGIN_OF_HOST_TURN = {
-  [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
-  [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [BRAIN_HOST_TURN.UNHEARD]: TURN_ORIGIN.SPOKEN,
+  [EVE_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
+  [EVE_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
+  [EVE_HOST_TURN.UNHEARD]: TURN_ORIGIN.SPOKEN,
   [RELAY_TURN.CHILD]: TURN_ORIGIN.CHILD,
 } as const satisfies Record<RelayTurn, TurnOrigin>;
 
@@ -916,7 +916,7 @@ export class StreamRelay {
           },
         },
       }));
-      const { origin, trigger } = BRAIN_HOST_TURN_KIND[kind];
+      const { origin, trigger } = EVE_HOST_TURN_KIND[kind];
       // The turn row is queued ahead of its start with what it will run under,
       // which is how the row comes to name eve's resolved model; the start
       // then only moves it to running. eve's own turn id rides on the row from
@@ -958,7 +958,7 @@ export class StreamRelay {
         deliveryIds,
         eveTurnId,
         turnId,
-        kind === BRAIN_HOST_TURN.TYPED ? 0 : undefined,
+        kind === EVE_HOST_TURN.TYPED ? 0 : undefined,
       );
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: RUN_EVENT.TURN_STARTED,
@@ -1050,7 +1050,7 @@ export class StreamRelay {
             joining,
             eveTurnId,
             hostTurnId(standing.sessionId, eveTurnId),
-            turn.kind === BRAIN_HOST_TURN.TYPED || turn.kind === BRAIN_HOST_TURN.UNHEARD
+            turn.kind === EVE_HOST_TURN.TYPED || turn.kind === EVE_HOST_TURN.UNHEARD
               ? Object.keys(turn.steps).length
               : undefined,
           )
@@ -1068,7 +1068,7 @@ export class StreamRelay {
   /**
    * One line the turn received, told apart as it arrives rather than by the
    * turn's kind, since a line of either kind may join a turn of the other.
-   * The turn's opening line is its kind's (`BRAIN_HOST_TURN_KIND`'s
+   * The turn's opening line is its kind's (`EVE_HOST_TURN_KIND`'s
    * `receivedLine`): a spoken turn's is the transcript's row. Any other is
    * first taken as the developer's typed lines awaiting a turn
    * (`takeAwaitingLine`), then bound as an ask that joined the turn under
@@ -1102,7 +1102,7 @@ export class StreamRelay {
         })),
       );
       const turnId = hostTurnId(standing.sessionId, eveTurnId);
-      const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
+      const { trigger, receivedLine } = EVE_HOST_TURN_KIND[turn.kind];
       const opening = read.count === 0;
       if (opening && receivedLine === RECEIVED_LINE.TRANSCRIPT) {
         yield* this.#joined(eveTurnId, deliveryIds, standing, true);

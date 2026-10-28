@@ -12,6 +12,7 @@ import { RUN_EVENT, RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/feat
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
 import { Duration, Effect, Option, Stream } from "effect";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -19,8 +20,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   EveUnreachable,
-} from "../agents/brain-host/eve-sessions.js";
-import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+} from "../agents/eve-host/eve-sessions.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching } from "../testing/github-app-fake.js";
 import { OPERATOR_WAKE_SWEEP, sweepOperatorWakes } from "./operator-wake-sweep.js";

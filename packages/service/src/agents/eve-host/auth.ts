@@ -6,16 +6,16 @@ import { isWireString } from "../../core.js";
 import { bearerMatchesSecret } from "../../http/http.js";
 import {
   ACCOUNT_ID_PATTERN,
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_AUTHENTICATOR,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN,
-  type BrainHostTurn,
   CONVERSATION_ID_PATTERN,
-  isBrainHostTurn,
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_AUTHENTICATOR,
+  EVE_HOST_DEPLOYMENT_PRINCIPAL,
+  EVE_HOST_HEADER,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_REFUSAL,
+  EVE_HOST_TURN,
+  type EveHostTurn,
+  isEveHostTurn,
 } from "./bounds.js";
 
 /**
@@ -79,15 +79,15 @@ const isTimeZone = Schema.is(timeZoneSchema);
 /** The three request headers as attributes, each only when it is well formed; a malformed one names nothing. */
 function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
   const attributes: Record<string, string> = {};
-  const conversation = headers.get(BRAIN_HOST_HEADER.CONVERSATION)?.trim();
+  const conversation = headers.get(EVE_HOST_HEADER.CONVERSATION)?.trim();
   if (conversation && CONVERSATION_ID_PATTERN.test(conversation)) {
-    attributes[BRAIN_HOST_ATTRIBUTE.CONVERSATION] = conversation;
+    attributes[EVE_HOST_ATTRIBUTE.CONVERSATION] = conversation;
   }
-  const turn = headers.get(BRAIN_HOST_HEADER.TURN)?.trim();
-  if (turn && isBrainHostTurn(turn)) attributes[BRAIN_HOST_ATTRIBUTE.TURN] = turn;
+  const turn = headers.get(EVE_HOST_HEADER.TURN)?.trim();
+  if (turn && isEveHostTurn(turn)) attributes[EVE_HOST_ATTRIBUTE.TURN] = turn;
   // Note that a zone the service does not know names none, and the turn reads UTC, rather than refusing the message.
-  const timeZone = headers.get(BRAIN_HOST_HEADER.TIME_ZONE)?.trim();
-  if (timeZone && isTimeZone(timeZone)) attributes[BRAIN_HOST_ATTRIBUTE.TIME_ZONE] = timeZone;
+  const timeZone = headers.get(EVE_HOST_HEADER.TIME_ZONE)?.trim();
+  if (timeZone && isTimeZone(timeZone)) attributes[EVE_HOST_ATTRIBUTE.TIME_ZONE] = timeZone;
   return attributes;
 }
 
@@ -106,8 +106,8 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
     if (!userId) return null;
     return {
       principalId: userId,
-      principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
-      authenticator: BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+      principalType: EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
+      authenticator: EVE_HOST_AUTHENTICATOR.ACCOUNT,
       attributes: requestAttributes(request.headers),
     };
   }, BEARER_CHALLENGE);
@@ -154,7 +154,7 @@ type DeploymentAct = (typeof DEPLOYMENT_ACT)[keyof typeof DEPLOYMENT_ACT];
 
 /** A channel's table: for each act, every kind of turn and whether a message under the secret may do it; a cell admitted nowhere is refused outright. */
 export type DeploymentTurnTable = Readonly<
-  Record<DeploymentAct, Readonly<Record<BrainHostTurn, boolean>>>
+  Record<DeploymentAct, Readonly<Record<EveHostTurn, boolean>>>
 >;
 
 /** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, whose identity it presents for all but a typed message, which presents the account's, and whether it may read a session's stream. */
@@ -203,12 +203,12 @@ const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
 export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
   return withAuthChallenges((request) => {
     if (actor.secret === undefined || !bearerMatchesSecret(request, actor.secret)) return null;
-    const account = request.headers.get(BRAIN_HOST_HEADER.ACCOUNT)?.trim();
+    const account = request.headers.get(EVE_HOST_HEADER.ACCOUNT)?.trim();
     if (!account || !ACCOUNT_ID_PATTERN.test(account)) {
-      throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_ACCOUNT });
+      throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NO_ACCOUNT });
     }
     const attributes = requestAttributes(request.headers);
-    const turn = attributes[BRAIN_HOST_ATTRIBUTE.TURN];
+    const turn = attributes[EVE_HOST_ATTRIBUTE.TURN];
     const pathname = new URL(request.url).pathname;
     const posted = request.method === "POST";
     const act = OPEN_ROUTE.test(pathname) ? DEPLOYMENT_ACT.OPEN : DEPLOYMENT_ACT.FOLLOW_UP;
@@ -216,34 +216,34 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
       posted &&
       MESSAGE_ROUTE.test(pathname) &&
       isWireString(turn) &&
-      isBrainHostTurn(turn) &&
+      isEveHostTurn(turn) &&
       actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
     const reset = posted && RESET_ROUTE.test(pathname);
     const stream = actor.streams && request.method === "GET" && STREAM_ROUTE.test(pathname);
     if (!message && !cancel && !reset && !stream) {
-      throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
+      throw new ForbiddenError({ message: EVE_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     // Note that a typed message presents the account whatever the channel presents, because it
     // is a developer's own line: eve steers it into, and folds it with, their own turns alone.
     const presents =
-      message && turn === BRAIN_HOST_TURN.TYPED ? DEPLOYMENT_PRESENCE.ACCOUNT : actor.presents;
+      message && turn === EVE_HOST_TURN.TYPED ? DEPLOYMENT_PRESENCE.ACCOUNT : actor.presents;
     if (presents === DEPLOYMENT_PRESENCE.ACCOUNT) {
       return {
         principalId: account,
-        principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
-        authenticator: BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+        principalType: EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
+        authenticator: EVE_HOST_AUTHENTICATOR.ACCOUNT,
         attributes: {
           ...attributes,
-          [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+          [EVE_HOST_ATTRIBUTE.CARRIER]: EVE_HOST_DEPLOYMENT_PRINCIPAL,
         },
       };
     }
     return {
-      principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
-      principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
-      authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
-      attributes: { ...attributes, [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: account },
+      principalId: EVE_HOST_DEPLOYMENT_PRINCIPAL,
+      principalType: EVE_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+      authenticator: EVE_HOST_AUTHENTICATOR.DEPLOYMENT,
+      attributes: { ...attributes, [EVE_HOST_ATTRIBUTE.ACCOUNT]: account },
     };
   }, BEARER_CHALLENGE);
 }
@@ -257,8 +257,8 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
  */
 export function actedForAccount(auth: SessionAuthContext | null): string | undefined {
   if (!auth) return undefined;
-  if (auth.principalType !== BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT) return auth.principalId;
-  const account = attribute(auth, BRAIN_HOST_ATTRIBUTE.ACCOUNT);
+  if (auth.principalType !== EVE_HOST_PRINCIPAL_TYPE.DEPLOYMENT) return auth.principalId;
+  const account = attribute(auth, EVE_HOST_ATTRIBUTE.ACCOUNT);
   return account !== undefined && ACCOUNT_ID_PATTERN.test(account) ? account : undefined;
 }
 
@@ -284,17 +284,17 @@ function attribute(auth: SessionAuthContext | null, name: string): string | unde
 
 /** The conversation a session was opened for: the initiator's attribute, read for the session's life. */
 export function conversationIdOf(initiator: SessionAuthContext | null): string | undefined {
-  return attribute(initiator, BRAIN_HOST_ATTRIBUTE.CONVERSATION);
+  return attribute(initiator, EVE_HOST_ATTRIBUTE.CONVERSATION);
 }
 
 /** The time zone the current request named, or nothing for one that named none; read again as the turn opens. */
 export function timeZoneOf(current: SessionAuthContext | null): string | undefined {
-  const timeZone = attribute(current, BRAIN_HOST_ATTRIBUTE.TIME_ZONE);
+  const timeZone = attribute(current, EVE_HOST_ATTRIBUTE.TIME_ZONE);
   return timeZone !== undefined && isTimeZone(timeZone) ? timeZone : undefined;
 }
 
 /** The kind of turn the current request opened, or nothing for a request that named none. */
-export function turnKindOf(current: SessionAuthContext | null): BrainHostTurn | undefined {
-  const turn = attribute(current, BRAIN_HOST_ATTRIBUTE.TURN);
-  return turn !== undefined && isBrainHostTurn(turn) ? turn : undefined;
+export function turnKindOf(current: SessionAuthContext | null): EveHostTurn | undefined {
+  const turn = attribute(current, EVE_HOST_ATTRIBUTE.TURN);
+  return turn !== undefined && isEveHostTurn(turn) ? turn : undefined;
 }

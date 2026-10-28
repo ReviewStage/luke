@@ -13,7 +13,7 @@ import { providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
 
 /**
- * turn-card.tsx -- the card a finished turn's "Worked for" line hangs while the pointer rests on it, and a call's closing line hangs too: what the run ran on, when, how it ended, and what it spent.
+ * turn-card.tsx -- the card a finished turn's "Worked for" line hangs while the pointer rests on it: what the turn ran on, when, how it ended, and what it spent.
  *
  * The line says how long a turn worked and when it ended; the card says
  * the rest a developer reaches for once they wonder what a turn cost or
@@ -33,18 +33,7 @@ import { ModelLabel } from "./model-label.js";
  * nothing, has no token rows, and no placeholder stands in for one. No
  * price is said, since a developer on their own key pays at their
  * provider's rate, not the catalog's.
- *
- * A call's card (`call-card.tsx`) is this card (`RunCard`), its voice model
- * at the head and the seconds the Live API metered under the rule.
  */
-
-/** What a run's card is of, which its root names. */
-export const RUN_CARD = {
-  TURN: "turn",
-  CALL: "call",
-} as const;
-
-type RunCardKind = (typeof RUN_CARD)[keyof typeof RUN_CARD];
 
 /** What the card's corner says for how a turn ended. */
 const ENDING_WORD = {
@@ -78,10 +67,10 @@ const TOKENS_LABEL = "Tokens";
 const UNRECORDED_EFFORT = "";
 
 /** One row under a run card's rule: what it counts, and the count as the card says it. */
-export type RunFigure = readonly [label: string, said: string];
+type RunFigure = readonly [label: string, said: string];
 
-/** How a run ended where it did not simply answer or hang up: the reason its record names, and the word its corner says. */
-export interface RunEnding {
+/** How a run ended where it did not simply answer: the reason its record names, and the word its corner says. */
+interface RunEnding {
   readonly reason: string;
   readonly word: string;
   /** Why, in a line under the head, where the word alone does not say. */
@@ -119,15 +108,14 @@ function turnEnding(ending: TurnEnding): RunEnding {
 }
 
 /**
- * A run's card, a turn's or a call's: the model it ran on at the head,
+ * A turn's card: the model it ran on at the head,
  * wearing its provider's mark as read from the model's id, so a model the
  * catalog does not list wears it too, and no mark for a provider Luke runs
  * nothing on; when it ran under the model, or as the head itself where no
  * model is on record; how it ended at the head's right; a note; and its
  * figures under a rule.
  */
-export function RunCard({
-  kind,
+function RunCard({
   model,
   startedAt,
   endedAt,
@@ -135,7 +123,6 @@ export function RunCard({
   note,
   figures,
 }: {
-  kind: RunCardKind;
   /** The model and effort it ran on, and the catalog as last read, which names the model; nothing where the record holds none. */
   model:
     | { readonly id: string; readonly effort: string; readonly models: readonly CatalogModel[] }
@@ -152,7 +139,7 @@ export function RunCard({
     <time dateTime={new Date(startedAt).toISOString()}>{spanText(startedAt, endedAt)}</time>
   );
   return (
-    <HoverCard data-run-card={kind}>
+    <HoverCard>
       <HoverCardHead
         glyph={provider === undefined ? undefined : <HarnessMark provider={provider} />}
         name={
@@ -208,7 +195,6 @@ export function TurnCard({
   const { model, effort, tokens, ending, fastRefused } = record;
   return (
     <RunCard
-      kind={RUN_CARD.TURN}
       model={
         model === undefined ? undefined : { id: model, effort: effort ?? UNRECORDED_EFFORT, models }
       }

@@ -46,8 +46,6 @@ import {
   runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
@@ -62,6 +60,8 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
 import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";

@@ -17,23 +17,27 @@
  * is woken and answers without it.
  */
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
+import { agentPin } from "../schemas/agent-pin.js";
 import { attachment } from "../schemas/attachment.js";
-import { invitation, member, user } from "../schemas/auth.js";
+import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
 import { codingAgent, codingAgentDelegation } from "../schemas/coding-agent.js";
+import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { macCommand } from "../schemas/mac-command.js";
+import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { taskPin } from "../schemas/task-pin.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { TOPIC } from "./notification.js";
 import { defineSyncTable, type SyncTable } from "./sync-table.js";
@@ -99,6 +103,24 @@ export const invitationSync = defineSyncTable(invitation, {
   topics: [{ kind: TOPIC.WORKSPACE, column: invitation.organizationId }],
 });
 
+/** A workspace, on its own topic, so its name, slug, and photo reach every member. */
+export const organizationSync = defineSyncTable(organization, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: organization.id }],
+});
+
+/** The workspace made for an account first, on the workspace's topic and the account's. */
+export const personalWorkspaceSync = defineSyncTable(personalWorkspace, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: personalWorkspace.organizationId },
+    { kind: TOPIC.ACCOUNT, column: personalWorkspace.userId },
+  ],
+});
+
+/** A GitHub App installation connected to a workspace, on the workspace's topic. */
+export const githubInstallationSync = defineSyncTable(githubInstallation, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: githubInstallation.organizationId }],
+});
+
 /** A member's own GitHub token, on the member's topic. */
 export const githubPersonalTokenSync = defineSyncTable(githubPersonalToken, {
   topics: [{ kind: TOPIC.ACCOUNT, column: githubPersonalToken.userId }],
@@ -133,6 +155,16 @@ export const agentSectionEntrySync = defineSyncTable(agentSectionEntry, {
 /** A repository an account pinned to its sidebar, on the account's topic. */
 export const repositoryPinSync = defineSyncTable(repositoryPin, {
   topics: [{ kind: TOPIC.ACCOUNT, column: repositoryPin.userId }],
+});
+
+/** A task an account pinned, on the account's topic. */
+export const taskPinSync = defineSyncTable(taskPin, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: taskPin.userId }],
+});
+
+/** An agent with no task an account pinned, on the account's topic. */
+export const agentPinSync = defineSyncTable(agentPin, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: agentPin.userId }],
 });
 
 /**
@@ -394,12 +426,17 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   memberSync,
   userSync,
   invitationSync,
+  organizationSync,
+  personalWorkspaceSync,
+  githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   taskSectionSync,
   taskSectionEntrySync,
   agentSectionEntrySync,
   repositoryPinSync,
+  taskPinSync,
+  agentPinSync,
   macCommandSync,
   planCommentThreadSync,
   planCommentSync,

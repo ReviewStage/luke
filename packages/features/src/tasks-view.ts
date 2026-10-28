@@ -314,8 +314,14 @@ export const tasksPinRepositoryParamsSchema = repositoryPinRequestSchema;
 
 export type TasksPinRepositoryParams = typeof tasksPinRepositoryParamsSchema.Type;
 
-/** One change to the account's sidebar sections, as the window asks it; the service keeps them on the account. */
-export const tasksWriteSectionParamsSchema = taskSectionWriteSchema;
+/**
+ * The changes one drag or menu makes to the account's sidebar sections, as
+ * the window asks them: drawn together and written to the service in the
+ * order given, which keeps them on the account.
+ */
+export const tasksWriteSectionParamsSchema = EffectSchema.Struct({
+  writes: EffectSchema.NonEmptyArray(taskSectionWriteSchema),
+});
 
 export type TasksWriteSectionParams = typeof tasksWriteSectionParamsSchema.Type;
 

@@ -7,7 +7,7 @@ import { getTestDB } from "@luke/database/testing";
 import { noNetwork } from "@luke/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { EVE_RESET_OUTCOME } from "./brain-host/eve-sessions.js";
+import { EVE_RESET_OUTCOME } from "./eve-host/eve-sessions.js";
 import { type EveAt, retireSessions } from "./retire-sessions.js";
 
 /**

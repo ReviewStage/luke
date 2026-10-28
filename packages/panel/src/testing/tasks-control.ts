@@ -178,7 +178,6 @@ export function codingAgentsControl(
     onStatus: ignore,
     onTitle: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readCalls: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     transcripts: pushedTranscripts(() => []),
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),

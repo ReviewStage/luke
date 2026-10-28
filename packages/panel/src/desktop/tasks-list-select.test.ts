@@ -110,8 +110,12 @@ const readStanding = Schema.decodeUnknownOption(
 );
 
 /** A section write's payload, read back as far as a task's place goes. */
-const readPlace = Schema.decodeUnknownOption(
-  Schema.Struct({ taskId: Schema.String, sectionId: Schema.NullOr(Schema.String) }),
+const readPlaces = Schema.decodeUnknownOption(
+  Schema.Struct({
+    writes: Schema.Array(
+      Schema.Struct({ taskId: Schema.String, sectionId: Schema.NullOr(Schema.String) }),
+    ),
+  }),
 );
 
 const roots: Root[] = [];
@@ -163,8 +167,8 @@ async function mountPage(): Promise<{
         // SAFETY: the kinds the test answers are the status and section writes, each answered as kept; every other kind is refused.
         act: ((kind: PortActKind, payload: unknown) => {
           if (kind === ACT_KIND.TASKS_WRITE_SECTION) {
-            const place = Option.getOrUndefined(readPlace(payload));
-            if (place !== undefined) placed.push([place.taskId, place.sectionId]);
+            const places = Option.getOrUndefined(readPlaces(payload))?.writes ?? [];
+            for (const place of places) placed.push([place.taskId, place.sectionId]);
             return Promise.resolve(true);
           }
           if (kind !== ACT_KIND.TASKS_SET_STANDING) return Promise.reject(new Error("unasked"));

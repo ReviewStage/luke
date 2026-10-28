@@ -245,7 +245,6 @@ function turnLine(turn: number): CodingAgentMessage {
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {
     id: `long-run-line-${turn}`,
-    turnId: `long-run-turn-${turn}`,
     role: MESSAGE_ROLE.USER,
     parts: [
       {
@@ -262,7 +261,6 @@ function turnJournal(turn: number, parts: readonly WireRecord[], running: boolea
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {
     id: `long-run-journal-${turn}`,
-    turnId: `long-run-turn-${turn}`,
     role: MESSAGE_ROLE.ASSISTANT,
     parts,
     startedAt: at,

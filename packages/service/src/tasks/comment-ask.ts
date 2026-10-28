@@ -10,10 +10,10 @@ import {
 } from "@luke/features/plan-comment-wire";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
@@ -30,7 +30,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * member's own bearer from the desktop, and from a browser's session cookie
  * as the deployment acting for the member, which the channel admits for a
  * typed message and mints as the member's own principal
- * (`brain-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
+ * (`eve-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment that mentions no agent hands
  * nothing to anyone, an \`@\` of Luke among it, and an agent's own reply

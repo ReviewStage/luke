@@ -137,7 +137,7 @@ import {
   Queue,
   Schedule,
   Schema,
-  type Scope,
+  Scope,
   Semaphore,
   Stream,
 } from "effect";
@@ -155,13 +155,14 @@ import {
 } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
+import { sidebarCollections } from "./sidebar-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import { TASK_RECORD_PART, type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import {
+  followSidebarRows,
   invitationsMoves,
   type LiveReadDependencies,
   peopleMoves,
-  sidebarMoves,
   workspacesMoves,
 } from "./workspaces-follow.js";
 
@@ -494,7 +495,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return rest;
   }
 
-  /** The one live follow of the open task's pages and calls; running another interrupts it. */
+  /** The one live follow of the open task's plan and pages; running another interrupts it. */
   const recordFollow = yield* FiberHandle.make<void>();
 
   /** The tasks whose pages' mark moved, read one at a time by the loop below. */
@@ -918,32 +919,31 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one follow of the account's sidebar sections and pinned repositories, from the first refresh after a launch or a sign-in until a sign-out. */
   const sidebarFollow = yield* FiberHandle.make<void>();
-  /** The sidebar follow's wait for a write's transaction while it is subscribed over Realtime; none while it polls or is let go. */
+  /** The sidebar follow's wait for a write's transaction once Luke Sync woke it; none while it polls or is let go. */
   let sidebarTxWait: TxWait | undefined;
 
   /**
-   * A sidebar write run under the serial lock, its answer drawn there, then
-   * confirmed once its transaction reaches the followed sidebar, outside the
-   * lock, as `writtenThenListed` confirms a task write, so no task open, save,
-   * or read waits on Realtime behind a pin or a section.
+   * The account's sidebar in collections (`sidebar-collections.ts`), from a
+   * launch or a sign-in until a sign-out closes their scope, so a pin or a
+   * section still written for the account signed out draws on nothing the
+   * next account sees.
    */
-  const writtenThenSidebar = <E, R>(
-    write: Effect.Effect<{ changed: boolean; txid?: string | undefined }, E, R>,
-  ): Effect.Effect<{ changed: boolean }, E, R> =>
-    Effect.flatMap(serial(write), ({ changed, txid }) =>
-      Effect.as(
-        Effect.suspend(() => confirmWrite(sidebarTxWait, txid)),
-        { changed },
-      ),
+  const openSidebar = Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const collections = yield* Scope.provide(scope)(
+      sidebarCollections({ draw: write, now: kernel.now, txWait: () => sidebarTxWait }),
     );
+    return { scope, collections };
+  });
+  let sidebar = yield* openSidebar;
+  yield* Effect.addFinalizer(() => Scope.close(sidebar.scope, Exit.void));
 
   /**
-   * Follows the account's sidebar over Realtime where nothing follows it
-   * yet (`workspaces-follow.ts`), polled while Realtime fails it, drawing
-   * each change as it lands, a section or a pin made on another Mac among
-   * them; nothing else reads it. A seal the service did not answer, or a
-   * follow that stopped, is sealed again on `FOLLOW_BACKOFF`, and what was
-   * drawn stays meanwhile.
+   * Follows the account's sidebar where nothing follows it yet
+   * (`workspaces-follow.ts`), each answer taken into its collections as it
+   * lands, a section or a pin made on another Mac among them; nothing else
+   * reads it. A seal the service did not answer, or a follow that stopped,
+   * is sealed again on `FOLLOW_BACKOFF`, and what was drawn stays meanwhile.
    */
   const followSidebar = Effect.gen(function* () {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
@@ -958,7 +958,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const attempt = Effect.gen(function* () {
       const sealed = yield* seal(false);
       if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
-      const moves = sidebarMoves(
+      yield* followSidebarRows(
         {
           poll: (after) => seal(true, after),
           now: kernel.now,
@@ -967,8 +967,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           },
         },
         sealed,
-      );
-      yield* Stream.runForEach(moves, (read) => Effect.sync(() => write(read))).pipe(Effect.ignore);
+        (rows) => sidebar.collections.answer(rows),
+      ).pipe(Effect.ignore);
       return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
     });
     const followed = attempt.pipe(
@@ -1295,7 +1295,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** Follows `taskId`'s plan, pages, and calls live, in place of any follow standing; with `standing`, only where none stands. */
+  /** Follows `taskId`'s plan and pages live, in place of any follow standing; with `standing`, only where none stands. */
   function openRecord(taskId: string, standing?: { readonly onlyIfMissing: true }) {
     return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
   }
@@ -2056,10 +2056,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           position === undefined ? { pinned } : { pinned, pinPosition: position },
         );
       }),
-    // The service answers the pins as they then stand, so the view takes its
-    // word rather than the window's guess, and the write answers once the
-    // followed sidebar has the pin's transaction, which carries those pins
-    // over any delivery from before it.
+    // A pin is drawn at once and stands while the service writes it, kept
+    // once the followed sidebar has its transaction and taken back where the
+    // service refused it (`sidebar-collections.ts`). Note that the service is
+    // asked under the serial lock and the transaction waited for outside it,
+    // so no task open, save, or read waits on the follow behind a pin.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2069,34 +2070,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return { changed: false };
         const { repository, pinned } = read;
-        return yield* writtenThenSidebar(
-          Effect.gen(function* () {
-            const answer = yield* served(client.pinRepository(repository, pinned));
-            if (answer === undefined) return { changed: false };
-            write({ repositoryPins: answer.pins });
-            return { changed: true, txid: answer.txid };
-          }),
+        const changed = yield* sidebar.collections.pinRepository(
+          repository,
+          pinned,
+          serial(served(client.pinRepository(repository, pinned))),
         );
+        return { changed };
       }),
-    // The service answers the sections as they then stand, as it does the pins, and confirms on the followed sidebar as a pin does.
+    // A drag's or a menu's section writes are drawn and confirmed as a pin is, each written in turn.
     [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
+        const { writes } = yield* readParams(
           tasksWriteSectionParamsSchema,
           params,
-          "a change to a section names what it changes",
+          "a change to the sections names what it changes",
         );
         if (!gate()) return { changed: false };
-        const asked = read;
-        return yield* writtenThenSidebar(
-          Effect.gen(function* () {
-            const written = yield* served(client.writeTaskSection(asked));
-            if (written === undefined) return { changed: false };
-            const { txid, ...sections } = written;
-            write({ taskSections: sections });
-            return { changed: true, txid };
-          }),
+        const changed = yield* sidebar.collections.writeSections(writes, (each) =>
+          serial(served(client.writeTaskSection(each))),
         );
+        return { changed };
       }),
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile
@@ -2647,6 +2640,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(sidebarFollow);
       yield* FiberMap.clear(peopleFollows);
       yield* FiberMap.clear(invitationFollows);
+      yield* Scope.close(sidebar.scope, Exit.void);
+      sidebar = yield* openSidebar;
       yield* serial(
         Effect.sync(() => {
           githubAskedAt = undefined;

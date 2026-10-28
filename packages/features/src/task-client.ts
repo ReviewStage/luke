@@ -460,7 +460,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Where one task's pages and calls stand, sealed for following over Neon
+   * Where one task's plan and pages stand, sealed for following over Neon
    * Realtime, or with `poll` their rows inline, for a reader polling while
    * Realtime fails them, for the account `userId` names: not found where the
    * account reaches no such task, signed out where the session is another's,

@@ -1,6 +1,6 @@
 import { keepsAliveAt } from "@luke/service/agents/agent-runtime/sandbox";
-import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
-import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
+import { pinnedState } from "@luke/service/agents/eve-host/pinned-state";
+import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/eve-host/relay";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
 import { keepAgentSandboxAlive, relayChildEvent, seams } from "../../../host.js";
@@ -31,7 +31,7 @@ const keptAlive = defineState<{ readonly at?: number }>("luke.coder.kept-alive.c
 export default defineHook({
   events: {
     async "*"(event, ctx) {
-      // Pinned before anything awaits, for the reason the root's relay pins it (`packages/service/src/agents/brain-host/pinned-state.ts`).
+      // Pinned before anything awaits, for the reason the root's relay pins it (`packages/service/src/agents/eve-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const delegation = pinnedState(delegationRecord);
       const kept = pinnedState(keptAlive);

@@ -26,8 +26,8 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import { isOperator } from "../steward.js";
 import {
@@ -45,7 +45,7 @@ import {
 
 /** The turn opening: its kind, as its request named it, and its store id. */
 export interface CoderTurn {
-  readonly kind: BrainHostTurn | undefined;
+  readonly kind: EveHostTurn | undefined;
   readonly turnId: string | undefined;
 }
 

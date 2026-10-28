@@ -1287,7 +1287,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

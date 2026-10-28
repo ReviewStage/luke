@@ -228,7 +228,7 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
 test("a Mac the service no longer lists keeps a This Mac row with Turn on again", async () => {
   const { turnOns } = await machinesWithThisMac([], { standing: THIS_MAC_HOST_STANDING.REMOVED });
 
-  assert.ok(document.body.textContent?.includes("This Mac was removed from Luke"));
+  assert.ok(document.body.textContent?.includes("Removed from Luke."));
   await press("Turn on again");
   assert.equal(turnOns(), 1);
 });

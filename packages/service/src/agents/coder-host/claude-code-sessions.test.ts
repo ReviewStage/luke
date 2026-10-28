@@ -94,7 +94,7 @@ import {
   EVE_SEND_OUTCOME,
   KEY_REFUSAL,
   PLAN_REFUSAL,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";

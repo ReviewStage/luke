@@ -31,7 +31,7 @@ import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { asks, conversations, messages, turns } from "../../schemas/storage.js";
+import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../../schemas/voice.js";
 import {
@@ -46,7 +46,6 @@ import {
   archiveIdleCodingAgent,
   archiveOperatorAgent,
   archiveUnmovedCodingAgent,
-  askTurnsOf,
   type CodingAgent,
   type CodingAgentLine,
   codingAgentLineOf,
@@ -389,46 +388,6 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
           (yield* linePlacesOf({ userId: other, conversationId: target.conversationId }, [
             reviewed,
           ])).size,
-          0,
-        );
-      }),
-  );
-});
-
-it.layer(getTestDB())("the coding-agent store's ask turns", (it) => {
-  it.effect(
-    "each ask that learned its turn names it by the ask's client id, with the steps begun before it where it joined a typed turn under way; an unbound ask names none, and another account reads none",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const other = yield* openAccount;
-        const target = {
-          userId: owner,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
-        };
-        const joinedTurn = randomUUID();
-        const wholeTurn = randomUUID();
-        const db = yield* Database;
-        yield* db.insert(asks).values([
-          {
-            ...target,
-            clientId: "dl_joined",
-            origin: TURN_ORIGIN.SPOKEN,
-            turnId: joinedTurn,
-            joinedAfterStep: 3,
-          },
-          { ...target, clientId: "dl_whole", origin: TURN_ORIGIN.SPOKEN, turnId: wholeTurn },
-          { ...target, clientId: "dl_unbound", origin: TURN_ORIGIN.SPOKEN },
-        ]);
-        const named = ["dl_joined", "dl_whole", "dl_unbound", "dl_never"];
-
-        const turnsOf = yield* askTurnsOf(target, named);
-        assert.deepEqual(
-          named.map((id) => turnsOf.get(id)),
-          [{ turnId: joinedTurn, afterStep: 3 }, { turnId: wholeTurn }, undefined, undefined],
-        );
-        assert.equal(
-          (yield* askTurnsOf({ userId: other, conversationId: target.conversationId }, named)).size,
           0,
         );
       }),

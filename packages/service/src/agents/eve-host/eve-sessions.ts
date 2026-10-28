@@ -26,7 +26,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
-import { BRAIN_HOST_HEADER, type BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
+import { EVE_HOST_HEADER, type EVE_HOST_TURN, type EveHostTurn } from "./bounds.js";
 
 /**
  * The host's own calls into eve's HTTP API, made from a web function on the
@@ -83,7 +83,7 @@ export const EVE_MOUNT = {
 export type EveMount = (typeof EVE_MOUNT)[keyof typeof EVE_MOUNT];
 
 /** A typed turn: the account's own words, the one kind a route's client may send. */
-export type EveTypedTurn = typeof BRAIN_HOST_TURN.TYPED;
+export type EveTypedTurn = typeof EVE_HOST_TURN.TYPED;
 
 /** eve's session routes under a mount; a path is composed from these and nothing else. */
 const SESSION_ROUTE = "/v1/session";
@@ -331,7 +331,7 @@ type EveReset =
       readonly runtimeRefusal?: RuntimeRefusal;
     };
 
-export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
+export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
   /** The words alone, or the AI SDK's user content where a coding agent's message carries files (`attached-files.ts`). */
@@ -357,7 +357,7 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
  * spoken ask, would pass for one that sends any kind, and the narrowing
  * would hold nothing.
  */
-export interface AgentSessions<Turn extends BrainHostTurn = BrainHostTurn> {
+export interface AgentSessions<Turn extends EveHostTurn = EveHostTurn> {
   /** Opens a session over the conversation with its first message; eve's answer names the session, whose first turn is the message's. */
   readonly open: (message: EveMessage<Turn>) => Effect.Effect<EveOpened, EveUnreachable>;
   /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
@@ -449,7 +449,7 @@ export interface EveSessionsOptions {
 }
 
 /** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
-export type EveSessionsComposer = <Turn extends BrainHostTurn = BrainHostTurn>(
+export type EveSessionsComposer = <Turn extends EveHostTurn = EveHostTurn>(
   options: EveSessionsOptions,
 ) => AgentSessions<Turn>;
 
@@ -458,7 +458,7 @@ function callerHeaders(caller: EveCaller) {
   if ("authorization" in caller) return { authorization: Redacted.value(caller.authorization) };
   return {
     authorization: `Bearer ${Redacted.value(caller.secret)}`,
-    [BRAIN_HOST_HEADER.ACCOUNT]: caller.account,
+    [EVE_HOST_HEADER.ACCOUNT]: caller.account,
   };
 }
 
@@ -588,7 +588,7 @@ function readReset({ status, body }: EveAnswer): EveReset {
     : { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION };
 }
 
-function sessionsOver<Turn extends BrainHostTurn>(
+function sessionsOver<Turn extends EveHostTurn>(
   client: HttpClient.HttpClient,
   options: EveSessionsOptions,
 ): AgentSessions<Turn> {
@@ -597,11 +597,11 @@ function sessionsOver<Turn extends BrainHostTurn>(
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
     postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
   const turnHeaders = (message: EveMessage<Turn>) => ({
-    [BRAIN_HOST_HEADER.CONVERSATION]: message.conversationId,
-    [BRAIN_HOST_HEADER.TURN]: message.turn,
+    [EVE_HOST_HEADER.CONVERSATION]: message.conversationId,
+    [EVE_HOST_HEADER.TURN]: message.turn,
     ...(message.timeZone === undefined
       ? undefined
-      : { [BRAIN_HOST_HEADER.TIME_ZONE]: message.timeZone }),
+      : { [EVE_HOST_HEADER.TIME_ZONE]: message.timeZone }),
   });
   return {
     open: (message) =>
@@ -653,7 +653,7 @@ export const eveSessionsComposer: Effect.Effect<EveSessionsComposer, never, Http
   );
 
 /** eve's client for one caller, over the calling fiber's `HttpClient`. */
-export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
+export function eveSessions<Turn extends EveHostTurn = EveHostTurn>(
   options: EveSessionsOptions,
 ): Effect.Effect<AgentSessions<Turn>, never, HttpClient.HttpClient> {
   return Effect.map(eveSessionsComposer, (compose) => compose<Turn>(options));
