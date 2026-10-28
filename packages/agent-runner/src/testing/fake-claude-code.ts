@@ -51,6 +51,7 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
   const unread = yield* Queue.unbounded<string>();
   const released = yield* Deferred.make<void>();
   const interrupted = yield* Deferred.make<void>();
+  const closed = yield* Deferred.make<void>();
   const record: CliRecord = {
     options: undefined,
     prompts: [],
@@ -119,10 +120,18 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     const script = Stream.fromIterable<Step>([{ awaitPrompt: true }, ...steps]).pipe(
       Stream.flatMap(play),
     );
-    const messages = Stream.toAsyncIterable(Stream.merge(script, prompts));
+    const messages = Stream.toAsyncIterable(
+      Stream.merge(script, prompts).pipe(Stream.interruptWhen(Deferred.await(closed))),
+    );
+    // Note that the messages are read through an async generator, as the SDK's are, so a
+    // `return()` waits on the read in flight, which only the CLI's next message or `close` ends.
+    async function* read() {
+      for await (const message of messages) yield message;
+    }
+    const reading = read();
 
     return {
-      [Symbol.asyncIterator]: () => messages[Symbol.asyncIterator](),
+      [Symbol.asyncIterator]: () => reading,
       interrupt: async () => {
         record.interrupts += 1;
         Deferred.doneUnsafe(interrupted, Exit.void);
@@ -136,6 +145,7 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
       },
       close: () => {
         record.closed = true;
+        Deferred.doneUnsafe(closed, Exit.void);
       },
     };
   };

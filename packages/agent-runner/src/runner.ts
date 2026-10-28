@@ -636,11 +636,16 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     ),
   ];
 
-  // The loops stop before the session closes, so nothing it emits on the
-  // way down is numbered after the launch's last event.
+  // The loops are told to stop before the session closes, so nothing it
+  // emits on the way down is numbered after the launch's last event, but
+  // are waited on only once it closed: the SDK answers the output loop's
+  // `return()` after the read it has in flight, which a CLI idle or waiting
+  // on a wakeup answers no sooner than its next message, and `close` ends
+  // that read at once.
   const end = yield* Deferred.await(launch.ended);
-  yield* Fiber.interruptAll(loops);
+  const stopping = yield* Effect.forkChild(Fiber.interruptAll(loops), { startImmediately: true });
   session.close();
+  yield* Fiber.join(stopping);
   const wakeups = yield* Ref.get(launch.released);
   return (
     wakeups === undefined ? { end, failure } : { end, failure, wakeups }
