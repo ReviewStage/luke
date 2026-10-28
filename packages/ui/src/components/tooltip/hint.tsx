@@ -151,11 +151,13 @@ const HINT_REST = Duration.millis(MOTION_DELAY_MS.HINT);
 const CARD_LINGER = Duration.millis(MOTION_DELAY_MS.SETTLE);
 
 /**
- * What a press may land on that is a control of its own: a tap works it
- * rather than showing its hint, so its hint shows on a long press instead.
+ * What a press may land on that is a control of its own, every pressable
+ * role among them: a tap works it rather than showing its hint, so its hint
+ * shows on a long press instead, and inside a control hanging a card it
+ * still raises its own pill.
  */
 const OWN_CONTROL =
-  "a[href], button, summary, input, textarea, select, label, [role='button'], [role='link'], [role='tab'], [role='switch'], [role='menuitem'], [contenteditable='true']";
+  "a[href], button, summary, input, textarea, select, label, [role='button'], [role='link'], [role='tab'], [role='switch'], [role^='menuitem'], [role='option'], [role='radio'], [role='checkbox'], [role='slider'], [contenteditable='true']";
 
 /**
  * What takes focus, by Tab or by the arrows of a list it roves in, and so is
@@ -186,15 +188,22 @@ const LONG_PRESS_MENU = "[data-long-press]";
 /** The chord that opens a focused control's card and takes focus into it. */
 const DETAILS_CHORD = APP_SHORTCUTS[APP_COMMAND.SHOW_DETAILS].chord;
 
+/** The ways into a control's card: opened at once with the keyboard in it, or waited for as the pointer resting on it waits, a finger's at once. */
+interface CardDoor {
+  readonly enter: () => void;
+  readonly rest: (touched: boolean) => void;
+}
+
 /**
- * How each control hanging a card opens it from the keyboard, by the
- * control's element, so a menu opened from it can open that card
- * (`showDetailsFrom`). Note that it is keyed by the element, as the tooltip
- * learns it from its ref where the control is an element of the page's own,
- * or else from the first pointer or focus on it, because a control takes
- * only the handlers a hint hands it and wears no mark of ours.
+ * How each control hanging a card opens it, by the control's element, so a
+ * menu opened from it can open that card (`showDetailsFrom`) and words
+ * inside it raise that card in their pill's place (`cardDoorAround`). Note
+ * that it is keyed by the element, as the tooltip learns it from its ref
+ * where the control is an element of the page's own, or else from the first
+ * pointer or focus on it, because a control takes only the handlers a hint
+ * hands it and wears no mark of ours.
  */
-const cardDoors = new WeakMap<HTMLElement, () => void>();
+const cardDoors = new WeakMap<HTMLElement, CardDoor>();
 
 /** Until when a newly rested-on control shows its pill at once: the window's one warm spell. */
 let warmUntil = 0;
@@ -389,7 +398,12 @@ export function commandKeyshortcuts(command: KeyedCommand): string {
  * where no card hangs there.
  */
 export function showDetailsFrom(from: HTMLElement | null | undefined): (() => void) | undefined {
-  for (let each = from ?? null; each !== null; each = each.parentElement) {
+  return cardDoorFrom(from ?? null)?.enter;
+}
+
+/** The door of the control hanging a card that `from` is, or stands in. */
+function cardDoorFrom(from: HTMLElement | null): CardDoor | undefined {
+  for (let each = from; each !== null; each = each.parentElement) {
     const door = cardDoors.get(each);
     if (door !== undefined) return door;
   }
@@ -397,13 +411,13 @@ export function showDetailsFrom(from: HTMLElement | null | undefined): (() => vo
 }
 
 /**
- * Whether `anchor` stands inside another control that hangs a card. Note
- * that the pointer entering a control enters every control around it first,
- * so the card's control has learned its element by the time a pill inside
- * asks.
+ * The door of another control hanging a card that `anchor` stands inside.
+ * Note that the pointer entering a control enters every control around it
+ * first, so the card's control has learned its element by the time a pill
+ * inside asks.
  */
-function insideCardedControl(anchor: HTMLElement): boolean {
-  return showDetailsFrom(anchor.parentElement) !== undefined;
+function cardDoorAround(anchor: HTMLElement): CardDoor | undefined {
+  return cardDoorFrom(anchor.parentElement);
 }
 
 /**
@@ -659,8 +673,15 @@ export function Tooltip({
     // A control in the standing card's row is part of that row, and leaves the card standing.
     const top = standing.at(-1);
     if (top !== undefined && top.id !== id && top.region?.contains(anchor) === true) return;
-    // Words or a mark inside a control hanging a card, as a row's name cut short is, yield their pill to that card, waiting or standing; a control of their own, as a chip's Remove is, keeps its pill.
-    if (!carded && !anchor.matches(OWN_CONTROL) && insideCardedControl(anchor)) return;
+    // Words or a mark inside a control hanging a card, as a row's name cut
+    // short is, raise that card in their pill's place, waiting or standing,
+    // so one the pointer reached past a control of its own inside still
+    // shows; a control of their own, as a chip's Remove is, keeps its pill.
+    const around = carded || anchor.matches(OWN_CONTROL) ? undefined : cardDoorAround(anchor);
+    if (around !== undefined) {
+      around.rest(touched);
+      return;
+    }
     // Note that the warm spell is read before anything is taken down, so a
     // hint this one takes down never warms the window for it.
     if (touched || performance.now() < warmUntil) {
@@ -683,10 +704,12 @@ export function Tooltip({
     stopRest();
     stand(anchor, false, true);
   };
-  // Note that the door a menu opens the card by reads the latest `enter`, because it is offered once for as long as the card is.
+  // Note that the doors to the card read the latest `enter` and `show`, because they are offered once for as long as the card is.
   const enterRef = useRef(enter);
+  const showRef = useRef(show);
   useLayoutEffect(() => {
     enterRef.current = enter;
+    showRef.current = show;
   });
   // A card on screen lingers for the pointer crossing to it, unless the
   // keyboard is in it; a pill goes at once, and a hint still waiting is
@@ -734,20 +757,24 @@ export function Tooltip({
   // its element is known, and hears ⌥↓ while it holds focus.
   const offersCard = carded && label !== undefined;
   const control = useRef<HTMLElement | null>(null);
+  const doorTo = (element: HTMLElement): CardDoor => ({
+    enter: () => enterRef.current(element),
+    rest: (touched) => showRef.current(element, touched),
+  });
   const learn = useCallback(
     (element: HTMLElement | null) => {
       const before = control.current;
       if (element === before) return;
       if (before !== null) cardDoors.delete(before);
       control.current = element;
-      if (element !== null && offersCard) cardDoors.set(element, () => enterRef.current(element));
+      if (element !== null && offersCard) cardDoors.set(element, doorTo(element));
     },
     [offersCard],
   );
   useEffect(() => {
     const element = control.current;
     if (element === null) return;
-    if (offersCard) cardDoors.set(element, () => enterRef.current(element));
+    if (offersCard) cardDoors.set(element, doorTo(element));
     else cardDoors.delete(element);
   }, [offersCard]);
   const unhearKey = useRef<(() => void) | undefined>(undefined);

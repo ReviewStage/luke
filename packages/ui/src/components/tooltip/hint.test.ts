@@ -28,7 +28,8 @@ import { Tooltip } from "./hint.js";
  * lets the next row wait its own wait, so a pointer sweeping down a list
  * hangs no card, and a pill seen still lets the next control's show at once.
  * Words cut short inside a control hanging a card raise its card, not their
- * pill, while a button inside it raises its own.
+ * pill, while a button inside it raises its own, and the pointer moving on
+ * from that button to the words raises the card.
  *
  * The keyboard enters a card: ⌥↓ on its control, on a Mac or where Command
  * is Ctrl, opens it with focus on its first button, Tab walks its buttons
@@ -892,7 +893,8 @@ test("words cut short inside a control hanging a card raise its card, not their 
   assert.equal(document.querySelectorAll("[role='tooltip']").length, 1, "no pill beside it");
 });
 
-test("a button inside a control hanging a card raises its own pill", () => {
+test("a button inside a control hanging a card raises its own pill, and the words beside it the card", () => {
+  waiting();
   const page = mount(
     createElement(Tooltip, {
       label: "Fix the refresh",
@@ -900,7 +902,14 @@ test("a button inside a control hanging a card raises its own pill", () => {
       children: createElement(
         "span",
         { "data-chip": "", "aria-describedby": undefined },
-        "Fix the refresh",
+        createElement(Tooltip, {
+          label: "Fix the refresh of the token",
+          children: createElement(
+            "span",
+            { "data-label": "", "aria-describedby": undefined },
+            "Fix the refresh of the token",
+          ),
+        }),
         createElement(Tooltip, {
           label: "Remove",
           children: createElement(
@@ -912,8 +921,16 @@ test("a button inside a control hanging a card raises its own pill", () => {
       ),
     }),
   );
-  restOn(page.querySelector("[data-remove]") ?? assert.fail("the button"));
+  const button = page.querySelector("[data-remove]") ?? assert.fail("the button");
+  move(document.body.appendChild(document.createElement("div")), button);
+  pass(MOTION_DELAY_MS.HINT);
 
-  assert.equal(cardStands(), false, "no card");
+  assert.equal(cardStands(), false, "no card over the button");
   assert.equal(document.querySelector("[role='tooltip']")?.textContent, "Remove");
+
+  move(button, page.querySelector("[data-label]") ?? assert.fail("the label"));
+  pass(MOTION_DELAY_MS.HINT);
+
+  assert.equal(cardStands(), true, "the card stands over the words");
+  assert.equal(card()?.textContent, "Opened by Sam");
 });
