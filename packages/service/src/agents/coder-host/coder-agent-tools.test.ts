@@ -3589,7 +3589,7 @@ test("an operator stops, renames, archives, and continues its member's own agent
   assert.equal(taskByCoder.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(taskByCoder));
 });
 
-test("list_open_asks lists every ask waiting on the operator's member across their own agents, and nothing a teammate's agent asked; it is offered to an operator alone, and a coder's call is refused", async () => {
+test("list_open_asks lists every ask waiting on the operator's member, a teammate's agent's addressed to them included, and none their own agent addressed to a teammate; it is offered to an operator alone, and a coder's call is refused", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const member = agents.caller.userId;
@@ -3606,7 +3606,13 @@ test("list_open_asks lists every ask waiting on the operator's member across the
       prompt: "Sweep expired invites.",
     },
   });
-  const ask = (agent: StartedAgent, taskId: string, key: string, title: string) =>
+  const ask = (
+    agent: StartedAgent,
+    taskId: string,
+    key: string,
+    title: string,
+    addresseeId?: string,
+  ) =>
     database.run(
       postInboxThread(
         { userId: agent.userId, taskId, agentId: agent.id },
@@ -3615,12 +3621,21 @@ test("list_open_asks lists every ask waiting on the operator's member across the
           title,
           body: "Two regions are free.",
           ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] },
+          addresseeId,
         },
       ),
     );
   await ask(agents.caller, tasks.invitations, "deploy-region", "Where should the preview deploy?");
   await ask(second, tasks.invitations, "token-expiry", "How long should invites last?");
   await ask(agents.teammates, tasks.billing, "billing-plan", "Which plan do we bill?");
+  await ask(agents.teammates, tasks.billing, "billing-owner", "Who owns billing?", member);
+  await ask(
+    agents.caller,
+    tasks.invitations,
+    "invite-copy",
+    "Which copy do invites use?",
+    agents.teammates.userId,
+  );
   // A notice asks nothing, and is read with its words.
   await database.run(
     postInboxThread(
@@ -3635,7 +3650,12 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
   const asks = Array.isArray(listed.asks) ? listed.asks : [];
   const byKey = new Map(asks.flatMap((each) => (isRecord(each) ? [[each.key, each]] : [])));
-  assert.deepEqual([...byKey.keys()].sort(), ["deploy-region", "preview-live", "token-expiry"]);
+  assert.deepEqual([...byKey.keys()].sort(), [
+    "billing-owner",
+    "deploy-region",
+    "preview-live",
+    "token-expiry",
+  ]);
   const notice = byKey.get("preview-live");
   assert.ok(isRecord(notice));
   assert.deepEqual([notice.ask, notice.words], [null, "It deployed to iad1."]);
