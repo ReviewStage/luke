@@ -194,6 +194,19 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
 });
 
+test("a file's pin opens its tab on the pin's task after a launch, which keeps no file's tab", () => {
+  const file = "src/invites/accept.ts";
+  const first = launch({ task: TASK, taskAgents: [] });
+  act(() => first.control().onOpenFile({ path: file }));
+  act(() => first.control().onPin({ file }, "accept.ts"));
+  first.quit();
+
+  const second = launch({ task: TASK, taskAgents: [] });
+  act(() => second.control().onShow(TASK, { file }));
+  assert.deepEqual(second.control().tab, { file });
+  assert.deepEqual(second.control().strip.at(-1), { file });
+});
+
 test("a tab pinned to the sidebar keeps the place a drag gave it across a launch, on this Mac", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));

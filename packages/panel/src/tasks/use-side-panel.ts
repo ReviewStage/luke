@@ -960,9 +960,10 @@ function withTab(
   const open = isSubagentTab(tab) ? held.subagents.find((each) => sameTab(each, tab)) : undefined;
   const subagents =
     isSubagentTab(tab) && open === undefined ? [...held.subagents, tab] : held.subagents;
+  // Note that a file's tab made here, as its pin opens one after a launch, is drawn on the task it is opened on.
   const files =
     isFileTab(tab) && !held.files.some((each) => each.path === tab.file)
-      ? [...held.files, { path: tab.file, range: undefined, opened: 0 }]
+      ? [...held.files, { path: tab.file, range: undefined, opened: 0, browsedOn: taskId }]
       : held.files;
   const pages =
     isPageTab(tab) && !held.pages.some((each) => sameTab(each, tab))
