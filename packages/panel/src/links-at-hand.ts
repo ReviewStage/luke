@@ -5,6 +5,7 @@ import {
   linkOf,
   type ReadLink,
 } from "@luke/features/link-grammar";
+import type { PagePlace } from "@luke/features/page-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -128,20 +129,34 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
   return home?.slug ?? workspaceId ?? "";
 }
 
-/** The place a tab of the side panel shows, on its task; none for a tab whose thing has no link of its own: a file's, the board, the code, the Inbox, a terminal. */
+/**
+ * The place a tab of the side panel shows, on the task or the agent's page
+ * that holds the panel; none for a tab whose thing has no link of its own:
+ * a file's, the board, the code, the Inbox, a terminal, and a worker of
+ * Luke's own, which is drawn nowhere a link opens. Note that a Changes or a
+ * worker's tab is the agent's, so it is linked by the agent, the task still
+ * named on a task's panel until its writers move to the agent's form.
+ */
 export function panelTabPlace(
-  taskId: string,
+  holder: PagePlace,
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.PLAN) return { kind: LINK_PLACE.TASK, planId: taskId };
-  if (isPageTab(tab)) return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: tab.page };
-  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId: tab.changes };
+  const task = "taskId" in holder ? { planId: holder.taskId } : {};
+  if (tab === SIDE_PANEL_TAB.PLAN) {
+    return "taskId" in holder ? { kind: LINK_PLACE.TASK, planId: holder.taskId } : undefined;
+  }
+  if (isPageTab(tab)) {
+    return "taskId" in holder
+      ? { kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: tab.page }
+      : { kind: LINK_PLACE.PAGE, agentId: holder.agentId, pageId: tab.page };
+  }
+  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, ...task, agentId: tab.changes };
   if (!isSubagentTab(tab)) return undefined;
-  const agent = tab.delegation?.agent;
+  const agent = tab.delegation?.agent ?? ("agentId" in holder ? holder.agentId : undefined);
   return agent === undefined
-    ? { kind: LINK_PLACE.WORKER, planId: taskId, callId: tab.subagent }
-    : { kind: LINK_PLACE.WORKER, planId: taskId, agentId: agent, callId: tab.subagent };
+    ? undefined
+    : { kind: LINK_PLACE.WORKER, ...task, agentId: agent, callId: tab.subagent };
 }
 
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
@@ -218,7 +233,9 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
           thing: LINK_THING.AGENT,
           name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = tasks.sidePanel.open ? panelTabPlace(drawn.id, tasks.sidePanel.tab) : undefined;
+  const held = tasks.sidePanel.open
+    ? panelTabPlace({ taskId: drawn.id }, tasks.sidePanel.tab)
+    : undefined;
   const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
     held === undefined || thing === undefined
@@ -270,13 +287,11 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     const page = at.pageWorkspace;
     const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
     const own = at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home);
-    // A page the agent showed on itself, open in the panel beside it, is at hand under the agent's link, first where the panel holds the keys.
-    const tab = tasks.sidePanel.open ? tasks.sidePanel.tab : undefined;
-    if (tab === undefined || !isPageTab(tab)) return [own];
-    const shown: LinkAtHand = {
-      link: { workspace: home, place: { kind: LINK_PLACE.PAGE, agentId, pageId: tab.page } },
-      thing: LINK_THING.PAGE,
-    };
+    // A tab of the panel beside it with a link of its own, a page the agent showed, its Changes, or a worker's, is at hand under the agent's link, first where the panel holds the keys.
+    const held = tasks.sidePanel.open ? panelTabPlace({ agentId }, tasks.sidePanel.tab) : undefined;
+    const thing = held === undefined ? undefined : panelThing(held);
+    if (held === undefined || thing === undefined) return [own];
+    const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
     return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
   }
   // A person's page is theirs in the workspace it opened in, which their link names.

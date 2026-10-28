@@ -53,8 +53,6 @@ export const THING_KIND = {
   SECTION: MENTION_KIND.SECTION,
   VERSION: LINK_PLACE.VERSION,
   COMMENT: LINK_PLACE.COMMENT,
-  /** A turn of Luke's work on a plan. */
-  TURN: LINK_PLACE.TURN,
   PAGE: MENTION_KIND.PAGE,
   AGENT: MENTION_KIND.AGENT,
   WORKER: LINK_PLACE.WORKER,
@@ -214,7 +212,6 @@ export const THING_NAME: ThingNames = {
     },
   },
   [THING_KIND.COMMENT]: NO_LIVE_NAME,
-  [THING_KIND.TURN]: NO_LIVE_NAME,
   // Note that the window holds the pages of its open task alone, so a page of any other borrows none of their names.
   [THING_KIND.PAGE]: {
     live: true,
@@ -279,7 +276,6 @@ export const THING_WORD: { readonly [K in ThingKind]: string } = {
   [THING_KIND.SECTION]: TERM.SECTION.one,
   [THING_KIND.VERSION]: "version",
   [THING_KIND.COMMENT]: "comment",
-  [THING_KIND.TURN]: "turn",
   [THING_KIND.PAGE]: TERM.PAGE.one,
   [THING_KIND.AGENT]: TERM.AGENT.one,
   [THING_KIND.WORKER]: TERM.WORKER.one,
@@ -348,7 +344,6 @@ const PLACE_THING: { readonly [K in LinkPlaceKind]: (place: PlaceOf<K>) => Thing
   [LINK_PLACE.PERSON]: (place) => ({ kind: THING_KIND.PERSON, userId: place.userId }),
   [LINK_PLACE.COMMENT]: asThing,
   [LINK_PLACE.VERSION]: asThing,
-  [LINK_PLACE.TURN]: asThing,
   [LINK_PLACE.WORKER]: asThing,
   [LINK_PLACE.CHANGES]: asThing,
   [LINK_PLACE.PULL_REQUEST_THREAD]: asThing,
