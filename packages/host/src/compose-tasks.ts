@@ -26,7 +26,7 @@ import {
   taskPagesLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import type { Task } from "@luke/features/task-wire";
+import { TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   HOST_LIVE,
   IDLE_TASKS_VIEW,
@@ -157,6 +157,7 @@ import { sidebarCollections } from "./sidebar-collections.js";
 import {
   type AgentRow,
   type PlanRow,
+  ROW_GONE,
   type RowWrite,
   taskListCollections,
 } from "./task-list-collections.js";
@@ -372,6 +373,9 @@ export interface TasksComposer extends Composer {
    */
   writeAgent: RowWrite<AgentRow>;
 }
+
+/** The statuses a task stands finished in, which the service stamps `completedAt` as it enters. */
+const FINISHED: ReadonlySet<string> = new Set([TASK_STATUS.DONE, TASK_STATUS.CANCELED]);
 
 /**
  * How long a live follow waits before sealing again after a seal the
@@ -646,22 +650,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return held?.id === taskId ? held : undefined;
   }
 
-  /** A task's row of the list: everything but its document and what is written of it. */
   /** A task's row or document without the assignee it stood with. */
   function withoutAssignee<T extends { readonly assignee?: unknown }>(
     standing: T,
   ): Omit<T, "assignee"> {
     const { assignee: _assignee, ...rest } = standing;
     return rest;
-  }
-
-  function summaryOf({
-    document: _document,
-    agentEdits: _agentEdits,
-    lastEdit: _lastEdit,
-    ...summary
-  }: Task): TasksView["tasks"][number] {
-    return summary;
   }
 
   /** The one follow of the list, started on the first refresh and stopped by a sign-out. */
@@ -714,13 +708,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * list publishes meanwhile is drawn over the answer rather than under it.
    */
   const writtenThenListed = <
-    Written extends readonly [answer: unknown, txid: string | undefined],
+    Written extends readonly [
+      answer: unknown,
+      txid: string | undefined,
+      held?: { readonly taskId: string; readonly fields: Partial<PlanRow> | typeof ROW_GONE },
+    ],
     E,
     R,
   >(
     write: Effect.Effect<Written, E, R>,
   ): Effect.Effect<Written[0], E, R> =>
-    Effect.flatMap(serial(write), ([answer, txid]) => Effect.as(listed(txid), answer));
+    Effect.flatMap(serial(write), ([answer, txid, held]) =>
+      Effect.as(
+        held === undefined ? listed(txid) : heldOverList(held.taskId, held.fields, txid),
+        answer,
+      ),
+    );
 
   const followList = Effect.suspend(() => {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out and ends.
@@ -1340,20 +1343,60 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     write({ document: { ...view.document, task } });
   }
 
+  /** The fields of a task's row of the list as the service answered the task. */
+  function planFieldsOf(task: Task): Partial<PlanRow> {
+    return {
+      workspaceId: task.workspaceId,
+      name: task.name,
+      repository: task.repository,
+      updatedAt: task.updatedAt,
+      ...(task.status === undefined ? undefined : { status: task.status }),
+      ...(task.priority === undefined ? undefined : { priority: task.priority }),
+      ...(task.number === undefined ? undefined : { number: task.number }),
+      assigneeId: task.assignee?.userId ?? null,
+      assigneeName: task.assignee?.name ?? null,
+      pinnedAt: task.pinnedAt ?? null,
+      pinPosition: task.pinPosition ?? null,
+      completedAt: task.completedAt ?? null,
+    };
+  }
+
   /**
-   * Draws `task` as the service answered it, in the list's row and in the
-   * open document where it is the one held. Note that the assignee standing
-   * is dropped first, because an answer names one only where the task has
-   * one, so an answer that names none is a task assigned to no one.
+   * Holds what a write's answer says of a task's row, or that it is gone,
+   * over the list until the list carries its transaction
+   * (`task-list-collections.ts`), so no draw meanwhile puts back the row as
+   * the list last answered it; outside the serial lock, as a list's wait is.
    */
-  function takeAnswered(task: Task): void {
-    const tasks = view.tasks.map((row) =>
-      row.id === task.id ? { ...withoutAssignee(row), ...summaryOf(task) } : row,
+  function heldOverList(
+    taskId: string,
+    fields: Partial<PlanRow> | typeof ROW_GONE,
+    txid: string | undefined,
+  ): Effect.Effect<void> {
+    return Effect.suspend(() =>
+      taskList.collections.writePlan(
+        taskId,
+        () => fields,
+        Effect.succeed({ answer: undefined, txid, fields }),
+      ),
     );
+  }
+
+  /**
+   * Draws `task` as the service answered it on the open document where it
+   * is the one held, and answers what it says of the task's row of the list,
+   * which the caller holds over the list (`heldOverList`). Note that the
+   * assignee standing is dropped first, because an answer names one only
+   * where the task has one, so an answer that names none is a task assigned
+   * to no one.
+   */
+  function takeAnswered(task: Task): {
+    readonly taskId: string;
+    readonly fields: Partial<PlanRow>;
+  } {
     write({
-      tasks,
       ...documentTook(task.id, task, (held) => ({ ...withoutAssignee(held), ...task })),
     });
+    return { taskId: task.id, fields: planFieldsOf(task) };
   }
 
   /**
@@ -1424,11 +1467,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           const marked = yield* served(client.mark(taskId, marks));
           if (marked === undefined) return { refused: { changed: false } };
           takeMarks(marked.task);
-          const { pinnedAt, pinPosition } = marked.task;
           return {
             answer: { changed: true },
             txid: marked.txid,
-            fields: { pinnedAt: pinnedAt ?? null, pinPosition: pinPosition ?? null },
+            fields: planFieldsOf(marked.task),
           };
         }),
       ),
@@ -1886,13 +1928,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const restored = yield* serial(
           Effect.gen(function* () {
             const answer = yield* served(client.restore(taskId, seq));
-            if (answer !== undefined) takeAnswered(answer.task);
-            return answer;
+            if (answer === undefined) return undefined;
+            return { ...answer, held: takeAnswered(answer.task) };
           }),
         );
         if (restored === undefined) return { restored: false };
-        // Note that the wait stands outside the serial reads, so no read waits on it.
-        yield* confirmWrite(historyTxWaits.get(taskId), restored.txid);
+        // Note that the waits stand outside the serial reads, so no read waits on them.
+        const { held, txid } = restored;
+        yield* Effect.all(
+          [
+            confirmWrite(historyTxWaits.get(taskId), txid),
+            heldOverList(held.taskId, held.fields, txid),
+          ],
+          { concurrency: "unbounded" },
+        );
         return { restored: true };
       }),
     // Leaving the task returns to the list, which was read when the tab
@@ -1971,14 +2020,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
             if (deleted === undefined) return [{ deleted: false }, undefined] as const;
-            const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(recordFollow);
               const { activeTaskId: _deleted, ...rest } = withoutPages(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
+              publish();
             }
-            write({ tasks });
-            return [{ deleted: true }, deleted.txid] as const;
+            return [{ deleted: true }, deleted.txid, { taskId, fields: ROW_GONE }] as const;
           }),
         );
       }),
@@ -2012,7 +2060,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               return {
                 answer: { renamed: true },
                 txid: written.txid,
-                fields: { name: answered.name },
+                fields: planFieldsOf(answered),
               };
             }),
           ),
@@ -2033,8 +2081,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const { taskId, assigneeName, ...standing } = read;
         return yield* taskList.collections.writePlan(
           taskId,
-          () => ({
-            ...(standing.status === undefined ? undefined : { status: standing.status }),
+          (row) => ({
+            ...(standing.status === undefined
+              ? undefined
+              : {
+                  status: standing.status,
+                  // Note that a task finished here is stamped now, as the service stamps it, so the recently finished find it.
+                  completedAt:
+                    standing.status === row.status
+                      ? (row.completedAt ?? null)
+                      : FINISHED.has(standing.status)
+                        ? kernel.now()
+                        : null,
+                }),
             ...(standing.priority === undefined ? undefined : { priority: standing.priority }),
             ...(standing.assigneeId === undefined
               ? undefined
@@ -2054,12 +2113,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               return {
                 answer: { changed: true },
                 txid: answered.txid,
-                fields: {
-                  ...(task.status === undefined ? undefined : { status: task.status }),
-                  ...(task.priority === undefined ? undefined : { priority: task.priority }),
-                  assigneeId: task.assignee?.userId ?? null,
-                  assigneeName: task.assignee?.name ?? null,
-                },
+                fields: planFieldsOf(task),
               };
             }),
           ),
@@ -2154,10 +2208,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 undefined,
               ] as const;
             }
-            takeAnswered(changed.answer.task);
             return [
               carried<TasksSetRepositoryAnswer>({ repository: changed.answer.task.repository }),
               changed.answer.txid,
+              takeAnswered(changed.answer.task),
             ] as const;
           }),
         );
@@ -2181,10 +2235,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             if (!moved.ok) {
               return [carried<TasksMoveAnswer>({ failure: moved.failure }), undefined] as const;
             }
-            takeAnswered(moved.answer.task);
             return [
               carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId }),
               moved.answer.txid,
+              takeAnswered(moved.answer.task),
             ] as const;
           }),
         );
@@ -2200,18 +2254,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksEditAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { taskId, edit } = read;
-        return yield* serial(
+        // Note that the row the edit answered is held over the list outside the serial reads, as a list's wait is.
+        const edited = yield* serial(
           Effect.gen(function* () {
-            const edited = yield* served(client.edit(taskId, edit));
-            if (!edited.ok) return carried<TasksEditAnswer>({ failure: edited.failure });
-            const answer = edited.answer;
+            const written = yield* served(client.edit(taskId, edit));
+            if (!written.ok)
+              return { answer: carried<TasksEditAnswer>({ failure: written.failure }) };
+            const answer = written.answer;
             if ("conflict" in answer)
-              return carried<TasksEditAnswer>({ conflict: answer.conflict });
-            if ("refused" in answer) return carried<TasksEditAnswer>({ failure: answer.refused });
-            takeAnswered(answer.plan);
-            return carried<TasksEditAnswer>({ saved: true });
+              return { answer: carried<TasksEditAnswer>({ conflict: answer.conflict }) };
+            if ("refused" in answer)
+              return { answer: carried<TasksEditAnswer>({ failure: answer.refused }) };
+            return {
+              answer: carried<TasksEditAnswer>({ saved: true }),
+              held: takeAnswered(answer.plan),
+            };
           }),
         );
+        if (edited.held !== undefined) {
+          yield* heldOverList(edited.held.taskId, edited.held.fields, undefined);
+        }
+        return edited.answer;
       }),
     // The browser connects or disconnects GitHub, so the panel coming
     // forward again reads the connection whatever the bound says.

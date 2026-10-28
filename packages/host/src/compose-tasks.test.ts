@@ -198,6 +198,8 @@ interface FakeService extends TasksClient {
   markTxid: string | undefined;
   /** Whether a task's pin is refused, as a service that did not answer refuses it. */
   markFails: boolean;
+  /** The transaction a task's repository change answers it committed in, where a test names one. */
+  repositoryTxid: string | undefined;
   /** What a task pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
   markAnswered: Effect.Effect<void>;
   /** What a pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
@@ -517,6 +519,7 @@ function fakeService(tasks: Task[]): FakeService {
     pinTxid: undefined,
     markTxid: undefined,
     markFails: false,
+    repositoryTxid: undefined,
     markAnswered: Effect.void,
     pinAnswered: Effect.void,
     sections: undefined,
@@ -925,7 +928,11 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return { ok: true, answer: { task: changed } };
+        const txid = service.repositoryTxid;
+        return {
+          ok: true,
+          answer: { task: changed, ...(txid === undefined ? undefined : { txid }) },
+        };
       }),
     // The service moves the task and answers it whole.
     move: (taskId, workspaceId) =>
@@ -1944,6 +1951,56 @@ it.effect(
       });
       assert.equal(pinned(last()), true);
     }),
+);
+
+it.effect(
+  "a repository the service answered stands on the task's row through another write's draw, until the list carries it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Draft", 10),
+        task(BILLING, "Billing", "# Draft", 11),
+      ]);
+      const { call, last, settled, listed } = yield* subject(service);
+      const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      service.live.list.set({}, ["tx-earlier"]);
+      yield* nextPoll(settled);
+
+      service.repositoryTxid = "tx-repository";
+      const changed = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, { taskId: INVITES, repository: "acme/relay" }),
+      );
+      yield* settled;
+      // Another task's pin draws the list again before the list carries the repository.
+      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: BILLING, pinned: true });
+      const drawn = repositoryOf();
+      service.live.list.set({ plans: service.tasks.map(rowOfTask) }, ["tx-repository"]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(changed), { repository: "acme/relay" });
+      assert.equal(drawn, "acme/relay");
+      assert.equal(repositoryOf(), "acme/relay");
+    }),
+);
+
+it.effect("a task marked done here is drawn finished now, so the recently finished find it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, told, listed } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
+    const from = told.length;
+
+    yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES, status: TASK_STATUS.DONE });
+
+    const drawn = told[from]?.tasks.find((row) => row.id === INVITES);
+    assert.equal(drawn?.status, TASK_STATUS.DONE);
+    // The harness's host clock reads zero.
+    assert.equal(drawn?.completedAt, 0);
+  }),
 );
 
 it.effect("a sign-out drops the view the window drew", () =>

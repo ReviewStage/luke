@@ -143,6 +143,8 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
    * never answered is left alone.
    */
   readonly confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => void;
+  /** Takes a write's own answer that one row is gone in the read's place, as `confirmRow` takes a change. */
+  readonly confirmGone: (key: Key) => void;
 }
 
 /** A collection of rows keyed by `getKey`, ready and empty until its read first answers, for as long as the scope stands. */
@@ -177,6 +179,12 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       const row = held.get(key);
       if (row !== undefined) taken(new Map(held).set(key, { ...row, ...fields(row) }));
     };
+    const confirmGone = (key: Key) => {
+      if (!held.has(key)) return;
+      const next = new Map(held);
+      next.delete(key);
+      taken(next);
+    };
     /** Takes the rows `next` holds as the synced ones, one transaction writing each that moved. */
     function taken(next: ReadonlyMap<Key, Row>): void {
       const changes = rowChanges(held, next);
@@ -187,7 +195,7 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       writer.commit();
       held = next;
     }
-    return { collection, answer, confirmRow };
+    return { collection, answer, confirmRow, confirmGone };
   });
 }
 

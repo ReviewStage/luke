@@ -53,14 +53,18 @@ export interface LiveTaskList {
 /**
  * What a write's service call answered: the caller's own answer, the
  * transaction it committed in, and the row's fields as the service then
- * holds them, taken in the list's place where it hands no wait; where the
- * answer says none of them, the fields the write drew are taken instead.
+ * holds them, or that it is gone, taken in the list's place where it hands
+ * no wait; where the answer says none of them, the fields the write drew
+ * are taken instead.
  */
 export interface RowWritten<Row, Answer> {
   readonly answer: Answer;
   readonly txid: string | undefined;
-  readonly fields?: Partial<Row>;
+  readonly fields?: Partial<Row> | typeof ROW_GONE;
 }
+
+/** What a write leaves of a row that it takes out of the list, as a task deleted is. */
+export const ROW_GONE: unique symbol = Symbol("the row is gone");
 
 /** A write the service refused, which takes back what it drew, and what the caller answers for it. */
 export interface RowRefused<Answer> {
@@ -79,12 +83,12 @@ export interface TaskListDependencies {
 
 /**
  * A write to one row: what the row's fields become, from the row as it is
- * drawn now, and the service call that writes it, answering what the caller
- * answers either way.
+ * drawn now, or that it is gone, and the service call that writes it,
+ * answering what the caller answers either way.
  */
 export type RowWrite<Row> = <Answer>(
   key: string,
-  change: (row: Row) => Partial<Row>,
+  change: (row: Row) => Partial<Row> | typeof ROW_GONE,
   written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
 ) => Effect.Effect<Answer>;
 
@@ -163,7 +167,7 @@ export function taskListCollections(
       const lastWrites = new Map<string, Deferred.Deferred<void>>();
       return <Answer>(
         key: string,
-        change: (row: Row) => Partial<Row>,
+        change: (row: Row) => Partial<Row> | typeof ROW_GONE,
         written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
       ) =>
         Effect.gen(function* () {
@@ -175,7 +179,8 @@ export function taskListCollections(
             const row = collection.collection.get(key);
             if (row === undefined) return;
             const fields = change(row);
-            collection.collection.update(key, (draft) => Object.assign(draft, fields));
+            if (fields === ROW_GONE) collection.collection.delete(key);
+            else collection.collection.update(key, (draft) => Object.assign(draft, fields));
           };
           const work = Effect.gen(function* () {
             yield* drawn;
@@ -186,9 +191,15 @@ export function taskListCollections(
               return yield* new Unwritten();
             }
             answered.value = result.answer;
-            yield* confirmed(result.txid, () =>
-              collection.confirmRow(key, (row) => result.fields ?? change(row)),
-            );
+            yield* confirmed(result.txid, () => {
+              const { fields } = result;
+              if (fields === ROW_GONE) collection.confirmGone(key);
+              else
+                collection.confirmRow(key, (row) => {
+                  const drawnFields = fields ?? change(row);
+                  return drawnFields === ROW_GONE ? {} : drawnFields;
+                });
+            });
           });
           yield* optimistically(draw, work).pipe(
             Effect.catchTag("Unwritten", () => Effect.void),
