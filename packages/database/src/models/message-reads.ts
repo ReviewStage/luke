@@ -1,4 +1,4 @@
-import { toolPartType } from "@luke/features/brain";
+import { toolPartType } from "@luke/features/turn-run";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,

@@ -16,22 +16,22 @@ import {
   ASK_ORIGIN,
   AssistantMessageBuilder,
   addModelUsage,
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  type BrainModelUsage,
-  type BrainRequestFailure,
-  type BrainRequestStatus,
-  type BrainRunEvent,
-  type BrainRunEventBody,
-  type BrainRunUsage,
   finishedSentencesOf,
   isRecord,
   isWireString,
+  RUN_EVENT,
+  RUN_STATUS,
+  type RunEvent,
+  type RunEventBody,
+  type RunModelUsage,
+  type RunStatus,
+  type RunUsage,
   sessionKey,
   TOOL_CALL_SETTLEMENT,
   type ToolCallSettlement,
+  TURN_FAILURE,
   TURN_ORIGIN,
+  type TurnFailure,
   type TurnOrigin,
   toolCallSettlementOf,
   type UnparsedWireValue,
@@ -55,7 +55,7 @@ import { keptPictures } from "./relay-pictures.js";
 /**
  * The relay from eve's stream into the brain's own: every event eve records
  * for a session is read here, after eve has written it, and told again as
- * the `BrainRunEvent` the store writer consumes, so the writer stays the sole
+ * the `RunEvent` the store writer consumes, so the writer stays the sole
  * consumer and the only thing that writes a message row. The coder host
  * composes it with the ask record, whose
  * deliveries a turn's start binds and whose Stop it carries, on every turn,
@@ -149,7 +149,7 @@ interface RelayTurnState {
   readonly sequence: number;
   readonly steps: Readonly<Record<string, RelayStep>>;
   /** Each step's usage under its index, so a step eve replays reports its usage once. */
-  readonly usageBySteps: Readonly<Record<string, BrainRunUsage>>;
+  readonly usageBySteps: Readonly<Record<string, RunUsage>>;
   /** The model each step ran on under its index, the agent's row as it stood at the step's start; absent in state an earlier build kept. */
   readonly modelBySteps?: Readonly<Record<string, string>>;
   /** Each step's words under its index while they form; absent in state an earlier build kept. */
@@ -163,7 +163,7 @@ interface RelayTurnState {
   /** The instant the writer last took a write that grew the turn's journal; absent before the first, and in state an earlier build kept. */
   readonly journaledAt?: number;
   /** The events that grow the journal told inside the interval since it was last written, in order, to land with its next write (`JOURNAL_WRITE_INTERVAL_MS`). */
-  readonly held?: readonly BrainRunEvent[];
+  readonly held?: readonly RunEvent[];
 }
 
 /** What one session's relay keeps: the turns still under way, by eve's own turn id. */
@@ -392,17 +392,17 @@ function withTurn(
 export const JOURNAL_WRITE_INTERVAL_MS = 250;
 
 /** The events held while the journal was written within the interval: each only grows it. */
-const HELD_EVENTS: ReadonlySet<BrainRunEvent["kind"]> = new Set([
-  BRAIN_RUN_EVENT.STEP_STARTED,
-  BRAIN_RUN_EVENT.REASONING_COMPLETED,
-  BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+const HELD_EVENTS: ReadonlySet<RunEvent["kind"]> = new Set([
+  RUN_EVENT.STEP_STARTED,
+  RUN_EVENT.REASONING_COMPLETED,
+  RUN_EVENT.TOOL_CALL_SETTLED,
 ]);
 
 /** The events a write of the journal carries, which start the interval again. */
-const JOURNAL_EVENTS: ReadonlySet<BrainRunEvent["kind"]> = new Set([
+const JOURNAL_EVENTS: ReadonlySet<RunEvent["kind"]> = new Set([
   ...HELD_EVENTS,
-  BRAIN_RUN_EVENT.TEXT_DRAFTED,
-  BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+  RUN_EVENT.TEXT_DRAFTED,
+  RUN_EVENT.TOOL_CALL_STARTED,
 ]);
 
 /** Whether the turn's journal was written less than the interval ago. */
@@ -494,19 +494,19 @@ interface RequestedCall {
  * a step's boundary that holds nothing yet, a reasoning part, or a call's
  * answer, so the relay keeps only what the writer took.
  */
-function withoutRefused(turn: RelayTurnState, event: BrainRunEvent): RelayTurnState {
+function withoutRefused(turn: RelayTurnState, event: RunEvent): RelayTurnState {
   switch (event.kind) {
-    case BRAIN_RUN_EVENT.STEP_STARTED: {
+    case RUN_EVENT.STEP_STARTED: {
       const key = String(event.step - 1);
       if ((turn.steps[key]?.parts.length ?? 0) > 0) return turn;
       const { [key]: _step, ...steps } = turn.steps;
       return { ...turn, steps };
     }
-    case BRAIN_RUN_EVENT.REASONING_COMPLETED:
+    case RUN_EVENT.REASONING_COMPLETED:
       return mapParts(turn, (part) =>
         part.kind === "reasoning" && part.id === event.item.id ? [] : [part],
       );
-    case BRAIN_RUN_EVENT.TOOL_CALL_SETTLED:
+    case RUN_EVENT.TOOL_CALL_SETTLED:
       return mapParts(turn, (part) => {
         if (part.kind !== "tool" || part.callId !== event.callId) return [part];
         const { settlement: _settlement, ...unsettled } = part;
@@ -605,8 +605,8 @@ function withPart(turn: RelayTurnState, stepIndex: number, part: RelayPart): Rel
 }
 
 /** The turn's usage: every step's, summed once each. */
-function usageOf(turn: RelayTurnState): BrainRunUsage | undefined {
-  return Object.values(turn.usageBySteps).reduce<BrainRunUsage | undefined>(
+function usageOf(turn: RelayTurnState): RunUsage | undefined {
+  return Object.values(turn.usageBySteps).reduce<RunUsage | undefined>(
     (total, usage) => addModelUsage(total, usage),
     undefined,
   );
@@ -619,8 +619,8 @@ function usageOf(turn: RelayTurnState): BrainRunUsage | undefined {
  * leaves the whole breakdown out, so the row prices every step at the
  * model it started on rather than guessing one for the step.
  */
-function usageByModelOf(turn: RelayTurnState): BrainModelUsage[] {
-  const byModel = new Map<string, BrainRunUsage>();
+function usageByModelOf(turn: RelayTurnState): RunModelUsage[] {
+  const byModel = new Map<string, RunUsage>();
   for (const [step, usage] of Object.entries(turn.usageBySteps)) {
     const model = turn.modelBySteps?.[step];
     if (model === undefined) return [];
@@ -873,16 +873,16 @@ export class StreamRelay {
         );
       }
       case "turn.completed":
-        return this.#turnEnded(event.data.turnId, BRAIN_REQUEST_STATUS.SUCCEEDED, standing);
+        return this.#turnEnded(event.data.turnId, RUN_STATUS.SUCCEEDED, standing);
       case "turn.failed":
         return this.#turnEnded(
           event.data.turnId,
-          BRAIN_REQUEST_STATUS.FAILED,
+          RUN_STATUS.FAILED,
           standing,
           failureDetailOf(event.data),
         );
       case "turn.cancelled":
-        return this.#turnEnded(event.data.turnId, BRAIN_REQUEST_STATUS.CANCELLED, standing);
+        return this.#turnEnded(event.data.turnId, RUN_STATUS.CANCELLED, standing);
       default:
         return Effect.void;
     }
@@ -962,7 +962,7 @@ export class StreamRelay {
         kind === BRAIN_HOST_TURN.TYPED ? 0 : undefined,
       );
       const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         origin,
         trigger,
         at: this.#seams.now(),
@@ -1137,7 +1137,7 @@ export class StreamRelay {
         userMetadataOf(trigger),
       );
       const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
         message: { ...message, parts: [...message.parts, ...received.files] },
       });
       // The hook cannot stop the turn eve already opened, so an ask the store
@@ -1178,7 +1178,7 @@ export class StreamRelay {
       const key = String(stepIndex);
       if (turn.steps[key] !== undefined) return;
       const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.STEP_STARTED,
+        kind: RUN_EVENT.STEP_STARTED,
         step: stepOf(stepIndex),
       });
       if (!written) return;
@@ -1250,7 +1250,7 @@ export class StreamRelay {
       const taken = yield* this.#land(
         eveTurnId,
         standing,
-        calls.map((call) => ({ kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED, ...call })),
+        calls.map((call) => ({ kind: RUN_EVENT.TOOL_CALL_STARTED, ...call })),
       );
       standing.state.update((state) =>
         withTurn(state, eveTurnId, (held) =>
@@ -1286,7 +1286,7 @@ export class StreamRelay {
         return;
       }
       const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+        kind: RUN_EVENT.TOOL_CALL_SETTLED,
         callId,
         name,
         settlement,
@@ -1340,7 +1340,7 @@ export class StreamRelay {
       const ordinal = held.filter((part) => part.kind === "reasoning").length;
       const id = reasoningItemId(standing.sessionId, eveTurnId, stepIndex, ordinal);
       const written = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.REASONING_COMPLETED,
+        kind: RUN_EVENT.REASONING_COMPLETED,
         summary: text,
         item: { id, summary: text },
       });
@@ -1355,7 +1355,7 @@ export class StreamRelay {
 
   #turnEnded(
     eveTurnId: string,
-    ended: BrainRequestStatus,
+    ended: RunStatus,
     standing: RelayStanding,
     failureDetail?: string,
   ): RelayEffect<void> {
@@ -1363,13 +1363,13 @@ export class StreamRelay {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       let status = ended;
-      let failure: BrainRequestFailure | undefined =
-        ended === BRAIN_REQUEST_STATUS.FAILED ? BRAIN_REQUEST_FAILURE.MODEL : undefined;
-      if (status === BRAIN_REQUEST_STATUS.SUCCEEDED && turn.askRefused) {
-        status = BRAIN_REQUEST_STATUS.FAILED;
-        failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
+      let failure: TurnFailure | undefined =
+        ended === RUN_STATUS.FAILED ? TURN_FAILURE.MODEL : undefined;
+      if (status === RUN_STATUS.SUCCEEDED && turn.askRefused) {
+        status = RUN_STATUS.FAILED;
+        failure = TURN_FAILURE.PERSISTENCE;
       }
-      if (status === BRAIN_REQUEST_STATUS.SUCCEEDED) {
+      if (status === RUN_STATUS.SUCCEEDED) {
         const builder = new AssistantMessageBuilder();
         for (const step of orderedSteps(turn)) {
           builder.stepStart();
@@ -1396,20 +1396,20 @@ export class StreamRelay {
           }
         }
         const answered = yield* this.#tell(eveTurnId, standing, {
-          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          kind: RUN_EVENT.MESSAGE_COMPLETED,
           message: builder.finish(answerMessageId(standing.sessionId, eveTurnId)),
         });
         // An answer the store refused is a turn the record cannot complete: it
         // ends failed for persistence rather than sealed without its words.
         if (!answered) {
-          status = BRAIN_REQUEST_STATUS.FAILED;
-          failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
+          status = RUN_STATUS.FAILED;
+          failure = TURN_FAILURE.PERSISTENCE;
         }
       }
       const usage = usageOf(turn);
       const usageByModel = usageByModelOf(turn);
       const sealed = yield* this.#tell(eveTurnId, standing, {
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         status,
         ...(failure !== undefined ? { failure } : undefined),
         ...(failureDetail !== undefined ? { failureDetail } : undefined),
@@ -1427,7 +1427,7 @@ export class StreamRelay {
   }
 
   /** Stamps one event with the conversation, the turn's store id, and the next sequence number. */
-  #stamped(eveTurnId: string, standing: RelayStanding, body: BrainRunEventBody): BrainRunEvent {
+  #stamped(eveTurnId: string, standing: RelayStanding, body: RunEventBody): RunEvent {
     let sequence = 0;
     standing.state.update((state) =>
       withTurn(state, eveTurnId, (turn) => {
@@ -1449,7 +1449,7 @@ export class StreamRelay {
    * last written, is held in the turn's state and answered as taken; any
    * other lands now, with whatever the turn held ahead of it.
    */
-  #tell(eveTurnId: string, standing: RelayStanding, body: BrainRunEventBody): RelayEffect<boolean> {
+  #tell(eveTurnId: string, standing: RelayStanding, body: RunEventBody): RelayEffect<boolean> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (
@@ -1479,7 +1479,7 @@ export class StreamRelay {
   #land(
     eveTurnId: string,
     standing: RelayStanding,
-    bodies: readonly BrainRunEventBody[],
+    bodies: readonly RunEventBody[],
   ): RelayEffect<readonly boolean[]> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
@@ -1489,7 +1489,7 @@ export class StreamRelay {
         ...held,
         ...drafts.map(({ key, text }) =>
           this.#stamped(eveTurnId, standing, {
-            kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
+            kind: RUN_EVENT.TEXT_DRAFTED,
             step: stepOf(Number(key)),
             text,
           }),

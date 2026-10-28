@@ -18,7 +18,7 @@ import type {
   UITools,
 } from "ai";
 import { TOOL_CALL_SETTLEMENT, type ToolCallSettlement } from "./run-events.js";
-import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
+import { TURN_TRIGGER, type TurnTrigger } from "./turn.js";
 
 /**
  * A turn's messages in the AI SDK's `UIMessage` shape, under the storage
@@ -72,11 +72,11 @@ export function toolPartType(name: string): ToolPart["type"] {
  * below. Every ask this host writes is typed, and a typed row carries no
  * author: its channel says what carried it.
  */
-export function userMetadataOf(trigger: BrainTurnTrigger): UserMessageMetadata {
+export function userMetadataOf(trigger: TurnTrigger): UserMessageMetadata {
   switch (trigger) {
-    case BRAIN_TURN_TRIGGER.ASK:
+    case TURN_TRIGGER.ASK:
       return { channel: MESSAGE_CHANNEL.TYPED };
-    case BRAIN_TURN_TRIGGER.CHILD_TASK:
+    case TURN_TRIGGER.CHILD_TASK:
       return { source: OBSERVATION_SOURCE.CHILD };
   }
 }

@@ -2139,7 +2139,7 @@ The store writer, `packages/database/src/models/writer.ts`, is the one path by w
 with an insert, an update, or a delete over `messages` or `turns`, whether as a
 Drizzle table imported from the schema or in the text of a statement, and the
 modules that name one at all are the writer and the two readers. It
-consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
+consumes the turn run event stream (`RunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
 turn's start where nothing queued it) through running to settled, cancelled,

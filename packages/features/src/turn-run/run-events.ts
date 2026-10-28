@@ -9,14 +9,9 @@ import {
 } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { TURN_SLOW_STEP, type TurnSlowStep } from "../turn-events-wire.js";
-import type {
-  BrainModelUsage,
-  BrainRequestFailure,
-  BrainRequestStatus,
-  BrainRunUsage,
-} from "./requests.js";
+import type { RunModelUsage, RunStatus, RunUsage, TurnFailure } from "./requests.js";
 import { spokenProse } from "./spoken-prose.js";
-import type { BrainTurnTrigger } from "./turn.js";
+import type { TurnTrigger } from "./turn.js";
 
 /**
  * What a turn tells whoever is listening, as it happens. Two audiences hear
@@ -34,18 +29,18 @@ import type { BrainTurnTrigger } from "./turn.js";
  * and its end with the status, the usage split four ways, and the response
  * ids. Every event carries the conversation's key, the turn's id, and its
  * place in the turn's sequence, numbered from one by the turn's one teller,
- * the hosted brain host's relay, which fires them in order, so a consumer can
+ * the eve host's relay, which fires them in order, so a consumer can
  * verify it heard the turn whole. A listener that throws ends no turn.
  */
 
-export const BRAIN_RUN_EVENT = {
+export const RUN_EVENT = {
   /** The run began a step slow enough to be worth telling the developer about; fired once per run. */
   SLOW_STEP: "slow_step",
-  /** A brain run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
+  /** A run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
   QUESTION_QUEUED: "question_queued",
-  /** A brain run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
+  /** A run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
   QUESTION_WITHDRAWN: "question_withdrawn",
-  /** A brain run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
+  /** A run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
   CALL_ENDING: "call_ending",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
@@ -77,7 +72,7 @@ export const SLOW_STEP_KIND = TURN_SLOW_STEP;
 type SlowStepKind = TurnSlowStep;
 
 /** Who or what opened a turn, as the turn's record takes it: attribution, never a permission. */
-export const BRAIN_TURN_ORIGIN = {
+export const RUN_TURN_ORIGIN = {
   /**
    * A developer's ask typed into a composer. No turn of this build opens
    * under it — Luke is voice only — but the stored rows an earlier build
@@ -90,7 +85,7 @@ export const BRAIN_TURN_ORIGIN = {
   CHILD: "child",
 } as const;
 
-export type BrainTurnOrigin = (typeof BRAIN_TURN_ORIGIN)[keyof typeof BRAIN_TURN_ORIGIN];
+export type RunTurnOrigin = (typeof RUN_TURN_ORIGIN)[keyof typeof RUN_TURN_ORIGIN];
 
 /** How a tool call settled, in the AI SDK's own words for a tool part's state. */
 export const TOOL_CALL_SETTLEMENT = {
@@ -145,7 +140,7 @@ export type ToolCallSettlement =
     };
 
 /** What every event of the stream carries beside its own fields. */
-interface BrainRunEventBase {
+interface RunEventBase {
   /** The conversation's key, which is its id in this build. */
   readonly conversationId: SessionKey;
   /** The turn the event belongs to: the primary run's id for an ask's turn, the turn's own for the rest. */
@@ -159,61 +154,61 @@ interface BrainRunEventBase {
   readonly sequence: number;
 }
 
-export type BrainRunEventBody =
+export type RunEventBody =
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.SLOW_STEP;
+      readonly kind: typeof RUN_EVENT.SLOW_STEP;
       readonly runId: string;
       readonly step: SlowStepKind;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.QUESTION_QUEUED;
+      readonly kind: typeof RUN_EVENT.QUESTION_QUEUED;
       readonly runId: string;
       readonly question: string;
       readonly recommendation: string;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;
+      readonly kind: typeof RUN_EVENT.QUESTION_WITHDRAWN;
       readonly runId: string;
       readonly question: string;
     }
-  | { readonly kind: typeof BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
-  | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
+  | { readonly kind: typeof RUN_EVENT.CALL_ENDING; readonly runId: string }
+  | { readonly kind: typeof RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.REPLY_SENTENCE;
+      readonly kind: typeof RUN_EVENT.REPLY_SENTENCE;
       readonly runId: string;
       readonly sentence: string;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.ENDED;
+      readonly kind: typeof RUN_EVENT.ENDED;
       readonly runId: string;
-      readonly status: BrainRequestStatus;
+      readonly status: RunStatus;
       readonly text?: string;
-      readonly failure?: BrainRequestFailure;
+      readonly failure?: TurnFailure;
       /** What the run's inferences cost, split four ways, when it was answered at all. */
-      readonly usage?: BrainRunUsage;
+      readonly usage?: RunUsage;
       /** The id of every response OpenAI answered the run with, in order. */
       readonly responseIds?: readonly string[];
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.TURN_STARTED;
-      readonly origin: BrainTurnOrigin;
-      readonly trigger: BrainTurnTrigger;
+      readonly kind: typeof RUN_EVENT.TURN_STARTED;
+      readonly origin: RunTurnOrigin;
+      readonly trigger: TurnTrigger;
       readonly at: number;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.STEP_STARTED;
+      readonly kind: typeof RUN_EVENT.STEP_STARTED;
       /** The step's place in the turn, numbered from one; a step told twice is one step. */
       readonly step: number;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED;
+      readonly kind: typeof RUN_EVENT.TOOL_CALL_STARTED;
       readonly callId: string;
       readonly name: string;
       /** The call's arguments parsed, or the raw arguments text when they do not parse. */
       readonly input: UnparsedWireValue;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED;
+      readonly kind: typeof RUN_EVENT.TOOL_CALL_SETTLED;
       readonly callId: string;
       readonly name: string;
       readonly settlement: ToolCallSettlement;
@@ -221,35 +216,35 @@ export type BrainRunEventBody =
       readonly input?: UnparsedWireValue;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED;
+      readonly kind: typeof RUN_EVENT.REASONING_COMPLETED;
       readonly summary: string;
       /** The provider's item, opaque and whole, as the context ingested it. */
       readonly item: WireRecord;
     }
-  | { readonly kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED; readonly message: UIMessage }
+  | { readonly kind: typeof RUN_EVENT.MESSAGE_COMPLETED; readonly message: UIMessage }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED;
+      readonly kind: typeof RUN_EVENT.TEXT_DRAFTED;
       /** The step the words belong to, numbered from one as `STEP_STARTED` numbers it. */
       readonly step: number;
       /** Every word the step has formed so far, through its last finished sentence; it only grows. */
       readonly text: string;
     }
   | {
-      readonly kind: typeof BRAIN_RUN_EVENT.TURN_ENDED;
-      readonly status: BrainRequestStatus;
-      readonly failure?: BrainRequestFailure;
+      readonly kind: typeof RUN_EVENT.TURN_ENDED;
+      readonly status: RunStatus;
+      readonly failure?: TurnFailure;
       /** Why the run failed in the runtime's own words, bounded, for the record's diagnosis; never worded to the developer. */
       readonly failureDetail?: string;
       /** What the turn's inferences cost, split four ways, as the run kept them; absent when no inference answered. */
-      readonly usage?: BrainRunUsage;
+      readonly usage?: RunUsage;
       /** The same counts by the model each step ran on, since the model can change between steps; absent where no step's model was known. */
-      readonly usageByModel?: readonly BrainModelUsage[];
+      readonly usageByModel?: readonly RunModelUsage[];
       /** The id of every response the turn was answered with, in order. */
       readonly responseIds: readonly string[];
       readonly at: number;
     };
 
-export type BrainRunEvent = BrainRunEventBody & BrainRunEventBase;
+export type RunEvent = RunEventBody & RunEventBase;
 
 /** How a tool's result reads as a tool part's settlement: an answer, or a refusal carrying the output's own reason. */
 export function toolCallSettlementOf(

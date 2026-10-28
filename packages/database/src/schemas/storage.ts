@@ -1,4 +1,4 @@
-import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
+import type { RunModelUsage, RunUsage } from "@luke/features/turn-run";
 import {
   MESSAGE_ROLE,
   type MessageRole,
@@ -287,8 +287,8 @@ export const messages = pgTable(
  * absent on a row from before the breakdown was kept, whose every step is
  * read as the row's `model`.
  */
-export interface StoredTurnUsage extends BrainRunUsage {
-  readonly byModel?: readonly BrainModelUsage[];
+export interface StoredTurnUsage extends RunUsage {
+  readonly byModel?: readonly RunModelUsage[];
 }
 
 /**

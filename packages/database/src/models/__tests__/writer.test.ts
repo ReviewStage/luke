@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  type BrainRunEvent,
-  type BrainRunEventBody,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  type RunEvent,
+  type RunEventBody,
+  TURN_TRIGGER,
   toolCallSettlementOf,
   UI_PART_TYPE,
-} from "@luke/features/brain";
-import { wireValidatedTool } from "@luke/features/brain/tool-set";
+} from "@luke/features/turn-run";
+import { wireValidatedTool } from "@luke/features/turn-run/tool-set";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -51,9 +51,9 @@ const openConversation = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSA
 
 /** A step eve ran, gave up on, and ran again: the abandoned attempt's words, then the step told again. */
 const RETRIED_ATTEMPT = [
-  { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
+  { kind: RUN_EVENT.STEP_STARTED, step: 1 },
   {
-    kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
+    kind: RUN_EVENT.TEXT_DRAFTED,
     step: 1,
     text: "The migration is complete, and every test passes.",
   },
@@ -72,23 +72,23 @@ const failedTurnJournal = (
     yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
     const bodies = [
       {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        kind: RUN_EVENT.TURN_STARTED,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       },
       ...abandoned,
-      { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
-      { kind: BRAIN_RUN_EVENT.TEXT_DRAFTED, step: 1, text: "I will look at the tests first." },
+      { kind: RUN_EVENT.STEP_STARTED, step: 1 },
+      { kind: RUN_EVENT.TEXT_DRAFTED, step: 1, text: "I will look at the tests first." },
       {
-        kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+        kind: RUN_EVENT.TOOL_CALL_STARTED,
         callId: "call-unanswered",
         name: "bash",
         input: { command: "pwd" },
       },
       {
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
-        status: BRAIN_REQUEST_STATUS.FAILED,
+        kind: RUN_EVENT.TURN_ENDED,
+        status: RUN_STATUS.FAILED,
         responseIds: [],
         at: 1,
       },
@@ -126,9 +126,9 @@ it.layer(getTestDB())("the store writer's retried steps", (it) => {
         let sequence = 0;
         const tell = (
           body:
-            | { readonly kind: typeof BRAIN_RUN_EVENT.STEP_STARTED; readonly step: number }
+            | { readonly kind: typeof RUN_EVENT.STEP_STARTED; readonly step: number }
             | {
-                readonly kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED;
+                readonly kind: typeof RUN_EVENT.TOOL_CALL_STARTED;
                 readonly callId: string;
                 readonly name: string;
                 readonly input: { readonly command: string };
@@ -155,7 +155,7 @@ it.layer(getTestDB())("the store writer's retried steps", (it) => {
             return part;
           });
         const call = (callId: string) => ({
-          kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+          kind: RUN_EVENT.TOOL_CALL_STARTED,
           callId,
           name: "bash",
           input: { command: "pwd" },
@@ -169,24 +169,24 @@ it.layer(getTestDB())("the store writer's retried steps", (it) => {
         sequence += 1;
         yield* writer.consume(target, {
           ...turn,
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           sequence,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
-        yield* tell({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 });
+        yield* tell({ kind: RUN_EVENT.STEP_STARTED, step: 1 });
         yield* tell(call("call-abandoned"));
-        yield* tell({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 });
+        yield* tell({ kind: RUN_EVENT.STEP_STARTED, step: 1 });
         const abandoned = yield* callState("call-abandoned");
         assert.equal(abandoned.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
         assert.partialDeepStrictEqual("output" in abandoned ? abandoned.output : undefined, {
           status: UNKNOWN_ACTION_STATUS,
         });
 
-        yield* tell({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 2 });
+        yield* tell({ kind: RUN_EVENT.STEP_STARTED, step: 2 });
         yield* tell(call("call-running"));
-        yield* tell({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 });
+        yield* tell({ kind: RUN_EVENT.STEP_STARTED, step: 1 });
         assert.equal((yield* callState("call-running")).state, TOOL_PART_STATE.INPUT_AVAILABLE);
       }),
   );
@@ -247,7 +247,7 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
         const writer = yield* storeWriter({ tools: TOOLS });
         const turnId = randomUUID();
         let sequence = 0;
-        const stamped = (body: BrainRunEventBody): BrainRunEvent => {
+        const stamped = (body: RunEventBody): RunEvent => {
           sequence += 1;
           return { ...body, conversationId: sessionKey(target.conversationId), turnId, sequence };
         };
@@ -258,12 +258,12 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
         });
         yield* writer.consumeAll(target, [
           stamped({
-            kind: BRAIN_RUN_EVENT.TURN_STARTED,
-            origin: BRAIN_TURN_ORIGIN.TYPED,
-            trigger: BRAIN_TURN_TRIGGER.ASK,
+            kind: RUN_EVENT.TURN_STARTED,
+            origin: RUN_TURN_ORIGIN.TYPED,
+            trigger: TURN_TRIGGER.ASK,
             at: 0,
           }),
-          stamped({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 }),
+          stamped({ kind: RUN_EVENT.STEP_STARTED, step: 1 }),
         ]);
         const before = yield* listMessagesPast(target.userId, target.conversationId, TOOLS, {
           seq: 0,
@@ -273,7 +273,7 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
         const results = yield* writer.consumeAll(target, [
           ...callIds.map((callId) =>
             stamped({
-              kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+              kind: RUN_EVENT.TOOL_CALL_STARTED,
               callId,
               name: "bash",
               input: { command: `echo ${callId}` },
@@ -281,7 +281,7 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
           ),
           ...callIds.map((callId) =>
             stamped({
-              kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+              kind: RUN_EVENT.TOOL_CALL_SETTLED,
               callId,
               name: "bash",
               settlement: toolCallSettlementOf(JSON.stringify({ stdout: callId }), undefined),
@@ -323,7 +323,7 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
       const conversationId = randomUUID();
       const results = yield* writer.consumeAll({ userId: `user-${randomUUID()}`, conversationId }, [
         {
-          kind: BRAIN_RUN_EVENT.STEP_STARTED,
+          kind: RUN_EVENT.STEP_STARTED,
           step: 1,
           conversationId: sessionKey(conversationId),
           turnId: randomUUID(),
