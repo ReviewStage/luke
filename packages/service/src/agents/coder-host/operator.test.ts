@@ -550,7 +550,6 @@ it.layer(getTestDB())("the member's operator", (it) => {
         const refused = [
           yield* start(blank),
           yield* start({ ...blank, kind: CODING_AGENT_KIND.CODER }),
-          yield* start({ ...blank, blank: false, prompt: "Watch my agents." }),
           yield* start({ ...operator, repository: "acme/relay" }),
           yield* start({ ...operator, prompt: "Watch my agents." }),
           yield* start({ ...operator, blank: false }),

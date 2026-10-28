@@ -103,6 +103,7 @@ import {
   acceptedAgentChoice,
   placeOfAgent,
   requestedChoice,
+  type StartWhere,
   startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
@@ -374,6 +375,29 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         context.userId,
         { taskId },
         input.body,
+        yield* summaryModelOf,
+      );
+      return startAnswer(started);
+    }),
+    /**
+     * An agent started in the workspace the path names with no task, in the
+     * repository the body names or in none, on the one start path, which
+     * refuses a workspace the account is not a member of as not found and a
+     * repository its installation does not reach.
+     */
+    startInWorkspace: signedIn.startInWorkspace.effect(function* ({ input, context }) {
+      // Note that a workspace's id is no UUID, so one the account is no member of is refused as the landing reads it.
+      const organizationId = input.params.id;
+      const { repository, ...request } = input.body;
+      const place: StartWhere =
+        repository === undefined
+          ? { taskId: null, organizationId, repository: null }
+          : { taskId: null, organizationId, repository };
+      const started = yield* startRequestedAgent(
+        eveFor<EveTypedTurn>(seams, context.request, context.userId),
+        context.userId,
+        place,
+        request,
         yield* summaryModelOf,
       );
       return startAnswer(started);

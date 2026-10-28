@@ -286,6 +286,8 @@ const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 const AGENT_NEWEST = "/api/agents/messages-newest";
 const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
 const AGENT_STARTS = "/api/agents/agents";
+/** A Start in a workspace with no task, by the workspace's id. */
+const WORKSPACE_STARTS = "/api/workspaces/agents";
 const AGENT = "/api/agents/agent";
 const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
@@ -540,6 +542,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
+  ["/api/workspaces/agents", (id: string) => `/api/workspaces/${id}/agents`],
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
@@ -1289,6 +1292,48 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
         assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
+
+  it.effect(
+    "a workspace's Start makes an agent on no task in that workspace, in the repository it names or in none, and one of a workspace the account is not in is not found",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, eve, ask } = yield* openTask();
+        const startIn = (bearer: string, body: WireBoundaryInput) =>
+          ask(request(WORKSPACE_STARTS, bearer, { method: "POST", id: task.workspaceId, body }));
+        const placeOf = (answer: Answer) =>
+          Effect.gen(function* () {
+            const { agent } = readAnswer(
+              codingAgentAnswerSchema,
+              HOSTED_HTTP_STATUS.CREATED,
+              answer,
+            );
+            const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+            return [stored.taskId, stored.organizationId, stored.repository];
+          });
+
+        const inRepository = yield* startIn(owner, {
+          idempotencyKey: randomUUID(),
+          task: "Sweep the flaky tests.",
+          repository: RELAY_FULL_NAME,
+        });
+        const inNone = yield* startIn(owner, {
+          idempotencyKey: randomUUID(),
+          task: "Talk the release through.",
+        });
+        const stranger = yield* startIn(other, {
+          idempotencyKey: randomUUID(),
+          task: "Sweep the flaky tests.",
+        });
+
+        assert.deepEqual(yield* placeOf(inRepository), [null, task.workspaceId, RELAY_FULL_NAME]);
+        assert.deepEqual(yield* placeOf(inNone), [null, task.workspaceId, null]);
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.equal(eve.opened.length, 2);
       }),
   );
 
