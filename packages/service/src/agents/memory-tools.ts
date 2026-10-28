@@ -369,17 +369,12 @@ function agentMemory(
     Effect.gen(function* () {
       const userId = callerUserId(call.caller);
       if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
-      const refused =
-        refusal === undefined || call.caller.kind !== AGENT_CALLER.AGENT
-          ? undefined
-          : yield* refusal(call.caller.agent);
+      const refused = refusal === undefined ? undefined : yield* refusal(call.caller.agent);
       if (refused !== undefined) return rejected(refused);
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) return rejected(MEMORY_REFUSAL.UNAVAILABLE);
       // Note that only an operator reaches private memories, because a coder's transcript is read by every member of the workspace.
-      const readsPrivate =
-        call.caller.kind === AGENT_CALLER.AGENT &&
-        call.caller.agent.kind === CODING_AGENT_KIND.OPERATOR;
+      const readsPrivate = call.caller.agent.kind === CODING_AGENT_KIND.OPERATOR;
       return yield* run({ workspaceId: workspace.value, userId, readsPrivate });
     }),
   );

@@ -61,12 +61,7 @@ import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import { type MemberOpenAsk, memberOpenAsks } from "../inbox/inbox-store.js";
 import { codingAgentFailureOf, codingAgentStatusOf, startedBlank } from "./coder-host/status.js";
-import {
-  AGENT_CALLER,
-  agentToolRejected,
-  type CodingAgentCall,
-  orStoreRefusal,
-} from "./coding-agent-tools.js";
+import { agentToolRejected, type CodingAgentCall, orStoreRefusal } from "./coding-agent-tools.js";
 import { isOperator } from "./steward.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
@@ -378,7 +373,7 @@ export function runListOpenAsks(
   _input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const { caller } = call;
-  if (caller.kind !== AGENT_CALLER.AGENT || !isOperator(caller.agent)) {
+  if (!isOperator(caller.agent)) {
     return Effect.succeed(agentToolRejected(LIST_OPEN_ASKS_REFUSAL.NOT_OPERATOR));
   }
   const operator = caller.agent;

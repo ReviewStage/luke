@@ -53,15 +53,14 @@ export function taskWorkspace(
 }
 
 /**
- * The workspace an agent's repository is reached through: its task's, read
- * as the account, or for an agent with no task its own, where the account
- * is a member of it still; none otherwise.
+ * The workspace an agent's repository is reached through: its own, which
+ * moves with its task (`task-store.ts`), where the account is a member of it
+ * still; none otherwise.
  */
 export function agentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "taskId" | "organizationId">,
+  agent: Pick<CodingAgent, "organizationId">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
-  if (agent.taskId !== null) return taskWorkspace(userId, agent.taskId);
   const { organizationId } = agent;
   return Effect.map(isWorkspaceMember(userId, organizationId), (member) =>
     member ? Option.some(organizationId) : Option.none(),
