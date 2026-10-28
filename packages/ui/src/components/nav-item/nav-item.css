@@ -157,9 +157,12 @@
     pointer-events: auto;
   }
 
+  /* Note that the count gives way by its opacity, never its visibility,
+     because a hidden one leaves the row's name, and a reader reaching the
+     row would no longer hear what waits in it. */
   .luke-nav-item-frame:focus-within .luke-nav-item-rest,
   .luke-nav-item-frame:has(.luke-nav-item-actions [aria-expanded="true"]) .luke-nav-item-rest {
-    visibility: hidden;
+    opacity: 0;
   }
 
   @media (hover: hover) {
@@ -169,7 +172,7 @@
     }
 
     .luke-nav-item-frame:hover .luke-nav-item-rest {
-      visibility: hidden;
+      opacity: 0;
     }
   }
 }
