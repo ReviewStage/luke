@@ -98,44 +98,26 @@ sidebar, one page at a time:
 - **Document page**: the open task's saved document. Its header and its
   microphone row hold still, and only the document scrolls between them.
 
-Escape unwinds one page at a time, after any open microphone has been muted
-(Escape mutes first, as it does for any call): the document page back to the
+Escape unwinds one page at a time: the document page back to the
 resting page, which leaves the task, and the resting page closes nothing. Escape on the Settings tab's front page comes back to Tasks.
 
-### Opening, leaving, and calls
+### Opening and leaving
 
 - Opening a task, from the list or by starting one, makes it the host's one
   **active task**, and every panel's Tasks tab shows it on its document page.
   It opens on the agent tab it last showed, or on its plan: the side panel
-  on its Plan tab beside a column that offers **New voice chat** and **New
-  agent**.
-- A call is about an **agent**, never a task. Any agent's tab can take one,
-  from the Call button beside Dictate in its composer, and "+ → New voice
-  chat" starts an agent blank and calls it at once. One call stands on a Mac
-  at a time: calling another agent asks first, then hangs the call up and
-  opens one into that agent. The host creates a call only into an agent of
-  the task the panel has open (`compose-live.ts` reads the agent and checks
-  its task), and the service checks again.
+  on its Plan tab beside a column that offers **New agent**.
 - A task stays open while the developer turns to Settings or closes the
-  window, so a call into one of its agents goes on. The voice's notices (a
-  failure, a notice, or that the Mac's output is off) stand as toasts in the
-  window's one stack (`voice-notice-toast.ts`), and the call card stands
-  while the window has the keyboard. There are no captions: what is said streams into the
-  agent's transcript as it is heard.
+  window.
 - A task is left by Back (`‹`) or Escape on its document page, by opening
-  another task, or by a sign-out. Leaving a task, or opening another, leaves
-  its call standing: the call outlives the tab on screen. Deleting the
-  call's task, and signing out, end it.
-- Luke takes no keys from the machine. The microphone and speaker mute
-  chords answer while a call is in progress wherever the panel stands, and
-  Escape mutes and quiets Luke.
+  another task, or by a sign-out.
 - Nothing polls. An agent's saves reach the open task through its tab: once
   the transcript the tab reads shows an `edit_plan` answered, the task is
   read again (`tasks/agent-tab.tsx`).
   The list and the open task are read when a panel shows the Tasks tab; the
   open task again when a task opens, and the list again when one starts or
-  is deleted. Leaving the tab leaves the task and its call standing, and
-  coming back reads everything again.
+  is deleted. Leaving the tab leaves the task standing, and coming back
+  reads everything again.
 
 ### Task list
 
@@ -249,8 +231,7 @@ the account's default, Dictate, and Start.
    Untitled until the agent names it, and the agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
-   which needs no repository. There is no Plan mode: starting a task never
-   opens a call, which only an agent's own tab starts.
+   which needs no repository. There is no Plan mode.
 
 ### Header
 
@@ -437,14 +418,9 @@ version kept of the task's Call tab is let go. ⌘T and ⌘W answer the column
 holding the focus, the side panel's once the pointer goes into it. A
 subagent's tab stays in the side panel.
 
-- **A new agent from the "+".** The column's "+" offers New voice chat,
-  where the window has a voice, then New agent, unavailable with Start's
-  own reason while Start could not run, then each of the task's agents,
-  picking one opening its tab again. Start's split menu offers New voice
-  chat at its foot too. New voice chat starts an agent blank, on the
-  account's one default model and needing no repository, opens its tab, and
-  calls it; a blank agent's first line, typed or spoken, is drawn as any
-  other line. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
+- **A new agent from the "+".** The column's "+" offers New agent,
+  unavailable with Start's own reason while Start could not run, then each
+  of the task's agents, picking one opening its tab again. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
   transcript yet, the composer focused, and the model chip on the account's
   default. Nothing reaches the service until the first message, which
   starts the agent with those words as its prompt; the agent's own tab then
@@ -453,8 +429,7 @@ subagent's tab stays in the side panel.
 - **The head.** The model · the effort · the status, which the tab's glyph
   wears (`state-glyph.tsx`): the mark of the harness the model runs in
   (Claude Code or Codex), giving way to the working mark while the agent is
-  starting or running, an alert in the danger colour once it failed, and the
-  voice's live mark while a call into the agent is in progress. A Stop
+  starting or running, and an alert in the danger colour once it failed. A Stop
   stands while the agent may still write; it asks the service to cancel the
   turn, and anything the agent pushed stays.
 - **What it published.** Once the agent has pushed, the head wears a pill
@@ -498,14 +473,11 @@ subagent's tab stays in the side panel.
   until it is shown.
 - **Privacy.** Every word is the agent's, the developer's, or the plan's, so
   the tab carries `ph-no-capture`.
-- **The web.** A browser has no voice, so its agent tabs draw their
-  transcripts, calls among them, and their composer, with no Call button,
-  and its "+" offers no New voice chat.
 
 ### Settings › Agents
 
-The model and effort every agent starts on, a voice chat's as a Start's, are
-the account's one default, with no voice default of its own, kept on the service with the account preferences
+The model and effort every agent starts on are
+the account's one default, kept on the service with the account preferences
 (`/api/account/preferences`'s `codingAgent` part) and shown on the Agents
 page of Settings (`settings/coding-agents-page.tsx`): a model menu
 with each model under its harness's mark (Claude Code's for Anthropic's,
@@ -878,26 +850,6 @@ hard part, which is where the old examples' precision went. The agent
 proposes the interfaces and the cases itself for the developer to confirm,
 so the call never turns into dictating code or test cases. None of this is validated against a
 comparative evaluation.
-
-### Call bar and the panel's voice
-
-- **Call button.** Beside Dictate in an agent's composer, on a platform with
-  a voice. One press calls the agent: the call opens and the microphone
-  opens. A second press, or the call bar's microphone, mutes it, and the
-  microphone stays open between the two because a call runs for minutes. A
-  press while another agent's call stands asks first, then hangs that call
-  up. The press asks for the microphone first where macOS has not granted
-  it, and opens System Settings where it was denied.
-- **Status**, at the call bar's left, in two lines. The first is the voice:
-  the one word `LIVE_STATUS` names, `Connecting`, `Listening`, `Muted`,
-  `Speaking`, or `Closing`, which reads `Handing off` or `About to answer`
-  while the voice waits. The second stands only while the agent works on
-  the call's turn, with the thinking dots and its pending command. The
-  service sends the snapshot as a `plan.activity` frame on the call's own
-  socket each time it changes, and the call's end is told as nothing doing.
-- **Everything else is the panel's own.** The waveform is the wings', and
-  a voice error or notice takes the notice line, with the button left able
-  to try again.
 
 ### Commands on the developer's Mac
 
