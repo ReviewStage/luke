@@ -491,7 +491,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         };
         const made = Option.getOrThrow(
           yield* createAutomation(owner, {
-            taskId: task.id,
+            organizationId: task.workspaceId,
+            repositories: task.repository === null ? [] : [task.repository],
             name: "Fix reported bugs",
             trigger,
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the reported bug." },
@@ -566,7 +567,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const onWorkspace = (event: GitHubTriggerEvent, name: string) =>
           Effect.map(
             createAutomation(owner, {
-              taskId: null,
               organizationId: task.workspaceId,
               repositories: ["Acme/elsewhere", repositoryName],
               name,
@@ -642,7 +642,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const listening = (trigger: AutomationTrigger) =>
           Effect.map(
             createAutomation(owner, {
-              taskId: null,
               organizationId: task.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
@@ -732,7 +731,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const hearing = (senders: readonly GitHubSender[]) =>
           Effect.map(
             createAutomation(owner, {
-              taskId: null,
               organizationId: task.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
@@ -808,7 +806,8 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       const task = yield* startTask(owner, { name: "CI", repository: repositoryName });
       const made = Option.getOrThrow(
         yield* createAutomation(owner, {
-          taskId: task.id,
+          organizationId: task.workspaceId,
+          repositories: task.repository === null ? [] : [task.repository],
           name: "Fix main",
           trigger: {
             kind: AUTOMATION_TRIGGER.GITHUB,

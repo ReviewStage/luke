@@ -69,7 +69,6 @@ const ranOnce = (
   Effect.gen(function* () {
     const made = Option.getOrThrow(
       yield* createAutomation(userId, {
-        taskId: null,
         organizationId,
         repositories: ["acme/api"],
         name,

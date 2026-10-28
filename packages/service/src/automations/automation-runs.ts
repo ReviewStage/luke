@@ -611,8 +611,7 @@ const decide = (automationId: string, run: ActedRun) =>
  * the start's refusal in one fixed word. The agent starts in the
  * automation's workspace on no task, in the repository a GitHub event named
  * and on the first of its repositories otherwise, so
- * the automation's runs stand apart from the task it was made on and
- * group under the automation itself.
+ * the automation's runs group under the automation itself.
  */
 const startClaimed = Effect.fnUntraced(function* (
   eveFor: EveForAccount,
@@ -628,11 +627,8 @@ const startClaimed = Effect.fnUntraced(function* (
   }
   const repository = runRepository(automation, run);
   const { organizationId } = automation;
-  if (organizationId === null || repository === undefined) {
-    const reason =
-      organizationId === null
-        ? AUTOMATION_RUN_REASON.TASK_UNREACHABLE
-        : AUTOMATION_RUN_REASON.NO_REPOSITORY;
+  if (repository === undefined) {
+    const reason = AUTOMATION_RUN_REASON.NO_REPOSITORY;
     yield* failClaimedRun(run.id, reason);
     const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
     return outcome;

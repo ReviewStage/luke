@@ -3,7 +3,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { createTask } from "@luke/database/models/task-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -274,18 +273,22 @@ const openAccounts = Effect.gen(function* () {
   const installation = INSTALLATIONS[installationsConnected++];
   assert.ok(installation);
   yield* connectWorkspaceGitHub(task.workspaceId, installation);
-  const bare = yield* startTask(owner, { name: "No repository yet" });
   const { ask, opened, openedAs } = yield* standing(
     new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]),
   );
-  return { owner, other, task, bare, ask, opened, openedAs };
+  return { owner, other, task, ask, opened, openedAs };
 });
 
-const weekdays = (taskId: string) => ({
-  planId: taskId,
+/** The weekday triage made on a workspace with the repositories named, the workspace's installed one where it names none. */
+const weekdays = (
+  workspaceId: string,
+  repositories: readonly string[] = [`${RELAY.owner}/${RELAY.name}`],
+) => ({
+  workspaceId,
+  repositories,
   name: "Morning triage",
   trigger: {
     kind: AUTOMATION_TRIGGER.SCHEDULE,
@@ -304,12 +307,6 @@ const pausedByAnOlderBuild = (id: string) =>
       .where(eq(automationTable.id, id)),
   );
 
-/** The weekday triage made on a workspace with the repositories named, no task between. */
-const onWorkspace = (workspaceId: string, repositories: readonly string[]) => {
-  const { planId: _taskId, ...rest } = weekdays("");
-  return { ...rest, workspaceId, repositories };
-};
-
 it.layer(getTestDB())("the automation routes", (it) => {
   it.effect(
     "an automation is made on a workspace with its repositories and no plan, listed by its workspace, and given other repositories, each read through the workspace's installation",
@@ -323,7 +320,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: onWorkspace(task.workspaceId, [relay.toLowerCase()]),
+            body: weekdays(task.workspaceId, [relay.toLowerCase()]),
           }),
         );
         const { automation } = made;
@@ -367,7 +364,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, one on a plan for an account outside the plan's workspace or on a plan that is none, one on a workspace with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
+    "an automation on a workspace is refused for an account outside it, one naming a plan, with no repositories, or on a repository its installation does not reach, and is made on a GitHub event",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openAccounts;
@@ -375,58 +372,35 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const post = (by: string, body: WireBoundaryInput) =>
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body });
 
-        const outside = yield* post(other, onWorkspace(task.workspaceId, [relay]));
-        const othersTask = yield* post(other, weekdays(task.id));
-        const noTask = yield* post(owner, weekdays(randomUUID()));
-        const both = yield* post(owner, {
-          ...onWorkspace(task.workspaceId, [relay]),
+        const outside = yield* post(other, weekdays(task.workspaceId, [relay]));
+        // Note that a released desktop may still name the plan it made an automation on, on which none stands now.
+        const onPlan = yield* post(owner, {
+          ...weekdays(task.workspaceId, [relay]),
           planId: task.id,
         });
-        const { repositories: _none, ...bare } = onWorkspace(task.workspaceId, [relay]);
+        const { repositories: _none, ...bare } = weekdays(task.workspaceId, [relay]);
         const noRepositories = yield* post(owner, bare);
-        const unreached = yield* post(owner, onWorkspace(task.workspaceId, ["acme/elsewhere"]));
+        const unreached = yield* post(owner, weekdays(task.workspaceId, ["acme/elsewhere"]));
         const onGitHub = yield* post(owner, {
-          ...onWorkspace(task.workspaceId, [relay]),
+          ...weekdays(task.workspaceId, [relay]),
           trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
-        });
-        // One standing on a task takes the task's repository and no other.
-        const onTask = readAnswer(
-          automationAnswerSchema,
-          HOSTED_HTTP_STATUS.CREATED,
-          yield* post(owner, weekdays(task.id)),
-        );
-        const elsewhere = yield* ask(automationPath(onTask.automation.id), owner, {
-          method: "PATCH",
-          body: { repositories: [relay] },
         });
 
         assert.deepEqual(
+          [outside.status, onPlan.status, noRepositories.status, unreached.status, onGitHub.status],
           [
-            outside.status,
-            othersTask.status,
-            noTask.status,
-            both.status,
-            noRepositories.status,
-            unreached.status,
-            onGitHub.status,
-            elsewhere.status,
-          ],
-          [
-            HOSTED_HTTP_STATUS.NOT_FOUND,
-            HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.FORBIDDEN,
             HOSTED_HTTP_STATUS.CREATED,
-            HOSTED_HTTP_STATUS.BAD_REQUEST,
           ],
         );
       }),
   );
 
   it.effect(
-    "an automation on a workspace changes to a GitHub event, as it may be made on one, and so does one on a plan",
+    "an automation on a workspace changes to a GitHub event, as it may be made on one",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openAccounts;
@@ -440,8 +414,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             (answer) =>
               readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
           );
-        const onWorkspaceMade = yield* made(onWorkspace(task.workspaceId, [relay]));
-        const onTaskMade = yield* made(weekdays(task.id));
+        const onWorkspaceMade = yield* made(weekdays(task.workspaceId, [relay]));
 
         const changed = readAnswer(
           automationAnswerSchema,
@@ -451,17 +424,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
             body: onGitHub,
           }),
         );
-        const onTaskChanged = yield* ask(automationPath(onTaskMade.id), owner, {
-          method: "PATCH",
-          body: onGitHub,
-        });
 
         assert.deepEqual(changed.automation.trigger, onGitHub.trigger);
-        assert.equal(
-          onTaskChanged.status,
-          HOSTED_HTTP_STATUS.OK,
-          JSON.stringify(onTaskChanged.body),
-        );
       }),
   );
 
@@ -477,14 +441,14 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         );
 
         const { automation } = made;
         assert.equal(made.webhookSecret, undefined, "a schedule has no secret");
         assert.equal(automation.enabled, true);
-        assert.equal(automation.planName, "Issue triage");
+        assert.equal(automation.planName, null);
         assert.deepEqual(automation.guards, AUTOMATION_DEFAULT_GUARDS);
         assert.equal(automation.lastRun, null);
         assert.ok(automation.nextRunAt !== null && automation.nextRunAt > now);
@@ -494,12 +458,19 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const listed = readAnswer(
           automationListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?planId=${task.id}`, owner),
+          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?workspaceId=${task.workspaceId}`, owner),
         );
         assert.deepEqual(
           listed.automations.map((each) => each.id),
           [automation.id],
         );
+        // Note that a released desktop may still list a plan's automations, of which there are none now.
+        const onPlan = readAnswer(
+          automationListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?planId=${task.id}`, owner),
+        );
+        assert.deepEqual(onPlan.automations, []);
         const othersList = readAnswer(
           automationListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -542,10 +513,10 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation aimed at its owner's operator needs no repository, made on a workspace naming none or a plan with none, and run there; every other automation still needs one",
+    "an automation aimed at its owner's operator needs no repository, made on a workspace naming none, and run there; every other automation still needs one",
     () =>
       Effect.gen(function* () {
-        const { owner, task, bare, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const agentOf = (kind: "operator" | "coder") =>
           Effect.map(
             createCodingAgent(
@@ -589,7 +560,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           }),
         );
         const aimed = (agentId: string) => ({ kind: AUTOMATION_TARGET.SAME_AGENT, agentId });
-        const { repositories: _none, ...noRepositories } = onWorkspace(task.workspaceId, []);
+        const { repositories: _none, ...noRepositories } = weekdays(task.workspaceId, []);
         const make = (body: WireBoundaryInput) =>
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
 
@@ -598,10 +569,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* make({ ...noRepositories, target: aimed(operator) }),
         ).automation;
-        const onBarePlan = yield* make({ ...weekdays(bare.id), target: aimed(operator) });
         const coderNoRepositories = yield* make({ ...noRepositories, target: aimed(coder) });
         const newAgentNoRepositories = yield* make(noRepositories);
-        const coderOnBarePlan = yield* make({ ...weekdays(bare.id), target: aimed(coder) });
         const toNewAgent = yield* ask(automationPath(heartbeat.id), owner, {
           method: "PATCH",
           body: { target: { kind: AUTOMATION_TARGET.NEW_AGENT } },
@@ -624,23 +593,11 @@ it.layer(getTestDB())("the automation routes", (it) => {
           [[], aimed(operator)],
           "made on the workspace with no repository, aimed at the operator",
         );
-        assert.equal(
-          onBarePlan.status,
-          HOSTED_HTTP_STATUS.CREATED,
-          JSON.stringify(onBarePlan.body),
-        );
         assert.deepEqual(
-          [
-            coderNoRepositories.body,
-            newAgentNoRepositories.body,
-            coderOnBarePlan.body,
-            toNewAgent.body,
-            toCoder.body,
-          ],
+          [coderNoRepositories.body, newAgentNoRepositories.body, toNewAgent.body, toCoder.body],
           [
             { error: HOSTED_API_ERROR.INVALID_REQUEST },
             { error: HOSTED_API_ERROR.INVALID_REQUEST },
-            { error: HOSTED_API_ERROR.NO_REPOSITORY },
             { error: HOSTED_API_ERROR.NO_REPOSITORY },
             { error: HOSTED_API_ERROR.NO_REPOSITORY },
           ],
@@ -654,13 +611,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation is refused where its schedule fires too often, its model is not offered, its plan names no repository, or its body names a key it should not",
+    "an automation is refused where its schedule fires too often, its model is not offered, or its body names a key it should not",
     () =>
       Effect.gen(function* () {
-        const { owner, task, bare, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const make = (body: WireBoundaryInput) =>
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body });
-        const base = weekdays(task.id);
+        const base = weekdays(task.workspaceId);
 
         const tooOften = yield* make({ ...base, trigger: { ...base.trigger, cron: "* * * * *" } });
         const unknownZone = yield* make({
@@ -671,7 +628,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           ...base,
           action: { ...base.action, choice: { model: "acme/unknown-1", effort: "high" } },
         });
-        const noRepository = yield* make(weekdays(bare.id));
         const excess = yield* make({ ...base, owner: "someone-else" });
 
         for (const refused of [tooOften, unknownZone, unknownModel, excess]) {
@@ -682,7 +638,6 @@ it.layer(getTestDB())("the automation routes", (it) => {
           );
           assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
         }
-        assert.deepEqual(noRepository.body, { error: HOSTED_API_ERROR.NO_REPOSITORY });
         const listed = readAnswer(
           automationListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -703,7 +658,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: { ...weekdays(task.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+            body: { ...weekdays(task.workspaceId), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
           }),
         );
         const secret = hooked.webhookSecret ?? "";
@@ -723,7 +678,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         ).automation;
         yield* pausedByAnOlderBuild(scheduled.id);
@@ -759,7 +714,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openAccounts;
-        const made = weekdays(task.id);
+        const made = weekdays(task.workspaceId);
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -812,7 +767,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           Effect.map(
             ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
               method: "POST",
-              body: { ...weekdays(plan.id), name },
+              body: { ...weekdays(plan.workspaceId), name },
             }),
             (answer) =>
               readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
@@ -956,7 +911,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         );
         const { run } = readAnswer(
@@ -1005,7 +960,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         );
         const key = randomUUID();
@@ -1067,7 +1022,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         );
         const { id } = made.automation;
@@ -1115,7 +1070,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           Effect.map(
             ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
               method: "POST",
-              body: weekdays(task.id),
+              body: weekdays(task.workspaceId),
             }),
             (answer) =>
               readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
@@ -1162,7 +1117,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: { ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE },
+            body: { ...weekdays(task.workspaceId), scope: AUTOMATION_SCOPE.WORKSPACE },
           }),
         );
 
@@ -1192,7 +1147,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: { ...weekdays(task.id), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+            body: { ...weekdays(task.workspaceId), trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
           }),
         ).automation;
         const hashOf = (id: string) =>
@@ -1228,7 +1183,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const escaped = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
           method: "POST",
           body: {
-            ...weekdays(task.id),
+            ...weekdays(task.workspaceId),
             action: {
               kind: AUTOMATION_ACTION.CODING_AGENT,
               prompt: `${"\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS - 1)}x`,
@@ -1255,7 +1210,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* made(weekdays(task.id)),
+          yield* made(weekdays(task.workspaceId)),
         );
         const { run } = readAnswer(
           automationRunAnswerSchema,
@@ -1288,19 +1243,18 @@ it.layer(getTestDB())("the automation routes", (it) => {
             .insert(personalWorkspace)
             .values({ userId: owner, organizationId: personal, createdAt: new Date(0) }),
         );
-        const personalTask = yield* createTask(owner, {
-          name: "Just mine",
-          repository: `${RELAY.owner}/${RELAY.name}`,
-          organizationId: personal,
-        });
+        // The personal workspace reaches the repository, so its scope alone is what refuses it.
+        const installation = INSTALLATIONS[installationsConnected++];
+        assert.ok(installation);
+        yield* connectWorkspaceGitHub(personal, installation);
         const inPersonalWorkspace = yield* made({
-          ...weekdays(personalTask.id),
+          ...weekdays(personal),
           scope: AUTOMATION_SCOPE.WORKSPACE,
         });
         const shared = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
-          yield* made({ ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE }),
+          yield* made({ ...weekdays(task.workspaceId), scope: AUTOMATION_SCOPE.WORKSPACE }),
         ).automation;
 
         assert.deepEqual(
@@ -1381,12 +1335,12 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const remove = (by: string, id: string) =>
           Effect.map(ask(automationPath(id), by, { method: "DELETE" }), (answer) => answer.status);
 
-        const personal = yield* make(owner, weekdays(task.id));
+        const personal = yield* make(owner, weekdays(task.workspaceId));
         const shared = yield* make(owner, {
-          ...weekdays(task.id),
+          ...weekdays(task.workspaceId),
           scope: AUTOMATION_SCOPE.WORKSPACE,
         });
-        const leavers = yield* make(member, weekdays(task.id));
+        const leavers = yield* make(member, weekdays(task.workspaceId));
 
         assert.deepEqual(yield* listed(member), [shared.id, leavers.id].toSorted());
         assert.deepEqual(
@@ -1451,7 +1405,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             [`Bearer ${member}`, member],
           ]),
         );
-        const shared = { ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE };
+        const shared = { ...weekdays(task.workspaceId), scope: AUTOMATION_SCOPE.WORKSPACE };
         const make = (by: string) =>
           Effect.map(
             ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body: shared }),
@@ -1494,7 +1448,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         );
         // The due instant as the sweep leaves it once it has moved a schedule on.
@@ -1535,7 +1489,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(task.id),
+            body: weekdays(task.workspaceId),
           }),
         );
 
@@ -1554,7 +1508,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const oversized = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
           method: "POST",
           body: {
-            ...weekdays(task.id),
+            ...weekdays(task.workspaceId),
             action: {
               kind: AUTOMATION_ACTION.CODING_AGENT,
               prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),
@@ -1581,7 +1535,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const unsignedOversized = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, undefined, {
           method: "POST",
           body: {
-            ...weekdays(task.id),
+            ...weekdays(task.workspaceId),
             action: {
               kind: AUTOMATION_ACTION.CODING_AGENT,
               prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),

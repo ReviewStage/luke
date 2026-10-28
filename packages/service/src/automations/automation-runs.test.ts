@@ -182,7 +182,8 @@ const openAutomation = (
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
     const now = yield* Clock.currentTimeMillis;
     const made = yield* createAutomation(owner, {
-      taskId: task.id,
+      organizationId: task.workspaceId,
+      repositories: task.repository === null ? [] : [task.repository],
       name: "Flaky-test sweep",
       trigger: options.trigger ?? {
         kind: AUTOMATION_TRIGGER.SCHEDULE,
@@ -536,7 +537,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         // Another automation of the owner's on the busy agent: no run of its own started it, and still its work counts.
         const fresh = Option.getOrThrow(
           yield* createAutomation(owner, {
-            taskId: automation.taskId,
+            organizationId: automation.organizationId,
+            repositories: automation.repositories,
             name: "Follow-up sweep",
             trigger: automation.trigger,
             action: automation.action,
@@ -1221,7 +1223,6 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* connectWorkspaceGitHub(task.workspaceId, installation);
         const automation = Option.getOrThrow(
           yield* createAutomation(owner, {
-            taskId: null,
             organizationId: task.workspaceId,
             repositories: ["Acme/Elsewhere", `${RELAY.owner}/${RELAY.name}`],
             name: "Code review",

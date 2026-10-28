@@ -590,7 +590,6 @@ it.layer(getTestDB())("the member's operator", (it) => {
         assert.deepEqual(
           {
             userId: heartbeat.userId,
-            taskId: heartbeat.taskId,
             organizationId: heartbeat.organizationId,
             repositories: heartbeat.repositories,
             scope: heartbeat.scope,
@@ -602,7 +601,6 @@ it.layer(getTestDB())("the member's operator", (it) => {
           },
           {
             userId: member,
-            taskId: null,
             organizationId: workspaceId,
             repositories: [],
             scope: AUTOMATION_SCOPE.PERSONAL,

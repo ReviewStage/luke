@@ -1239,7 +1239,6 @@ it.effect(
         ]);
         const making = (userId: string, scope: AutomationScope) =>
           createAutomation(userId, {
-            taskId: null,
             organizationId: acme,
             repositories: ["acme/relay"],
             name: "Flaky-test sweep",

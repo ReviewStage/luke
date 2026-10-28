@@ -5,14 +5,9 @@ import {
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
 import { agentGivenNameSql } from "@luke/database/models/agent-name";
-import {
-  AUTOMATION_COLUMNS,
-  AUTOMATION_WORKSPACE,
-  automationReadableBy,
-} from "@luke/database/models/automation-store";
+import { AUTOMATION_COLUMNS, automationReadableBy } from "@luke/database/models/automation-store";
 import { automation, automationRun } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { task } from "@luke/database/schemas/task";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Option } from "effect";
 import {
@@ -36,6 +31,9 @@ import {
  * milliseconds. Nothing reads the clock: an agent's status, which turns on
  * it, is the reader's, and so is the order, since Realtime keeps none.
  */
+
+/** The task an automation's row names, which is none: a typed null for the columns a released desktop still decodes. */
+const LIVE_NO_TASK = sql<null>`null::text`;
 
 /** The most runs an automation's live history holds, as its held read answers them. */
 export const AUTOMATION_RUNS_READ = 50;
@@ -91,19 +89,19 @@ export function automationsLiveStatements(
     .limit(1)
     .as("last_run");
   const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
-  const {
-    nextRunAt,
-    createdAt,
-    updatedAt: _updatedAt,
-    repositories: _repositories,
-    ...columns
-  } = AUTOMATION_COLUMNS;
+  const { nextRunAt, createdAt, updatedAt: _updatedAt, ...columns } = AUTOMATION_COLUMNS;
   const statement = queryBuilder
     .select({
       ...liveSelection(
-        // Note that the row's own repositories are selected bare, and its task's beside them,
-        // because the held read's fallback builds an array with a function Realtime refuses.
-        { ...columns, repositories: automation.repositories, mine: eq(automation.userId, userId) },
+        {
+          ...columns,
+          // Note that no automation stands on a task, and the row still carries the task's columns
+          // as nulls because a released desktop decodes them as required.
+          taskId: LIVE_NO_TASK,
+          taskName: LIVE_NO_TASK,
+          taskRepository: LIVE_NO_TASK,
+          mine: eq(automation.userId, userId),
+        },
         { nextRunAt, createdAt },
       ),
       ...liveSelection(
@@ -118,11 +116,10 @@ export function automationsLiveStatements(
       ...runAgentSelection(userId, latest),
     })
     .from(automation)
-    .leftJoin(task, eq(task.id, automation.taskId))
     .leftJoinLateral(lastRun, sql`true`)
     .leftJoin(codingAgent, eq(codingAgent.id, lastRun.codingAgentId))
     .leftJoinLateral(latest, sql`true`)
-    .where(and(automationReadableBy(userId), eq(AUTOMATION_WORKSPACE, workspaceId)));
+    .where(and(automationReadableBy(userId), eq(automation.organizationId, workspaceId)));
   return Option.map(liveStatementOf(statement), (automations) => ({ automations }));
 }
 
@@ -189,7 +186,7 @@ export function automationWorkspaceRunsLiveStatements(
   userId: string,
   workspaceId: string,
 ): Option.Option<AutomationWorkspaceRunsLiveStatements> {
-  const readable = and(automationReadableBy(userId), eq(AUTOMATION_WORKSPACE, workspaceId));
+  const readable = and(automationReadableBy(userId), eq(automation.organizationId, workspaceId));
   const newest = queryBuilder
     .select({ id: automationRun.id })
     .from(automationRun)

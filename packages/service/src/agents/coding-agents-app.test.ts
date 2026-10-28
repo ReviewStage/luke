@@ -5405,7 +5405,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(yield* automationIds(), [undefined, undefined]);
 
         const made = yield* createAutomation(owner, {
-          taskId: task.id,
+          organizationId: task.workspaceId,
+          repositories: task.repository === null ? [] : [task.repository],
           name: "Morning Sentry triage",
           scope: AUTOMATION_SCOPE.PERSONAL,
           trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
@@ -7727,7 +7728,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const { owner, other, task, waiting } = yield* openInbox();
         const automation = Option.getOrThrow(
           yield* createAutomation(owner, {
-            taskId: task.id,
+            organizationId: task.workspaceId,
+            repositories: task.repository === null ? [] : [task.repository],
             name: "Nightly flaky-test sweep",
             trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
