@@ -136,7 +136,7 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.AGENT]: (agent, at) => (
     <MentionedAgentCard
       agentId={agent.agentId}
-      taskId={agent.taskId}
+      taskId={undefined}
       name={at.name}
       workspaceId={at.wordsWorkspaceId}
       reading={reading(at)}

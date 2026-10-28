@@ -47,18 +47,14 @@ export function useMessagePlace(messageId: string): LinkPlace | undefined {
   return useContext(MessagePlaceContext)?.(messageId);
 }
 
-/** How an agent's messages are named: under its task where it has one, and only those the service has read back, since a line still on its way has no id a link can find. */
+/** How an agent's messages are named: under the agent, whichever task it works on, and only those the service has read back, since a line still on its way has no id a link can find. */
 export function agentMessagePlace(
-  agent: { readonly id: string; readonly planId: string | null },
+  agentId: string,
   read: readonly { readonly id: string }[],
 ): (messageId: string) => LinkPlace | undefined {
   const ids = new Set(read.map((message) => message.id));
-  return (messageId) => {
-    if (!ids.has(messageId)) return undefined;
-    return agent.planId === null
-      ? { kind: LINK_PLACE.MESSAGE, agentId: agent.id, messageId }
-      : { kind: LINK_PLACE.MESSAGE, planId: agent.planId, agentId: agent.id, messageId };
-  };
+  return (messageId) =>
+    ids.has(messageId) ? { kind: LINK_PLACE.MESSAGE, agentId, messageId } : undefined;
 }
 
 const MessageRevealContext = createContext<

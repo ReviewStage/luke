@@ -190,13 +190,13 @@ const onlyItem = (agent: Pick<InboxAgent, "userId"> & { readonly taskId: string 
     return item;
   });
 
-/** The mention an agent writes a thread of its task's as, its link spelled out as the window reads one. */
+/** The mention an agent writes a thread of its own as, under the agent whichever task it works on, its link spelled out as the window reads one. */
 function mentionOf(
-  agent: { readonly workspaceId: string; readonly taskId: string },
+  agent: { readonly workspaceId: string; readonly agentId: string },
   title: string,
   itemId: string,
 ): string {
-  return `[@${title}](https://tryluke.dev/workspace-${agent.workspaceId}/plan/${agent.taskId}/inbox/${itemId})`;
+  return `[@${title}](https://tryluke.dev/workspace-${agent.workspaceId}/agent/${agent.agentId}/inbox/${itemId})`;
 }
 
 /** The message whose ask the thread holds open. */

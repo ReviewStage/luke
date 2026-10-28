@@ -1340,11 +1340,10 @@ function givenNameOf(agent: CodingAgent): { name?: string } {
   return name === undefined ? {} : { name };
 }
 
-/** The agent's mention under the workspace's step: under its task where it has one, else under the workspace, named as its tab is. */
+/** The agent's mention under the workspace's step, by the agent whichever task it works on, named as its tab is. */
 function agentMention(agent: CodingAgent, workspace: string): string {
-  const task = agent.taskId === null ? undefined : { taskId: agent.taskId };
   return writtenMention(
-    { kind: MENTION_KIND.AGENT, ...task, agentId: agent.id },
+    { kind: MENTION_KIND.AGENT, agentId: agent.id },
     agentName(agent),
     workspace,
   );
@@ -1571,11 +1570,7 @@ const earlierContinuationsOf = (
       (each): EarlierContinuation => ({
         id: each.agentId,
         mention: writtenMention(
-          {
-            kind: MENTION_KIND.AGENT,
-            ...(at.taskId === null ? undefined : { taskId: at.taskId }),
-            agentId: each.agentId,
-          },
+          { kind: MENTION_KIND.AGENT, agentId: each.agentId },
           each.title ?? CONTINUATION_NAME,
           step,
         ),

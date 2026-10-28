@@ -31,7 +31,7 @@ export const operatorNotice = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => codingAgent.id, { onDelete: "cascade" }),
-    /** The agent's task as the event was written; null for an agent with none. */
+    /** The agent's task as the event was once written; written and read no more, since a notice's link names the agent, and dropped by a later deployment. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /** When the latest event this row stands for happened: a repeat while unread moves it. */
     at: timestamptz("at").notNull(),

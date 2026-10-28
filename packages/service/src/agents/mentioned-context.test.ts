@@ -434,14 +434,8 @@ const person = (name: string, userId = PERSON_ID) =>
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
-const agent = (name: string, agentId = OTHER_AGENT_ID, taskId: string | undefined = TASK.id) =>
-  mentionMarkdown(
-    taskId === undefined
-      ? { kind: MENTION_KIND.AGENT, agentId }
-      : { kind: MENTION_KIND.AGENT, taskId: taskId, agentId },
-    name,
-    PLACE,
-  );
+const agent = (name: string, agentId = OTHER_AGENT_ID) =>
+  mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId }, name, PLACE);
 
 const OTHER_AGENT: MentionedAgent = {
   id: OTHER_AGENT_ID,
@@ -494,17 +488,8 @@ test("an agent of the workspace on another task or on none is handed with its ta
     people: new Map(),
   });
 
-  const another = mentionedContext(
-    `See ${agent("Store", OTHER_AGENT_ID, onAnother.task.id)}.`,
-    TASK,
-    reads(onAnother),
-  );
-  const none =
-    mentionedContext(
-      `See ${agent("Store", OTHER_AGENT_ID, undefined)}.`,
-      undefined,
-      reads(onNone),
-    ) ?? "";
+  const another = mentionedContext(`See ${agent("Store")}.`, TASK, reads(onAnother));
+  const none = mentionedContext(`See ${agent("Store")}.`, undefined, reads(onNone)) ?? "";
 
   assert.match(
     another ?? "",
@@ -618,10 +603,7 @@ test("a gone section's bare address is named by its anchor, and a page's, an age
     { kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId: PAGE_ID },
     PLACE,
   );
-  const agentAddress = encodeMention(
-    { kind: MENTION_KIND.AGENT, taskId: TASK.id, agentId: OTHER_AGENT_ID },
-    PLACE,
-  );
+  const agentAddress = encodeMention({ kind: MENTION_KIND.AGENT, agentId: OTHER_AGENT_ID }, PLACE);
   const personAddress = encodeMention({ kind: MENTION_KIND.PERSON, userId: PERSON_ID }, PLACE);
   const words = `See ${bareSection("Old flow")}, ${pageAddress}, ${agentAddress} and ${personAddress}.`;
 

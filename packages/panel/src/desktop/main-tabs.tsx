@@ -541,9 +541,7 @@ export function MainTabStrip({
   const doorsOf = (entry: DrawnTab): TabDoors => {
     // An agent's link is its own action (`agent-actions.tsx`).
     const linked: LinkPlace | undefined =
-      entry.agent === undefined
-        ? undefined
-        : { kind: LINK_PLACE.AGENT, planId: task.id, agentId: entry.agent.id };
+      entry.agent === undefined ? undefined : { kind: LINK_PLACE.AGENT, agentId: entry.agent.id };
     const { agent } = entry;
     const pinTab: ColumnPinnableTab | undefined =
       agent === undefined ? undefined : { agent: agent.id };

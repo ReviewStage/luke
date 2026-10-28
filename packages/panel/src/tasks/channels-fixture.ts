@@ -646,7 +646,7 @@ const THREADS: ThreadSeed[] = [
           `![The update manifest as every Mac reads it](${inboxAttachmentAddress(
             {
               kind: LINK_PLACE.INBOX_ITEM,
-              planId: TASK.RELEASE,
+              agentId: seed(TASK.RELEASE).agentId,
               itemId: fixtureId("d4000004", 12),
             },
             RELEASE_PICTURE,

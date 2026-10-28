@@ -1114,14 +1114,27 @@ test("a Luke link to a review thread opens its agent's Pull request tab on the v
   assert.equal(tab.control().threadReveal, undefined);
 });
 
-test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, and one to an automation in the workspace its slug names", () => {
-  const tab = mount(
-    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-  );
+test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, under the task or under its agent, whose task is read, and one to an automation in the workspace its slug names", async () => {
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const agentItemId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
+  const tab = mount(
+    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.CODING_AGENTS_PAGE]: () =>
+        Promise.resolve({
+          agent: {
+            ...RUNNING_AGENT,
+            planId: alerts,
+            automationId: null,
+            workspaceId: ACME.id,
+            repository: null,
+          },
+        }),
+    },
+  );
 
   act(() =>
     tab.control().onOpenLink({
@@ -1137,6 +1150,15 @@ test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the t
   const taken = tab.control().inboxItemReveal;
   act(() =>
     tab.control().onOpenLink({
+      workspace: "renamed-since",
+      place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT_ID, itemId: agentItemId },
+    }),
+  );
+  await settle();
+  const agentReveal = tab.control().inboxItemReveal;
+  const agentInboxOpen = tab.control().inboxView.open;
+  act(() =>
+    tab.control().onOpenLink({
       workspace: "personal",
       place: { kind: LINK_PLACE.AUTOMATION, automationId },
     }),
@@ -1147,6 +1169,8 @@ test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the t
   assert.deepEqual(reveal, { planId: alerts, itemId, ask: 1 });
   assert.equal(taken, undefined);
   assert.equal(listed, ACME.id);
+  assert.deepEqual(agentReveal, { planId: alerts, itemId: agentItemId, ask: 1 });
+  assert.equal(agentInboxOpen, false, "an item of a listed task stands in its task, not the Inbox");
   assert.equal(tab.control().inboxView.open, false);
   assert.deepEqual(tab.control().automationsView.place, {
     kind: AUTOMATIONS_PAGE.EDIT,

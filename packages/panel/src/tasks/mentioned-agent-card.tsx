@@ -170,6 +170,25 @@ const tasklessAgentsAtom = Atom.family((workspaceId: string) =>
 /** One agent read by its id, for a mark of an agent on no task drawn where no workspace is known to find it in, read once for every mark of it while one stands. */
 const agentByIdAtom = Atom.family((agentId: string) => rendererRuntime.atom(agentById(agentId)));
 
+/** No agent asked after, which reads nothing. */
+const NO_AGENT_ASKED: Atom.Atom<AsyncResult.AsyncResult<AgentsRead>> = Atom.make(
+  AsyncResult.success(NO_AGENT),
+);
+
+/**
+ * The task an agent works on, read by its id once for every reader asking
+ * while one stands: its id, null for an agent on none or one the read found
+ * not, and undefined while the read is out, where it failed, or where no
+ * agent is asked after.
+ */
+export function useAgentTaskRead(agentId: string | undefined): string | null | undefined {
+  const read = useAtomValue(agentId === undefined ? NO_AGENT_ASKED : agentByIdAtom(agentId));
+  if (agentId === undefined || !AsyncResult.isSuccess(read) || read.value === UNREAD) {
+    return undefined;
+  }
+  return read.value.find((agent) => agent.id === agentId)?.planId ?? null;
+}
+
 /** The model a read answered the agent runs on; none while it is out, where it failed, and where it found no such agent. */
 function modelOf(read: AsyncResult.AsyncResult<AgentsRead>, agentId: string): string | undefined {
   if (!AsyncResult.isSuccess(read)) return undefined;

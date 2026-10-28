@@ -164,7 +164,7 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { GitHubLineCard, ThreadLineHead } from "./line-cards.js";
+import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
 import { linkChip } from "./mention-chip.js";
 import {
   agentMessagePlace,
@@ -2061,6 +2061,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
+  agentId,
   taskId,
   replay,
   endPress,
@@ -2118,6 +2119,8 @@ function AgentTranscriptView({
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
+  /** The agent whose transcript this is, whose threads its thread lines are on; none on a worker's, or before the agent stands. */
+  agentId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
   taskId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
@@ -2203,118 +2206,122 @@ function AgentTranscriptView({
     const plan = carded ? first : undefined;
     const task = carded || blank ? undefined : first;
     return (
-      <LiveDoors value={live}>
-        <ConnectionNames needed={callsServer}>
-          <Conversation list={log} onNearTop={onOlder}>
-            {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
-            {olderFailed && onOlder !== undefined ? (
-              <div
-                className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
-              >
-                <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
-              </div>
-            ) : null}
-            {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-            <ConversationContent
-              className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
-              streams
-            >
-              <ConversationRows
-                keys={rowKeys}
-                estimate={ROW_ESTIMATE_PX}
-                gap={0}
-                rowClassName={rowClassOf}
-                handle={rowsHandle}
-              >
-                {(at) => {
-                  const entry = entries[at];
-                  if (entry === undefined) return null;
-                  const { row, index, piece } = entry;
-                  const { message } = row;
-                  const tails = piece === undefined || piece.last;
-                  return (
-                    <>
-                      <SteadyAgentMessage
-                        message={
-                          message === first && opening !== undefined ? opening.brief : message
-                        }
-                        plan={message === plan}
-                        taskId={message === plan ? taskId : undefined}
-                        lead={lead}
-                        moving={working && index === placed.length - 1}
-                        forkCut={forkCutOf(message, open)}
-                        delegation={delegation}
-                        todos={todos}
-                        briefTitle={briefTitle}
-                        origin={message === plan ? origin : undefined}
-                        sender={
-                          message === task
-                            ? briefSender
-                            : lineSender(message.sentBy, readerId, members, former)
-                        }
-                        arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                        piece={piece}
-                      />
-                      {!tails ? null : message === first &&
-                        opening !== undefined &&
-                        replay !== undefined ? (
-                        <>
-                          <ReplayCard
-                            replay={opening.replay}
-                            sentAt={first.sentAt}
-                            place={replay}
-                            taskId={taskId}
-                          />
-                          {opening.note === undefined ? null : (
-                            <SteadyAgentMessage
-                              message={opening.note}
-                              plan={false}
-                              lead={lead}
-                              moving={false}
-                              delegation={delegation}
-                              sender={briefSender}
-                            />
-                          )}
-                        </>
-                      ) : null}
-                      {earlierOmitted && message === plan ? (
-                        <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                      ) : null}
-                    </>
-                  );
-                }}
-              </ConversationRows>
-              {working ? (
-                <WorkingLine
-                  startedAt={startedAt}
-                  words={
-                    WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
-                  }
-                />
-              ) : null}
-              {ended === undefined && endTrail === undefined ? null : (
+      <TranscriptAgent value={agentId}>
+        <LiveDoors value={live}>
+          <ConnectionNames needed={callsServer}>
+            <Conversation list={log} onNearTop={onOlder}>
+              {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
+              {olderFailed && onOlder !== undefined ? (
                 <div
-                  className="agent-end flex flex-col items-start gap-control-gap"
-                  data-ended={ended === undefined ? undefined : ""}
+                  className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
-                  {ended === undefined ? null : (
-                    <AgentEndRow
-                      ended={ended}
-                      endReason={endReason}
-                      keyProvider={keyProvider}
-                      onOpenApiKeys={onOpenApiKeys}
-                      press={endPress}
-                    />
-                  )}
-                  {endTrail}
+                  <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
                 </div>
-              )}
-              {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
-            </ConversationContent>
-            <ConversationScrollButton />
-          </Conversation>
-        </ConnectionNames>
-      </LiveDoors>
+              ) : null}
+              {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
+              <ConversationContent
+                className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
+                streams
+              >
+                <ConversationRows
+                  keys={rowKeys}
+                  estimate={ROW_ESTIMATE_PX}
+                  gap={0}
+                  rowClassName={rowClassOf}
+                  handle={rowsHandle}
+                >
+                  {(at) => {
+                    const entry = entries[at];
+                    if (entry === undefined) return null;
+                    const { row, index, piece } = entry;
+                    const { message } = row;
+                    const tails = piece === undefined || piece.last;
+                    return (
+                      <>
+                        <SteadyAgentMessage
+                          message={
+                            message === first && opening !== undefined ? opening.brief : message
+                          }
+                          plan={message === plan}
+                          taskId={message === plan ? taskId : undefined}
+                          lead={lead}
+                          moving={working && index === placed.length - 1}
+                          forkCut={forkCutOf(message, open)}
+                          delegation={delegation}
+                          todos={todos}
+                          briefTitle={briefTitle}
+                          origin={message === plan ? origin : undefined}
+                          sender={
+                            message === task
+                              ? briefSender
+                              : lineSender(message.sentBy, readerId, members, former)
+                          }
+                          arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                          piece={piece}
+                        />
+                        {!tails ? null : message === first &&
+                          opening !== undefined &&
+                          replay !== undefined ? (
+                          <>
+                            <ReplayCard
+                              replay={opening.replay}
+                              sentAt={first.sentAt}
+                              place={replay}
+                              taskId={taskId}
+                            />
+                            {opening.note === undefined ? null : (
+                              <SteadyAgentMessage
+                                message={opening.note}
+                                plan={false}
+                                lead={lead}
+                                moving={false}
+                                delegation={delegation}
+                                sender={briefSender}
+                              />
+                            )}
+                          </>
+                        ) : null}
+                        {earlierOmitted && message === plan ? (
+                          <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                        ) : null}
+                      </>
+                    );
+                  }}
+                </ConversationRows>
+                {working ? (
+                  <WorkingLine
+                    startedAt={startedAt}
+                    words={
+                      WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
+                    }
+                  />
+                ) : null}
+                {ended === undefined && endTrail === undefined ? null : (
+                  <div
+                    className="agent-end flex flex-col items-start gap-control-gap"
+                    data-ended={ended === undefined ? undefined : ""}
+                  >
+                    {ended === undefined ? null : (
+                      <AgentEndRow
+                        ended={ended}
+                        endReason={endReason}
+                        keyProvider={keyProvider}
+                        onOpenApiKeys={onOpenApiKeys}
+                        press={endPress}
+                      />
+                    )}
+                    {endTrail}
+                  </div>
+                )}
+                {failed ? (
+                  <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
+                ) : null}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          </ConnectionNames>
+        </LiveDoors>
+      </TranscriptAgent>
     );
   }
   if (failed) {
@@ -2591,6 +2598,7 @@ function AgentTabView({
                     briefSender={starter === undefined ? undefined : starterActor}
                     origin={origin}
                     readerId={readerId}
+                    agentId={agent.id}
                     taskId={agent.planId ?? undefined}
                     replay={replay}
                     delegation={{
@@ -2937,14 +2945,13 @@ function AgentTabBody({
     messages.map((message) => message.id),
     sameIds,
   );
-  const planId = agent.planId;
   const messagePlace = useMemo(
     () =>
       agentMessagePlace(
-        { id: agent.id, planId },
+        agent.id,
         readIds.map((id) => ({ id })),
       ),
-    [agent.id, planId, readIds],
+    [agent.id, readIds],
   );
   return (
     <MessagePlaceProvider value={messagePlace}>

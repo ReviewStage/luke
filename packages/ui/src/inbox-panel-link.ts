@@ -55,6 +55,16 @@ export interface InboxPanelPlace {
   readonly agentIds?: readonly string[] | undefined;
 }
 
+/** Whether an agent a link names is one of what holds the item: by the task an older link names it under, else by the agent itself. */
+function holdsAgent(
+  at: { readonly planId?: string | undefined; readonly agentId: string },
+  place: InboxPanelPlace,
+): boolean {
+  return at.planId === undefined
+    ? place.agentIds?.includes(at.agentId) === true
+    : at.planId === place.taskId;
+}
+
 /**
  * What the panel beside the item opens of the link, or nothing where the
  * window opens it, leaving the Inbox or for the browser: a Luke link to a
@@ -74,11 +84,11 @@ export function inboxPanelTarget(
     if (at.kind === LINK_PLACE.PAGE && "planId" in at && at.planId === place.taskId) {
       return { kind: INBOX_PANEL_TARGET.PAGE, pageId: at.pageId };
     }
-    if (at.kind === LINK_PLACE.CHANGES && at.planId === place.taskId) {
+    if (at.kind === LINK_PLACE.CHANGES && holdsAgent(at, place)) {
       return { kind: INBOX_PANEL_TARGET.CHANGES, agentId: at.agentId };
     }
     // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
-    if (at.kind === LINK_PLACE.AGENT && at.planId !== undefined && at.planId === place.taskId) {
+    if (at.kind === LINK_PLACE.AGENT && place.taskId !== undefined && holdsAgent(at, place)) {
       return { kind: INBOX_PANEL_TARGET.AGENT, agentId: at.agentId };
     }
     return undefined;

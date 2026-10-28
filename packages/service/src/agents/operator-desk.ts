@@ -127,14 +127,9 @@ const NOTICE_WORDS = {
   [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in a thread",
 } as const satisfies Record<OperatorNoticeKind, string>;
 
-/** An agent's mention under the workspace's step, under its task where it has one. */
-function agentMention(
-  agent: { readonly id: string; readonly taskId: string | null },
-  name: string,
-  step: string,
-): string {
-  const task = agent.taskId === null ? undefined : { taskId: agent.taskId };
-  return writtenMention({ kind: MENTION_KIND.AGENT, ...task, agentId: agent.id }, name, step);
+/** An agent's mention under the workspace's step, by the agent whichever task it works on. */
+function agentMention(agentId: string, name: string, step: string): string {
+  return writtenMention({ kind: MENTION_KIND.AGENT, agentId }, name, step);
 }
 
 /** An ask's agent as its rows name it. */
@@ -148,7 +143,7 @@ function askAgent(ask: MemberOpenAsk, step: string) {
   return {
     id: ask.agentId,
     name,
-    mention: agentMention({ id: ask.agentId, taskId: ask.taskId }, name, step),
+    mention: agentMention(ask.agentId, name, step),
   };
 }
 
@@ -228,7 +223,7 @@ const readDeskSections = (
       ],
       { concurrency: "unbounded" },
     );
-    const named = (agent: CodingAgent) => agentMention(agent, agentName(agent), step);
+    const named = (agent: CodingAgent) => agentMention(agent.id, agentName(agent), step);
     const running = agents.filter(
       ({ status }) =>
         status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING,
@@ -290,7 +285,7 @@ function noticesSection(notices: readonly UnreadOperatorNotice[], step: string):
       model: newest.agentModel,
       automationName: newest.agentAutomationName,
     });
-    const mention = agentMention({ id: newest.agentId, taskId: newest.taskId }, name, step);
+    const mention = agentMention(newest.agentId, name, step);
     return `- ${mention}: ${kinds.map((kind) => NOTICE_WORDS[kind]).join(", ")}`;
   });
   return {

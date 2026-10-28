@@ -879,9 +879,7 @@ test("another agent picked from the @ list is drawn as its chip and sent as its 
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(sent, [
-    "Build on [@Wire the desktop](https://tryluke.dev/acme/plan/pl_1/agent/agent-2)",
-  ]);
+  assert.deepEqual(sent, ["Build on [@Wire the desktop](https://tryluke.dev/acme/agent/agent-2)"]);
 });
 
 test("a sent message's mention of a page or an agent is drawn as the chip that opens its tab through the window's opener, its target on no attribute", () => {
@@ -892,7 +890,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
     PLACE,
   );
   const agent = mentionMarkdown(
-    { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: STORE_AGENT.id },
+    { kind: MENTION_KIND.AGENT, agentId: STORE_AGENT.id },
     STORE_AGENT.name,
     PLACE,
   );
@@ -913,7 +911,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
     { workspace: "acme", place: { kind: LINK_PLACE.PAGE, planId: TASK_ID, pageId: PAGE.id } },
     {
       workspace: "acme",
-      place: { kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: STORE_AGENT.id },
+      place: { kind: LINK_PLACE.AGENT, agentId: STORE_AGENT.id },
     },
   ]);
   assert.equal(carryingTarget(container), undefined);
@@ -1123,7 +1121,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent of another task picked from the @ list is sent as its link under its task, and one on no task under the workspace",
+  "an agent of another task and one on no task picked from the @ list are each sent as the agent's own link under the workspace",
   () =>
     Effect.gen(function* () {
       const registry = registryOn(yield* Clock.Clock);
@@ -1141,7 +1139,7 @@ it.effect(
       yield* Effect.promise(settle);
 
       assert.deepEqual(sent, [
-        `Ask [@Bill by seat](https://tryluke.dev/acme/plan/${BILLING.id}/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
+        `Ask [@Bill by seat](https://tryluke.dev/acme/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
       ]);
     }),
 );
@@ -1296,27 +1294,24 @@ test("an @ row for a page still on its first version says how long ago it was wr
 });
 
 test("a sent mention of an agent of another task or none hangs its card's one reading state while it is read, never the task page's own card for an id it has no tab of", () => {
-  const mention = (agentId: string, taskId: string | undefined) =>
-    mentionMarkdown(
-      taskId === undefined
-        ? { kind: MENTION_KIND.AGENT, agentId }
-        : { kind: MENTION_KIND.AGENT, taskId, agentId },
-      "Agent",
-      PLACE,
-    );
+  const mention = (agentId: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId }, "Agent", PLACE);
   const container = drawn(
     createElement(TranscriptWords, {
-      text: `${mention("agent-7", TASK_ID)} ${mention(BILLING_AGENT.id, BILLING.id)} ${mention(SWEEPER.id, undefined)}`,
+      text: `${mention("agent-7")} ${mention(BILLING_AGENT.id)} ${mention(SWEEPER.id)}`,
     }),
-    // The task page's doors answer a card for any id, a "Not found" one for an agent it has no tab of.
+    // The task page's doors answer the card of its own agent's tab, and none for an agent it has no tab of.
     {
       ...planPage([]),
       doors: {
         ...planPage([]).doors,
-        agentOf: (agentId: string) => ({
-          actor: STORE_AGENT.actor,
-          card: createElement("div", { "data-mention-card": "" }, `Not found ${agentId}`),
-        }),
+        agentOf: (agentId: string) =>
+          agentId === "agent-7"
+            ? {
+                actor: STORE_AGENT.actor,
+                card: createElement("div", { "data-mention-card": "" }, "Its tab's card"),
+              }
+            : undefined,
       },
     },
   );
@@ -1324,9 +1319,7 @@ test("a sent mention of an agent of another task or none hangs its card's one re
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     restOn(chip);
     const card = document.querySelector(".luke-tooltip-card > *");
-    const words = card?.hasAttribute("data-chip-card-reading")
-      ? "Reading"
-      : (/Not found/u.exec(card?.textContent ?? "")?.[0] ?? card?.textContent);
+    const words = card?.hasAttribute("data-chip-card-reading") ? "Reading" : card?.textContent;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });
@@ -1335,7 +1328,7 @@ test("a sent mention of an agent of another task or none hangs its card's one re
 
   assert.deepEqual(
     notes,
-    ["Not found", "Reading", "Reading"],
+    ["Its tab's card", "Reading", "Reading"],
     "the task's own agent hangs its tab's card; another task's and one on none wait on their read",
   );
 });
@@ -1376,10 +1369,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   });
   const { container, sent } = await box(planPage([]));
   const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id }, PLACE);
-  const agent = encodeMention(
-    { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: STORE_AGENT.id },
-    PLACE,
-  );
+  const agent = encodeMention({ kind: MENTION_KIND.AGENT, agentId: STORE_AGENT.id }, PLACE);
   const file = "https://github.com/acme/relay/blob/HEAD/apps/web/rollout-store.ts";
 
   typeInComposer(container, "Build ");
