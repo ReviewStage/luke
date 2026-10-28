@@ -15,11 +15,10 @@ import {
   Toolbar,
   Tooltip,
 } from "@luke/ui";
-import { RotateCcwIcon } from "@luke/ui/icons";
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
-import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
+import { PhoneHead } from "../desktop/phone-head.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
@@ -81,7 +80,6 @@ const SECTION_LEVEL = "2";
 const BAR_SKELETON = {
   MOMENT: "160px",
   RESTORE: "148px",
-  MORE: "var(--luke-control-height)",
 } as const;
 
 /** What the toast says once a version is restored, and why its Undo did nothing. */
@@ -93,9 +91,6 @@ const CURRENT_HINT = "This version is already current";
 
 /** What the version's restore says. */
 const RESTORE_LABEL = "Restore this version";
-
-/** What a phone's ⋯ over a version is named for ("Version actions"). */
-const VERSION_THING = "Version";
 
 /** What Restore this version says while its restore is under way. */
 const RESTORING = "Restoring";
@@ -308,19 +303,16 @@ export function sayRestored(
   );
 }
 
-/** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document. */
+/** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document; a phone's header ends in the same `actions`, its one Restore, which no ⋯ of one item would hold. */
 function VersionPageFrame({
   lead,
   title,
   actions,
-  more,
   children,
 }: {
   lead?: React.ReactNode;
   title: React.ReactNode;
   actions: React.ReactNode;
-  /** The ⋯ holding `actions` on a phone, whose bar has room for one control a corner. */
-  more: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   // Note that only a phone leads the bar with a way back, the version standing there alone.
@@ -334,7 +326,7 @@ function VersionPageFrame({
       {lead === undefined ? (
         <Toolbar title={titled} actions={actions} />
       ) : (
-        <PhoneHead place="version" start={lead} title={titled} end={more} />
+        <PhoneHead place="version" start={lead} title={titled} end={actions} />
       )}
       <Fill className="desktop-document @container/plan-document">
         <DocumentScroll>{children}</DocumentScroll>
@@ -395,23 +387,6 @@ export function VersionView({
           </Button>
         </Tooltip>
       }
-      more={
-        <PlaceMore
-          thing={VERSION_THING}
-          shown
-          groups={() => [
-            [
-              {
-                label: RESTORE_LABEL,
-                icon: <RotateCcwIcon />,
-                detail: viewing.current ? CURRENT_HINT : undefined,
-                disabled: viewing.current || restore.busy,
-                onSelect: () => restore.onRestore(),
-              },
-            ],
-          ]}
-        />
-      }
     >
       <VersionContent
         viewing={viewing}
@@ -443,7 +418,6 @@ export function VersionPageSkeleton({
       lead={lead}
       title={<Skeleton width={BAR_SKELETON.MOMENT} />}
       actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.RESTORE} />}
-      more={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.MORE} />}
     >
       <VersionSkeleton title={title} section={section} />
     </VersionPageFrame>

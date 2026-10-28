@@ -48,7 +48,6 @@ import {
   FoldVerticalIcon,
   GLYPH,
   ImageIcon,
-  RotateCwIcon,
   UnfoldVerticalIcon,
 } from "@luke/ui/icons";
 import {
@@ -158,7 +157,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * files and the member's viewed marks with them (`useChangesReads`), so its
  * own Files changed tab counts the lines left to review by the marks drawn
  * here; it asks as the view first comes on screen,
- * when the developer presses Retry or Refresh changes, and the moment the
+ * when the developer presses Retry or the tab's Refresh, and the moment the
  * agent ends, since that is when what it published has settled. A refresh
  * leaves the files drawn standing until its answer lands; a read that
  * failed says so with a retry, as a File tab's does; an agent with no pull
@@ -335,17 +334,18 @@ const CHANGES_MENU_WORDS = {
 } as const;
 
 /**
- * The bar's ⋯ over the diffs, which acts on the whole pull request since the
- * bar names no file: its patch copied or saved, every file the read holds
- * in the list's order (`pullRequestPatch`), and the changes read again. The
- * patch is not offered, and says why, where the read stopped short of every
- * file, since it would not be the pull request's. A file's own path is
- * copied from its header (`FileHead`). `PaneBar` draws it as its ⋯.
+ * The bar's ⋯ over the diffs, named Files changed, which acts on the whole
+ * pull request since the bar names no file: its patch copied or saved, every
+ * file the read holds in the list's order (`pullRequestPatch`). The patch is
+ * not offered, and says why, where the read stopped short of every file,
+ * since it would not be the pull request's. A file's own path is copied from
+ * its header (`FileHead`). `PaneBar` draws it as its ⋯. Note that it offers
+ * no Refresh, because the Pull request tab the view stands in hands its own
+ * to the same screen's ⋯, which reads these changes again too, and one
+ * screen offers one Refresh.
  */
 function useChangesMenu({
   pullRequest,
-  reading,
-  onRefresh,
 }: {
   /** The pull request read; none, while there is none to act on, draws no ⋯. */
   pullRequest: {
@@ -353,9 +353,6 @@ function useChangesMenu({
     readonly truncated: boolean;
     readonly files: readonly CodingAgentChangedFile[];
   } | null;
-  /** Whether a read is out, which a refresh would only repeat. */
-  reading: boolean;
-  onRefresh: () => void;
 }): PaneBarMenu | undefined {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
@@ -367,7 +364,7 @@ function useChangesMenu({
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
   return {
-    thing: "Changes",
+    thing: "Files changed",
     groups: [
       [
         {
@@ -389,12 +386,6 @@ function useChangesMenu({
               saveText(pullRequestPatchName(pullRequest.url), patch).catch(() => undefined);
             }
           },
-        },
-        {
-          label: "Refresh changes",
-          icon: <RotateCwIcon aria-hidden="true" />,
-          disabled: reading,
-          onSelect: onRefresh,
         },
       ],
     ],
@@ -423,7 +414,7 @@ export interface ChangesThreads {
   readonly list: readonly ReviewThread[];
   /** Draws one, under its line or above the diff, where it names the lines it is on. */
   readonly draw: (thread: ReviewThread, place: ThreadPlace) => ReactNode;
-  /** Reads the threads again, as Refresh changes reads the files again, so the two describe the same push. */
+  /** Reads the threads again, as Retry reads the files again, so the two describe the same push. */
   readonly refresh?: (() => void) | undefined;
 }
 
@@ -1885,7 +1876,7 @@ export function AgentChangesTab({
     ask();
     threads?.refresh?.();
   };
-  const changesMenu = useChangesMenu({ pullRequest, reading: out, onRefresh: refresh });
+  const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
   // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files.
   const phone = usePhoneRoom();
