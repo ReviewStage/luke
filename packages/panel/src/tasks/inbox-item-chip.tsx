@@ -7,7 +7,6 @@ import type {
 } from "@luke/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
-import { InboxIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { InboxItemCard, inboxLineGlyph } from "./inbox-item-parts.js";
@@ -124,7 +123,7 @@ function waitingWords(item: WaitingBrief, readerId: string | undefined): string 
   return waitsOnReader(item, readerId) ? NEEDS_YOU.LABEL : "Waiting";
 }
 
-/** An item's card from main's brief alone: its question, that it waits for an answer, and when it was asked. */
+/** An item's card from main's brief alone, wearing the thread glyph its chip wears until the item is read: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
   item,
   now,
@@ -137,7 +136,7 @@ function WaitingItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={<InboxIcon aria-hidden="true" />}
+        glyph={<GLYPH.THREAD />}
         name={item.title}
         corner={<Time at={item.postedAt} now={now} hint={false} />}
       />
