@@ -577,7 +577,7 @@ export function StopIcon(): React.JSX.Element {
   );
 }
 
-/** A board on its stand with a line drawn across it: the task's whiteboard. */
+/** A board on its stand with a line drawn across it: a plan's diagram. */
 export function BoardIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

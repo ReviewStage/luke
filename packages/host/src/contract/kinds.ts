@@ -280,8 +280,8 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, a call about the open task, and its
- * whiteboard saved. And what one task holds, read as its tabs draw it: its
+ * GitHub connected or disconnected, and a call about the open task. And
+ * what one task holds, read as its tabs draw it: its
  * earlier work and conversation, a call's messages, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
@@ -323,8 +323,6 @@ export const TASKS_ACT_KIND = {
   GITHUB_DISCONNECT: "github.disconnect",
   /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */

@@ -834,7 +834,6 @@ function InboxSidePanel({
       holder={SIDE_PANEL_HOLDER.INBOX}
       taskId={panelFor ?? ""}
       repository={repository}
-      board={undefined}
       pages={pages}
       agents={agents}
       openAgents={NO_OPEN_AGENTS}

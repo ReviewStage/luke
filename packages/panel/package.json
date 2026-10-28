@@ -72,7 +72,6 @@
   },
   "dependencies": {
     "@effect/atom-react": "catalog:",
-    "@excalidraw/excalidraw": "0.18.1",
     "@luke/brand": "workspace:*",
     "@luke/credentials": "workspace:*",
     "@luke/features": "workspace:*",

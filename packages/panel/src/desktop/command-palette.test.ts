@@ -1070,13 +1070,13 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 
   type("#42");
   const changes = rows().filter((row) => row.startsWith("Pull request"));
-  type("Show board");
-  const board = rows().filter((row) => row.startsWith("Show board"));
+  type("Show comments");
+  const comments = rows().filter((row) => row.startsWith("Show comments"));
   chooseFilter("Files");
   type("index");
   const notice = document.querySelector(".luke-note-line")?.textContent;
 
-  assert.deepEqual([changes, board], [[], []]);
+  assert.deepEqual([changes, comments], [[], []]);
   assert.deepEqual(read, [], "the hidden task's files are not read");
   assert.equal(notice, "Open a task with a repository to search its files.");
 });
@@ -1084,7 +1084,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 /** The palette over the plan with a repository, or over the Inbox in front of it with `chosen` chosen there, each file it opens recorded. */
 async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | undefined): Promise<{
   opened: string[];
-  boards: string[];
+  comments: string[];
   pulls: string[];
 }> {
   const agent = {
@@ -1147,13 +1147,13 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
   );
   type("#42");
   const pulls = rows().filter((row) => row.startsWith("#42"));
-  type("Show board");
-  const boards = rows().filter((row) => row.startsWith("Show board"));
+  type("Show comments");
+  const comments = rows().filter((row) => row.startsWith("Show comments"));
   chooseFilter("Files");
   type("accept");
   await act(async () => undefined);
   if (rows().includes("accept.ts")) press("accept.ts");
-  return { opened, boards, pulls };
+  return { opened, comments, pulls };
 }
 
 /** The Pull request row of the plan's agent, as `paletteOverPanel` finds it by its number. */
@@ -1162,7 +1162,7 @@ const PULL = `#42 Export invoices as CSV · Invoice export · ${DOCUMENT_TASK.na
 test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file or a pull request found opens, and its panel tabs are offered on the plan alone, since the Inbox's panel draws none", async () => {
   assert.deepEqual(await paletteOverPanel(undefined), {
     opened: ["accept.ts"],
-    boards: ["Show board"],
+    comments: ["Show comments"],
     pulls: [PULL],
   });
   act(() => {
@@ -1170,14 +1170,14 @@ test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K off
   });
   assert.deepEqual(
     await paletteOverPanel({ chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" } }),
-    { opened: ["accept.ts"], boards: [], pulls: [PULL] },
+    { opened: ["accept.ts"], comments: [], pulls: [PULL] },
   );
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   assert.deepEqual(await paletteOverPanel({ chosen: undefined }), {
     opened: [],
-    boards: [],
+    comments: [],
     pulls: [],
   });
 });
@@ -3194,9 +3194,12 @@ test("with a task open and nothing typed, ⌘K lists the task's commands first, 
   ];
   assert.deepEqual(listed.slice(0, task.length), task);
   const goTo = listed.findIndex((row) => row.startsWith("Go to "));
-  const showBoard = listed.indexOf("Show board");
+  const showComments = listed.indexOf("Show comments");
   const window = listed.indexOf("Show my tasks");
-  assert.ok(showBoard >= task.length && showBoard < goTo, "the task's Show rows come before Go to");
+  assert.ok(
+    showComments >= task.length && showComments < goTo,
+    "the task's Show rows come before Go to",
+  );
   assert.ok(goTo < window, "Go to comes before the window's own commands");
   assert.ok(
     listed.slice(goTo, window).every((row) => row.startsWith("Go to ")),

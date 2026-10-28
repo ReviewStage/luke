@@ -161,7 +161,6 @@ function panelCard(subject: Extract<CardSubject, { kind: typeof TAB_KIND.PANEL }
       );
     case SIDE_PANEL_TAB.INBOX:
       return subject.inbox === undefined ? null : <InboxCard inbox={subject.inbox} />;
-    case SIDE_PANEL_TAB.BOARD:
     case SIDE_PANEL_TAB.COMMENTS:
       return null;
   }

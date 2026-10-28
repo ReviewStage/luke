@@ -1,6 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { BoardIcon, CommentsIcon, DocumentIcon } from "@luke/ui";
+import { CommentsIcon, DocumentIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
@@ -50,20 +50,18 @@ import {
  *
  * The task's column is the agents': its Call with Luke and its coding
  * agents (`use-main-tabs.ts`); everything else (the plan's document, the
- * task's Inbox, the whiteboard, and the plan's
- * comments) stands in a panel at the window's right that the developer
- * opens and closes, as every devtool window's secondary sidebar does. What
- * opens it on its own is Luke drawing on a task's board
- * (`use-panel-arrivals.ts`), each time he does, and an Inbox item the
+ * task's Inbox and the plan's comments) stands in a panel at the window's
+ * right that the developer opens and closes, as every devtool window's
+ * secondary sidebar does. What opens it on its own is a page Luke shows on
+ * a call (`use-panel-arrivals.ts`), each time he does, and an Inbox item the
  * developer has not seen (`onInboxRead`); a subagent's tab opened from an
  * agent's transcript opens it too. A task New task started with an agent
  * opens on the agent alone, its plan's tab closed there (`use-tasks-tab.ts`),
  * so the panel stands as it stood on every other task. Not to be confused
  * with "the panel", which in this renderer is Luke's whole surface.
  *
- * A fixed tab stands in the strip only once the open task has used it: its
- * board holds something, or a comment was left on
- * its plan. The plan's own tab is used on every task, so it stands on each
+ * A fixed tab stands in the strip only once the open task has used it: a
+ * comment was left on its plan. The plan's own tab is used on every task, so it stands on each
  * until closed there. The Inbox stands only once it has something to show:
  * it is closed on a task until an item the developer has not seen waits
  * there, and then opens and is chosen as an arrival is (in a narrow room it
@@ -78,7 +76,7 @@ plan); an item has not
  * draws none of them. The developer's own choices lie
  * over that, per task: a tab they open from the "+" stands on that task
  * though it holds nothing, and one they close stays closed on that task however
- * much more arrives, until they or Luke's next drawing opens it again. The tab chosen is the
+ * much more arrives, until they open it again. The tab chosen is the
  * window's rather than any task's, so a chosen tab the open task does not
  * have reads as the first it does.
  *
@@ -178,13 +176,12 @@ plan); an item has not
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed five. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   /** The task's plan, its document (`plan-body.tsx`). */
   PLAN: "plan",
   /** Everything the task's agents need of the developer, answered in place (`inbox-pane.tsx`). */
   INBOX: "inbox",
-  BOARD: "board",
   /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
   COMMENTS: "comments",
 } as const;
@@ -194,8 +191,8 @@ export const SIDE_PANEL_TAB = {
  * may still name: History, whose versions now take the whole window
  * (`desktop-version-history.tsx`), Transcript, Work, and Call, the task's
  * calls with Luke, whose calls every agent's tab takes now, the task's
- * Chat channel, gone with Chat, and Code, the code its agents showed, gone
- * with `show_code`. Note that a
+ * Chat channel, gone with Chat, Code, the code its agents showed, gone
+ * with `show_code`, and Board, the task's whiteboard. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
  * would otherwise not read at all and lose every other choice it holds.
  */
@@ -206,6 +203,7 @@ const RETIRED_SIDE_PANEL_TAB = {
   CALL: "call",
   CHAT: "chat",
   CODE: "code",
+  BOARD: "board",
 } as const;
 
 type RetiredSidePanelTab = (typeof RETIRED_SIDE_PANEL_TAB)[keyof typeof RETIRED_SIDE_PANEL_TAB];
@@ -280,7 +278,6 @@ interface SidePanelTabKind {
 export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.PLAN]: { label: "Plan", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
-  [SIDE_PANEL_TAB.BOARD]: { label: "Board", icon: BoardIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
@@ -696,8 +693,8 @@ function clampWidth(width: number): number {
 
 /**
  * Whether the open task holds something of each fixed kind: its plan
- * always, its board any element, its plan any
- * comment. Of the Inbox it says whether the task may draw one at all, an
+ * always, its plan any comment. Of the Inbox it says whether the task may
+ * draw one at all, an
  * agent held or an item waiting, since the Inbox stands only once opened
  * (`drawnFixed`). A kind not yet read on the task is absent, which draws no
  * tab, as nothing does.

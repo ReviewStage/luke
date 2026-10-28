@@ -16,12 +16,9 @@ import { fakeAppPlatform } from "./testing/app-platform.js";
 
 const BASE = "https://luke.example/assets/panel/";
 
-test("Excalidraw's fonts and the Codex mark both resolve from the asset base the shell names", async () => {
+test("the Codex mark resolves from the asset base the shell names", () => {
   window.history.replaceState(null, "", "/acme/plan/0b805267");
   fakeAppPlatform({ assetBase: () => BASE });
-
-  await import("./whiteboard/asset-path.js");
-  assert.equal(window.EXCALIDRAW_ASSET_PATH, BASE);
 
   const page = document.createElement("div");
   page.innerHTML = renderToStaticMarkup(

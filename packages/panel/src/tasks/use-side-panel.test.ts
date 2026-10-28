@@ -342,7 +342,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 
   render(false);
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose({ changes: AGENT }));
 
   render(true);
@@ -354,7 +353,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   render(false);
   assert.deepEqual(panel().strip, [
     SIDE_PANEL_TAB.PLAN,
-    SIDE_PANEL_TAB.BOARD,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -450,8 +448,8 @@ test("a record kept while the Call and Code stood in the panel reads with their 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.COMMENTS],
-    "neither the Call nor Code stands in the strip, and the plan leads it",
+    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS],
+    "neither the Call, Code, nor the Board stands in the strip, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
   assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");

@@ -1101,7 +1101,7 @@ the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
-its whiteboard, its Call tab, the contents of its File tabs with
+its Call tab, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
@@ -1110,10 +1110,10 @@ the live view of its page; code drawn in a
 transcript; the API keys page of Settings; an automation's
 webhook secret, the one time it is shown; the admin page in the app, which
 only our maintainers can open and which names other people's accounts; and the cards
-that open over a row or a chip on hover, a page's preview among them. The
-whiteboard and a Terminal tab's shell draw their words as pixels, which the
-masking cannot reach, so leaving them out is
-their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
+that open over a row or a chip on hover, a page's preview among them. A
+Terminal tab's shell draws its words as pixels, which the
+masking cannot reach, so leaving it out is
+its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked. Each recording carries Luke's version and whether it is a released

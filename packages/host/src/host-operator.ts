@@ -239,7 +239,6 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
-  type TasksBoardSaveParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
@@ -553,8 +552,6 @@ export interface HostOperator {
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a task's repository, coloured; or why it is not shown. */
   tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
   tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
@@ -1850,15 +1847,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_START, request),
         answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksBoardSave: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.TASKS_BOARD_SAVE, {
-          taskId: params.taskId,
-          elements: params.elements,
-          appliedDrawing: params.appliedDrawing,
-          ...(params.image === undefined ? undefined : { image: params.image }),
-        }),
       ),
     codingAgentModels: () =>
       Effect.map(

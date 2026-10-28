@@ -11,12 +11,12 @@ import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
  *
  * The service answers one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
- * follows them (`live-follow.ts`) for as long as the task stands open, as it
- * does the board (`board-follow.ts`), and answers each delivery with the
- * parts it moved, which the caller reads again from the service. The calls
- * and code parts the service still answers are read by no one: every call
- * speaks into an agent, whose own transcript says what was said, and no
- * window draws the code agents showed. Only which parts moved leaves.
+ * follows them (`live-follow.ts`) for as long as the task stands open, and
+ * answers each delivery with the parts it moved, which the caller reads
+ * again from the service. The calls and code parts the service still
+ * answers are read by no one: every call speaks into an agent, whose own
+ * transcript says what was said, and no window draws the code agents
+ * showed. Only which parts moved leaves.
  */
 
 /** A part of the record the panel reads again once its mark moves. */

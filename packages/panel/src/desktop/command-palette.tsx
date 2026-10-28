@@ -933,7 +933,7 @@ function paletteEntries(entry: AddEntry): readonly AddEntry[] {
  * agent's browser; then its archived agents (`archivedAgentRows`), each in
  * its row's look and words, found by its row's words, and beside the task's
  * name; none while no task is open. The "+"'s kinds stand under Commands as
- * Show board and the rest (`panelTabRows`). An agent opens on its task's
+ * Show comments and the rest (`panelTabRows`). An agent opens on its task's
  * tab, or its own page where it has no task, the Inbox the same way, and the panel's
  * places as the "+" opens them, the version history giving way to each, so
  * none opens behind what covers it.
@@ -1301,7 +1301,7 @@ function copyLinkRows(
 }
 
 /**
- * The side panel's kinds, listed with the commands as Show board and the
+ * The side panel's kinds, listed with the commands as Show comments and the
  * rest, a command's verb before the name its tab wears, each wearing its
  * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
  * its tab as the panel's "+" does, over the version history, and only the

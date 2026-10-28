@@ -73,7 +73,7 @@ import { askHeadWords } from "./inbox-ask-words.js";
  * is read through the wire's own schema, since its input is the list the
  * row draws item by item, and an item posted to the developer's inbox
  * through it too, its row naming the item the Inbox tab draws. A call
- * about something the window opens elsewhere, a page, the board, an agent,
+ * about something the window opens elsewhere, a page, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
  * A call of an integration's own MCP tool, stored under its provider's
  * remote name, is drawn as the tool it ran: the provider's mark, the
@@ -1190,8 +1190,6 @@ export const TOOL_TARGET = {
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
-  /** The side panel's Board tab. */
-  BOARD: "board",
   /** The task's own tab, its document. */
   PLAN: "plan",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
@@ -1205,7 +1203,6 @@ export const TOOL_TARGET = {
 export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
-  | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
@@ -1219,7 +1216,6 @@ export type ToolTarget =
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
