@@ -21,7 +21,7 @@ import type { ADMIN_ATTENTION_KIND, AdminWorkspacesKind } from "./admin-wire.js"
 import type { AutomationRunReason } from "./automation-wire.js";
 import type { CodingAgentFailure, CodingAgentStatus, ContextWindow } from "./coding-agent-wire.js";
 import type { GitHubInstallationStatus } from "./github-installation-wire.js";
-import type { INTEGRATION_ROW_STATUS, IntegrationRowStatus } from "./integration-row-wire.js";
+import type { IntegrationRowStatus } from "./integration-row-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 import type { FastAccess, ProviderKeyProvider, ProviderKeyStatus } from "./provider-key-wire.js";
 
@@ -446,12 +446,6 @@ export interface AdminWorkspaceInstallation {
   status: GitHubInstallationStatus;
 }
 
-/** One integration a workspace connected for its members, and whether its grant still works. */
-export interface AdminWorkspaceIntegration {
-  provider: IntegrationProvider;
-  status: typeof INTEGRATION_ROW_STATUS.CONNECTED | typeof INTEGRATION_ROW_STATUS.EXPIRED;
-}
-
 export interface AdminWorkspaceRow {
   id: string;
   /** The workspace's name as its members read it; a personal one goes by its owner's name. */
@@ -462,7 +456,6 @@ export interface AdminWorkspaceRow {
   members: number;
   /** Every installation connected to it, the first linked first. */
   installations: AdminWorkspaceInstallation[];
-  integrations: AdminWorkspaceIntegration[];
   tasksWeek: number;
   agentsWeek: number;
   /** Distinct pull requests from its agents that merged inside the week. */

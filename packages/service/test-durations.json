@@ -162,7 +162,6 @@
   "src/integrations/integration-tool-store.test.ts": 1682,
   "src/integrations/integrations-app.test.ts": 2230,
   "src/integrations/mcp-tools.test.ts": 160,
-  "src/integrations/workspace-linear-app.test.ts": 2329,
   "src/live/live-procedures.test.ts": 10022,
   "src/live/live-statements.test.ts": 2330,
   "src/maintenance/eve-sandbox-sweep.test.ts": 3088,

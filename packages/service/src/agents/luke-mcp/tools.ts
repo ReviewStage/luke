@@ -56,10 +56,7 @@ import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../../integrations/integration-connect.js";
+import type { IntegrationConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   type CommentToolName,
@@ -148,7 +145,6 @@ export type LukeMcpServices =
   | HttpClient.HttpClient
   | GitHubApp
   | ModelCatalog
-  | WorkspaceLinearConnect
   | IntegrationConnect
   | HostedEnvironment
   | SentryApp;

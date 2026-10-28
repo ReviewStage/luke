@@ -89,19 +89,17 @@ import { useWordsDates } from "./words-dates.js";
  * MCP popover draws it, with what the mention does for the agent the words
  * go to (`server-card.tsx`); a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. A Linear issue's chip, a pull
- * request's, and a GitHub issue's say the state it stands in after their
- * name, a pull request's and a GitHub issue's wearing GitHub's mark for it,
- * as the workspace's own Linear or GitHub App answers them on the service
- * (`use-link-standing.ts`). A pull request or a GitHub issue GitHub answered
- * for is then called by its number alone, `#42`, its repository's name
- * before it where that is not the task's, `relay#42`, whatever words its
- * link was written with, so a pasted address, an agent's `[@#42](…)`, and
- * its `[@the fix](…)` draw one chip; a bare Linear issue is called by its
- * key and title. Its card then says its title, its key and state, and a
- * pull request's its size, who opened it and when, its branches, labels,
- * and counts (`pull-request-card-notes.tsx`), in its address's place,
- * which it says only while its provider has answered nothing. A page an
+ * browser, its card saying its address. A pull request's chip and a GitHub
+ * issue's say the state it stands in after their name, wearing GitHub's
+ * mark for it, as the workspace's own GitHub App answers them on the
+ * service (`use-link-standing.ts`). A pull request or a GitHub issue GitHub
+ * answered for is then called by its number alone, `#42`, its repository's
+ * name before it where that is not the task's, `relay#42`, whatever words
+ * its link was written with, so a pasted address, an agent's `[@#42](…)`,
+ * and its `[@the fix](…)` draw one chip. Its card then says its title, its
+ * key and state, and a pull request's its size, who opened it and when, its
+ * branches, labels, and counts (`pull-request-card-notes.tsx`), in its
+ * address's place, which it says only while GitHub has answered nothing. A page an
  * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`), and any
  * other agent, one of another task's or of none, or one named where the
@@ -418,11 +416,7 @@ function MentionCard({
           <HoverCardNote>
             {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
           </HoverCardNote>
-          {standing.opener === undefined ? (
-            <OptionalNote words={standing.byline} />
-          ) : (
-            <OpenedNote opener={standing.opener} />
-          )}
+          {standing.opener === undefined ? null : <OpenedNote opener={standing.opener} />}
         </>
       ) : (
         <PullRequestCardNotes

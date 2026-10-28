@@ -335,18 +335,6 @@ export const HOSTED_SERVICE_PATH = {
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /**
-   * Where an owner or admin connects Linear for a whole workspace (POST):
-   * answers Vercel Connect's sign-in address, which returns the browser to
-   * `/api/workspaces/linear/connected` (`linear-wire.ts`).
-   */
-  WORKSPACE_LINEAR_CONNECT: "/api/workspaces/linear/connect",
-  /** Where Vercel Connect returns the browser from a workspace's Linear sign-in (GET), which lands it on the integrations landing page. */
-  WORKSPACE_LINEAR_CONNECTED: "/api/workspaces/linear/connected",
-  /** A workspace's Linear disconnected by an owner or admin (POST), answering the workspace. */
-  WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
-  /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
-  WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
-  /**
    * Where an owner or admin installs Luke's Sentry integration for a
    * workspace (POST): answers Sentry's install address, carrying a
    * single-use intent Sentry returns to `SENTRY_INSTALLED` with

@@ -34,7 +34,6 @@ import { taskSectionsContract } from "./task-sections.js";
 import { tasksContract } from "./tasks.js";
 import { workspaceGithubContract } from "./workspace-github.js";
 import { workspaceInvitationsContract } from "./workspace-invitations.js";
-import { workspaceLinearContract } from "./workspace-linear.js";
 import { workspaceSentryContract } from "./workspace-sentry.js";
 import { workspacesContract } from "./workspaces.js";
 
@@ -76,7 +75,6 @@ export const hostedContract = {
   taskSections: taskSectionsContract,
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,
-  workspaceLinear: workspaceLinearContract,
   workspaceSentry: workspaceSentryContract,
   workspaces: workspacesContract,
 };

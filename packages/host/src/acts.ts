@@ -1,4 +1,3 @@
-import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
 import { Schema as EffectSchema } from "effect";
@@ -24,17 +23,11 @@ export const WORKSPACE_NOT_PERMITTED_REFUSAL =
 const _workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 const _formerMembersSchema = EffectSchema.Array(formerMemberSchema);
 
-const _linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
-
 const _workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
   "GitHub is the only way you sign in to this Luke account, so it cannot be disconnected." as const;
-
-/** What a Linear read is refused with where the workspace's Linear could not be read. */
-export const LINEAR_UNAVAILABLE_REFUSAL =
-  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it." as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =

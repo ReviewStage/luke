@@ -22,7 +22,6 @@ import { inboxItem } from "@luke/database/schemas/inbox";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   DAILY_COUNT,
   type DailyCount,
@@ -282,11 +281,6 @@ function reachRows(since: Date) {
       })
       .from(integrationConnection)
       .where(eq(integrationConnection.status, INTEGRATION_STATUS.CONNECTED)),
-    queryBuilder
-      .select({ tag: tag(REACH_FEATURE.INTEGRATIONS), userId: userIdOf(member.userId) })
-      .from(workspaceIntegrationConnection)
-      .innerJoin(member, eq(member.organizationId, workspaceIntegrationConnection.organizationId))
-      .where(eq(workspaceIntegrationConnection.status, INTEGRATION_STATUS.CONNECTED)),
     queryBuilder
       .select({ tag: tag(REACH_FEATURE.AUTOMATIONS), userId: userIdOf(automationRun.userId) })
       .from(automationRun)

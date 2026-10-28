@@ -4,9 +4,8 @@
  * A native agent's harness lists every integration server's tools at each
  * launch (`connection-door.ts`), and a live list needs the grant's token
  * from Vercel Connect, which bills each ask. So the list is kept on the row
- * that stands for the grant it was read on: the account's own
- * (`schemas/integration.ts`), or the workspace's Linear
- * (`schemas/workspace-integration.ts`). A grant from the account's GitHub
+ * that stands for the grant it was read on, the account's own
+ * (`schemas/integration.ts`). A grant from the account's GitHub
  * sign-in has no row and keeps nothing, since reading its token asks Connect
  * nothing. What is kept is each tool's name, words, and schemas as the server
  * sent them, never a credential, and it is read back only for the grant it
@@ -17,17 +16,14 @@
  * list read on a grant a sign-in has since replaced is dropped rather than
  * kept over the new one, and only over a list whose read began no later, so
  * two reads that finish out of order keep the newer. A completed sign-in
- * clears the row's list (`integration-store.ts`,
- * `workspace-integration-store.ts`), and a Disconnect deletes the row and
- * the list with it.
+ * clears the row's list (`integration-store.ts`), and a Disconnect deletes
+ * the row and the list with it.
  */
 
 import { Database } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { integrationConnection } from "@luke/database/schemas/integration";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
-import { integrationProviderSchema } from "@luke/features/integration-wire";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -56,11 +52,6 @@ const AccountGrantSchema = Schema.Struct({
   connectSubject: Schema.String,
 });
 
-const WorkspaceGrantSchema = Schema.Struct({
-  organizationId: Schema.String,
-  provider: integrationProviderSchema,
-});
-
 /** The account's connected row under the connection name, while it stands for the grant under this subject. */
 function ofAccountGrant({
   userId,
@@ -72,15 +63,6 @@ function ofAccountGrant({
     eq(integrationConnection.connectionName, connectionName),
     eq(integrationConnection.connectSubject, connectSubject),
     eq(integrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED),
-  );
-}
-
-/** The workspace's connected row at the provider. */
-function ofWorkspaceGrant({ organizationId, provider }: typeof WorkspaceGrantSchema.Type) {
-  return and(
-    eq(workspaceIntegrationConnection.organizationId, organizationId),
-    eq(workspaceIntegrationConnection.provider, provider),
-    eq(workspaceIntegrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED),
   );
 }
 
@@ -99,21 +81,6 @@ const findAccountTools = SqlSchema.findOneOption({
     ),
 });
 
-const findWorkspaceTools = SqlSchema.findOneOption({
-  Request: WorkspaceGrantSchema,
-  Result: StoredRowSchema,
-  execute: (grant) =>
-    Database.use((db) =>
-      db
-        .select({
-          tools: workspaceIntegrationConnection.tools,
-          toolsListedAt: workspaceIntegrationConnection.toolsListedAt,
-        })
-        .from(workspaceIntegrationConnection)
-        .where(ofWorkspaceGrant(grant)),
-    ),
-});
-
 const updateAccountTools = SqlSchema.void({
   Request: Schema.Struct({ ...AccountGrantSchema.fields, tools: ToolsSchema, from: Schema.Date }),
   execute: ({ tools, from, ...grant }) =>
@@ -128,26 +95,6 @@ const updateAccountTools = SqlSchema.void({
             or(
               isNull(integrationConnection.toolsListedAt),
               lte(integrationConnection.toolsListedAt, from),
-            ),
-          ),
-        ),
-    ),
-});
-
-const updateWorkspaceTools = SqlSchema.void({
-  Request: Schema.Struct({ ...WorkspaceGrantSchema.fields, tools: ToolsSchema, from: Schema.Date }),
-  execute: ({ tools, from, ...grant }) =>
-    Database.use((db) =>
-      db
-        .update(workspaceIntegrationConnection)
-        .set({ tools: keptOf(tools), toolsListedAt: from })
-        .where(
-          and(
-            ofWorkspaceGrant(grant),
-            lte(workspaceIntegrationConnection.connectedAt, from),
-            or(
-              isNull(workspaceIntegrationConnection.toolsListedAt),
-              lte(workspaceIntegrationConnection.toolsListedAt, from),
             ),
           ),
         ),
@@ -183,8 +130,6 @@ export function readStoredTools(
   switch (grant.holder) {
     case INTEGRATION_GRANT_HOLDER.ACCOUNT:
       return Effect.map(findAccountTools(grant), storedOf);
-    case INTEGRATION_GRANT_HOLDER.WORKSPACE:
-      return Effect.map(findWorkspaceTools(grant), storedOf);
     case INTEGRATION_GRANT_HOLDER.SIGN_IN:
       return Effect.succeed(undefined);
   }
@@ -207,13 +152,6 @@ export function storeTools(
         userId: grant.userId,
         connectionName: grant.connectionName,
         connectSubject: grant.connectSubject,
-        tools,
-        from,
-      });
-    case INTEGRATION_GRANT_HOLDER.WORKSPACE:
-      return updateWorkspaceTools({
-        organizationId: grant.organizationId,
-        provider: grant.provider,
         tools,
         from,
       });
