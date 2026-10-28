@@ -1233,17 +1233,21 @@ body,
   background: var(--luke-color-fill-hover);
 }
 
-.task-summary-archived-agent:has(:focus-visible) > .task-summary-row {
+/* The marks stay while the row's menu stands open from its ⋯, as a list row's acts do. */
+.task-summary-archived-agent:has(:focus-visible) > .task-summary-row,
+.task-summary-archived-agent[data-menu-open="true"] > .task-summary-row {
   padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
 }
 
-.task-summary-archived-agent:has(:focus-visible) > .task-summary-marks {
+.task-summary-archived-agent:has(:focus-visible) > .task-summary-marks,
+.task-summary-archived-agent[data-menu-open="true"] > .task-summary-marks {
   opacity: 1;
   pointer-events: auto;
   transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
 }
 
-.task-summary-archived-agent:has(:focus-visible) .failed-mark {
+.task-summary-archived-agent:has(:focus-visible) .failed-mark,
+.task-summary-archived-agent[data-menu-open="true"] .failed-mark {
   display: none;
 }
 

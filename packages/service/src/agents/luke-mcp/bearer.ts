@@ -15,7 +15,7 @@ import {
   readRunnerTokenConversation,
 } from "@luke/database/models/coding-agent-store";
 import { Effect, Option } from "effect";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 
 /** What a bearer header leads with before the bearer. */
 const BEARER_PREFIX = "Bearer ";

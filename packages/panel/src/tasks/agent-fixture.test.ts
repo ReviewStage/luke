@@ -47,7 +47,6 @@ const AGENT = { agentId: FIXTURE_AGENT_ID };
 /** The reads the agent's column and its side panel's tabs ask that answer once, each a value the contract encodes. */
 const READS: readonly Read[] = [
   read(ACT_KIND.CODING_AGENTS_LIST, { taskId: FIXTURE_TASK_ID, includeArchived: true }),
-  read(ACT_KIND.CODING_AGENTS_CALLS, AGENT),
   read(ACT_KIND.CODING_AGENTS_PULL_REQUEST, AGENT),
   read(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, AGENT),
   read(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, AGENT),

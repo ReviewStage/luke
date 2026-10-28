@@ -45,7 +45,6 @@ import {
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
-  type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
   type TasksPagesAnswer,
@@ -80,7 +79,6 @@ import {
   tasksEditParamsSchema,
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
-  tasksLinearIssuesParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPagesParamsSchema,
@@ -288,6 +286,7 @@ export type TasksClient = Pick<
   | "readFile"
   | "readTree"
   | "readSkills"
+  | "readRepositoryFile"
   | "readRepositoryTree"
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
@@ -319,9 +318,6 @@ export type TasksClient = Pick<
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
-    | "linearConnect"
-    | "linearDisconnect"
-    | "linearIssues"
     | "sentryInstallations"
     | "sentryInstall"
     | "sentryDisconnect"
@@ -499,7 +495,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return rest;
   }
 
-  /** The one live follow of the open task's pages and calls; running another interrupts it. */
+  /** The one live follow of the open task's plan and pages; running another interrupts it. */
   const recordFollow = yield* FiberHandle.make<void>();
 
   /** The tasks whose pages' mark moved, read one at a time by the loop below. */
@@ -1301,7 +1297,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** Follows `taskId`'s plan, pages, and calls live, in place of any follow standing; with `standing`, only where none stands. */
+  /** Follows `taskId`'s plan and pages live, in place of any follow standing; with `standing`, only where none stands. */
   function openRecord(taskId: string, standing?: { readonly onlyIfMissing: true }) {
     return Effect.asVoid(FiberHandle.run(recordFollow, followRecord(taskId), standing));
   }
@@ -1560,15 +1556,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksFileParamsSchema,
           params,
-          "reading a file names a task, a path, and a window of its lines",
+          "reading a file names a task, or a workspace and its repository, a path, and a window of its lines",
         );
         if (!gate()) return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { taskId, ...window } = read;
-        const answer = yield* served(client.readFile(taskId, window));
-        if (answer === undefined) {
-          return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        return carried<TasksFileAnswer>(answer);
+        const { path, firstLine, lastLine, raw, ref } = read;
+        const window = {
+          path,
+          firstLine,
+          lastLine,
+          ...(raw === undefined ? undefined : { raw }),
+          ...(ref === undefined ? undefined : { ref }),
+        };
+        const answer = yield* served(
+          "taskId" in read
+            ? client.readFile(read.taskId, window)
+            : client.readRepositoryFile(read, window),
+        );
+        return carried<TasksFileAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
     // the tree keeps the folders it has opened.
@@ -2316,52 +2320,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // Vercel Connect's address is answered to the caller that opens it and
-    // held nowhere: the grant lands in the browser, and the follow carries
-    // the connection.
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting Linear names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.linearConnect(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting Linear names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const disconnected = yield* workspaceCall(
-          client.workspaces.linearDisconnect(read.workspaceId),
-        );
-        return carried<TasksWorkspaceAnswer>(
-          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // The issues are answered to the window that asked and held nowhere: a
-    // picker reads them as it opens and as its search changes.
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksLinearIssuesParamsSchema,
-          params,
-          "reading Linear issues names a workspace",
-        );
-        if (!gate()) return carried<TasksLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
-        const listed = yield* served(client.workspaces.linearIssues(read));
-        return carried<TasksLinearIssuesAnswer>(
-          listed.ok ? { issues: listed.answer } : { failure: listed.failure },
         );
       }),
     // A workspace's Sentry is answered to the window that asked and held

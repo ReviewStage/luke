@@ -14,7 +14,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type {
   AdminWorkspaceInstallation,
-  AdminWorkspaceIntegration,
   AdminWorkspaceList,
   AdminWorkspaceOwner,
   AdminWorkspaceRow,
@@ -54,7 +53,7 @@ export const INVITATION_STATUS = {
 } as const;
 
 /** A workspace as the main read answers it, before its owner and connections are folded on. */
-type AdminWorkspaceSourceRow = Omit<AdminWorkspaceRow, "owner" | "installations" | "integrations">;
+type AdminWorkspaceSourceRow = Omit<AdminWorkspaceRow, "owner" | "installations">;
 
 /** What the queries read, before the builder folds it into the page's answer. */
 export interface AdminWorkspaceListSource {
@@ -65,7 +64,6 @@ export interface AdminWorkspaceListSource {
   owners: readonly { organizationId: string; owner: AdminWorkspaceOwner }[];
   /** Each listed workspace's installations, the first linked first. */
   installations: readonly { organizationId: string; installation: AdminWorkspaceInstallation }[];
-  integrations: readonly { organizationId: string; integration: AdminWorkspaceIntegration }[];
   summary: {
     shared: number;
     sharedActiveWeek: number;
@@ -127,7 +125,6 @@ export function buildAdminWorkspaceList(
 ): AdminWorkspaceList {
   const owners = byWorkspace(source.owners, (row) => row.owner);
   const installations = byWorkspace(source.installations, (row) => row.installation);
-  const integrations = byWorkspace(source.integrations, (row) => row.integration);
   const { summary } = source;
 
   return {
@@ -151,7 +148,6 @@ export function buildAdminWorkspaceList(
       ...row,
       owner: owners.get(row.id)?.[0] ?? null,
       installations: installations.get(row.id) ?? [],
-      integrations: integrations.get(row.id) ?? [],
     })),
   };
 }

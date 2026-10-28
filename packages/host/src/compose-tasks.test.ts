@@ -21,7 +21,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   PAGE_SHOWER,
@@ -158,10 +157,17 @@ interface FakeService extends TasksClient {
   folders: Record<string, TaskTreeAnswer>;
   /** What the service answers for each task's skills, by task id; a task with none answers nothing, as a service that did not answer. */
   skills: Record<string, TaskSkillsAnswer>;
-  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its folders by path, and its skills. */
+  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its files' windows and its folders by path, and its skills. */
   places: Record<
     string,
-    Record<string, { folders: Record<string, TaskTreeAnswer>; skills: TaskSkillsAnswer }>
+    Record<
+      string,
+      {
+        files: Record<string, TaskFileAnswer>;
+        folders: Record<string, TaskTreeAnswer>;
+        skills: TaskSkillsAnswer;
+      }
+    >
   >;
   /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
@@ -227,8 +233,6 @@ interface FakeService extends TasksClient {
   members: Record<string, WorkspaceMember[]>;
   /** Who each workspace's work names but left, as the service answers beside its members. */
   former: Record<string, FormerMember[]>;
-  /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
-  linearIssues: Record<string, LinearIssueSummary[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -312,7 +316,6 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
       own: each.id === PERSONAL.id,
       personal: each.personal === true,
       role: each.role,
-      linearActive: each.linear?.active ?? null,
       memberCount: each.memberCount ?? 1,
       photoVersion: each.photoVersion ?? null,
       ownerImage: null,
@@ -327,7 +330,6 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
   };
 }
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
-const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -525,7 +527,6 @@ function fakeService(tasks: Task[]): FakeService {
     renameAnswered: Effect.void,
     members: {},
     former: {},
-    linearIssues: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -667,33 +668,6 @@ function fakeService(tasks: Task[]): FakeService {
             each.id === workspaceId ? now : each,
           );
           return { ok: true, answer: now } as const;
-        }),
-      linearConnect: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-connect:${workspaceId}`);
-          return service.notPermitted
-            ? NOT_PERMITTED_WORKSPACE
-            : ({ ok: true, answer: LINEAR_SIGN_IN_URL } as const);
-        }),
-      linearDisconnect: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-disconnect:${workspaceId}`);
-          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
-          const found = service.memberships.find((each) => each.id === workspaceId);
-          if (found === undefined) return UNANSWERED_WORKSPACE;
-          const { linear: _gone, ...now } = found;
-          service.memberships = service.memberships.map((each) =>
-            each.id === workspaceId ? now : each,
-          );
-          return { ok: true, answer: now } as const;
-        }),
-      linearIssues: ({ workspaceId, query }) =>
-        Effect.sync(() => {
-          service.reads.push(`linear-issues:${workspaceId}:${query ?? ""}`);
-          const issues = service.linearIssues[workspaceId];
-          return issues === undefined
-            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
-            : ({ ok: true, answer: issues } as const);
         }),
       sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
@@ -840,6 +814,8 @@ function fakeService(tasks: Task[]): FakeService {
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
     readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
+    readRepositoryFile: (place, window) =>
+      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.files[window.path]),
     readRepositoryTree: (place, folder) =>
       Effect.sync(
         () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
@@ -2715,7 +2691,7 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
 );
 
 it.effect(
-  "a folder and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
+  "a file, a folder, and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2736,14 +2712,42 @@ it.effect(
           ],
         },
       });
+      const file = (path: string): TaskFileAnswer => ({
+        file: {
+          path,
+          repository: "acme/relay",
+          branch: "main",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["const seats = 3;"],
+        },
+      });
       service.places[ACME.id] = {
-        "acme/relay": { folders: { src: folder("src") }, skills: skills("release") },
+        "acme/relay": {
+          files: { "src/seats.ts": file("src/seats.ts") },
+          folders: { src: folder("src") },
+          skills: skills("release"),
+        },
       };
+      service.files["docs/plan.md"] = file("docs/plan.md");
       service.folders.docs = folder("docs");
       service.skills[INVITES] = skills("review");
       const { call } = yield* subject(service);
       const place = { workspaceId: ACME.id, repository: "acme/relay" };
 
+      const window = { firstLine: 1, lastLine: 1 };
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, { ...place, path: "src/seats.ts", ...window }),
+        file("src/seats.ts"),
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, {
+          taskId: INVITES,
+          path: "docs/plan.md",
+          ...window,
+        }),
+        file("docs/plan.md"),
+      );
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.TASKS_TREE, { ...place, path: "src" }),
         folder("src"),

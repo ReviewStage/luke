@@ -303,11 +303,11 @@ time the page opens rather than once.
 Three categories, and only the first is ever cut:
 
 - **Describes.** Restates the control, reassures, or explains the app to
-  itself. "Their volume dips while you and Luke are talking, and returns
-  after." under a switch reading *Quiet Music and Spotify*. Delete it. If the
-  line seems necessary, the label is what to fix.
+  itself. "Luke listens through the Mac's own microphone rather than
+  another." under a switch reading *Prefer the Mac's microphone*. Delete it.
+  If the line seems necessary, the label is what to fix.
 - **Instructs.** Tells the developer something they cannot act without.
-  "Talking uses the GPT Live API, which needs billing enabled." Nobody can
+  "With the lid shut, Luke uses the headset's microphone anyway." Nobody can
   guess that. Keep it.
 - **Reports state.** This is the row's content. "Version 0.2.0 is available to
   download." Keep it.

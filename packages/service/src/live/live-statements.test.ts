@@ -42,7 +42,7 @@ function liveStatements() {
       agentFollowedBy(USER_ID, parent, USER_ID),
     ),
   );
-  const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
+  const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID, true));
   const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
   const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
   return {

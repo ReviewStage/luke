@@ -336,6 +336,15 @@
   --spacing-tasks-board-column: 320px; /* off-scale: a card's width, as Linear's board stands it */
   --spacing-tasks-list-row: calc(var(--luke-control-height) + var(--luke-space-6));
   --spacing-tasks-list-maker: 16ch; /* off-scale: a maker's name, cut short at a short name's measure */
+  /* A row's box (`SelectBox`): a checkbox's own size, as shadcn/checkbox.tsx
+     draws it, and the start of a row that keeps a gutter for it, the box
+     standing at the row's inset with an icon's gap after it. */
+  --spacing-select-box: 14px; /* off-scale: the checkbox's own size */
+  --spacing-select-gutter: calc(
+    var(--luke-row-inset) +
+    var(--spacing-select-box) +
+    var(--luke-icon-gap)
+  );
   --grid-template-columns-tasks-list: var(--tasks-list-columns);
   --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
   --spacing-dialog-action: var(--luke-dialog-action-width);
@@ -612,12 +621,9 @@
     (var(--luke-control-height) - var(--luke-type-section-leading)) /
     2
   );
-  --spacing-toast-compact: calc(var(--luke-control-height) + var(--luke-space-8));
   --radius-toast: var(--luke-radius-14);
   --shadow-toast: 0 1px 2px var(--luke-color-shadow-soft), 0 12px 36px var(--luke-color-shadow);
   --shadow-toast-dismiss: 0 1px 3px var(--luke-color-shadow-soft);
-  /* The compact strip's shadow, kept within a few pixels. */
-  --shadow-toast-compact: 0 2px 6px var(--luke-color-shadow);
   --z-index-toast: var(--luke-z-toast);
 
   /* Chip and Badge. Their lengths name the scale's steps, as above. */

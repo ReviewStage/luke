@@ -51,6 +51,7 @@ import {
   Tooltip,
   useMenu,
   useMinute,
+  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -64,7 +65,14 @@ import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  commentAuthor,
+} from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -828,14 +836,14 @@ function phoneItemGroups(
       ? []
       : [
           {
-            label: "Previous item",
+            label: "Previous inbox item",
             icon: <ChevronUpIcon />,
             disabled: pager.onPrevious === undefined,
             onSelect: () => pager.onPrevious?.(),
             command: APP_COMMAND.PREVIOUS_INBOX_ITEM,
           },
           {
-            label: "Next item",
+            label: "Next inbox item",
             icon: <ChevronDownIcon />,
             disabled: pager.onNext === undefined,
             onSelect: () => pager.onNext?.(),
@@ -857,6 +865,7 @@ function phoneItemGroups(
                 status: holder.task.status,
               }).icon,
               onSelect: onOpenHolder,
+              command: APP_COMMAND.OPEN_IN_TASK,
             },
           ]
         : [
@@ -867,11 +876,13 @@ function phoneItemGroups(
               onSelect: onOpenHolder,
             },
           ];
+  // ⌘O opens the item's task, or its agent where no task holds it (`desktop-inbox.tsx`).
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
     icon: <BotIcon />,
     onSelect: by.onOpen,
+    ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
   };
   const panel: MenuAction[] =
     phone.onShowPanel === undefined
@@ -885,22 +896,24 @@ const OPEN_TASK = "Open task";
 const OPEN_AUTOMATION = "Open automation";
 const OPEN_AGENT = "Open agent";
 
-/** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_THING = "Item";
+/** What the pane's ⋯ menu is called, which is its tooltip too, as the item's row names its own. */
+const ITEM_THING = "Inbox item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
- * agent's tab end theirs: Mark as read or unread, naming U, as the item's
- * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open, Close
- * without answering, asked first (`inbox-close.tsx`). It is keyed by its
- * item where it is drawn, so a question asked on one item never closes the
- * next, and the menu and the question go with the pane once it is hidden.
+ * agent's tab end theirs, offering what the item's row's menu offers in the
+ * same order (`inbox-item-actions.tsx`): Copy link; Mark as read or unread,
+ * naming U; Move to channel…; and, while the item is open, Resolve without
+ * answering, asked first. It is keyed by its item where it is drawn, so a
+ * question asked on one item never closes the next, and the menu and the
+ * question go with the pane once it is hidden.
  */
 function InboxItemMenu({
   holder,
   item,
   shown,
   onMark,
+  onMove,
   onClose,
   lead = NO_LEAD,
   heading,
@@ -909,6 +922,7 @@ function InboxItemMenu({
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
+  onMove: InboxPaneDoors["onMove"];
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -918,6 +932,7 @@ function InboxItemMenu({
   const menu = useMenu(shown);
   const { close, groups: itemGroups } = useInboxItemActions(holder, item, {
     onMark,
+    onMove,
     onClose,
     shown,
     keyed: true,
@@ -982,10 +997,13 @@ function QuestionClose({
 function Subject({
   item,
   heading,
+  first,
 }: {
   item: InboxItem;
   /** Takes the title's heading, which the bar watches scroll away (`useHeadingAway`). */
   heading: (element: HTMLElement | null) => void;
+  /** Whether it is the page's first heading, as on a phone, whose bar names what holds the item and whose list is not drawn beside it. */
+  first: boolean;
 }): React.JSX.Element {
   return (
     <header
@@ -993,7 +1011,7 @@ function Subject({
       {...{ [REPLY_SCOPE]: "" }}
     >
       <Text
-        as={TEXT_ELEMENT.H2}
+        as={first ? TEXT_ELEMENT.H1 : TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
         ref={heading}
         className="inbox-subject-title"
@@ -1076,6 +1094,8 @@ export interface InboxPaneDoors {
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
+  /** Asks which channel the item's thread moves to, from the bar's ⋯ menu; none where Channels is off. */
+  readonly onMove?: ((item: InboxItem) => void) | undefined;
 }
 
 /** What starts a new thread from an item's box instead of a reply, where the page offers one. */
@@ -1089,18 +1109,18 @@ export interface InboxNewThread {
 }
 
 /**
- * The box's new thread for one item: the item's agent's chip, as the
- * crumbs name the agent, and its channel's chip, each hanging its card and
- * opening nothing, since a press on the checkbox's words ticks it.
+ * The box's new thread for one item: the item's agent's chip, wearing its
+ * tile as a mention of the agent does, and its channel's chip, each hanging
+ * its card and opening nothing, since a press on the checkbox's words ticks it.
  */
 function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
-  const { name, agent } = by.subject;
+  const { name, tile } = by.subject;
   const channel = offer.channelOf(item);
   return {
     agent: (
       <InlineRef
         look={INLINE_REF_LOOK.PILL}
-        glyph={tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
+        glyph={<ActorMark actor={tile} size={ACTOR_SIZE.INLINE} />}
         label={name}
         card={<AgentCard subject={by.subject} models={by.models} />}
       />
@@ -1174,34 +1194,13 @@ function Crumbs({
   /** Whether the heading has scrolled away, so the path names the item. */
   titleShown: boolean;
 }): React.JSX.Element {
-  const { name, agent } = by.subject;
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
-  const onOpenHolder = doors.onOpenHolder;
-  const task: Crumb | undefined =
-    holder.kind === INBOX_HOLDER.TASK
-      ? {
-          label: holder.task.name,
-          glyph: tabLook({
-            kind: TAB_KIND.PLAN,
-            name: holder.task.name,
-            status: holder.task.status,
-          }).icon,
-          hint: holder.task.name,
-          card: doors.taskCard,
-          onPress: () => onOpenHolder?.(),
-        }
-      : undefined;
+  // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
+  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
   const crumbs: Crumb[] = [
-    task ?? automation,
-    {
-      label: name,
-      glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
-      hint: name,
-      card: <AgentCard subject={by.subject} models={by.models} />,
-      onPress: () => by.onOpen(),
-      // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
-      fixed: titleShown,
-    },
+    taskCrumb(holder, doors) ?? (operator ? undefined : automation),
+    // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
+    agentCrumb(holder, by, titleShown),
     { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
   return (
@@ -1209,6 +1208,52 @@ function Crumbs({
       <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
+}
+
+/** The path's task crumb, wearing its plan's glyph and hanging its card, which opens the task; none for an item no task holds. */
+function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefined {
+  if (holder.kind !== INBOX_HOLDER.TASK) return undefined;
+  const { onOpenHolder } = doors;
+  return {
+    label: holder.task.name,
+    glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name, status: holder.task.status })
+      .icon,
+    hint: holder.task.name,
+    card: doors.taskCard,
+    onPress: () => onOpenHolder?.(),
+  };
+}
+
+/** The path's agent crumb, wearing its mark, or Luke's face for Luke's own, and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
+function agentCrumb(holder: InboxHolder, by: ItemAgent, fixed = false): Crumb {
+  const { name, agent } = by.subject;
+  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
+  return {
+    label: name,
+    glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+    hint: name,
+    card: <AgentCard subject={by.subject} models={by.models} />,
+    onPress: () => by.onOpen(),
+    fixed,
+  };
+}
+
+/**
+ * A phone's bar's name for the item: what holds it, its task as the wide
+ * path leads with it, or its agent where no task holds it, each crumb
+ * pressing where the wide path's does. Note that the bar never names the
+ * item's title, because the thread's heading right under it already does.
+ */
+function PhoneHolder({
+  holder,
+  by,
+  doors,
+}: {
+  holder: InboxHolder;
+  by: ItemAgent;
+  doors: InboxPaneDoors;
+}): React.JSX.Element {
+  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(holder, by)]} />;
 }
 
 /**
@@ -1258,7 +1303,7 @@ export function InboxPane({
   mentions?: TaskMentionsValue | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the item stands alone on a
-   * phone: the way back's glyph, the item's title centred, and one ⋯
+   * phone: the way back's glyph, what holds the item centred (`PhoneHolder`), and one ⋯
    * holding the pager, what the crumbs open, the panel, and the item's own
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
@@ -1276,6 +1321,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
+  // A phone heads the item with its own row, the item standing alone in the list's place.
+  const phoneHead = phone !== undefined && onBack !== undefined;
   // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
   const by: ItemAgent = {
@@ -1343,7 +1390,7 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      {phone !== undefined && onBack !== undefined ? (
+      {phoneHead ? (
         <PhoneHead
           place="inbox-item"
           start={
@@ -1353,7 +1400,7 @@ export function InboxPane({
               <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
-          title={cardTitle(item.title)}
+          title={<PhoneHolder holder={holder} by={by} doors={doors} />}
           end={
             <InboxItemMenu
               key={item.id}
@@ -1361,6 +1408,7 @@ export function InboxPane({
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
+              onMove={doors.onMove}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1403,6 +1451,7 @@ export function InboxPane({
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
+                onMove={doors.onMove}
                 onClose={doors.onClose}
               />
             </>
@@ -1422,7 +1471,7 @@ export function InboxPane({
               images={control}
               code={doors.code}
             >
-              <Subject item={item} heading={setHeading} />
+              <Subject item={item} heading={setHeading} first={phoneHead} />
               <Stack
                 as={LAYOUT_ELEMENT.OL}
                 gap={GAP.NONE}

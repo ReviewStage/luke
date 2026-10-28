@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
-import { memo, useRef } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -64,18 +64,20 @@ import { TabStrip } from "./tab-strip.js";
  * to it. The strip is the side panel's in every way: the same pills, the
  * same hover and chosen fills, dragged and stepped along, closed by ×,
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
- * right-click (`strip-tabs.tsx`). A tab's own actions, on an agent's its
- * Rename, its Show terminal, its transcript's copies, and its Archive, are
- * its right-click menu's alone: the toolbar's one ⋯ is the task's.
+ * right-click (`strip-tabs.tsx`). An agent's own actions, its one menu
+ * (`agent-actions.tsx`), stand on its tab's right-click after the tab's
+ * keeping, and the chosen agent's in the toolbar's ⋯, drawn into the slot
+ * the toolbar keeps for it (`slot`), so the ⋯ acts on what is under the bar.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
  * works and an alert once it failed, and hangs a card naming it whole with when it
  * last moved and its latest step, read from what its tab last drew and
- * never from the service. Its menu offers Pin, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, Show terminal,
+ * never from the service. Its menu offers Pin tab, which puts it in the
+ * sidebar, then the agent's menu: Copy link and its transcript's two copies,
+ * Rename, which turns the tab into its name's field, Show terminal,
  * which shows the agent's own Terminal tab in the side panel as ⌘J does from
- * the tab, and its transcript's two copies. Closing it closes only the view:
+ * the tab, its Archive, and its Permanently delete. Closing it closes only the view:
  * the agent goes on as it was, and the "+" opens it again. A tab an agent
  * ended on while no one was looking at it reads in semibold until shown. The
  * draft's tab, named New agent as the "+" row that opens it is, stands after
@@ -168,14 +170,21 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, whose menu offers the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
-function AgentMenuTab({
+/**
+ * An agent's tab, whose menu offers the agent's own actions
+ * (`agent-actions.tsx`), renamed in place while its task is not archived:
+ * the task's column's, and the side panel's beside the Inbox, which hears
+ * the tab's whole doors (`onDoors`) for a phone's header to offer them.
+ */
+export function AgentMenuTab({
   agent,
   agents,
   look,
   doors,
   shown,
   terminals,
+  slot,
+  onDoors,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -183,6 +192,10 @@ function AgentMenuTab({
   doors: TabDoors;
   shown: boolean;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
+  /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
+  slot: HTMLElement | null | undefined;
+  /** Hears the tab's doors with the agent's own in them as each draw makes them, and none once the tab is gone. */
+  onDoors?: ((agentId: string, doors: TabDoors | undefined) => void) | undefined;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, {
     label: look.label,
@@ -190,13 +203,17 @@ function AgentMenuTab({
     terminals,
     onDeleted: doors.onClose,
   });
+  const whole: TabDoors = { ...doors, ...actions.doors };
+  useLayoutEffect(() => onDoors?.(agent.id, whole));
+  useLayoutEffect(() => () => onDoors?.(agent.id, undefined), [onDoors, agent.id]);
   return (
     <>
       <RenamableTab
         look={look}
-        doors={{ ...doors, ...actions.doors }}
+        doors={whole}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
+        slot={slot}
       />
       {actions.dialog}
     </>
@@ -431,6 +448,7 @@ export function MainTabStrip({
   keys,
   shown,
   onOpenTerminal,
+  slot,
 }: {
   task: TaskSummary;
   main: MainTabsControl;
@@ -450,6 +468,8 @@ export function MainTabStrip({
   shown: boolean;
   /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent; none where the platform runs no terminals. */
   onOpenTerminal?: ((agentId: string) => void) | undefined;
+  /** The toolbar's slot the chosen agent's ⋯ is drawn into; none where the toolbar keeps none, as a phone's. */
+  slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -521,6 +541,7 @@ export function MainTabStrip({
               doors={doorsOf(entry)}
               shown={shown}
               terminals={{ onOpenTerminal }}
+              slot={slot}
             />
           ),
         )}

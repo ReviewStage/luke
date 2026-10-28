@@ -24,7 +24,7 @@ import {
   type ConnectionDoorServices,
   nativeAgentConnections,
 } from "../../integrations/connection-door.js";
-import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
+import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import { LUKE_MCP_PATH, lukeIntegrationMcpUrl } from "../luke-mcp/app.js";
 import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";

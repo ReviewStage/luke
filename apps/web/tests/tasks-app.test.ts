@@ -34,10 +34,7 @@ import {
   taskListAnswerSchema,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
-import {
-  type AgentSessions,
-  EVE_RESET_OUTCOME,
-} from "@luke/service/agents/brain-host/eve-sessions";
+import { type AgentSessions, EVE_RESET_OUTCOME } from "@luke/service/agents/eve-host/eve-sessions";
 import { messagesProcedures } from "@luke/service/agents/messages-procedures";
 import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import {
@@ -139,11 +136,8 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The Linear connectors the deployment names: the accounts' own, and the one a workspace connects for every member. */
-const LINEAR_CONNECTORS = {
-  LINEAR_CONNECTOR_UID: "oauth/linear",
-  LINEAR_WORKSPACE_CONNECTOR_UID: "linear/luke-workspaces",
-} as const;
+/** The Linear connector the deployment names, the accounts' own. */
+const LINEAR_CONNECTORS = { LINEAR_CONNECTOR_UID: "oauth/linear" } as const;
 
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
 const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };

@@ -56,10 +56,7 @@ import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../../integrations/integration-connect.js";
+import type { IntegrationConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   type CommentToolName,
@@ -82,7 +79,6 @@ import {
   RUN_AUTOMATION_TOOL,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import {
   BROWSER_TOOL,
@@ -133,6 +129,7 @@ import {
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
@@ -148,7 +145,6 @@ export type LukeMcpServices =
   | HttpClient.HttpClient
   | GitHubApp
   | ModelCatalog
-  | WorkspaceLinearConnect
   | IntegrationConnect
   | HostedEnvironment
   | SentryApp;

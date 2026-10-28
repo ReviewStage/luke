@@ -13,7 +13,9 @@ import { LengthCounter } from "../length-counter/length-counter.js";
  * error marks it invalid. The error is the one `ErrorLine` every form part
  * says what went wrong in. A field is to be filled unless it says otherwise:
  * one that may be left empty (`optional`) says Optional after its label, in
- * the label, so a reader hears it with the field's name. A field whose control takes
+ * the label, so a reader hears it with the field's name, and the control of
+ * one that may not is marked required (`aria-required`), never the native
+ * `required`, whose browser bubble would stop a form's own submit. A field whose control takes
  * so many characters at most (`count`) says how many it holds of them at the
  * end of its label's line once they near the limit (`LengthCounter`). The field owns the room
  * between its parts; the room around it is its container's. It is drawn by
@@ -29,6 +31,8 @@ export interface FieldControl {
   readonly labelId: string;
   readonly "aria-describedby": string | undefined;
   readonly "aria-invalid": true | undefined;
+  /** Whether the field is to be filled, which every field is unless it is `optional`. */
+  readonly "aria-required": true | undefined;
 }
 
 /** Whether a field's words say anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -90,6 +94,7 @@ export function FormField({
         labelId,
         "aria-describedby": describedBy === "" ? undefined : describedBy,
         "aria-invalid": failed ? true : undefined,
+        "aria-required": optional ? undefined : true,
       })}
       {described ? <FieldDescription id={descriptionId}>{description}</FieldDescription> : null}
       <ErrorLine id={errorId}>{failed ? error : null}</ErrorLine>

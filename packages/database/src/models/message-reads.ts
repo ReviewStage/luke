@@ -592,6 +592,65 @@ export function messageCursorNow(
   });
 }
 
+/** Where a transcript stands as one reading: the cursor of a reader who has every message as it now stands, and the journal revision it was last rewound at, none for one never rewound. */
+export interface MessageStanding {
+  readonly cursor: MessageCursor;
+  readonly rewound: Option.Option<number>;
+}
+
+const findMessageStanding = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({
+    seq: EpochMillisColumnSchema,
+    revision: EpochMillisColumnSchema,
+    rewound: Schema.NullOr(EpochMillisColumnSchema),
+  }),
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select({
+          seq: sql<number>`(
+            select coalesce(max(${messages.seq}), 0) from ${messages}
+            where ${and(eq(messages.conversationId, conversations.id), eq(messages.userId, options.userId))}
+          )`,
+          revision: conversations.journalRevision,
+          rewound: conversations.rewoundRevision,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, options.conversationId),
+            eq(conversations.userId, options.userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where a transcript stands now (`messageCursorNow`), and where it was last
+ * rewound, read in one statement, so a reader that reads its rows after
+ * this misses no message written or amended past the cursor, and a rewind
+ * that lands meanwhile moves the rewound revision past the cursor answered,
+ * which its next reading then finds behind. A conversation that no longer
+ * stands, or another account's, is the start, never rewound.
+ */
+export function messageStandingNow(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<MessageStanding, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    findMessageStanding({ conversationId, userId }),
+    Option.match({
+      onNone: () => ({ cursor: { seq: 0, revision: 0 }, rewound: Option.none() }),
+      onSome: (row) => ({
+        cursor: { seq: row.seq, revision: row.revision },
+        rewound: Option.fromNullishOr(row.rewound),
+      }),
+    }),
+  );
+}
+
 const findRunningChildTurns = SqlSchema.findAll({
   Request: Schema.Struct({ parentConversationId: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),

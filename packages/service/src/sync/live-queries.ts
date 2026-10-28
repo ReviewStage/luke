@@ -6,18 +6,23 @@
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
  */
+import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { messageStandingNow } from "@luke/database/models/message-reads";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
-import { TOPIC } from "@luke/database/sync/notification";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
+  agentBrowserTabSync,
   agentSectionEntrySync,
   attachmentSync,
   automationRunSync,
   automationSync,
   channelSync,
+  codingAgentDelegationSync,
   codingAgentSync,
+  conversationsSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   inboxItemReadSync,
@@ -26,23 +31,32 @@ import {
   invitationSync,
   macCommandSync,
   memberSync,
+  messagesSync,
+  planPageVersionSync,
   planRevisionSync,
   repositoryPinSync,
   taskSectionEntrySync,
   taskSectionSync,
   taskSync,
+  turnsSync,
   userSync,
 } from "@luke/database/sync/tables";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
+import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   channelsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
+import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
+import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { defineLiveQuery, LIVE_MODE, liveQueryRegistry } from "./live-query.js";
 
 /**
@@ -114,7 +128,7 @@ const ITEM_GATES = [memberSync, githubPersonalTokenSync, githubRepositoryReadSyn
  */
 export const inboxLive = defineLiveQuery({
   name: "inbox",
-  params: ["userId"],
+  params: ["userId", "repositoryless"],
   reads: [
     inboxItemSync,
     inboxItemReadSync,
@@ -125,9 +139,10 @@ export const inboxLive = defineLiveQuery({
     ...ITEM_GATES,
   ],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) =>
+  // Note that an agent with no repository is carried only to a reader that asks (`ACCOUNT_INBOX_REPOSITORYLESS`), since a build before it fails its whole read on one null.
+  statements: ({ userId, repositoryless }) =>
     Option.zipWith(
-      accountInboxLiveStatements(userId),
+      accountInboxLiveStatements(userId, repositoryless === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
       ownFailedRunsLiveStatement(userId),
       (parts, failedRuns) => ({ ...parts, failedRuns }),
     ),
@@ -230,6 +245,217 @@ export const workspaceInvitationsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/**
+ * An open task's record: when its plan was last saved and each page's
+ * newest version, woken by a save of the task and a page shown on it, both
+ * of which name the task. Its calls and code answer no rows.
+ */
+export const taskRecordLive = defineLiveQuery({
+  name: "taskRecord",
+  params: ["userId", "taskId"],
+  reads: [
+    taskSync,
+    planPageVersionSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) => taskRecordLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** One task's pages, each at its newest version, woken by a page shown on the task. */
+export const taskPagesLive = defineLiveQuery({
+  name: "taskPages",
+  params: ["userId", "taskId"],
+  reads: [
+    taskSync,
+    planPageVersionSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) => taskPagesLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** One coding agent's own pages on no task, woken by a page it shows and by the agent's own row, both of which name the agent. */
+export const agentPagesLive = defineLiveQuery({
+  name: "agentPages",
+  params: ["userId", "agentId"],
+  reads: [
+    codingAgentSync,
+    planPageVersionSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId }) => [
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId }) => agentPagesLiveStatements(userId, agentId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One task's newest page of plan history, woken by a revision written or
+ * moved on, and by the task and its agents, all of which name the task.
+ * Note that an editor's own name, read beside each revision, wakes no
+ * history, because an account's row names only it and its workspaces, and
+ * waking every open history in a workspace on each of its writes is not
+ * worth a rename: one shows at the hold's end.
+ */
+export const taskHistoryLive = defineLiveQuery({
+  name: "taskHistory",
+  params: ["userId", "taskId"],
+  reads: [
+    planRevisionSync,
+    taskSync,
+    codingAgentSync,
+    userSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) => taskHistoryLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One task's Browser tabs, every one of its agents', the agent's pointer on
+ * each among them, woken by a tab opened, moved, pointed at, taken over, or
+ * closed under the task, and by the agents on the task, all of which name
+ * the task.
+ */
+export const taskBrowserTabsLive = defineLiveQuery({
+  name: "taskBrowserTabs",
+  params: ["userId", "taskId"],
+  reads: [
+    agentBrowserTabSync,
+    codingAgentSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) =>
+    Option.map(browserTabsLiveStatement(userId, { taskId }), (tabs) => ({ tabs })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One coding agent's Browser tabs, on a task or on none, woken by the
+ * agent's own row. Note that a tab names no agent's topic, its own row
+ * holding only its agent's conversation, so a tab's move reaches a reader
+ * on the watched look rather than by a wake.
+ */
+export const agentBrowserTabsLive = defineLiveQuery({
+  name: "agentBrowserTabs",
+  params: ["userId", "agentId"],
+  reads: [
+    agentBrowserTabSync,
+    codingAgentSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId }) => [
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId }) =>
+    Option.map(browserTabsLiveStatement(userId, { agentId }), (tabs) => ({ tabs })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * A coding agent's transcript, or one of its workers' (`conversationId`,
+ * under the agent's own `parentConversationId`), started by `ownerId` and
+ * read by `readerId` while it is a member of the agent's workspace
+ * (`transcript-live.ts`). It is woken by a write to the transcript's
+ * messages, turns, or conversation, to a worker's conversation or
+ * delegation under the agent's, to the agent itself, and to what admits the
+ * reader to its workspace or repository.
+ *
+ * Its newest messages (`window`, `windowParts`) are followed by cursor:
+ * where the reader holds them, the highest sequence it has and the journal
+ * revision it read at, as a page past a cursor reads them
+ * (`listMessagesPast`). Every write to a message locks its conversation and
+ * takes its sequence or revision from the conversation's counters, so they
+ * move in commit order, and a reader past a cursor read before its rows
+ * misses none. A rewind moves the conversation's rewound revision, and a
+ * reader whose cursor is older is answered the window whole.
+ *
+ * Note that a line's sender's name, and a sending agent's task, are read
+ * beside the line rather than written on it, so a change to either wakes no
+ * transcript and moves no line past the cursor: a cursor reader sees it the
+ * next time it reads the window whole, and a reader that names no cursor at
+ * the hold's end, within 25 s. A turn settling moves its journal's revision
+ * (`writer.ts`'s `reviseJournal`), so what the settled turn says of it is
+ * answered past the cursor.
+ */
+export const agentTranscriptLive = defineLiveQuery({
+  name: "agentTranscript",
+  params: ["ownerId", "conversationId", "parentConversationId", "agentId", "readerId"],
+  reads: [
+    messagesSync,
+    conversationsSync,
+    turnsSync,
+    codingAgentDelegationSync,
+    userSync,
+    codingAgentSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
+    const parent: readonly SyncTopic[] =
+      parentConversationId === conversationId ? [] : [[TOPIC.CONVERSATION, parentConversationId]];
+    return [
+      [TOPIC.CONVERSATION, conversationId],
+      ...parent,
+      [TOPIC.AGENT, agentId],
+      [TOPIC.ACCOUNT, readerId],
+    ];
+  },
+  statements: ({ ownerId, conversationId, parentConversationId, readerId }, past) =>
+    transcriptLiveStatements(
+      { userId: ownerId, conversationId },
+      parentConversationId,
+      agentFollowedBy(ownerId, parentConversationId, readerId),
+      past === undefined ? undefined : cursorOfWire(past),
+    ),
+  mode: LIVE_MODE.CURSOR,
+  cursor: {
+    parts: ["window", "windowParts"],
+    standing: ({ ownerId, conversationId }) =>
+      Effect.map(messageStandingNow(ownerId, conversationId), ({ cursor, rewound }) => ({
+        next: cursorToWire(cursor),
+        stands: (asked) =>
+          Option.match(rewound, {
+            onNone: () => true,
+            onSome: (at) => cursorOfWire(asked).revision >= at,
+          }),
+      })),
+  },
+});
+
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
   macCommandsLive,
@@ -239,4 +465,11 @@ export const LIVE_QUERIES = liveQueryRegistry([
   channelsLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
+  taskRecordLive,
+  taskPagesLive,
+  agentPagesLive,
+  taskHistoryLive,
+  taskBrowserTabsLive,
+  agentBrowserTabsLive,
+  agentTranscriptLive,
 ]);

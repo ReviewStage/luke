@@ -823,15 +823,18 @@ function spokenName(item: HTMLElement): string {
 }
 
 test("on a phone the bar's Inbox wears the count the drawer's row shows, named in the sidebar's words, and none at zero", async () => {
+  // Note that main lists the three questions it counts, as its read of the account does.
+  const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
     tasks: [DOCUMENT_TASK],
-    inbox: [],
+    inbox: [{ taskId: DOCUMENT_TASK.id, items: asks }],
     inboxTasks: [{ taskId: DOCUMENT_TASK.id, items: 3, toDo: 3, updatedAt: 0 }],
   };
   const page = await mountNarrow(
     {
       boardView: { ...tasksControl().boardView, open: true },
       listed,
+      inbox: listed.inbox,
       inboxTasks: listed.inboxTasks,
     },
     { overlay: SIDEBAR_OVERLAY.OPEN },
@@ -1282,7 +1285,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

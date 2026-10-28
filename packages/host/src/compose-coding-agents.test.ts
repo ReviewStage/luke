@@ -410,11 +410,6 @@ function fakeService() {
         asked.push(`page:${agentId}`);
         return { agent: PAGE };
       }),
-    calls: (agentId) =>
-      Effect.sync(() => {
-        asked.push(`calls:${agentId}`);
-        return { transcript: { calls: [], earlierOmitted: false } };
-      }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
         asked.push(`pull-request:${agentId}`);

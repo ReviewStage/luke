@@ -36,6 +36,7 @@ const source: CodingAgent = {
   automationId: null,
   automationOrigin: null,
   startedFrom: null,
+  startedByAgentId: null,
   conversationId: randomUUID(),
   model: "claude-sonnet",
   effort: "high",

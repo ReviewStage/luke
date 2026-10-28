@@ -3,7 +3,6 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentDeleteAnswerView,
@@ -173,7 +172,6 @@ export type CodingAgentClient = Pick<
   | "rewind"
   | "delete"
   | "agent"
-  | "calls"
   | "pullRequest"
   | "changes"
   | "overviewPullRequest"
@@ -265,9 +263,16 @@ export function composeCodingAgents(
     const asked = askedOf(dependencies, http);
     const { client } = dependencies;
     const transcripts = yield* transcriptFollows({
-      seal: (key, poll, userId, after) =>
+      seal: (key, poll, userId, after, cursor) =>
         asked(
-          dependencies.client.agentTranscriptLive(key.agentId, userId, key.callId, poll, after),
+          dependencies.client.agentTranscriptLive(
+            key.agentId,
+            userId,
+            key.callId,
+            poll,
+            after,
+            cursor,
+          ),
         ),
       accountId: dependencies.accountId,
     });
@@ -747,16 +752,6 @@ function composed(
         );
         const answer = yield* asked(client.agent(agentId));
         return carried<CodingAgentPageAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_CALLS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          codingAgentPageParamsSchema,
-          params,
-          "reading an agent's calls names one agent",
-        );
-        const answer = yield* asked(client.calls(agentId));
-        return carried<CodingAgentCallsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {

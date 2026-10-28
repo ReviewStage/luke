@@ -1,7 +1,6 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
@@ -84,7 +83,6 @@ import {
 } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
-import type { CallsReader } from "./use-agent-calls.js";
 import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
@@ -373,8 +371,6 @@ export interface CodingAgentsControl {
   onTitle: (agentId: string, title: string | null) => void;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
-  /** One read of the calls into an agent, each with its lines and its record, which its tab places among its rows. */
-  readCalls: CallsReader;
   /** How a shown tab follows its transcript and hears its pages pushed. */
   transcripts: TranscriptFollower;
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
@@ -1695,14 +1691,6 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readCalls = useCallback<CallsReader>(
-    (agentId) =>
-      act(ACT_KIND.CODING_AGENTS_CALLS, { agentId }).catch(
-        (): CodingAgentCallsAnswerView => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-      ),
-    [act],
-  );
-
   const readPullRequestOnce = useCallback<PullRequestReader>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
@@ -1928,7 +1916,6 @@ export function useCodingAgents(input: {
     onStatus,
     onTitle,
     readTranscript,
-    readCalls,
     transcripts: windowTranscriptFollower,
     readPullRequest: published.read,
     pullRequests: published.pullRequests,

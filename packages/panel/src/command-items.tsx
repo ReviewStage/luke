@@ -99,6 +99,7 @@ export const PANEL_COMMAND = {
   CLOSE_TAB: keyed(APP_COMMAND.CLOSE_TAB, <GLYPH.CLOSE />, NOUN.TAB),
   CLOSE_OTHER_TABS: unkeyed("Close others", <ListXIcon />),
   SHOW_TERMINAL: keyed(APP_COMMAND.SHOW_TERMINAL, <GLYPH.TERMINAL />),
+  OPEN_IN_TASK: keyed(APP_COMMAND.OPEN_IN_TASK, <GLYPH.TASK />),
   COPY_CONCISE_TRANSCRIPT: unkeyed("Copy concise transcript", <GLYPH.COPY />),
   COPY_FULL_TRANSCRIPT: unkeyed("Copy full transcript", <ScrollTextIcon />),
   ARCHIVE_AGENT: unkeyed("Archive", <GLYPH.ARCHIVE />, NOUN.AGENT),

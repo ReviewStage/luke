@@ -232,6 +232,27 @@ const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>
   [HOSTED_API_ERROR.UPSTREAM_ERROR, BROWSER_TAB_OPEN_FAILURE.UNREACHABLE],
 ]);
 
+/** A File tab's window as its query carries it, or nothing where it is not one the wire admits. */
+function fileWindowQuery(window: TaskFileRequest):
+  | {
+      readonly path: string;
+      readonly first: string;
+      readonly last: string;
+      readonly raw?: typeof TASK_FILE_QUERY_FLAG;
+      readonly ref?: string;
+    }
+  | undefined {
+  const admitted = Result.getOrUndefined(readEither(taskFileRequestSchema)(window));
+  if (admitted === undefined) return undefined;
+  return {
+    path: admitted.path,
+    first: String(admitted.firstLine),
+    last: String(admitted.lastLine),
+    ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
+    ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
+  };
+}
+
 /** A procedure's answer, or nothing where it reached none. */
 function orNothing<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
@@ -440,7 +461,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Where one task's pages and calls stand, sealed for following over Neon
+   * Where one task's plan and pages stand, sealed for following over Neon
    * Realtime, or with `poll` their rows inline, for a reader polling while
    * Realtime fails them, for the account `userId` names: not found where the
    * account reaches no such task, signed out where the session is another's,
@@ -538,18 +559,19 @@ export class HostedTaskClient {
     taskId: string,
     window: TaskFileRequest,
   ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(taskFileRequestSchema)(window));
-    if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(
-      askHosted(this.#hosted.taskFiles.file, {
-        id: taskId,
-        path: admitted.path,
-        first: String(admitted.firstLine),
-        last: String(admitted.lastLine),
-        ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
-        ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
-      }),
-    );
+    const query = fileWindowQuery(window);
+    if (query === undefined) return Effect.succeed(undefined);
+    return orNothing(askHosted(this.#hosted.taskFiles.file, { id: taskId, ...query }));
+  }
+
+  /** One window of a file of a repository the workspace's installation reaches, as `readFile` reads a task's; nothing where the service did not answer, or where the window is not one the wire admits. */
+  readRepositoryFile(
+    place: RepositoryPlace,
+    window: TaskFileRequest,
+  ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
+    const query = fileWindowQuery(window);
+    if (query === undefined) return Effect.succeed(undefined);
+    return orNothing(askHosted(this.#hosted.github.repositoryFile, { ...place, ...query }));
   }
 
   /**

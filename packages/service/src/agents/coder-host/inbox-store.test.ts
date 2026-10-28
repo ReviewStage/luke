@@ -225,7 +225,8 @@ const openAutomation = (userId: string, workspaceId: string) =>
     const task = yield* startTask(userId, { name: "Flaky tests" });
     yield* updateTask(userId, task.id, { organizationId: workspaceId });
     const made = yield* createAutomation(userId, {
-      taskId: task.id,
+      organizationId: task.workspaceId,
+      repositories: task.repository === null ? [] : [task.repository],
       name: "Flaky-test sweep",
       scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
@@ -272,7 +273,7 @@ const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Ro
 /** What waits across the account as the desktop builds it from the live rows, at the instant the held read was read. */
 const liveAnswerOf = (userId: string, readAt: number) =>
   Effect.gen(function* () {
-    const parts = Option.getOrThrow(accountInboxLiveStatements(userId));
+    const parts = Option.getOrThrow(accountInboxLiveStatements(userId, true));
     const failedRuns = Option.getOrThrow(ownFailedRunsLiveStatement(userId));
     return accountInboxOfLiveRows(
       {
@@ -476,7 +477,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
           Effect.gen(function* () {
             const made = Option.getOrThrow(
               yield* createAutomation(owner, {
-                taskId: agent.taskId,
+                organizationId: workspaceId,
+                repositories: ["acme/relay"],
                 name,
                 trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
                 action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
@@ -1632,6 +1634,23 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
         assert.ok(Result.isSuccess(yield* addressed("for-owner", owner)));
 
         assert.ok((yield* stampIds(owner)).includes(posted.id));
+        // Note that the account's read carries an agent with no repository only to a reader that asks for one, as an older build would fail on its null.
+        const planlessOf = (userId: string, repositoryless: boolean) =>
+          Effect.map(
+            accountInboxPast(userId, INBOX_CURSOR_START, repositoryless),
+            (answer) => answer.planless ?? [],
+          );
+        const carried = (yield* planlessOf(owner, true)).find((each) => each.id === posted.id);
+        assert.deepEqual(
+          [carried?.id, carried?.agentKind, carried?.repository, carried?.channelId !== undefined],
+          [posted.id, CODING_AGENT_KIND.OPERATOR, null, true],
+          "its member's read carries the operator's ask, its kind, and its channel",
+        );
+        assert.deepEqual(
+          [(yield* planlessOf(owner, false)).length, (yield* planlessOf(teammate, true)).length],
+          [0, 0],
+          "an older build's read carries none, nor a teammate's",
+        );
         const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
         assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
         assert.ok(Option.isSome(yield* answerDone(owner, posted)));

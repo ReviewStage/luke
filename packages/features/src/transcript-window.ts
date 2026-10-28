@@ -6,13 +6,18 @@
  * as stored and beside it, joined in rather than read after, what the
  * service's page carries for it (`transcript.ts`'s `transcriptMessageOf`):
  * what sent a developer's line and where in a turn under way it arrived,
- * the turn whose work a line said on a call answers, and for a turn's
- * journal when the turn began and what it ran on and spent. The rows are
+ * and for a turn's journal when the turn began and what it ran on and
+ * spent. Note that the row still carries `turnId`, and `askTurnId` and
+ * `askAfterStep`, always null, for a released desktop that decodes them;
+ * this build reads none of them. The rows are
  * keyed by the message's id, as Neon's guide asks. Its parts are rows of
  * their own (`windowParts`), keyed by the message's id and the part's index,
  * the heavy ones cut as a page asked cut cuts them, so a journal that grows
  * in place moves only the parts it added. A reader draws the messages from
- * both with `windowMessagesOf`, with nothing read again.
+ * both with `windowMessagesOf`, with nothing read again. A reader that
+ * follows the window by cursor is answered only the messages written or
+ * amended past it, which it joins onto the rows it holds
+ * (`joinedWindowRows`).
  */
 
 import { isRecord, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
@@ -46,7 +51,6 @@ export const transcriptWindowRowSchema = Schema.Struct({
   id: Schema.String,
   seq: countedNumber,
   clientId: Schema.String,
-  turnId: NullableString,
   role: Schema.Literals(Object.values(MESSAGE_ROLE)),
   /** How many parts the message holds, which `windowParts` carries a row each. */
   partCount: countedNumber,
@@ -66,9 +70,6 @@ export const transcriptWindowRowSchema = Schema.Struct({
   /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
   journalId: NullableString,
   afterStep: NullableNumber,
-  /** The turn the ask a line said on a call followed ran in, and the steps begun before the ask joined it. */
-  askTurnId: NullableString,
-  askAfterStep: NullableNumber,
   /** The turn the row was written in: when it began as a working line counts it, and what it ran on and spent. */
   turnStartedAt: NullableNumber,
   turnStatus: NullableString,
@@ -146,9 +147,8 @@ function spokenOnCall(row: TranscriptWindowRow): boolean {
  * A row of the window as the tab draws it, the message the service's page
  * would carry for it: for a developer's line what sent it, when, and where
  * in a turn under way it arrived; for a line said on a call when its words
- * began and the turn whose work it answers; and for a turn's journal when
- * the turn began and what it ran on and, once the journal closed, when it
- * did and what it spent.
+ * began; and for a turn's journal when the turn began and what it ran on
+ * and, once the journal closed, when it did and what it spent.
  */
 function windowMessageOf(
   row: TranscriptWindowRow,
@@ -187,25 +187,10 @@ function windowMessageOf(
         : { arrivedIn: { journalId: row.journalId, afterStep: row.afterStep } }),
     };
   }
-  if (spokenOnCall(row)) {
-    return {
-      ...message,
-      sentAt: row.placedAt,
-      ...(row.askTurnId === null
-        ? undefined
-        : {
-            readFrom: {
-              turnId: row.askTurnId,
-              ...(row.askAfterStep === null ? undefined : { afterStep: row.askAfterStep }),
-            },
-          }),
-    };
-  }
+  if (spokenOnCall(row)) return { ...message, sentAt: row.placedAt };
   if (row.turnStartedAt === null || row.turnStatus === null) return message;
   return {
     ...message,
-    // Note that a turn's journal shares the turn's id as its client id, which no other row of the turn does.
-    ...(row.clientId === row.turnId ? { turnId: row.turnId } : undefined),
     startedAt: row.turnStartedAt,
     ...(row.finishedAt === null ? undefined : { finishedAt: row.finishedAt }),
     ...turnRecordOf({
@@ -242,4 +227,34 @@ export function windowMessagesOf(
       const parts = partsOf.get(row.id) ?? [];
       return parts.length === row.partCount ? [windowMessageOf(row, parts)] : [];
     });
+}
+
+/** The rows a window is drawn from, beside whatever else the read that carries them answers. */
+interface WindowRows {
+  readonly window: readonly TranscriptWindowRow[];
+  readonly windowParts: readonly TranscriptWindowPartRow[];
+}
+
+/**
+ * The rows held, with an answer's newest messages past the reader's cursor
+ * joined on by message id: each message it answers in place of the one held,
+ * the parts it answers of a message in place of the parts held of it, and
+ * everything else as it answers it, the newest `TRANSCRIPT_WINDOW` messages
+ * kept. Note that a message the answer moved to a later sequence stays one
+ * row, since it keeps its id, and that a message whose row and parts the
+ * answer read apart is left out of the drawing until both agree
+ * (`windowMessagesOf`), as it would be in a whole answer.
+ */
+export function joinedWindowRows<Rows extends WindowRows>(held: Rows, past: Rows): Rows {
+  const rowsAnswered = new Set(past.window.map((row) => row.id));
+  const partsAnswered = new Set([...rowsAnswered, ...past.windowParts.map((row) => row.messageId)]);
+  const window = [...held.window.filter((row) => !rowsAnswered.has(row.id)), ...past.window]
+    .toSorted((a, b) => b.seq - a.seq)
+    .slice(0, TRANSCRIPT_WINDOW);
+  const kept = new Set(window.map((row) => row.id));
+  const windowParts = [
+    ...held.windowParts.filter((row) => !partsAnswered.has(row.messageId)),
+    ...past.windowParts,
+  ].filter((row) => kept.has(row.messageId));
+  return { ...past, window, windowParts };
 }

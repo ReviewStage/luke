@@ -12,7 +12,7 @@
  * so a turn hands the call's words and the task only where they changed (`packages/service/src/agents/coder-host/turn-context.ts`).
  */
 
-import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import { pinnedState } from "@luke/service/agents/eve-host/pinned-state";
 import { defineDynamic, defineInstructions } from "eve/instructions";
 import { readStepStarted, stepTurnId, turnMessage } from "../host.js";
 import { turnHanded } from "../session-prompt.js";
@@ -20,7 +20,7 @@ import { turnHanded } from "../session-prompt.js";
 export default defineDynamic({
   events: {
     "turn.started": async (event, ctx) => {
-      // Pinned before anything awaits (`packages/service/src/agents/brain-host/pinned-state.ts`).
+      // Pinned before anything awaits (`packages/service/src/agents/eve-host/pinned-state.ts`).
       const handed = pinnedState(turnHanded);
       const turnId = stepTurnId(ctx.session.id, readStepStarted(event));
       const message = await turnMessage(ctx.session.auth, ctx.session.id, turnId, handed.get());

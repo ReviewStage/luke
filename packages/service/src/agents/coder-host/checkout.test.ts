@@ -182,7 +182,8 @@ const openAgent = (
       options.byAutomation === true
         ? Option.getOrThrow(
             yield* createAutomation(userId, {
-              taskId: task.id,
+              organizationId: task.workspaceId,
+              repositories: task.repository === null ? [] : [task.repository],
               name: "Nightly invitations",
               trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
               action: {

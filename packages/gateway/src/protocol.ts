@@ -113,12 +113,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** A workspace's Linear connection begun on the service by an owner or admin: Vercel Connect's sign-in address, for the caller to open. */
-  WORKSPACES_LINEAR_CONNECT: "workspaces.linearConnect",
-  /** A workspace's Linear disconnected on the service; the view's workspaces are read again. */
-  WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
-  /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_SENTRY: "workspaces.sentry",
   /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
@@ -230,8 +224,6 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DELETE: "codingAgents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */

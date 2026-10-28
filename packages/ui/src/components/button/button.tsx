@@ -60,7 +60,8 @@ import { SpinnerRing } from "../spinner/spinner.js";
  *
  * A button unavailable is out of the tab order, unless it is
  * `focusableWhenDisabled`, where it stays in it, so a hint over it can say
- * why, and refuses its press instead, with a shake. Every press a button
+ * why, and refuses its press instead, with a shake, telling `onRefused`, so
+ * its owner can say why on the press. Every press a button
  * or a link drawn as one takes is answered with a pulse of its face, and a
  * submit's arrow lifts as it sends. A busy button refuses its press and is
  * named by `busyLabel` ("Saving") from the press on; once its press has been
@@ -252,6 +253,8 @@ type ButtonBase = LandingProps &
     disabled?: boolean | undefined;
     /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
     focusableWhenDisabled?: boolean | undefined;
+    /** Hears a press an unavailable `focusableWhenDisabled` button refused, so its owner can say why. */
+    onRefused?: (() => void) | undefined;
     /** Whether Tab stops on it; one that is not still takes the focus a roving group hands it. */
     tabbable?: boolean | undefined;
     /** Whether it is an item of a `useRovingKeys` box, which keeps its tab order and walks it with the arrows. */
@@ -427,7 +430,9 @@ function stateProps(props: ButtonBase, name: string | undefined, done = false) {
       if (refusing) {
         event.preventDefault();
         // Note that a busy button's ring, or a done one's check, already says why it takes no press.
-        if (!settled) replayMotion(event.currentTarget, DENIED_ATTRIBUTE);
+        if (settled) return;
+        replayMotion(event.currentTarget, DENIED_ATTRIBUTE);
+        props.onRefused?.();
         return;
       }
       pulse(event.currentTarget, props.variant);

@@ -17,7 +17,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
-import { EVE_RESET_OUTCOME } from "../brain-host/eve-sessions.js";
+import { EVE_RESET_OUTCOME } from "../eve-host/eve-sessions.js";
 import { isNativeRuntime } from "./native-runtime.js";
 import { runnerHalted } from "./runtime-sessions.js";
 import { cancelledTurn, type EveReach, eveFor } from "./stop.js";

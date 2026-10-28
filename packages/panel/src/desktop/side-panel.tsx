@@ -165,9 +165,10 @@ import {
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
-import type { MenuAction } from "./action-menu.js";
+import type { MenuEntry } from "./action-menu.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
+import { AgentMenuTab } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
@@ -203,7 +204,7 @@ import { TabStrip } from "./tab-strip.js";
 export interface ShownTab {
   readonly label: string;
   /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
-  readonly groups: (opener: HTMLElement) => MenuAction[][];
+  readonly groups: (opener: HTMLElement) => MenuEntry[][];
 }
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
@@ -868,6 +869,8 @@ export interface DrawnTab {
   /** Closes the tab, as its × does. */
   close: () => void;
   copy?: ((copy: TranscriptCopy) => void) | undefined;
+  /** The agent a transcript's tab beside the Inbox shows, whose own menu its tab offers. */
+  agent?: CodingAgentSummary | undefined;
 }
 
 /**
@@ -1078,6 +1081,7 @@ function stripTabs(input: {
           card: hungCard({ kind: TAB_KIND.AGENT, subject, models }),
         }),
         close: () => panel.onClose(tab),
+        agent,
       },
     ];
   });
@@ -1092,6 +1096,13 @@ function stripTabs(input: {
     ...macTerminalTabs,
     ...cloudBrowserTabs,
   ];
+}
+
+/** What an agent's transcript's tab beside the Inbox opens on the agent's task, by the agent: its tab there, and its Terminal tab. */
+export interface TranscriptDoors {
+  readonly onOpenInTask: (agentId: string) => void;
+  /** None where the platform runs no terminals. */
+  readonly onOpenTerminal: ((agentId: string) => void) | undefined;
 }
 
 /** The ids the chosen tab and the panel it shows stand under: the tab controls the panel, and the panel is labelled by the tab. */
@@ -1121,7 +1132,9 @@ interface PanelWiring {
  * a Changes tab's Pin or Unpin, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
  * tab draws (`transcript-copy.ts`) and answered with the window's toast,
- * which the bar's ⋯ also offers while the subagent's tab is the chosen one.
+ * which the bar's ⋯ also offers while the subagent's tab is the chosen one;
+ * an agent's beside the Inbox offers the agent's one menu, as its tab in
+ * the task's column does, with Open in task (`agent-actions.tsx`).
  * The "+" stands after all of them, apart from the strip, so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the panel
  * holds the window's focus (`keys`).
@@ -1151,6 +1164,8 @@ function PanelTabs({
   inboxDrafted,
   activity,
   wiring,
+  shown,
+  transcriptDoors,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
@@ -1196,6 +1211,10 @@ function PanelTabs({
   activity?: StripActivity | undefined;
   /** The ids the chosen tab and the panel it shows stand under, so each names the other; none while no panel stands for the tab. */
   wiring: PanelWiring | undefined;
+  /** Whether the panel is on screen, which an agent's Archive and delete ask on. */
+  shown: boolean;
+  /** What a transcript's tab beside the Inbox opens on its task; none elsewhere. */
+  transcriptDoors: TranscriptDoors | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -1239,6 +1258,7 @@ function PanelTabs({
     };
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
+    const { agent } = entry;
     const others = strip.filter((_, place) => place !== at);
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id, and names only its pages by it.
     const linked =
@@ -1260,13 +1280,27 @@ function PanelTabs({
       pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
+      onOpenInTask:
+        agent === undefined || transcriptDoors === undefined
+          ? undefined
+          : () => transcriptDoors.onOpenInTask(agent.id),
       handed:
         entry.look.selected && handed !== undefined && sameTab(handed.tab, entry.tab)
           ? handed.actions
           : undefined,
     };
   };
-  useShownTab(activity?.onShown, strip, doorsOf);
+  // An agent's tab hears its own doors as it draws, which a phone's header offers as the tab's ⋯ does.
+  const agentDoors = useRef(new Map<string, TabDoors>());
+  const heardDoors = useCallback((agentId: string, doors: TabDoors | undefined) => {
+    if (doors === undefined) agentDoors.current.delete(agentId);
+    else agentDoors.current.set(agentId, doors);
+  }, []);
+  useShownTab(activity?.onShown, strip, (entry, at) =>
+    entry.agent === undefined
+      ? doorsOf(entry, at)
+      : (agentDoors.current.get(entry.agent.id) ?? doorsOf(entry, at)),
+  );
   return (
     <PanelTabsRow>
       {activity?.slot
@@ -1282,18 +1316,28 @@ function PanelTabs({
           if (entry !== undefined) panel.onMove(entry.tab, to);
         }}
       >
-        {strip.map((entry, at) => (
-          <DoorsTab
-            key={tabKey(entry.tab)}
-            look={
-              entry.look.selected && wiring !== undefined
-                ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
-                : entry.look
-            }
-            doors={doorsOf(entry, at)}
-            slot={activity === undefined ? actionsSlot : null}
-          />
-        ))}
+        {strip.map((entry, at) => {
+          const look =
+            entry.look.selected && wiring !== undefined
+              ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
+              : entry.look;
+          const slot = activity === undefined ? actionsSlot : null;
+          return entry.agent === undefined || transcriptDoors === undefined ? (
+            <DoorsTab key={tabKey(entry.tab)} look={look} doors={doorsOf(entry, at)} slot={slot} />
+          ) : (
+            <AgentMenuTab
+              key={tabKey(entry.tab)}
+              agent={entry.agent}
+              agents={agents}
+              look={look}
+              doors={doorsOf(entry, at)}
+              shown={shown}
+              terminals={{ onOpenTerminal: transcriptDoors.onOpenTerminal }}
+              slot={slot}
+              onDoors={heardDoors}
+            />
+          );
+        })}
       </TabStrip>
       <AddTabButton
         label="Open a tab"
@@ -2221,6 +2265,7 @@ export function SidePanel({
   task,
   inbox,
   transcript,
+  transcriptDoors,
   activity: taskActivity,
   phone,
 }: SidePanelDrawing & {
@@ -2263,6 +2308,8 @@ export function SidePanel({
     | undefined;
   /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
   transcript?: ((agentId: string) => React.ReactNode) | undefined;
+  /** What the agent of a transcript's tab opens on its task, which its menu offers; none where no transcript's tab stands. */
+  transcriptDoors?: TranscriptDoors | undefined;
   /**
    * A phone's Activity (`task-pane-switcher.tsx`): whether the panel lists
    * its tabs rather than showing one, and the way to ask for the list or
@@ -2538,6 +2585,8 @@ export function SidePanel({
           inbox={inbox?.board}
           inboxDrafted={inbox?.drafted ?? false}
           task={task}
+          shown={shown}
+          transcriptDoors={transcriptDoors}
           activity={
             switched
               ? {
@@ -2731,7 +2780,9 @@ function PanelPhoneHead({
                 : shown
                     .groups(opener)
                     .map((group) =>
-                      group.map((item) => ({ ...item, detail: item.detail ?? shown.label })),
+                      group.map((item) =>
+                        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+                      ),
                     );
             return [
               [{ label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList }],

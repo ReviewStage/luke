@@ -156,12 +156,6 @@ test("every route that stays off the oRPC router is reached at its public URL by
       [],
     ],
     [
-      "/api/workspaces/linear/connected",
-      "workspaces/linear/connected",
-      "/api/workspaces/linear/connected",
-      [],
-    ],
-    [
       "/api/plans/p1/attachments/f1",
       "plans/attachment",
       "/api/plans/attachment",

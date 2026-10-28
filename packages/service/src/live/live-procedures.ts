@@ -7,9 +7,10 @@
  * resolved first, on the resource's implementer, and each statement is
  * built with that account's id in it, as its held read's is, so it reads
  * that account's rows and no other's. A read that names where its rows
- * last stood (`after`) is held until they move past it, or answered
- * unchanged at the hold's end, its digests and no rows, and the desktop
- * asks again (`sealedParts`). The hold looks again every 3 s, or every
+ * last stood (`after`) is held until they move past it, each look reading
+ * only the digests Postgres computes of them, or answered unchanged at the
+ * hold's end, its digests and no rows, and the desktop asks again
+ * (`sealedParts`). The hold looks again every 3 s, or every
  * second for a read someone watches move, or, for a read Luke Sync wakes
  * (`../sync/live-queries.ts`), whenever a write to its topics lands, and
  * then answers with that write's txid (`liveQueryParts`). The account's
@@ -22,12 +23,13 @@
  * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
  * the same way, one statement a part that marks where it stands
  * (`task-record-live.ts`), after the task is read as the account, so one it
- * does not reach is not found, as its own read answers. `GET
- * /api/live/task-browser-tabs?id=` answers its Browser tabs as one
- * statement, the agent's pointer on each among them, so a window draws the
- * pointer moving within a moment of the agent's action; a takeover is
- * delivered as it stands and lapsed by the reader, since no statement reads
- * the clock.
+ * does not reach is not found, as its own read answers, woken by a write
+ * that names the task (`taskRecordLive`), as its pages and its history are.
+ * `GET /api/live/task-browser-tabs?id=` answers its Browser tabs as one
+ * statement, the agent's pointer on each among them, woken by a write that
+ * names the task, so a window draws the pointer moving within a moment of
+ * the agent's action; a takeover is delivered as it stands and lapsed by
+ * the reader, since no statement reads the clock.
  *
  * `GET /api/live/mac-commands?kinds=` answers the commands of those kinds
  * no Mac of the account has claimed, as one statement, for the Mac to claim
@@ -62,7 +64,10 @@
  * account, each statement joined through the caller's membership of the
  * agent's workspace. A worker's delegation may not be recorded yet, as a
  * tab opened on its call is read before it is, so its statements name the
- * conversation the call will open rather than wait for it.
+ * conversation the call will open rather than wait for it. It is woken by
+ * Luke Sync (`agentTranscriptLive`), and a reader that names where it holds
+ * the newest messages (`cursor`) is answered only those written or amended
+ * past it (`liveCursorParts`).
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
@@ -73,7 +78,6 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { readAutomation } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
@@ -84,8 +88,8 @@ import {
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
-import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
-import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
+import { codingAgentCallIdSchema, codingAgentCursorSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
   LIVE_USER_QUERY,
@@ -97,7 +101,6 @@ import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   automationRunsLiveStatements,
   automationsLiveStatements,
@@ -114,22 +117,26 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
+  agentBrowserTabsLive,
   agentInboxLive,
+  agentPagesLive,
+  agentTranscriptLive,
   channelsLive,
   inboxLive,
   macCommandsLive,
   sidebarLive,
+  taskBrowserTabsLive,
+  taskHistoryLive,
   taskInboxLive,
+  taskPagesLive,
+  taskRecordLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
 } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListLiveStatements } from "../tasks/task-list-live.js";
-import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
-import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
-import { type LiveSealer, pollSealer } from "./poll-sealer.js";
+import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -142,12 +149,14 @@ export interface LiveProcedureSeams {
  * unchanged after 25, well inside a function's limit and the client's held
  * deadline.
  *
- * Note that the clock looks every 3 s, because each look reads every row of
- * the read back from the database whether or not one moved, and a window
- * holds a read for each task its Inbox lists: at every second that was most
- * of the database's traffic. A read someone watches move, an agent's
- * transcript, a Browser tab's pointer, or the commands a Mac waits to claim,
- * still looks every second (`WATCHED_LOOK`).
+ * Note that the clock looks every 3 s, because each look runs every part's
+ * statement whether or not a row moved, and a window holds a read for each
+ * task its Inbox lists: at every second that was most of the database's
+ * traffic. A look carries only each part's digest off the database
+ * (`heldParts`), but the database still reads every row to compute it. A
+ * read someone watches move, an agent's transcript, a Browser tab's pointer,
+ * or the commands a Mac waits to claim, still looks every second
+ * (`WATCHED_LOOK`).
  */
 const LIVE_POLL_HOLD = {
   LOOK: Duration.seconds(3),
@@ -173,73 +182,86 @@ function wokenBy<Part extends string>(
   ) as Record<Part, SealedLiveQueryWire>;
 }
 
+/** A read's parts as answered: the address it was read at, and each part's digest, with its rows where they were read. */
+interface ReadParts<Part extends string> {
+  readonly url: string;
+  readonly queries: Record<Part, SealedLiveQueryWire>;
+}
+
+/** Which of the sealer's reads answers a part: its digest alone, or its rows with it. */
+type PartRead = (sealer: LiveSealer) => LiveSealer["seal"];
+
+/** Each part read now at the poll address (`pollSealer`), as `how` reads it; unavailable where it could not be read. */
+function readParts<Part extends string>(
+  statements: Readonly<Record<Part, LiveStatement>>,
+  how: PartRead,
+): Effect.Effect<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) => {
+    const sealer = pollSealer(sql);
+    const read = how(sealer);
+    return Effect.map(
+      Effect.forEach(
+        Object.entries<LiveStatement>(statements),
+        ([part, statement]) => Effect.map(read(statement), (sealed) => [part, sealed] as const),
+        { concurrency: LIVE_PART_CONCURRENCY },
+      ),
+      (sealed) => ({
+        url: sealer.url,
+        // SAFETY: every part of `statements` is read above, and no other.
+        queries: Object.fromEntries(sealed) as Record<Part, SealedLiveQueryWire>,
+      }),
+    );
+  }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+}
+
+/**
+ * A read held until `moved` says its digests moved, looking between waits
+ * on a watch of the topics (or, where none wakes it, the look) at its
+ * digests alone (`looked`), so a hold over rows that never move carries
+ * none of them off the database. Once they moved, its rows are read
+ * (`read`) and answered with their own digests, and with the txids of the
+ * writes that woke it, which is how the desktop confirms a write once the
+ * read it follows shows it. At the hold's end it looks once more, and
+ * answers that look, its digests and no rows, where nothing moved.
+ */
+const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string, R>(
+  looked: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
+  read: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
+  moved: (standing: ReadParts<Part>) => boolean,
+  topics: readonly SyncTopic[],
+  look: Duration.Duration,
+): Effect.fn.Return<ReadParts<Part>, HostedRefusal, R> {
+  const woken = yield* heldUntil(looked, moved, topics, look, LIVE_POLL_HOLD.HOLD);
+  if (Option.isSome(woken)) {
+    // Note that the rows are read after the look that saw them move, so they are at least as new as it, and are answered with their own digests rather than its.
+    const answer = yield* read;
+    return { ...answer, queries: wokenBy(answer.queries, woken.value.txids) };
+  }
+  const standing = yield* looked;
+  return moved(standing) ? yield* read : standing;
+});
+
 /**
  * Each part's rows read inline at the poll address (`pollSealer`); where
  * the reader names where they last stood (`after`), held until they move
- * past it, waiting between looks on a watch of the topics (or, where none
- * wakes it, the look), or answered unchanged at the hold's end. An answer a
- * write woke carries that write's txid, which is how the desktop confirms a
- * write once the read it follows shows it. Unavailable where the rows could
- * not be read.
+ * past it (`heldParts`). Unavailable where the rows could not be read.
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   topics: readonly SyncTopic[] = NO_TOPICS,
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
-): Effect.fn.Return<
-  {
-    readonly url: string;
-    readonly queries: Record<Part, Effect.Success<ReturnType<LiveSealer["seal"]>>>;
-  },
-  HostedRefusal,
-  SqlClient.SqlClient
-> {
-  const polled = Effect.flatMap(SqlClient.SqlClient, (sql) => {
-    const sealer = pollSealer(sql);
-    return Effect.map(
-      Effect.forEach(
-        Object.entries<LiveStatement>(statements),
-        ([part, statement]) =>
-          Effect.map(sealer.seal(statement), (sealed) => [part, sealed] as const),
-        { concurrency: LIVE_PART_CONCURRENCY },
-      ),
-      (sealed) => ({
-        url: sealer.url,
-        // SAFETY: every part of `statements` is read above, and no other.
-        queries: Object.fromEntries(sealed) as Record<
-          Part,
-          Effect.Success<ReturnType<LiveSealer["seal"]>>
-        >,
-      }),
-    );
-  }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+): Effect.fn.Return<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
+  const read = readParts(statements, (sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
-  if (after === undefined) return yield* polled;
-  // A poll past `after` is held until the rows move past it, or answered unchanged: its digests and no rows.
-  const moved = yield* heldUntil(
-    polled,
-    (read) => liveDigestOf(read.queries) !== after,
+  if (after === undefined) return yield* read;
+  return yield* heldParts(
+    readParts(statements, (sealer) => sealer.digest),
+    read,
+    (standing) => liveDigestOf(standing.queries) !== after,
     topics,
     look,
-    LIVE_POLL_HOLD.HOLD,
   );
-  if (Option.isSome(moved)) {
-    const { read, txids } = moved.value;
-    return { ...read, queries: wokenBy(read.queries, txids) };
-  }
-  const standing = yield* polled;
-  if (liveDigestOf(standing.queries) !== after) return standing;
-  return {
-    ...standing,
-    // SAFETY: every part is kept, each with its rows left out.
-    queries: Object.fromEntries(
-      Object.entries<SealedLiveQueryWire>(standing.queries).map(([part, sealed]) => {
-        const { rows: _rows, ...unchanged } = sealed;
-        return [part, unchanged];
-      }),
-    ) as typeof standing.queries,
-  };
 });
 
 /**
@@ -263,19 +285,77 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   return yield* sealedParts(statements.value, asked, query.topics(params), look);
 });
 
-/** An agent's or a task's Browser tabs sealed for following, held on the watched look; unavailable where the statement can't be built. */
-const browserTabsParts = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  place: BrowserTabsPlace,
-  asked: { readonly [LIVE_POLL.AFTER]?: string },
+/**
+ * Whether a cursor read moved for its reader: its cursor no longer stands,
+ * so its cursor parts are answered whole, a cursor part stands at a row past
+ * it (its digest is not that of no rows, which a look at its digest alone
+ * tells as its rows would), or its other parts moved past `after`.
+ */
+function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string | undefined) {
+  const pastCursor = Object.values<SealedLiveQueryWire>(read.queries).some(
+    ({ cursor, digest }) =>
+      cursor !== undefined && (cursor.past === undefined || digest !== NO_ROWS_DIGEST),
+  );
+  return pastCursor || liveDigestOf(read.queries) !== after;
+}
+
+/**
+ * A defined live read's parts in cursor mode (`LIVE_MODE.CURSOR`) for a
+ * reader that names where it holds them (`cursor`): where the read stands
+ * is read first (`standing`), then its cursor parts past the reader's
+ * cursor, or whole where a rewind left it behind, each carrying where it
+ * stands and the cursor to read past next, and its other parts whole, as
+ * a snapshot's are. Held until any of that moves (`cursorMoved`). A reader
+ * that names no cursor, or a read with no cursor parts, is answered as a
+ * snapshot is (`liveQueryParts`), which is how a released desktop reads it.
+ * Unavailable where its statements can't be built or read.
+ */
+export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+  Param extends string,
+  Part extends string,
+>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
+  look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
 ) {
-  const statement = browserTabsLiveStatement(userId, place);
-  if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* sealedParts(
-    { tabs: statement.value },
-    asked,
-    NO_TOPICS,
-    LIVE_POLL_HOLD.WATCHED_LOOK,
+  const following = query.cursor;
+  const cursor = asked[LIVE_POLL.CURSOR];
+  if (following === undefined || cursor === undefined) {
+    return yield* liveQueryParts(query, params, asked, look);
+  }
+  const followed: ReadonlySet<string> = new Set(following.parts);
+  const polled = (how: PartRead) =>
+    Effect.gen(function* () {
+      // Note that where it stands is read before its rows, so a write that lands between the two is read again past the next cursor rather than missed.
+      const standing = yield* following
+        .standing(params)
+        .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+      const past = standing.stands(cursor) ? cursor : undefined;
+      const statements = query.statements(params, past);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      const read = yield* readParts(statements.value, how);
+      const at = { ...(past === undefined ? undefined : { past }), next: standing.next };
+      return {
+        ...read,
+        // SAFETY: every part is kept, each cursor part with where it stands beside it.
+        queries: Object.fromEntries(
+          Object.entries<SealedLiveQueryWire>(read.queries).map(([part, sealed]) => [
+            part,
+            followed.has(part) ? { ...sealed, cursor: at } : sealed,
+          ]),
+        ) as Record<Part, SealedLiveQueryWire>,
+      };
+    });
+  const read = polled((sealer) => sealer.seal);
+  const after = asked[LIVE_POLL.AFTER];
+  if (after === undefined) return yield* read;
+  return yield* heldParts(
+    polled((sealer) => sealer.digest),
+    read,
+    (standing) => cursorMoved(standing, after),
+    query.topics(params),
+    look,
   );
 });
 
@@ -306,7 +386,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(inboxLive, { userId: context.userId }, input);
+      return yield* liveQueryParts(
+        inboxLive,
+        { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
+        input,
+      );
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -347,50 +431,52 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskRecordLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskRecordLive, { userId: context.userId, taskId }, input);
     }),
     taskPages: signedIn.taskPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskPagesLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskPagesLive, { userId: context.userId, taskId }, input);
     }),
     agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = agentPagesLiveStatements(context.userId, agentId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
     }),
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskHistoryLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskHistoryLive, { userId: context.userId, taskId }, input);
     }),
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* browserTabsParts(context.userId, { taskId }, input);
+      return yield* liveQueryParts(
+        taskBrowserTabsLive,
+        { userId: context.userId, taskId },
+        input,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
+      );
     }),
     agentBrowserTabs: signedIn.agentBrowserTabs.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* browserTabsParts(context.userId, { agentId }, input);
+      return yield* liveQueryParts(
+        agentBrowserTabsLive,
+        { userId: context.userId, agentId },
+        input,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
+      );
     }),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -404,21 +490,30 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
-      const { target } = yield* reachedAgentById(context.userId, input.id);
-      const read =
-        callId === undefined
-          ? target
-          : {
-              userId: target.userId,
-              conversationId: childConversationId(target.conversationId, callId),
-            };
-      const statements = transcriptLiveStatements(
-        read,
-        target.conversationId,
-        agentFollowedBy(target.userId, target.conversationId, context.userId),
+      const cursor = input[LIVE_POLL.CURSOR];
+      if (
+        cursor !== undefined &&
+        Result.isFailure(readEither(codingAgentCursorSchema)(unparsedWire(cursor)))
+      ) {
+        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      const { agent, target } = yield* reachedAgentById(context.userId, input.id);
+      const params = {
+        ownerId: target.userId,
+        conversationId:
+          callId === undefined
+            ? target.conversationId
+            : childConversationId(target.conversationId, callId),
+        parentConversationId: target.conversationId,
+        agentId: agent.id,
+        readerId: context.userId,
+      };
+      return yield* liveCursorParts(
+        agentTranscriptLive,
+        params,
+        input,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
       );
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input, NO_TOPICS, LIVE_POLL_HOLD.WATCHED_LOOK);
     }),
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

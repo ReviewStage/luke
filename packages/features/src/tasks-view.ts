@@ -20,7 +20,6 @@ import {
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
   pagePlaceSchema,
@@ -74,7 +73,6 @@ import {
 } from "./workspace-invitation-wire.js";
 import {
   formerMemberSchema,
-  linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -469,11 +467,25 @@ export const tasksEditAnswerSchema = EffectSchema.Union([
 
 export type TasksEditAnswer = typeof tasksEditAnswerSchema.Type;
 
-/** A window of a file of a task's repository, as the File tab asks the host for it: the task, the path, and the window's first and last line. */
-export const tasksFileParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  ...taskFileRequestSchema.fields,
-});
+/**
+ * A repository as a read with no plan names it, as an agent an automation
+ * started names its own: the workspace whose installation reaches it, and
+ * the repository.
+ */
+const repositoryPlaceFields = {
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+};
+
+/**
+ * A window of a file of a repository, as the File tab asks the host for it:
+ * the task whose repository it is, or the workspace and the repository
+ * where no task names it, the path, and the window's first and last line.
+ */
+export const tasksFileParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, ...taskFileRequestSchema.fields }),
+  EffectSchema.Struct({ ...repositoryPlaceFields, ...taskFileRequestSchema.fields }),
+]);
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
@@ -486,16 +498,6 @@ export const tasksFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksFileAnswer = typeof tasksFileAnswerSchema.Type;
-
-/**
- * A repository as a read with no plan names it, as an agent an automation
- * started names its own: the workspace whose installation reaches it, and
- * the repository.
- */
-const repositoryPlaceFields = {
-  workspaceId: workspaceIdSchema,
-  repository: githubRepositoryFullNameSchema,
-};
 
 /**
  * One folder of a repository, as the File tab's tree or an `@` list asks
@@ -858,19 +860,6 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
-
-/** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
-export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;
-
-export type TasksLinearIssuesParams = typeof tasksLinearIssuesParamsSchema.Type;
-
-/** The Linear issues as the window hears them: the issues the workspace's connection reaches, or why there are none. */
-export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ issues: EffectSchema.Array(linearIssueSummarySchema) }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

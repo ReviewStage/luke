@@ -39,10 +39,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../../integrations/integration-connect.js";
+import type { IntegrationConnect } from "../../integrations/integration-connect.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -68,7 +65,6 @@ import {
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
@@ -85,6 +81,7 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
   LUKE_MCP_PATH,
@@ -180,7 +177,7 @@ const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox
 /** The server's group over the test's database, the sandbox door and the browser given, and any services that stand in for the ones given, as a fetch a client is handed. */
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
-  instead?: Layer.Layer<IntegrationConnect | WorkspaceLinearConnect | HttpClient.HttpClient>,
+  instead?: Layer.Layer<IntegrationConnect | HttpClient.HttpClient>,
   browser: LukeMcpBrowser = noSandboxBrowserLayer,
 ) =>
   Effect.gen(function* () {

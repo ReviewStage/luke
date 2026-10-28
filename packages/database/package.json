@@ -106,7 +106,6 @@
     "./schemas/storage": "./src/schemas/storage.js",
     "./schemas/usage": "./src/schemas/usage.js",
     "./schemas/voice": "./src/schemas/voice.js",
-    "./schemas/workspace-integration": "./src/schemas/workspace-integration.js",
     "./pull-request-chapters-vocabulary": "./src/pull-request-chapters-vocabulary.js",
     "./storage-vocabulary": "./src/storage-vocabulary.js",
     "./sync/listener": "./src/sync/listener.js",

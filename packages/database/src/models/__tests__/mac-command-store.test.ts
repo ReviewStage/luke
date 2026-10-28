@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_TARGET,
+  AUTOMATION_TRIGGER,
+  type AutomationFiring,
+} from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND, type CodingAgentKind } from "@luke/features/coding-agent-wire";
 import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@luke/features/live-wire";
 import {
@@ -20,6 +29,12 @@ import { macCommand } from "../../schemas/mac-command.js";
 import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER, type MessageSender } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
+import {
+  claimAutomationRun,
+  createAutomation,
+  failClaimedRun,
+  recordAutomationRun,
+} from "../automation-store.js";
 import {
   claimMacCommand,
   claimMacCommands,
@@ -454,6 +469,78 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         for (const { conversationId } of [messaged, reached]) {
           assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
         }
+      }),
+  );
+
+  it.effect(
+    "an automation's line from before its line said what fired it counts where a run handed to the agent was a webhook's, and not where it was a schedule's or one whose send was refused, as does the untagged opening of an agent a webhook's run started",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const heardAfter = (firing: AutomationFiring, sent = true) =>
+          Effect.gen(function* () {
+            const agent = yield* openAgent(starter, workspace, "Keep the desk.");
+            const aimed = Option.getOrThrow(
+              yield* createAutomation(starter, {
+                organizationId: workspace,
+                repositories: [],
+                name: "Triage",
+                trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
+                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage what came in." },
+                guards: AUTOMATION_DEFAULT_GUARDS,
+                nextRunAt: null,
+                webhookSecretHash: null,
+                targetKind: AUTOMATION_TARGET.SAME_AGENT,
+                targetAgentId: agent.id,
+              }),
+            );
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(aimed, {
+                dedupeKey: randomUUID(),
+                firing,
+                firedAt: yield* now,
+              }),
+            );
+            yield* claimAutomationRun(run.id, agent.id);
+            // A send refused withdraws its line, so the run fails having handed the agent nothing.
+            if (!sent) yield* failClaimedRun(run.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
+            // Written as a line was before it said what fired it: its sender, and nothing else.
+            yield* sendLine(starter, agent.conversationId, 1, { kind: MESSAGE_SENDER.AUTOMATION });
+            return yield* heardFromAnotherAccount({
+              userId: starter,
+              conversationId: agent.conversationId,
+            });
+          });
+
+        assert.equal(yield* heardAfter({ kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 }), false);
+        assert.equal(yield* heardAfter({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }), true);
+        assert.equal(
+          yield* heardAfter({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }, false),
+          false,
+          "a webhook's run whose send was refused",
+        );
+
+        // An eve agent's opening from before the Start wrote it, untagged, as its relay wrote it.
+        const started = yield* openAgent(starter, workspace, "Triage what came in.");
+        const db = yield* Database;
+        yield* db
+          .update(codingAgent)
+          .set({
+            automationOrigin: {
+              name: "Triage",
+              firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 },
+              prompt: "Triage what came in.",
+            },
+          })
+          .where(eq(codingAgent.id, started.id));
+        yield* sendLine(starter, started.conversationId, 1);
+        assert.equal(
+          yield* heardFromAnotherAccount({
+            userId: starter,
+            conversationId: started.conversationId,
+          }),
+          true,
+        );
       }),
   );
 

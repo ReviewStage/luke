@@ -28,7 +28,6 @@ import type { SessionAuth, SessionContext } from "eve/context";
 import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
   type OfferedModel,
@@ -41,29 +40,29 @@ import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { turnKindOf } from "../brain-host/auth.js";
-import { BRAIN_HOST, type BrainHostTurn, RELAY_TURN } from "../brain-host/bounds.js";
+import { turnKindOf } from "../eve-host/auth.js";
+import { EVE_HOST, type EveHostTurn, RELAY_TURN } from "../eve-host/bounds.js";
 import {
   type AdmittedConversation,
   admitConversation,
   type ConversationAdmission,
   claimRuntimeSession,
   SESSION_STANDING,
-} from "../brain-host/conversation.js";
+} from "../eve-host/conversation.js";
 import {
   EVE_MOUNT,
   type EveSessionsComposer,
   eveSessionsComposer,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import {
   foldedQuietly,
   type RelayAskSeams,
   type RelayStanding,
   type RelayStateStore,
   StreamRelay,
-} from "../brain-host/relay.js";
-import { rotationSeedText } from "../brain-host/seed.js";
-import { carryStop } from "../brain-host/stop-carrier.js";
+} from "../eve-host/relay.js";
+import { rotationSeedText } from "../eve-host/seed.js";
+import { carryStop } from "../eve-host/stop-carrier.js";
 import { newestLineIsAutomation } from "../memory-provenance.js";
 import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
@@ -250,7 +249,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
   /**
    * The conversation so far, for a session opened over a conversation with
-   * words already said, as the brain's rotation seeds one (`brain-host/seed.ts`):
+   * words already said, as the brain's rotation seeds one (`eve-host/seed.ts`):
    * a session opened afresh after its last one retired remembers what was
    * said. A line awaiting its turn is left out, since it is the message the
    * session opens with; nothing for a conversation with nothing else said.
@@ -361,7 +360,7 @@ export interface CoderHost extends HostAdmission {
     call: InboxCall,
   ): Effect.Effect<ThreadToolResult, never, DatabaseServices>;
   /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
-  turnKind(auth: SessionAuth): BrainHostTurn | undefined;
+  turnKind(auth: SessionAuth): EveHostTurn | undefined;
   /**
    * What a turn opens with as a user-role message of its own, which eve
    * appends to the history after what came before, so the system prompt,
@@ -439,12 +438,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    | DatabaseServices
-    | HttpClient.HttpClient
-    | GitHubApp
-    | ModelCatalog
-    | WorkspaceLinearConnect
-    | SentryApp
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | SentryApp
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
@@ -810,7 +804,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           admitted.target.userId,
           admitted.target.conversationId,
           CODER_TOOL_SET,
-          BRAIN_HOST.SEED_MESSAGES,
+          EVE_HOST.SEED_MESSAGES,
         );
         const records = read.ok ? read.value.filter((record) => !awaitsTurn(record)) : [];
         const speakers = yield* teammateSpeakers(admitted.target, records);

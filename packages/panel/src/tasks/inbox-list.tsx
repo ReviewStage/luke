@@ -220,7 +220,8 @@ import { cardTitle } from "./tool-call-model.js";
  * none does. The head names the Inbox and, at its right, offers the view's
  * menu: first what the list holds, For you, the developer's own items they are
  * not done with, asks waiting on them and anything of theirs unread, a
- * settled thread its agent wrote on again among them, or All, every item,
+ * settled thread its agent wrote on again among them, and their updates on
+ * a task still under way, read or not, or All, every item,
  * the head naming All after the Inbox's name; then Group by, None, one
  * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
@@ -255,9 +256,6 @@ import { cardTitle } from "./tool-call-model.js";
 
 /** What an item's row is, which names its ⋯ and its menu "Inbox item actions". */
 const ITEM_THING = "Inbox item";
-
-/** What a row's ⋯ offers with Channels on, which asks which channel its thread moves to (`move-thread-dialog.tsx`). */
-const MOVE_TO_CHANNEL = "Move to channel…";
 
 /** What an archived channel's head offers, and says while it is under way. */
 const ARCHIVED_WORDS = {
@@ -485,6 +483,7 @@ export function InboxItemRow({
   // Note that U acts only on the chosen item, so only its row names the chord.
   const { read, close, groups } = useInboxItemActions(holder, item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
+    onMove: onAskMove === undefined ? undefined : () => onAskMove(listed),
     onClose,
     shown: true,
     keyed: chosen,
@@ -600,23 +599,7 @@ export function InboxItemRow({
           hint={{ Hint: RowHint, label: title }}
           selectKey={selectKey}
           onPress={() => onChoose(listed)}
-          menu={rowMenu(
-            ITEM_THING,
-            groups(
-              [],
-              onAskMove === undefined
-                ? []
-                : [
-                    [
-                      {
-                        label: MOVE_TO_CHANNEL,
-                        icon: <GLYPH.CHANNEL />,
-                        onSelect: () => onAskMove(listed),
-                      },
-                    ],
-                  ],
-            ),
-          )}
+          menu={rowMenu(ITEM_THING, groups())}
         />
       </RowHintOptions>
       {close.dialog}
@@ -680,7 +663,7 @@ function HolderHeader({
     );
   }
   if (holder.automationId === null) {
-    return <GroupHeader glyph={<GLYPH.AUTOMATION />} label={holder.name} {...shared} />;
+    return <GroupHeader glyph={<HolderGlyph holder={holder} />} label={holder.name} {...shared} />;
   }
   const actor =
     known === undefined
@@ -1231,9 +1214,9 @@ function ListHead({
             <PlaceMore
               thing={channel === undefined ? "Inbox" : `#${channel.name}`}
               shown={shown}
-              groups={(opener) => [
+              groups={(opener) =>
                 [
-                  ...(channel?.unarchive === undefined
+                  channel?.unarchive === undefined
                     ? []
                     : [
                         {
@@ -1241,15 +1224,17 @@ function ListHead({
                           icon: <GLYPH.ARCHIVE />,
                           onSelect: channel.unarchive.onUnarchive,
                         },
-                      ]),
-                  {
-                    label: VIEW_OPTIONS,
-                    icon: <SlidersHorizontalIcon />,
-                    opens: true,
-                    onSelect: () => asked.onAsk(opener),
-                  },
-                ],
-              ]}
+                      ],
+                  [
+                    {
+                      label: VIEW_OPTIONS,
+                      icon: <SlidersHorizontalIcon />,
+                      opens: true,
+                      onSelect: () => asked.onAsk(opener),
+                    },
+                  ],
+                ].filter((group) => group.length > 0)
+              }
             />
           }
         />

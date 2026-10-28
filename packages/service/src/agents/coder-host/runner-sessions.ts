@@ -2,7 +2,7 @@
  * runner-sessions.ts -- a coding agent's sessions on a native harness: the runner launched on the machine Luke opens for it, its stdin written to, and the machine's place stopped, resumed, and thrown away around it.
  *
  * The launch machinery the `claude_code` and `codex` implementations of
- * `AgentSessions` (`brain-host/eve-sessions.ts`) share; each names what is
+ * `AgentSessions` (`eve-host/eve-sessions.ts`) share; each names what is
  * its own as a `RunnerHarness` (`claude-code-sessions.ts`,
  * `codex-sessions.ts`): the credential its runner is started with, its
  * config line, and the lines that go ahead of a message to a runner already
@@ -116,8 +116,8 @@ import {
   IMAGE_PREPARING_STATUS,
   ImagePreparing,
 } from "../agent-sandbox-image.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -125,7 +125,7 @@ import {
   type EveMessage,
   PLAN_REFUSAL,
   RUNTIME_REFUSAL,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   AgentMachine,
@@ -292,7 +292,7 @@ type MessageLine = Extract<InputLine, { readonly type: typeof INPUT_LINE.MESSAGE
 interface RunnerMessage {
   readonly line: MessageLine;
   readonly files: readonly SandboxFile[];
-  readonly turn: BrainHostTurn;
+  readonly turn: EveHostTurn;
   readonly timeZone: string | undefined;
 }
 
@@ -467,7 +467,7 @@ function failedStatus(failure: { readonly _tag: string }): number {
 /** The sessions for one account on the harness given, over the calling fiber's services. */
 export const runnerSessions = <
   E extends { readonly _tag: string },
-  Turn extends BrainHostTurn = BrainHostTurn,
+  Turn extends EveHostTurn = EveHostTurn,
 >(
   harness: RunnerHarness<E>,
   options: RunnerSessionsOptions,

@@ -31,7 +31,7 @@ import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { asks, conversations, messages, turns } from "../../schemas/storage.js";
+import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../../schemas/voice.js";
 import {
@@ -46,7 +46,6 @@ import {
   archiveIdleCodingAgent,
   archiveOperatorAgent,
   archiveUnmovedCodingAgent,
-  askTurnsOf,
   type CodingAgent,
   type CodingAgentLine,
   codingAgentLineOf,
@@ -127,6 +126,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And the member's operator, one standing per workspace, and archived for a fresh one.
  * And that operator private to its member: no teammate reaches it.
  * And the plan notes a native agent's running turn holds reserved, its account's alone.
+ * And the account's own agent that started an agent, which no other account's agent stands for.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -388,46 +388,6 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
           (yield* linePlacesOf({ userId: other, conversationId: target.conversationId }, [
             reviewed,
           ])).size,
-          0,
-        );
-      }),
-  );
-});
-
-it.layer(getTestDB())("the coding-agent store's ask turns", (it) => {
-  it.effect(
-    "each ask that learned its turn names it by the ask's client id, with the steps begun before it where it joined a typed turn under way; an unbound ask names none, and another account reads none",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const other = yield* openAccount;
-        const target = {
-          userId: owner,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
-        };
-        const joinedTurn = randomUUID();
-        const wholeTurn = randomUUID();
-        const db = yield* Database;
-        yield* db.insert(asks).values([
-          {
-            ...target,
-            clientId: "dl_joined",
-            origin: TURN_ORIGIN.SPOKEN,
-            turnId: joinedTurn,
-            joinedAfterStep: 3,
-          },
-          { ...target, clientId: "dl_whole", origin: TURN_ORIGIN.SPOKEN, turnId: wholeTurn },
-          { ...target, clientId: "dl_unbound", origin: TURN_ORIGIN.SPOKEN },
-        ]);
-        const named = ["dl_joined", "dl_whole", "dl_unbound", "dl_never"];
-
-        const turnsOf = yield* askTurnsOf(target, named);
-        assert.deepEqual(
-          named.map((id) => turnsOf.get(id)),
-          [{ turnId: joinedTurn, afterStep: 3 }, { turnId: wholeTurn }, undefined, undefined],
-        );
-        assert.equal(
-          (yield* askTurnsOf({ userId: other, conversationId: target.conversationId }, named)).size,
           0,
         );
       }),
@@ -1500,6 +1460,45 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           Option.getOrThrow(yield* readCodingAgent(starter, forked.id)).startedFrom,
           startedFrom,
         );
+      }),
+  );
+
+  it.effect(
+    "an agent another of its account's agents started keeps that agent as its starter, read by a teammate as by its account and by no outsider, and a Start naming another account's agent keeps none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Rollout" });
+        const start = (startedByAgentId?: string): NewCodingAgent => ({
+          taskId: task.id,
+          planSnapshot: "# Rollout",
+          prompt: null,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+          ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
+        });
+        const orchestrator = Option.getOrThrow(yield* createCodingAgent(owner, start())).agent;
+        const worker = Option.getOrThrow(
+          yield* createCodingAgent(owner, start(orchestrator.id)),
+        ).agent;
+        const teammates = Option.getOrThrow(
+          yield* createCodingAgent(teammate, start(orchestrator.id)),
+        ).agent;
+
+        assert.equal(orchestrator.startedByAgentId, null);
+        assert.equal(worker.startedByAgentId, orchestrator.id);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(teammate, worker.id)).startedByAgentId,
+          orchestrator.id,
+        );
+        assert.ok(Option.isNone(yield* readCodingAgent(outsider, worker.id)));
+        assert.equal(teammates.startedByAgentId, null);
       }),
   );
 

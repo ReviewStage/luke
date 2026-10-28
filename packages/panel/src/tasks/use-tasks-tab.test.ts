@@ -310,7 +310,7 @@ const _EDITED: TasksView = {
   ...OPEN,
   document: {
     status: TASKS_READ.READY,
-    task: { ...TASK, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true } },
+    task: { ...TASK, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: false } },
   },
 };
 
@@ -318,7 +318,7 @@ const _EDITED: TasksView = {
 function _revisionLine(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: true },
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };

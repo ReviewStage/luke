@@ -875,6 +875,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
         const mine = yield* openWorkspace(owner);
 
         for (const path of [
+          HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_FILE,
           HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE,
           HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS,
         ]) {
@@ -882,6 +883,9 @@ it.layer(getTestDB())("the repositories route", (it) => {
             yield* read(owner, path, [
               [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, theirs],
               [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+              ["path", "README.md"],
+              ["first", "1"],
+              ["last", "1"],
             ]),
             refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
             path,
@@ -1571,17 +1575,34 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "the desktop's client reads through the route: the listing, a folder, a repository out of reach as unreachable, and nothing from a workspace it is not in",
+    "the desktop's client reads through the route with no task: the listing, a folder, a file, a repository out of reach as unreachable, and nothing from a workspace it is not in",
     () =>
       Effect.gen(function* () {
+        const head = "c".repeat(40);
         const github = githubReaching(
           [{ id: 7901, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
           undefined,
           {},
-          (sent) =>
-            new URL(sent.url).pathname === "/repos/acme/relay/git/trees/main%3Asrc"
-              ? Response.json({ tree: [{ path: "invite.ts", type: "blob" }], truncated: false })
-              : undefined,
+          (sent) => {
+            const path = new URL(sent.url).pathname;
+            if (path === "/repos/acme/relay/git/trees/main%3Asrc") {
+              return Response.json({
+                tree: [{ path: "invite.ts", type: "blob" }],
+                truncated: false,
+              });
+            }
+            if (path === "/repos/acme/relay/git/ref/heads/main") {
+              return Response.json({ object: { type: "commit", sha: head } });
+            }
+            if (path !== "/repos/acme/relay/contents/src/invite.ts") return undefined;
+            const text = "export const seats = 3;\nexport const sent = 0;";
+            return Response.json({
+              type: "file",
+              size: text.length,
+              encoding: "base64",
+              content: Buffer.from(text).toString("base64"),
+            });
+          },
         );
         const { owner, other, bearers } = yield* openAccounts(github);
         const workspace = yield* openInstallationWorkspace(owner, {
@@ -1611,6 +1632,10 @@ it.layer(getTestDB())("the repositories route", (it) => {
             { path: "src" },
           ),
         );
+        const window = { path: "src/invite.ts", firstLine: 2, lastLine: 2 };
+        const file = yield* asked(
+          desktop.readRepositoryFile({ workspaceId: workspace, repository: "acme/relay" }, window),
+        );
         const unreached = yield* asked(
           desktop.readRepositoryTree(
             { workspaceId: workspace, repository: "acme/ledger" },
@@ -1622,6 +1647,12 @@ it.layer(getTestDB())("the repositories route", (it) => {
             workspaceId: workspace,
             repository: "acme/relay",
           }),
+        );
+        const strangerFile = yield* asked(
+          desktopOf(other).readRepositoryFile(
+            { workspaceId: workspace, repository: "acme/relay" },
+            window,
+          ),
         );
 
         assert.deepEqual(
@@ -1639,15 +1670,29 @@ it.layer(getTestDB())("the repositories route", (it) => {
             truncated: false,
           },
         });
+        assert.deepEqual(file, {
+          file: {
+            path: "src/invite.ts",
+            repository: "acme/relay",
+            branch: "main",
+            commit: head,
+            firstLine: 2,
+            lineCount: 2,
+            lines: ["export const sent = 0;"],
+          },
+        });
         assert.deepEqual(unreached, { refusal: TASK_FILE_REFUSAL.NOT_REACHABLE });
         assert.equal(stranger, undefined);
+        assert.equal(strangerFile, undefined);
         assert.deepEqual(
           service.requests.map((sent) => `${sent.method} ${sent.pathname}${sent.search}`),
           [
             `GET /api/github/repositories?workspaceId=${workspace}`,
             `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Frelay&path=src`,
+            `GET /api/github/repositories/file?workspaceId=${workspace}&repository=acme%2Frelay&path=src%2Finvite.ts&first=2&last=2`,
             `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Fledger`,
             `GET /api/github/repositories/skills?workspaceId=${workspace}&repository=acme%2Frelay&installed=1`,
+            `GET /api/github/repositories/file?workspaceId=${workspace}&repository=acme%2Frelay&path=src%2Finvite.ts&first=2&last=2`,
           ],
         );
       }),

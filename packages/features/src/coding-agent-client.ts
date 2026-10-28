@@ -9,13 +9,13 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
-  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentDeleteAnswerView,
@@ -112,6 +112,7 @@ import {
 import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
+  LIVE_POLL,
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
   TRANSCRIPT_NOW_QUERY,
@@ -867,9 +868,10 @@ export class HostedCodingAgentClient {
    * named, sealed for following over Neon Realtime, answered at once: not
    * found where the account reaches no such agent, unanswered for anything
    * else, which the caller answers by sealing it again; with `poll`, its
-   * rows inline, for a reader polling while Realtime fails it. Sealed for
-   * the account `userId` names, and signed out where the session is no
-   * longer that account's.
+   * rows inline, for a reader polling while Realtime fails it; with
+   * `cursor`, its newest messages only past where the reader holds them.
+   * Sealed for the account `userId` names, and signed out where the session
+   * is no longer that account's.
    */
   agentTranscriptLive(
     agentId: string,
@@ -877,12 +879,17 @@ export class HostedCodingAgentClient {
     callId?: string,
     poll = false,
     after?: string,
+    cursor?: string,
   ): Effect.Effect<
     AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
     never,
     HttpClient.HttpClient
   > {
-    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    const read = {
+      id: agentId,
+      [LIVE_USER_QUERY]: userId,
+      ...(cursor === undefined ? undefined : { [LIVE_POLL.CURSOR]: cursor }),
+    };
     const named = callId === undefined ? read : { ...read, call: callId };
     return Effect.catchIf(
       askLive(this.#hosted.live.agentTranscript, named, poll, after),
@@ -1021,11 +1028,6 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
   }
 
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's boundaries from; not found for an agent the account does not reach. */
-  calls(agentId: string): Effect.Effect<CodingAgentCallsAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.agents.calls, { id: agentId }), ROW_REFUSALS);
-  }
-
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   pullRequest(
     agentId: string,
@@ -1147,7 +1149,15 @@ export class HostedCodingAgentClient {
     HttpClient.HttpClient
   > {
     return Effect.catchIf(
-      askLive(this.#hosted.live.inbox, { [LIVE_USER_QUERY]: userId }, poll, after),
+      askLive(
+        this.#hosted.live.inbox,
+        {
+          [LIVE_USER_QUERY]: userId,
+          [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE,
+        },
+        poll,
+        after,
+      ),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

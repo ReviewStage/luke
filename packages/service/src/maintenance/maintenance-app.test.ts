@@ -22,7 +22,7 @@ import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/bounds.js";
+import { EVE_HOST_ENVIRONMENT, EVE_HOST_HEADER } from "../agents/eve-host/bounds.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
@@ -262,7 +262,8 @@ const openDueAutomation = Effect.gen(function* () {
   const now = yield* Clock.currentTimeMillis;
   Option.getOrThrow(
     yield* createAutomation(owner, {
-      taskId: task.id,
+      organizationId: task.workspaceId,
+      repositories: task.repository === null ? [] : [task.repository],
       name: "Flaky-test sweep",
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
       action: {
@@ -296,7 +297,7 @@ function githubAndEve() {
     asked.push({
       url: sent.url,
       authorization: sent.headers.get("authorization"),
-      account: sent.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+      account: sent.headers.get(EVE_HOST_HEADER.ACCOUNT),
     });
     return Response.json(
       { ok: true, sessionId: "wrun_01SWEPTAUTOMATION000000000", status: "accepted" },
@@ -314,7 +315,7 @@ it.layer(getTestDB())("an automation the sweep starts", (it) => {
     "reaches eve as the deployment acting for its owner, under the deployment's own secret and never the cron's bearer the sweep was called with",
     () =>
       Effect.gen(function* () {
-        yield* Effect.sync(() => vi.stubEnv(BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
+        yield* Effect.sync(() => vi.stubEnv(EVE_HOST_ENVIRONMENT.EVE_ORIGIN, EVE_ORIGIN));
         const owner = yield* openDueAutomation;
         const eve = githubAndEve();
         const sentry = recordingSentry();

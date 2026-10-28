@@ -96,9 +96,15 @@ export interface PlacedWords {
   readonly top: number;
 }
 
-/** Where the caret goes as the editor opens: where a click landed, on the words it landed on where they are known, the end of a section, or the end of the text; the start of the text without any. */
+/** Where the caret goes as the editor opens: where a click landed, on the words it landed on where they are known, selecting from the words its press started on where it selected some, the end of a section, or the end of the text; the start of the text without any. */
 export type PlanEditorPlacement =
-  | { readonly x: number; readonly y: number; readonly words?: PlacedWords | undefined }
+  | {
+      readonly x: number;
+      readonly y: number;
+      readonly words?: PlacedWords | undefined;
+      /** Where the words the press selected start, which the editor selects from to `words`; none where it selected nothing. */
+      readonly from?: PlacedWords | undefined;
+    }
   | { readonly section: number }
   | typeof PLACEMENT_END;
 

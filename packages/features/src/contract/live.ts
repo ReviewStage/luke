@@ -28,6 +28,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import {
   automationRunsLiveAnswerSchema,
   automationsLiveAnswerSchema,
@@ -72,6 +73,16 @@ const liveReadSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
+/** The account's inbox as a live read follows it: whether it is carried the items of agents with no repository (`ACCOUNT_INBOX_REPOSITORYLESS`), which a build from before it never asks for. */
+const liveAccountInboxSchema = EffectSchema.Struct({
+  [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: EffectSchema.optionalKey(
+    EffectSchema.Literal(ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
+  ),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
@@ -88,12 +99,19 @@ const liveScopeSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
+/**
+ * The agent a transcript is followed for, and the delegation call of the
+ * worker where it is a worker's; each read as text, an id or call of no
+ * shape answered as not found. A reader that names where it holds the
+ * newest messages (`LIVE_POLL.CURSOR`) is answered them past it; one of no
+ * shape is refused.
+ */
 const liveTranscriptSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   call: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_POLL.CURSOR]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_USER_QUERY]: userField,
 });
 
@@ -120,7 +138,7 @@ export const liveContract = {
     .output(EffectSchema.flip(channelsLiveAnswerSchema)),
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
-    .input(liveReadSchema)
+    .input(liveAccountInboxSchema)
     .output(EffectSchema.flip(accountInboxLiveAnswerSchema)),
   taskRecord: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))

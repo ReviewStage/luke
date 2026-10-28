@@ -2,7 +2,7 @@
  * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks Luke's token route for, or on a local agent's Mac's own Codex sign-in.
  *
  * The `codex` implementation of `AgentSessions`
- * (`brain-host/eve-sessions.ts`), on the launch machinery every native
+ * (`eve-host/eve-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Codex's own:
  *
  * - The runner's config names the image's `codex` and carries Luke's coder
@@ -66,8 +66,8 @@ import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-cre
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
+import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../eve-host/eve-sessions.js";
 import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
@@ -349,7 +349,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 }
 
 /** The sessions for one account, over the calling fiber's services. */
-export const codexSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
+export const codexSessions = <Turn extends EveHostTurn = EveHostTurn>(
   options: CodexSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(codex(options), options);
