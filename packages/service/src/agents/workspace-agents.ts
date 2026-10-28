@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   listWorkspaceCodingAgents,
+  readCodingAgent,
   readVisibleCodingAgent,
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
@@ -110,14 +111,25 @@ export const workspaceAgentsOf = (
     return { agents, taskOf };
   });
 
-/** The agent under the id where it is one of the workspace's, archived or not, and the account may read it (`readVisibleCodingAgent`), as an agent's tools name another; nothing for an agent of another workspace or none. */
+/**
+ * The agent under the id where it is one of the workspace's, archived or
+ * not, as the calling agent's tools name it; nothing for an agent of another
+ * workspace or none. Another agent is read as a member may read it
+ * (`readVisibleCodingAgent`), and the caller itself as it reads itself
+ * (`readCodingAgent`), so its own tools never lose it when its starter
+ * loses sight of its task.
+ */
 export const workspaceAgent = (
   userId: string,
   workspaceId: string,
   agentId: string,
+  callerId: string,
 ): Effect.Effect<Option.Option<CodingAgent>, StoreFailure, DatabaseServices> =>
-  Effect.map(readVisibleCodingAgent(userId, agentId), (found) =>
-    Option.filter(found, (agent) => agent.organizationId === workspaceId),
+  Effect.map(
+    agentId === callerId
+      ? readCodingAgent(userId, agentId)
+      : readVisibleCodingAgent(userId, agentId),
+    (found) => Option.filter(found, (agent) => agent.organizationId === workspaceId),
   );
 
 /** The task one agent stands on, read as the account; null for an agent on none or on one the account cannot read. */

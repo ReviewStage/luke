@@ -2742,40 +2742,59 @@ export const CHANNEL_MOVE_REFUSAL = {
 
 export type ChannelMoveRefusal = (typeof CHANNEL_MOVE_REFUSAL)[keyof typeof CHANNEL_MOVE_REFUSAL];
 
-/** One thread the reader may read as a channel's read carries it. */
+/** One thread the reader may read as a channel's read carries it (`itemVisibleTo`), or, where an agent reads as itself, one it posted, as its own reads read it (`itemReachableBy`). */
 const findChannelThread = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    ownAgentId: Schema.NullOr(Schema.String),
+  }),
   Result: ChannelThreadRowSchema,
-  execute: ({ userId, itemId }) =>
+  execute: ({ userId, itemId, ownAgentId }) =>
     Database.use((db) =>
       db
         .select({ ...inboxColumns(userId), channelId: inboxItem.channelId, agent: THREAD_AGENT })
         .from(inboxItem)
-        .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
+        .where(
+          and(
+            eq(inboxItem.id, itemId),
+            ownAgentId === null
+              ? itemVisibleTo(userId)
+              : or(
+                  and(eq(inboxItem.agentId, ownAgentId), itemReachableBy(userId)),
+                  itemVisibleTo(userId),
+                ),
+          ),
+        ),
     ),
 });
 
 /**
  * The thread the member may read moved into another open channel of its
  * own workspace, as a member moves one or an agent on its starter's
- * behalf; the thread as it then stands. Refused where they may not read
- * it, or the channel is unknown, archived, or another workspace's.
+ * behalf, the agent moving its own thread as it acts as itself
+ * (`ownAgentId`); the thread as it then stands. Refused where they may not
+ * read it, or the channel is unknown, archived, or another workspace's.
  */
 export function moveChannelThread(
   userId: string,
   itemId: string,
   channelId: string,
+  ownAgentId: string | null = null,
 ): InboxStoreEffect<Result.Result<ChannelThreadItem, ChannelMoveRefusal>> {
   return Effect.gen(function* () {
-    const standing = yield* findChannelThread({ userId, itemId });
+    const standing = yield* findChannelThread({ userId, itemId, ownAgentId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD);
     if (!(yield* moveItemToChannel(itemId, channelId))) {
       return Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL);
     }
-    const moved = Option.getOrElse(yield* findChannelThread({ userId, itemId }), () => ({
-      ...standing.value,
-      channelId,
-    }));
+    const moved = Option.getOrElse(
+      yield* findChannelThread({ userId, itemId, ownAgentId }),
+      () => ({
+        ...standing.value,
+        channelId,
+      }),
+    );
     return Result.succeed({
       ...storedItem(moved).item,
       channelId: moved.channelId,

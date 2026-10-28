@@ -141,7 +141,7 @@ import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
 import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
-import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
+import { AGENT_LIST_FILTER_REFUSAL, workspaceAgent } from "../workspace-agents.js";
 import { MESSAGE_AGENT_REFUSAL, MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import {
@@ -1881,6 +1881,24 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
     reason: CODER_REFUSAL.NO_AGENT,
   });
   assert.equal(eve.sent.length, 0);
+});
+
+test("an agent whose starter no longer sees its task is still named by its own tools as itself, while another agent of that starter names it no longer", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const onBilling = await agentOn(agents.caller.userId, tasks.billing);
+  // The task moves onto its owner's own token, which the caller's starter keeps none to read through.
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, tasks.billing)),
+    ),
+  );
+  const named = (callerId: string) =>
+    database.run(workspaceAgent(agents.caller.userId, workspaceId, onBilling.id, callerId));
+
+  assert.deepEqual(
+    [Option.isSome(await named(onBilling.id)), Option.isNone(await named(agents.caller.id))],
+    [true, true],
+  );
 });
 
 test("update_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done with the first record kept, and brings it back with the record cleared", async () => {

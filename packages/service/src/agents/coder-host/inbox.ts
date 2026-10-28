@@ -1052,7 +1052,12 @@ export function moveAgentThread(
       }
       const itemId = yield* movedThreadId(agent, read.success.thread);
       if (Option.isNone(itemId)) return channelRejected(CHANNEL_REFUSAL.NO_THREAD);
-      const moved = yield* moveChannelThread(agent.userId, itemId.value, channel.success.id);
+      const moved = yield* moveChannelThread(
+        agent.userId,
+        itemId.value,
+        channel.success.id,
+        agent.agentId,
+      );
       if (Result.isFailure(moved)) {
         // Note that the channel was found open in the agent's workspace, so one the move refuses is not the thread's.
         return channelRejected(

@@ -1246,7 +1246,7 @@ const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
     const workspace = yield* callerWorkspace(caller);
     if (Option.isNone(workspace)) return Option.none();
     const userId = callerUserId(caller);
-    const found = yield* workspaceAgent(userId, workspace.value, agentId);
+    const found = yield* workspaceAgent(userId, workspace.value, agentId, caller.agent.id);
     if (Option.isNone(found)) return Option.none();
     const agent = found.value;
     const task = yield* agentTaskOf(userId, agent);

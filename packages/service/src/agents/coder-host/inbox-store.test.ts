@@ -989,6 +989,22 @@ it.layer(getTestDB())("the inbox store", (it) => {
           [posted.id],
           "the agent reads its own ask, as it acts as itself",
         );
+        const app = Result.getOrThrow(
+          yield* createChannel(
+            owner,
+            task.workspaceId,
+            { name: "app", purpose: "All about app.", project: false },
+            new Date(1),
+          ),
+        ).id;
+        assert.deepEqual(
+          [
+            yield* moveChannelThread(teammate, posted.id, app),
+            Result.isSuccess(yield* moveChannelThread(teammate, posted.id, app, agent.agentId)),
+          ],
+          [Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD), true],
+          "the agent moves its own thread as itself, which its starter moves not as a member",
+        );
         const channelId =
           Option.getOrThrow(yield* readInboxItem(owner, posted.id)).item.channelId ?? "";
         const seen = (userId: string) =>
