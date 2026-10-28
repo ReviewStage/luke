@@ -29,11 +29,15 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js"
  * issue is read by its repository and number through the workspace's
  * GitHub App, on the service, once per chip, and only where that workspace
  * has the App, so a chip in a workspace without it asks nothing. Until it
- * answers, or where it never does, a repository the App does not reach
- * among them, the chip says what the address says, as it always has, and an
- * answer is held to the workspace it was read through and the connection it
- * was read over, so a workspace that disconnects stops drawing it. A Linear
- * issue's chip asks nothing and says what its address says.
+ * first answers, or where it never does, a repository the App does not reach
+ * among them, the chip says what the address says, as it always has. The
+ * window keeps the last answer for each page by the workspace it was read
+ * through, so a chip drawn again, as a plan's text is when a section opens
+ * in its editor and when it closes, says it at once while it is read again,
+ * rather than its address until the read lands; and a kept answer is drawn
+ * only while that workspace still has the App, so a workspace that
+ * disconnects stops drawing it. A Linear issue's chip asks nothing and says
+ * what its address says.
  */
 
 /** Where the words a chip stands in are: the plan's id, or none off a plan, and the workspace's slug its mentions are written under. */
@@ -181,13 +185,52 @@ function keyOf(asked: Asked): string {
   return `${asked.repository.split("/")[1] ?? asked.repository}#${asked.number}`;
 }
 
-/** Whether two asks ask for the same page. */
-function sameAsked(first: Asked, second: Asked): boolean {
-  return (
-    first.page === second.page &&
-    first.repository === second.repository &&
-    first.number === second.number
-  );
+/** A page's last answer as the window keeps it: the order its read was asked in, and what it answered, none where GitHub holds no such page. */
+interface HeldStanding {
+  readonly order: number;
+  readonly standing: LinkStanding | undefined;
+}
+
+/**
+ * The last answer this window read for each page, by the workspace it was
+ * read through and then by the page's kind, repository, and number, let go
+ * as the account signed in changes (`forgetStandings`), since what a page
+ * answers may be the account's. Note that each is small and replaced by the
+ * next read of the same page, so the window keeps every one it read rather
+ * than bound them.
+ */
+const heldStandings = new Map<string, Map<GitHubPage, Map<string, Map<number, HeldStanding>>>>();
+
+/** How many reads the window has asked, which orders their answers. */
+let asks = 0;
+
+/** What the window keeps for an ask through a workspace; nothing before any read landed. */
+function heldOf(workspaceId: string, asked: Asked): HeldStanding | undefined {
+  return heldStandings.get(workspaceId)?.get(asked.page)?.get(asked.repository)?.get(asked.number);
+}
+
+/**
+ * An answer kept as the last for its ask through a workspace, an answer
+ * that the page is gone included, so a chip stops saying a title GitHub no
+ * longer answers. Note that an answer to a read asked before the one kept
+ * is dropped, so reads landing out of order never put back what a later
+ * one replaced.
+ */
+function keepStanding(workspaceId: string, asked: Asked, answer: HeldStanding): void {
+  if ((heldOf(workspaceId, asked)?.order ?? -1) > answer.order) return;
+  const pages =
+    heldStandings.get(workspaceId) ?? new Map<GitHubPage, Map<string, Map<number, HeldStanding>>>();
+  heldStandings.set(workspaceId, pages);
+  const repositories = pages.get(asked.page) ?? new Map<string, Map<number, HeldStanding>>();
+  pages.set(asked.page, repositories);
+  const numbers = repositories.get(asked.repository) ?? new Map<number, HeldStanding>();
+  repositories.set(asked.repository, numbers);
+  numbers.set(asked.number, answer);
+}
+
+/** Lets go of every answer the window kept, as the account signed in changes. */
+export function forgetStandings(): void {
+  heldStandings.clear();
 }
 
 /** GitHub's answer for an ask, through the workspace's App: a pull request or an issue by repository and number; none where it holds none. */
@@ -282,11 +325,8 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
   );
   const workspaceId = workspace?.id;
   const connected = asked !== undefined && connectedFor(workspace);
-  const [read, setRead] = useState<{
-    workspaceId: string;
-    asked: Asked;
-    standing: LinkStanding;
-  }>();
+  // Note that the answer itself is kept by the window, so this only draws the chip again as it lands.
+  const [, setAnswered] = useState<HeldStanding>();
   // Note that the read stands on what it asks, field by field, so a chip redrawn asks no more.
   const page = asked?.page;
   const repository = asked?.repository;
@@ -298,9 +338,13 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
         : undefined;
     if (ask === undefined || workspaceId === undefined || !connected) return;
     let live = true;
+    asks += 1;
+    const order = asks;
     readStanding(act, workspaceId, ask).then(
       (standing) => {
-        if (live && standing !== undefined) setRead({ workspaceId, asked: ask, standing });
+        const answer = { order, standing };
+        keepStanding(workspaceId, ask, answer);
+        if (live) setAnswered(answer);
       },
       // Note that a refused read leaves the chip as the address says it, which is how it always stood.
       () => undefined,
@@ -310,11 +354,5 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
     };
   }, [act, page, repository, number, workspaceId, connected]);
   // Note that an answer stands only for the workspace and the connection it was read through, so a disconnect or another workspace drops it at once.
-  const current =
-    connected &&
-    read !== undefined &&
-    asked !== undefined &&
-    read.workspaceId === workspaceId &&
-    sameAsked(read.asked, asked);
-  return current ? read.standing : undefined;
+  return connected && workspaceId !== undefined ? heldOf(workspaceId, asked)?.standing : undefined;
 }
