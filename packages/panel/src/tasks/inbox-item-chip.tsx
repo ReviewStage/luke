@@ -3,7 +3,6 @@ import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import type { AppInboxSlice, AppInboxWaitingItem } from "@luke/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
-import { InboxIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { InboxItemCard, inboxLineGlyph } from "./inbox-item-parts.js";
@@ -112,7 +111,7 @@ function useWaitingBrief(itemId: string): AppInboxWaitingItem | undefined {
 /** What an item still waiting says of where it stands, before its inbox is read. */
 const WAITING_WORDS = "Waiting for an answer";
 
-/** An item's card from main's brief alone: its question, that it waits for an answer, and when it was asked. */
+/** An item's card from main's brief alone, wearing the thread glyph its chip wears until the item is read: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
   item,
   now,
@@ -123,7 +122,7 @@ function WaitingItemCard({
   return (
     <HoverCard data-inbox-item-card="">
       <HoverCardHead
-        glyph={<InboxIcon aria-hidden="true" />}
+        glyph={<GLYPH.THREAD />}
         name={item.title}
         corner={<Time at={item.postedAt} now={now} hint={false} />}
       />

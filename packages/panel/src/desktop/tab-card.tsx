@@ -144,6 +144,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="">
       <HoverCardHead
+        glyph={tabLook({ kind: TAB_KIND.INBOX }).icon}
         name={TAB_WORDS.INBOX}
         corner={waiting === 0 ? NEEDS_YOU.NONE : needsYouWords(waiting)}
       />
