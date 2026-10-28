@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AUTOMATION_PRESET } from "@luke/features/automation-code-review";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
@@ -791,29 +790,6 @@ test("on a narrow stage a step between an automation's setup and its runs a link
   assert.deepEqual(window.at().automation, { open: true, runs: false, page: AUTOMATION_PAGE });
   act(() => window.history().onForward());
   assert.deepEqual(window.at().automation, { open: true, runs: true, page: LINKED_RUN });
-});
-
-test("on a narrow stage a move back from a new automation's page to one opened from another suggestion asks to leave its unsaved work, and stays where it is refused", () => {
-  const window = mount(SHELL_ROOM.NARROW, {
-    ...ON_AUTOMATION,
-    automation: {
-      open: true,
-      runs: false,
-      page: { kind: AUTOMATIONS_PAGE.NEW, preset: AUTOMATION_PRESET.CODE_REVIEW },
-    },
-  });
-  // An automation between the two, as a browser's Back passes over one deleted since.
-  window.move((held) => ({
-    ...held,
-    automation: { open: true, runs: false, page: AUTOMATION_PAGE },
-  }));
-  const blank: AutomationsPlace = { kind: AUTOMATIONS_PAGE.NEW };
-  window.move((held) => ({ ...held, automation: { open: true, runs: false, page: blank } }));
-  assert.equal(window.addresses().length, 3);
-
-  window.moveHistory(-2);
-  assert.deepEqual(window.at().automation?.page, blank, "the blank draft stands");
-  assert.equal(window.held.current().at, 2, "the history stands back on it");
 });
 
 test("on a narrow stage Back from an automation with unsaved work to another automation still asks, and stays where it is refused", () => {

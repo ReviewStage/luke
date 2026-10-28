@@ -1,9 +1,4 @@
 import {
-  AUTOMATION_PRESET,
-  type AutomationPresetName,
-  automationPreset,
-} from "@luke/features/automation-code-review";
-import {
   AUTOMATION_NEXT,
   type AutomationGroup,
   automationGroups,
@@ -23,13 +18,11 @@ import { momentText } from "@luke/features/time-format";
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackButton,
   BUTTON_VARIANT,
   Button,
-  CardPress,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   COLLECTION_STATE,
@@ -54,7 +47,6 @@ import {
   RowHintOptions,
   STATUS_TONE,
   TEXT_ELEMENT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TOOLBAR_INSET,
@@ -69,8 +61,8 @@ import {
 import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { BotIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -80,7 +72,6 @@ import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import {
   AutomationEditor,
@@ -127,16 +118,10 @@ import { useAutomations } from "./use-automations.js";
  * building for the workspace and a lock for Only you. A row's glyph wears
  * where its newest run stands, a failure keeps its mark at the row's end,
  * and an automation turned off reads "Off" where its next run would.
- * Under the list, or under the line saying there is none yet, stand the
- * suggested automations: a press opens a new automation's page filled in
- * from the suggestion's preset, to look over and Create. Beside New
- * automation, Create with an agent opens New task's own card for the agent
- * that makes one: what to automate in the member's own words, the
+ * Beside New automation, Create with an agent opens New task's own card for
+ * the agent that makes one: what to automate in the member's own words, the
  * repository and the model, then Start agent, a new task's agent handed the
- * brief to make it (`new-task-composer.tsx`). Code review, the
- * one suggestion, is still an experiment (`EXPERIMENT.CODE_REVIEW`), so
- * nothing is suggested while the account has it off, and a page filled in
- * from it goes back to the list.
+ * brief to make it (`new-task-composer.tsx`).
  */
 
 /** What an automation's row is, which names its ⋯ and its menu. */
@@ -172,12 +157,6 @@ const READING_RUNS = "Reading the runs…";
 
 /** What the pages say where no workspace is listed because the workspaces could not be read. */
 const WORKSPACES_UNREAD_LINE = "The workspaces could not be read.";
-
-/** The presets the list suggests while Code review's experiment is on, in its order, each by the glyph of what fires it. */
-const SUGGESTIONS: readonly {
-  readonly name: AutomationPresetName;
-  readonly glyph: React.ReactNode;
-}[] = [{ name: AUTOMATION_PRESET.CODE_REVIEW, glyph: <GitPullRequestIcon /> }];
 
 /** Why the bar's two acts are unavailable while no workspace is chosen. */
 const NO_WORKSPACE_HINT = "Choose a workspace first";
@@ -452,69 +431,6 @@ function AutomationList({
   );
 }
 
-/**
- * The automations Luke suggests, under a heading of their own, each a card:
- * the glyph of what fires it, its name over what it does, and a plus, the
- * whole card one press that opens a new automation's page filled in from
- * its preset.
- */
-function SuggestedAutomations({
-  disabled,
-  onStart,
-}: {
-  disabled: boolean;
-  onStart: (preset: AutomationPresetName) => void;
-}): React.JSX.Element | null {
-  if (!useExperiment(EXPERIMENT.CODE_REVIEW)) return null;
-  return (
-    <section
-      className="automation-suggestions flex w-full flex-col gap-control-gap [.automation-group+&]:mt-page-section-gap [.automations-empty>&]:mt-section-gap"
-      aria-label="Suggested"
-    >
-      <div className="automation-suggestions-head px-luke-2">
-        <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
-          Suggested
-        </Text>
-      </div>
-      <div className="automation-suggestion-cards grid grid-cols-automation-suggestions gap-block-gap">
-        {SUGGESTIONS.map(({ name, glyph }) => {
-          const preset = automationPreset(name);
-          return (
-            <div
-              key={name}
-              className="automation-suggestion group/suggestion relative flex min-w-0 flex-col rounded-control border border-border bg-surface p-card-compact transition-[background-color] duration-(--luke-duration-hover) ease-motion-exit data-[disabled=true]:opacity-disabled [&:hover:not([data-disabled=true])]:bg-muted"
-              data-disabled={disabled ? "true" : undefined}
-            >
-              <CardPress disabled={disabled} onPress={() => onStart(name)}>
-                <span className="automation-suggestion-face flex flex-col gap-item-gap">
-                  <span className="automation-suggestion-head mb-item-gap flex items-start justify-between">
-                    <span
-                      className="automation-suggestion-glyph grid size-luke-32 place-items-center rounded-control border border-border bg-muted text-muted-foreground [&_svg]:size-luke-16"
-                      aria-hidden="true"
-                    >
-                      {glyph}
-                    </span>
-                    <PlusIcon
-                      className="automation-suggestion-add size-luke-16 flex-none text-muted-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit [.automation-suggestion:hover:not([data-disabled=true])_&]:text-foreground"
-                      aria-hidden="true"
-                    />
-                  </span>
-                  <span className="automation-suggestion-name text-label font-luke-medium text-foreground">
-                    {preset.name}
-                  </span>
-                  <span className="automation-suggestion-detail text-caption text-muted-foreground">
-                    {preset.description}
-                  </span>
-                </span>
-              </CardPress>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 /** What the list's page shows: the workspaces or the list unread, the list still being read, or the list. */
 function listState(
   workspacesUnread: boolean,
@@ -650,8 +566,6 @@ function ListPage({
   const now = useMinute();
   const workspace = tasks.workspace;
   const { read, refreshFailed, reload, toggle, remove } = automations;
-  const openSuggested = (preset: AutomationPresetName) =>
-    view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
@@ -681,27 +595,22 @@ function ListPage({
     >
       {/* A refresh that failed after the list was read leaves it drawn, with a line over it. */}
       {refreshFailed ? <ErrorState onRetry={reload}>{REFRESH_FAILED_WORDS}</ErrorState> : null}
-      {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
       {groups.length === 0 ? (
         <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.luke-empty-state]:flex-none">
           <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
-          <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
         </div>
       ) : (
-        <>
-          <AutomationList
-            groups={groups}
-            workspace={workspace}
-            now={now}
-            narrow={room === SHELL_ROOM.NARROW}
-            onOpen={(automation) =>
-              view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
-            }
-            onToggle={(automation, enabled) => toggle(automation.id, enabled)}
-            onDelete={deletion.ask}
-          />
-          <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
-        </>
+        <AutomationList
+          groups={groups}
+          workspace={workspace}
+          now={now}
+          narrow={room === SHELL_ROOM.NARROW}
+          onOpen={(automation) =>
+            view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
+          }
+          onToggle={(automation, enabled) => toggle(automation.id, enabled)}
+          onDelete={deletion.ask}
+        />
       )}
       <ConfirmDialog
         open
@@ -995,7 +904,6 @@ function AutomationsPages({
 }): React.JSX.Element {
   const view = tasks.automationsView;
   const workspace = tasks.workspace;
-  const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
   // Note that no list is asked for while no workspace is listed, which is
   // while the workspaces are still read, so the pages stand as quiet blocks
   // until one is, rather than calling the list empty or an automation gone;
@@ -1005,16 +913,6 @@ function AutomationsPages({
   const [made, setMade] = useState<string | undefined>(undefined);
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
-  // A new page filled in from Code review's preset goes back to the list once its experiment is off, here or
-  // on another Mac; the window's leave guard asks first where it was written in.
-  // Note that the way out is read through a ref, because the window rebuilds it on every render, and a draft
-  // kept by Cancel is asked again only when the place or the experiment moves.
-  const fromPreset = place.kind === AUTOMATIONS_PAGE.NEW && place.preset !== undefined;
-  const open = useRef(view.onOpen);
-  open.current = view.onOpen;
-  useEffect(() => {
-    if (fromPreset && !codeReviewOn) open.current({ kind: AUTOMATIONS_PAGE.LIST });
-  }, [fromPreset, codeReviewOn]);
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
     return <ListPage tasks={tasks} automations={automations} room={room} />;
   }
@@ -1056,14 +954,11 @@ function AutomationsPages({
       <GonePage onBack={back} phone={room === SHELL_ROOM.NARROW} />
     );
   }
-  // Code review, the one preset, is an experiment, so no page is filled in from it while it is off.
-  const preset = place.kind === AUTOMATIONS_PAGE.NEW && codeReviewOn ? place.preset : undefined;
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
   const editor = (sentry: SentryOffer) => (
     <AutomationEditor
       key={editing}
       automation={opened}
-      preset={preset}
       workspace={workspace}
       offersOwner={offersOwner}
       repositories={tasks.newTask.repositoriesIn(workspace?.id)}

@@ -1,11 +1,4 @@
 import {
-  type AutomationPresetName,
-  automationPreset,
-  type CodeReviewSettings,
-  readCodeReviewSettings,
-  withCodeReviewSettings,
-} from "@luke/features/automation-code-review";
-import {
   type AutomationDraft,
   automationDraft,
   changeOf,
@@ -21,7 +14,6 @@ import {
   filterAdmitted,
   filterValuesOf,
   type GitHubTriggerSettings,
-  presetDraft,
   repositoryHeld,
   SCHEDULE_KIND,
   type ScheduleDraft,
@@ -87,7 +79,6 @@ import {
   TERM,
 } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -178,7 +169,6 @@ import { useAppCommand } from "../app-commands.js";
 import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useCreator } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
@@ -196,7 +186,6 @@ import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
@@ -1083,18 +1072,16 @@ function AutomationActions({
 /**
  * The editor's toolbar: the crumb back to the list leading it, the
  * automation's name after it once the page's header has scrolled away
- * (`pickUp`), and `tag` after that, with the page's acts at its end. Its own
+ * (`pickUp`), with the page's acts at its end. Its own
  * width, which a container query reads, folds its acts' words before they
  * crowd its crumbs.
  */
 function EditorToolbarFrame({
   pickUp,
-  tag,
   onBack,
   children,
 }: {
   pickUp: ToolbarPickUp;
-  tag?: ReactNode;
   onBack: () => void;
   children: ReactNode;
 }): React.JSX.Element {
@@ -1103,7 +1090,6 @@ function EditorToolbarFrame({
       <Toolbar
         trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
         pickUp={pickUp}
-        tag={tag}
         actions={children}
       />
     </div>
@@ -1149,7 +1135,6 @@ const RUNS_LABEL = "Runs";
 function EditorToolbar({
   automation,
   pickUp,
-  codeReview,
   dirty,
   saving,
   saveRefused,
@@ -1165,8 +1150,6 @@ function EditorToolbar({
   automation: AutomationSummary | undefined;
   /** The page's name as the bar picks it up from the header. */
   pickUp: ToolbarPickUp;
-  /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
-  codeReview: boolean;
   dirty: boolean;
   saving: boolean;
   /** Whether the last save was refused, read as its ring leaves: one that was not lands on a check. */
@@ -1183,7 +1166,6 @@ function EditorToolbar({
   narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
-  const feedback = useSendFeedbackItem(EXPERIMENT.CODE_REVIEW);
   const status =
     automation === undefined
       ? "Not created yet"
@@ -1219,14 +1201,12 @@ function EditorToolbar({
             },
           ],
       [{ label: RUNS_LABEL, icon: <HistoryIcon />, onSelect: runs.onPress }],
-      codeReview ? [feedback] : [],
     ];
     return (
       <PhoneHead
         place="automation"
         start={<AutomationsBack onBack={onBack} />}
         pickUp={pickUp}
-        tag={codeReview ? <ExperimentTag narrow /> : null}
         end={
           <AutomationActions
             automation={automation}
@@ -1239,12 +1219,7 @@ function EditorToolbar({
     );
   }
   return (
-    <EditorToolbarFrame
-      pickUp={pickUp}
-      tag={codeReview ? <ExperimentTag narrow={narrow} /> : null}
-      onBack={onBack}
-    >
-      {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
+    <EditorToolbarFrame pickUp={pickUp} onBack={onBack}>
       <EditorStatus>
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
           {status}
@@ -1570,80 +1545,6 @@ function SentryRows({
         )}
       </SettingsRow>
     </>
-  );
-}
-
-/** The most findings a review may be set to post, as its picker offers them. */
-const MOST_FINDINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((most) => ({
-  value: most,
-  label: String(most),
-}));
-
-/** The most findings a review may post, read back from its picker's row. */
-function mostFindingsOf(raw: string): number | undefined {
-  return MOST_FINDINGS.find((option) => String(option.value) === raw)?.value;
-}
-
-/**
- * A code review's own settings, modelled on Cursor Bugbot's, as a card of
- * Settings rows: whether a clean first review says so, the most findings it
- * posts, the rules file it reads, and whether it pushes fixes. Each is a
- * line the task opens with, written back as it changes, so the task stays
- * the one place the review is described; when it runs and on whose pull
- * requests are the Trigger card's.
- */
-function CodeReviewGroup({
-  settings,
-  onSettings,
-}: {
-  settings: CodeReviewSettings;
-  onSettings: (settings: CodeReviewSettings) => void;
-}): React.JSX.Element {
-  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does.
-  const rulesFile = useRef<HTMLInputElement>(null);
-  return (
-    <SettingsSection title="Code review">
-      <SwitchRow
-        label="Comment when no issues are found"
-        detail="Only on a pull request's first review."
-        checked={settings.commentWhenClean}
-        onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
-      />
-      <SelectRow
-        width={CHIP_WIDTH.MIN_FIELD}
-        label="Most findings"
-        detail="Per review, most severe first."
-        value={settings.mostFindings}
-        options={MOST_FINDINGS}
-        parse={mostFindingsOf}
-        onChange={(mostFindings) => onSettings({ ...settings, mostFindings })}
-      />
-      <SettingsRow
-        label="Rules file"
-        description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
-      >
-        {(control) => (
-          <span className={AUTOMATION_FIELD}>
-            <TextField
-              ref={rulesFile}
-              label="Rules file"
-              describedBy={control["aria-describedby"]}
-              font={TEXT_FIELD_FONT.MONO}
-              spellCheck={false}
-              value={settings.rulesFile}
-              onEscape={() => rulesFile.current?.blur()}
-              onChange={(text) => onSettings({ ...settings, rulesFile: text })}
-            />
-          </span>
-        )}
-      </SettingsRow>
-      <SwitchRow
-        label="Fix what it finds"
-        detail="Pushes its fixes to the pull request as Luke. Luke's own pushes start no review."
-        checked={settings.fix}
-        onChange={(fix) => onSettings({ ...settings, fix })}
-      />
-    </SettingsSection>
   );
 }
 
@@ -2176,7 +2077,6 @@ function EditorForm({
   shownSecret,
   onSecret,
   savedAgentId,
-  codeReviewOn,
   sentry,
   onDraft,
   onUnreadableTime,
@@ -2193,8 +2093,6 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
-  /** Whether the account has Code review's experiment on, without which no code review's settings stand apart from its prompt. */
-  codeReviewOn: boolean;
   /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
   sentry: SentryOffer;
   onDraft: (patch: Partial<AutomationDraft>) => void;
@@ -2210,8 +2108,6 @@ function EditorForm({
             : trigger,
         )
       : TRIGGERS;
-  // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
-  const review = codeReviewOn ? readCodeReviewSettings(draft.prompt) : undefined;
   // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
   // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
@@ -2304,12 +2200,6 @@ function EditorForm({
             }
           </RevealChoice>
         </SettingsSection>
-        {review === undefined ? null : (
-          <CodeReviewGroup
-            settings={review}
-            onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
-          />
-        )}
         <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
           <TextArea
             ref={prompt}
@@ -2540,8 +2430,7 @@ const EDITOR_SCREENS: NarrowColumns = {
 
 /**
  * One automation's page, or a new one's where none is given. A new one,
- * opened from a suggestion on the list, starts filled in from its preset;
- * once made, it is handed to `onCreated`, which stands its own page where
+ * once made, is handed to `onCreated`, which stands its own page where
  * this one stood. A deleted one is handed to `onDeleted`, which goes back
  * to the list.
  *
@@ -2555,7 +2444,6 @@ const EDITOR_SCREENS: NarrowColumns = {
  */
 export function AutomationEditor({
   automation,
-  preset,
   workspace,
   offersOwner,
   repositories,
@@ -2572,8 +2460,6 @@ export function AutomationEditor({
   sentry,
 }: {
   automation: AutomationSummary | undefined;
-  /** The preset a new automation starts filled in from, as the list's suggestion it was opened from names it; none for a blank one. */
-  preset?: AutomationPresetName | undefined;
   workspace: Workspace | undefined;
   /** Whether the workspace is shared, so an automation in it may be the workspace's rather than its maker's. */
   offersOwner: boolean;
@@ -2603,23 +2489,18 @@ export function AutomationEditor({
   sentry: SentryOffer;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
-  const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
   const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: readerZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
-  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,
-  // filled in from the preset of the suggestion it was opened from.
-  const [start] = useState(() => {
-    if (automation !== undefined) return automationDraft(automation, defaults);
-    const blank = {
-      ...automationDraft(undefined, defaults),
-      repository: repositories.recent[0] ?? null,
-    };
-    return preset === undefined ? blank : presetDraft(blank, automationPreset(preset));
-  });
+  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does.
+  const [start] = useState(() =>
+    automation !== undefined
+      ? automationDraft(automation, defaults)
+      : { ...automationDraft(undefined, defaults), repository: repositories.recent[0] ?? null },
+  );
   const [draft, setDraft] = useState(start);
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2785,7 +2666,6 @@ export function AutomationEditor({
               draft.name.trim() ||
               (automation === undefined ? NEW_AUTOMATION : UNTITLED_AUTOMATION),
           }}
-          codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
           saveRefused={refusal !== undefined}
@@ -2821,7 +2701,6 @@ export function AutomationEditor({
             shownSecret={shownSecret}
             onSecret={setShownSecret}
             savedAgentId={savedAgentId}
-            codeReviewOn={codeReviewOn}
             sentry={sentry}
             onDraft={editDraft}
             onUnreadableTime={setUnreadableTime}

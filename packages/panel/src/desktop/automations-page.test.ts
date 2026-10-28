@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { codeReviewPreset } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -36,12 +35,10 @@ import {
 } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
-import { EXPERIMENT, type Experiment } from "@luke/settings";
+import type { Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { CARD_PRESS_SELECTOR, PROFILE } from "@luke/ui";
+import { PROFILE } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -55,16 +52,9 @@ import {
   type LeaveAsk,
   useLeaveGuard,
 } from "../tasks/use-tasks-tab.js";
-import {
-  type AnyAct,
-  FAKE_ANSWER,
-  type FakeActAnswer,
-  fakeActs,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-} from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { deliveryOf, handState, stateWith } from "../testing/app-state.js";
+import { handState } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -1219,13 +1209,6 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
-/** The titles of the page's cards, in order. */
-function cards(page: HTMLElement): string[] {
-  return [...page.querySelectorAll("section[aria-labelledby] h2")].map(
-    (title) => title.textContent ?? "",
-  );
-}
-
 /** The switch named, wherever it is drawn. */
 function switchNamed(name: string): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
@@ -1793,56 +1776,6 @@ test("the Runs panel's edge resizes it within its bounds, and the width stands o
   await settle();
   assert.equal(pane()?.style.width, "280px");
   window.localStorage.clear();
-});
-
-/** A code review as its preset makes it, standing in the workspace. */
-const REVIEW = automation(10, {
-  name: "Code review",
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: codeReviewPreset().prompt },
-});
-
-/** Whether the page wears the Experimental tag and offers Send feedback, each or neither. */
-function saysExperimental(page: HTMLElement): boolean {
-  const tagged = page.querySelector(".experiment-tag")?.textContent === "Experimental";
-  const feedback = [...page.querySelectorAll("button")].some(
-    (each) => each.textContent === "Send feedback",
-  );
-  assert.equal(tagged, feedback, "the tag and Send feedback stand together");
-  return tagged;
-}
-
-test("the list and an automation's page are no experiment, so neither wears the Experimental tag or offers Send feedback", async () => {
-  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  assert.equal(saysExperimental(list), false);
-  act(() => root?.unmount());
-
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  assert.equal(saysExperimental(page), false);
-});
-
-test("a code review's page says it is an experiment while Code review is on, its Send feedback about Code review, and is a plain automation's page, its settings in its prompt alone, while it is off", async () => {
-  standing = [DIGEST, SWEEP, REVIEW];
-  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
-  const on = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: REVIEW.id });
-  await settle();
-  assert.equal(saysExperimental(on), true);
-  assert.ok(cards(on).includes("Code review"));
-  act(() => button("Send feedback").click());
-  assert.deepEqual(feedbackAbout, [EXPERIMENT.CODE_REVIEW]);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState({});
-  const off = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: REVIEW.id });
-  await settle();
-  assert.equal(saysExperimental(off), false);
-  assert.ok(!cards(off).includes("Code review"));
-  assert.match(
-    off.querySelector<HTMLTextAreaElement>("textarea[aria-label='Prompt']")?.value ?? "",
-    /^Code review settings:/u,
-  );
 });
 
 /** The pill the pointer resting on `element` raises, or nothing where it raises none. */
@@ -3230,206 +3163,6 @@ test("a link to a run opens its automation's editor with that run marked current
     ),
     [null, "true"],
   );
-});
-
-test("an automation whose task opens with no code review settings shows no Code review card", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-
-  assert.ok(!cards(page).includes("Code review"));
-});
-
-/** The suggestion named, under the list. */
-function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
-  const found = [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      `[aria-label='Suggested'] .automation-suggestion ${CARD_PRESS_SELECTOR}`,
-    ),
-  ].find((each) => each.querySelector(".automation-suggestion-name")?.textContent === name);
-  assert.ok(found, `no suggestion ${name}`);
-  return found;
-}
-
-test("Code review is suggested under an empty list as under a full one, and a blank new automation offers no preset of its own", async () => {
-  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
-  standing = [];
-  const empty = mount();
-  await settle();
-  assert.match(empty.textContent ?? "", /No automations yet\./u);
-  assert.ok(suggestion(empty, "Code review"));
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  standing = [DIGEST, SWEEP, FAILING];
-  const full = mount();
-  await settle();
-  assert.equal(rows(full).length, 3);
-  assert.ok(suggestion(full, "Code review"));
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const blank = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-  assert.deepEqual(cards(blank).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
-  assert.equal(
-    blank.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "",
-  );
-});
-
-test("while Code review is off nothing is suggested, under an empty list or a full one, and a page sent to its preset goes back to the list", async () => {
-  handState({});
-  standing = [];
-  const empty = mount();
-  await settle();
-  assert.match(empty.textContent ?? "", /No automations yet\./u);
-  assert.equal(empty.querySelector("[aria-label='Suggested']"), null);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  standing = [DIGEST, SWEEP, FAILING];
-  const full = mount();
-  await settle();
-  assert.equal(rows(full).length, 3);
-  assert.equal(full.querySelector("[aria-label='Suggested']"), null);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const sent = mountPages({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
-  await settle();
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
-  assert.equal(sent.querySelector("input[aria-label='Automation name']"), null);
-});
-
-test("a Code review draft goes back to the list once Code review turns off while it stands, asking once first where it was written in, so no review is made with the experiment off", async () => {
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {})),
-    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
-      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  });
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  act(() => suggestion(page, "Code review").click());
-  await settle();
-  type(page.querySelector("input[aria-label='Automation name']"), "Review it all");
-
-  act(() => {
-    for (const listener of listeners) listener(stateWith({}, {}));
-  });
-  await settle();
-  assert.ok(leaveAsked(), "the leave question stands before the written draft is lost");
-  act(() => button("Cancel").click());
-  await settle();
-  // The window draws again with nothing moved, as any delivery of its state draws it, which asks nothing again.
-  act(() => sendTo({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" }));
-  await settle();
-  assert.equal(
-    leaveAsked(),
-    undefined,
-    "Cancel keeps the draft until the place or the experiment moves",
-  );
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "Review it all",
-  );
-
-  act(() => {
-    for (const listener of listeners)
-      listener(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {}));
-  });
-  await settle();
-  act(() => {
-    for (const listener of listeners) listener(stateWith({}, {}));
-  });
-  await settle();
-  assert.ok(leaveAsked(), "turned off again, it asks again");
-  act(() => button("Leave").click());
-  await settle();
-
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
-  assert.equal(page.querySelector("input[aria-label='Automation name']"), null);
-  assert.deepEqual(creates, []);
-});
-
-test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
-  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-
-  act(() => suggestion(page, "Code review").click());
-  await settle();
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
-  // Note that the page opens filled in, so a Create pressed straight away saves the review.
-  // Note that the owner is chosen first, as Dean asked, then its trigger and its own settings.
-  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Trigger", "Code review"]);
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "Code review",
-  );
-  assert.equal(
-    pickerDetail(page, "Type"),
-    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
-  );
-  // Its own settings, Cursor Bugbot's kind, in a card of their own and written into the lines its task opens with.
-  assert.ok(cards(page).includes("Code review"));
-  act(() => switchNamed("Comment when no issues are found").click());
-  pick(page, "Most findings", "3");
-  const rulesFile = page.querySelector<HTMLInputElement>("input[aria-label='Rules file']");
-  // Note that the field is described by its row's words, so a screen reader reads where the file is read from.
-  assert.equal(
-    document.getElementById(rulesFile?.getAttribute("aria-describedby") ?? "")?.textContent,
-    "Read from the base branch, beside AGENTS.md and CLAUDE.md.",
-  );
-  type(rulesFile, ".cursor/BUGBOT.md");
-  act(() => button("Create automation").click());
-  await settle();
-
-  const made = creates[0];
-  assert.ok(made, "the automation is made");
-  assert.deepEqual(
-    {
-      name: made.name,
-      trigger: made.trigger,
-      archiveSuccessful: made.archiveSuccessful,
-      guards: made.guards,
-      target: made.target,
-      repositories: made.repositories,
-    },
-    {
-      name: "Code review",
-      trigger: {
-        kind: AUTOMATION_TRIGGER.GITHUB,
-        event: "pull-request-updated",
-        senders: ["people", "luke-agents"],
-        moments: ["opened", "ready", "pushed"],
-        drafts: false,
-        forks: false,
-      },
-      archiveSuccessful: true,
-      guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
-      target: { kind: AUTOMATION_TARGET.NEW_AGENT },
-      repositories: ["acme/ledger"],
-    },
-  );
-  assert.match(made.action.prompt, /post what you find as one GitHub review/u);
-  assert.ok(
-    made.action.prompt.startsWith(
-      [
-        "Code review settings:",
-        "- Comment when you find nothing: no",
-        "- Most findings to post: 3",
-        "- Rules file: .cursor/BUGBOT.md",
-        "- Fix what you find: no",
-      ].join("\n"),
-    ),
-    "the settings open the task the agent is handed",
-  );
-  assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
 });
 
 /**

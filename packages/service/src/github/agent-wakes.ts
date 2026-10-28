@@ -77,8 +77,7 @@ import {
  * may be the agent's own, since every agent comments as that App, so it
  * reaches only an agent that was not at work when GitHub says it was made:
  * an agent comments only inside a turn, so one idle since before is not its
- * author. That is what keeps an agent's own replies from waking it, while
- * the code-review agent's findings on another agent's pull request do. A
+ * author. That is what keeps an agent's own replies from waking it. A
  * failed check reaches only an agent idle since before it failed, since an
  * agent at work waits on its own checks. An archived agent is told nothing.
  *

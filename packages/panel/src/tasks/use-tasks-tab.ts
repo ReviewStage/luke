@@ -1,5 +1,4 @@
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -436,11 +435,7 @@ export type AutomationsPlace =
       readonly deleted?: string;
     }
   | { readonly kind: typeof AUTOMATIONS_PAGE.RUNS }
-  | {
-      readonly kind: typeof AUTOMATIONS_PAGE.NEW;
-      /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
-      readonly preset?: AutomationPresetName;
-    }
+  | { readonly kind: typeof AUTOMATIONS_PAGE.NEW }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.EDIT;
       readonly automationId: string;
