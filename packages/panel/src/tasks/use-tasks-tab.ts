@@ -36,7 +36,7 @@ import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
+import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
 import {
@@ -86,6 +86,7 @@ import {
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { streamFrom } from "../act-stream.js";
@@ -98,7 +99,7 @@ import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { APP_SETTINGS_VIEW, useAppSlice, useExperiment } from "../use-app-state.js";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -954,6 +955,21 @@ const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const TASK_COPIED_NOTE = "Plan copied";
+
+/** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
+const OPENS_NEW_TASK = Atom.map(
+  APP_SETTINGS_VIEW,
+  (settings) => settings?.openNewTask ?? APP_SETTING_DEFAULTS.openNewTask,
+);
+
+/** What the toast says once New task started a task it did not open. */
+const TASK_STARTED_NOTE = "Task started";
+
+/** What it says instead where the task started but its agent was refused. */
+const TASK_STARTED_AGENT_REFUSED_NOTE = "Task started, but its agent did not";
+
+/** That toast's action, which opens the task. */
+const OPEN_STARTED_TASK = "Open";
 
 /** What the toast says once a task is deleted. */
 
@@ -2211,6 +2227,17 @@ export function useTasksTab(input: {
     onRestored: (undo) => sayRestored(toast, undo),
   });
 
+  const opensNewTask = useAppSlice(OPENS_NEW_TASK);
+  // A task opened from a list or a started task's toast, its pin no longer chosen.
+  const openUnpinned = (taskId: string) => {
+    setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+    select(taskId);
+  };
+  // One opened from a list lands on its plan in a narrow room.
+  const selectListed = (taskId: string) => {
+    openUnpinned(taskId);
+    if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
+  };
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
@@ -2223,6 +2250,9 @@ export function useTasksTab(input: {
   // Note that a start whose task was refused, or never answered, is never
   // sent again by itself, because the service keeps no key for a task, so a
   // second start could make a second task; the card says why with Retry.
+  // With Settings' Open a task once it starts off, the start is a quiet one:
+  // the window stays on the page it was on, the agent's tab is made ready
+  // for when the task opens, and a toast says the task started with Open.
   const startTask = (
     name: string,
     repository: string | null,
@@ -2235,7 +2265,10 @@ export function useTasksTab(input: {
     const { handed, card } = from;
     const standingBefore = standIn;
     const historyBefore = historyFor;
-    if (handed !== undefined) {
+    const stays = !opensNewTask;
+    // Staying, an agent's start puts the card away at once and opens nothing.
+    if (handed !== undefined && stays) setNewTaskAsk(undefined);
+    else if (handed !== undefined) {
       setStartingTask({
         line: openingLineOf({
           key: handed.idempotencyKey,
@@ -2272,6 +2305,7 @@ export function useTasksTab(input: {
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
+      ...(stays ? { quiet: true } : undefined),
     }).then(
       (answer) => {
         if ("failure" in answer) {
@@ -2283,6 +2317,17 @@ export function useTasksTab(input: {
                 : startFailureNote(answer.failure),
           });
         }
+        if (stays) {
+          setNewTaskAsk(undefined);
+          if (handed !== undefined)
+            openAgent(answer.planId, handed, answer.agentStart, from.device);
+          const { agentStart } = answer;
+          sayStarted(
+            answer.planId,
+            handed === undefined || (agentStart !== undefined && !("failure" in agentStart)),
+          );
+          return undefined;
+        }
         setNewTaskAsk(undefined);
         setStartingTask(undefined);
         setStandIn(undefined);
@@ -2293,6 +2338,21 @@ export function useTasksTab(input: {
       (refused: Error) => refusedWith({ reason: FAILURE_REASON.OTHER, text: refused.message }),
     );
   };
+
+  // A task started without opening says so in a toast whose Open opens it
+  // as an opening start would, on the agent's tab where its agent started,
+  // or on the draft saying why where it did not, which the toast says too,
+  // so a narrow room does not lay the plan over it as a list's press does.
+  // Note that Open asks first while a page stands unsaved work, as the
+  // sidebar's press does, and reads the opener of the render it is pressed in.
+  const selectNow = useRef(guard(openUnpinned));
+  selectNow.current = guard(openUnpinned);
+  const sayStarted = (planId: string, agentRan: boolean) =>
+    toast({
+      words: agentRan ? TASK_STARTED_NOTE : TASK_STARTED_AGENT_REFUSED_NOTE,
+      tone: agentRan ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION,
+      action: { label: OPEN_STARTED_TASK, onPress: () => selectNow.current(planId) },
+    });
 
   // A task started with an agent opens on the agent's tab, as a landed
   // Start opens it; one whose agent was refused opens on a draft holding
@@ -3029,11 +3089,7 @@ export function useTasksTab(input: {
     // screen on the plan's tab, rather than on whatever tab it last showed;
     // a link names its own place (`openLink`), and the history opens a task
     // through `onRestoreTask` instead, standing the pane its step held.
-    onSelect: guard((taskId: string) => {
-      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
-      select(taskId);
-      if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
-    }),
+    onSelect: guard(selectListed),
     onRestoreTask: guard((taskId: string) => {
       setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);
