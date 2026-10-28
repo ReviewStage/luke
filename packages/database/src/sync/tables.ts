@@ -35,6 +35,7 @@ import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
+import { runnerLine } from "../schemas/runner-line.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
@@ -175,6 +176,17 @@ export const agentPinSync = defineSyncTable(agentPin, {
  */
 export const macCommandSync = defineSyncTable(macCommand, {
   topics: [{ kind: TOPIC.ACCOUNT, column: macCommand.userId }],
+});
+
+/**
+ * A line queued for a cloud agent's runner, on the agent's topic, which the
+ * runner's held read waits on (`@luke/service`'s `runner-lines-app.ts`).
+ * Note that its acceptance is ignored, because the runner's read waits on
+ * new lines alone, and every message the runner takes stamps one.
+ */
+const runnerLineSync = defineSyncTable(runnerLine, {
+  topics: [{ kind: TOPIC.AGENT, column: runnerLine.agentId }],
+  ignore: [runnerLine.acceptedAt],
 });
 
 /** A comment thread on a task's plan, on the task's topic. */
@@ -438,6 +450,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   taskPinSync,
   agentPinSync,
   macCommandSync,
+  runnerLineSync,
   planCommentThreadSync,
   planCommentSync,
   inboxItemSync,
