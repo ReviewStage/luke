@@ -161,8 +161,9 @@ export function heldInboxes(options: {
     if (byId === undefined || standing === undefined || standing.holders > 0) return;
     standing.stop?.();
     byId.delete(id);
-    // Note that an inbox the feed answers for gives its own follow's items up with it, so the feed's newer word is drawn.
-    if (!forget && fed === undefined) return;
+    // Note that an inbox the feed holds gives its own follow's items up with it, so the feed's newer word is drawn,
+    // while one the feed holds nothing of, its items all settled past the feed's bound, keeps them.
+    if (!forget && fedOf(kind)?.has(id) !== true) return;
     const was = followedOf(kind);
     if (!was.items.has(id)) return;
     const items = new Map(was.items);
