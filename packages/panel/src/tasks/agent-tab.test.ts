@@ -31,6 +31,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { ChipCards } from "./chip-cards.js";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
 /**
@@ -1017,23 +1018,24 @@ const AGENT_MESSAGE: CodingAgentMessage = {
   metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
 };
 
-/** The message drawn in an agent's transcript. */
-function agentMessageDrawn(message: CodingAgentMessage): HTMLElement {
+/** The message drawn in an agent's transcript, on the task's page where one is given. */
+function agentMessageDrawn(message: CodingAgentMessage, page?: TaskMentionsValue): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const drawn = createElement(AgentMessage, {
+    message,
+    plan: false,
+    lead: AGENT_LEAD,
+    moving: false,
+    delegation: { models: [] },
+  });
   act(() =>
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving: false,
-          delegation: { models: [] },
-        }),
+        page === undefined ? drawn : createElement(TaskMentions, { value: page, children: drawn }),
       ),
     ),
   );
@@ -1069,4 +1071,90 @@ test("a message from an agent the line keeps no chip of is named by the name its
     bubble?.querySelector(".luke-message-line-sender")?.textContent ?? "",
     /Invite emails/u,
   );
+});
+
+/** A task's page in the workspace `acme`, whose transcript draws a thread's chip. */
+const TASK_PAGE: TaskMentionsValue = {
+  taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+  taskName: "Invitations",
+  workspace: "acme",
+  repository: "acme/relay",
+  text: () => "",
+  doors: {
+    taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+    place: { workspace: "acme", repository: "acme/relay" },
+    anchors: new Set(),
+    onOpenTask: () => undefined,
+    onOpenFile: undefined,
+  },
+};
+
+test("a member's message on a thread is headed by what they did and the thread's chip, its words without the header that names the item to the agent, whatever its title spells", () => {
+  fakeAppBridge({});
+  const container = agentMessageDrawn(
+    {
+      id: "thread-line",
+      role: MESSAGE_ROLE.USER,
+      parts: [
+        {
+          type: "text",
+          text: 'Thread message on "Ship " (key fake): the invites?" (key ship-invites):\n\nWhich PRs first?',
+        },
+      ],
+      metadata: {
+        author: "developer",
+        channel: "thread",
+        event: "message",
+        item_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      },
+    },
+    TASK_PAGE,
+  );
+  const head = container.querySelector<HTMLElement>("[data-thread-line]");
+  assert.match(head?.textContent ?? "", /^Thread message/u);
+  assert.ok(head?.querySelector("[data-mention-ref]"), "the head wears the thread's chip");
+  assert.equal(
+    container.querySelector(".message-content")?.textContent?.trim(),
+    "Which PRs first?",
+  );
+});
+
+test("a review from GitHub draws as a card of who said what on the pull request, their words, and each inline comment by its line, without the agent's instructions", () => {
+  const container = agentMessageDrawn({
+    id: "github-line",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      {
+        type: "text",
+        text: "@octocat requested changes on your pull request #42.\n\n<github-review>\nClose.\n</github-review>\n\nAct on it as you judge best.",
+      },
+    ],
+    metadata: {
+      author: "developer",
+      channel: "github",
+      event: "review",
+      repository: "acme/relay",
+      number: 42,
+      url: "https://github.com/acme/relay/pull/42#pullrequestreview-1",
+      by: "octocat",
+      verdict: "changes_requested",
+      words: "Close, but the store reads the list **twice**.",
+      comments: [
+        {
+          path: "apps/web/store.ts",
+          line: 12,
+          url: "https://github.com/acme/relay/pull/42#discussion_r1",
+          body: "Guard the empty list here.",
+        },
+      ],
+    },
+    sentBy: { kind: "github", name: "octocat" },
+  });
+  const card = container.querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  const text = card.textContent ?? "";
+  assert.match(text, /^@octocat requested changes on .*#42/u);
+  assert.match(text, /Close, but the store reads the list twice\./u);
+  assert.match(text, /apps\/web\/store\.ts:12\s*Guard the empty list here\./u);
+  assert.doesNotMatch(container.textContent ?? "", /Act on it|github-review/u);
 });

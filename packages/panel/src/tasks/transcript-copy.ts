@@ -9,7 +9,7 @@ import {
   type CodingAgentBrief,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
-import { inboxLineWords } from "@luke/features/inbox-wire";
+import { THREAD_LINE_LEAD, threadLineWords } from "@luke/features/inbox-wire";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -27,9 +27,12 @@ import {
   type AgentPart,
   agentMessageOf,
   agentRows,
+  githubLineOf,
+  githubLineWords,
   isDelegation,
   messageWords,
   placedMessages,
+  threadLineOf,
   turnStretches,
   workerLines,
 } from "./coding-agent-model.js";
@@ -262,7 +265,8 @@ function drawnWords(block: CopiedBlock): readonly string[] {
  * answer as drawn.
  */
 export function drawnMessageWords(message: CodingAgentMessage): string {
-  return drawnRowsWords(agentRows(message, false));
+  const sent = sentLineWords(message);
+  return sent ?? drawnRowsWords(agentRows(message, false));
 }
 
 /** The words a turn's rows draw, as `drawnMessageWords` reads a whole turn's: a piece of a long turn's (`turn-pieces.ts`). */
@@ -272,7 +276,8 @@ export function drawnRowsWords(rows: readonly TurnRow<AgentPart>[]): string {
 
 /**
  * One of the developer's messages as a copy reads it: their words, as the
- * tab draws them, an inbox line without its item's key; and another agent's
+ * tab draws them, a thread's line led by what the member did on it and
+ * without the header naming the item to the agent; and another agent's
  * message, which the tab draws as its sender's (`agentMessageOf`), under
  * who sent it, without the lines that are the agent's alone.
  */
@@ -288,8 +293,25 @@ function developerTurn(message: CodingAgentMessage): CopiedTurn {
       blocks,
     };
   }
-  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: inboxLineWords(words) }] as const;
+  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: sentLineWords(message) ?? words }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };
+}
+
+/**
+ * A line steered into the agent as its row draws it from its metadata,
+ * rather than as the prompt the agent read: a thread's led by what the
+ * member did, without the header naming the item; GitHub's as its card
+ * (`githubLineWords`), without the instructions and the fence. Nothing for
+ * any other line, whose words are its own.
+ */
+function sentLineWords(message: CodingAgentMessage): string | undefined {
+  const github = githubLineOf(message);
+  if (github !== undefined) return githubLineWords(github);
+  const thread = threadLineOf(message);
+  if (thread === undefined) return undefined;
+  return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]
+    .filter((part) => part !== "")
+    .join("\n\n");
 }
 
 /**

@@ -28,6 +28,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_AUTHOR,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
   type CodingAgentChangedFile,
@@ -338,18 +339,63 @@ const WORK: CodingAgentMessage = {
   finishedAt: STARTED_AT + 6 * MINUTE,
 };
 
+/** Grace's review of the pull request, which the long transcript's second turn answers. */
+const REVIEW_URL = `${PULL_REQUEST.url}#pullrequestreview-2001`;
+
+const REVIEW_WORDS =
+  "The members list shows invited addresses as **members**. Skip a pending membership there and in the access check.";
+
+/** The review's inline comments, more than the card shows before its foot. */
+const REVIEW_COMMENTS = [
+  {
+    path: "src/members/list.ts",
+    line: 14,
+    url: `${PULL_REQUEST.url}#discussion_r3001`,
+    body: "This reads every membership, pending ones included.",
+  },
+  {
+    path: "src/workspaces/access.ts",
+    line: 31,
+    url: `${PULL_REQUEST.url}#discussion_r3002`,
+    body: "Same here: a pending membership grants access.",
+  },
+  {
+    path: "src/members/invite.ts",
+    line: 52,
+    url: `${PULL_REQUEST.url}#discussion_r3003`,
+    body: "Nit: `acceptedAt` could be set in the same update.",
+  },
+  {
+    path: "src/members/invite.test.ts",
+    line: 8,
+    url: `${PULL_REQUEST.url}#discussion_r3004`,
+    body: "A test for a pending member being skipped?",
+  },
+];
+
+/** The thread a teammate wrote on, which the long transcript's third turn answers. */
+const THREAD_ITEM_ID = "7a1c3e5b-9d2f-4b6a-8c0e-1f3a5c7e9b2d";
+
+const GRACE_USER_ID = "8b2d4f6a-0c3e-4a5b-9d1f-2a4c6e8b0d3f";
+
+/** The commit whose check failed, which the long transcript's last turn answers. */
+const FAILED_SHA = "c0ffee5a7d3b9e1f2a4c6e8b0d2f4a6c8e0b2d4f";
+
+const FAILED_CHECKS_URL = `https://github.com/${REPOSITORY}/commit/${FAILED_SHA}/checks`;
+
 /** The agent's one turn: the developer's ask, then its work. */
 const MESSAGES: readonly CodingAgentMessage[] = [ASK, WORK];
 
 /** The first turn's id where later turns followed it, the newest of which is `TURN_ID`. */
 const FIRST_TURN_ID = "3b7d1f5a-0c2e-4d4f-8a6b-1c3e5f7a9b0d";
 
-/** One follow-up turn: the developer's ask at `at`, then the agent's work on it, `parts`, done two minutes later. */
+/** One follow-up turn: the developer's ask at `at`, or the line `steered` says carried it, then the agent's work on it, `parts`, done two minutes later. */
 function followUp(input: {
   readonly id: string;
   readonly turnId: string;
   readonly at: number;
   readonly ask: string;
+  readonly steered?: Pick<CodingAgentMessage, "metadata" | "sentBy"> | undefined;
   readonly parts: CodingAgentMessage["parts"];
 }): readonly CodingAgentMessage[] {
   return [
@@ -359,6 +405,7 @@ function followUp(input: {
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: input.ask }],
       sentAt: input.at,
+      ...input.steered,
     },
     {
       id: `${input.id}-work`,
@@ -383,7 +430,26 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
     id: "fixture-agent-pending",
     turnId: "4c8e2a6b-1d3f-4e5a-9b7c-2d4e6f8a0b2e",
     at: STARTED_AT + 10 * MINUTE,
-    ask: "The members list shows invited addresses as members. Skip a pending membership there and in the access check.",
+    ask: [
+      `@grace requested changes on your pull request [@#${PULL_REQUEST.number}](${REVIEW_URL}).`,
+      `<github-review>\n${REVIEW_WORDS}\n</github-review>`,
+      "Act on it as you judge best.",
+    ].join("\n\n"),
+    steered: {
+      metadata: {
+        author: "developer",
+        channel: "github",
+        event: "review",
+        repository: REPOSITORY,
+        number: PULL_REQUEST.number,
+        url: REVIEW_URL,
+        by: GRACE.login,
+        verdict: "changes_requested",
+        words: REVIEW_WORDS,
+        comments: REVIEW_COMMENTS,
+      },
+      sentBy: { kind: CODING_AGENT_SENDER.GITHUB, name: GRACE.login },
+    },
     parts: [
       toolPart(
         "read_file",
@@ -410,7 +476,16 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
     id: "fixture-agent-race",
     turnId: "5d9f3b7c-2e4a-4f6b-8c8d-3e5f7a9b1c3f",
     at: STARTED_AT + 20 * MINUTE,
-    ask: "What happens if two people open the same link at once?",
+    ask: 'Thread message on "Invite links" (key invite-links):\n\nWhat happens if two people open the same link at once?',
+    steered: {
+      metadata: {
+        author: "developer",
+        channel: "thread",
+        event: "message",
+        item_id: THREAD_ITEM_ID,
+      },
+      sentBy: { kind: CODING_AGENT_SENDER.MEMBER, userId: GRACE_USER_ID, name: "Grace Hopper" },
+    },
     parts: [
       {
         type: "text",
@@ -442,7 +517,20 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
     id: "fixture-agent-label",
     turnId: TURN_ID,
     at: STARTED_AT + 30 * MINUTE,
-    ask: "Rename the expired page's button to Ask for a new invite, then push.",
+    ask: `A check failed on your branch \`${PULL_REQUEST.head}\`: ${FAILED_CHECKS_URL}\n\nRead why, fix the cause, and push.`,
+    steered: {
+      metadata: {
+        author: "developer",
+        channel: "github",
+        event: "check_failed",
+        repository: REPOSITORY,
+        number: PULL_REQUEST.number,
+        url: FAILED_CHECKS_URL,
+        by: "github-actions[bot]",
+        sha: FAILED_SHA,
+      },
+      sentBy: { kind: CODING_AGENT_SENDER.GITHUB, name: "github-actions[bot]" },
+    },
     parts: [
       toolPart(
         "apply_patch",
