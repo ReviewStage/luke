@@ -21,7 +21,7 @@ import { attachment } from "../schemas/attachment.js";
 import { invitation, member, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { codingAgent, codingAgentDelegation } from "../schemas/coding-agent.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
@@ -32,6 +32,7 @@ import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
+import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { TOPIC } from "./notification.js";
@@ -299,6 +300,94 @@ export const agentBrowserTabSync = defineSyncTable(agentBrowserTab, {
   topics: [{ kind: TOPIC.TASK, column: agentBrowserTab.taskId }],
 });
 
+/**
+ * A transcript's message, on its conversation's topic alone. Note that no
+ * column is ignored and no wider topic is taken, because a journal is
+ * rewritten in place on every streamed step: each write transaction
+ * notifies the one topic once, its rows' notifications folding into one,
+ * and only the transcript's own readers wake on it.
+ */
+export const messagesSync = defineSyncTable(messages, {
+  topics: [{ kind: TOPIC.CONVERSATION, column: messages.conversationId }],
+});
+
+/**
+ * A conversation, on its own topic and its parent's, so a worker's title
+ * landing, or a worker opened or cleared, reaches the agent's transcript,
+ * which lists its workers. Note that the next message sequence, the native
+ * harness's projection and its event count, the last activity, and the
+ * dispatch claim are ignored, because each is rewritten by every message or
+ * hand-over and no view reads them; a message written beside them notifies
+ * the conversation's topic itself.
+ */
+export const conversationsSync = defineSyncTable(conversations, {
+  topics: [
+    { kind: TOPIC.CONVERSATION, column: conversations.id },
+    { kind: TOPIC.CONVERSATION, column: conversations.parentConversationId },
+  ],
+  ignore: [
+    conversations.nextMessageSeq,
+    conversations.nativeSequence,
+    conversations.nativeProjection,
+    conversations.lastActivityAt,
+    conversations.dispatchClaim,
+    conversations.dispatchClaimedAt,
+    conversations.dispatchLine,
+  ],
+});
+
+/**
+ * A turn, on its conversation's topic and, through the coding agent whose
+ * conversation it runs in, the agent's own, its task's, and its
+ * workspace's, so a turn starting, settling, or stopped reaches every view
+ * of the agent's status. Note that the count of plan notes it has taken is
+ * ignored, because every note a turn takes rewrites it and no view reads it,
+ * so a turn notifies about once as it starts and once as it settles.
+ */
+export const turnsSync = defineSyncTable(turns, {
+  topics: [
+    { kind: TOPIC.CONVERSATION, column: turns.conversationId },
+    {
+      through: codingAgent,
+      key: codingAgent.conversationId,
+      by: turns.conversationId,
+      topics: [
+        { kind: TOPIC.AGENT, column: codingAgent.id },
+        { kind: TOPIC.TASK, column: codingAgent.taskId },
+        { kind: TOPIC.WORKSPACE, column: codingAgent.organizationId },
+      ],
+    },
+  ],
+  ignore: [turns.planNotesTaken],
+});
+
+/**
+ * An ask, on its conversation's topic. Note that its dispatch claim is
+ * ignored, because every hand-over writes and clears it, and so are the
+ * voice session it was delegated in, its place in that session, and how far
+ * its turn was told to the voice, which no view reads.
+ */
+export const asksSync = defineSyncTable(asks, {
+  topics: [{ kind: TOPIC.CONVERSATION, column: asks.conversationId }],
+  ignore: [asks.dispatchClaim, asks.voiceSessionId, asks.askRevision, asks.toldSeq, asks.endToldAt],
+});
+
+/**
+ * A worker's delegation as it was recorded, on its parent conversation's
+ * topic, looked up through the worker's own conversation, so the agent's
+ * transcript hears the call that opened the worker.
+ */
+export const codingAgentDelegationSync = defineSyncTable(codingAgentDelegation, {
+  topics: [
+    {
+      through: conversations,
+      key: conversations.id,
+      by: codingAgentDelegation.childConversationId,
+      topics: [{ kind: TOPIC.CONVERSATION, column: conversations.parentConversationId }],
+    },
+  ],
+});
+
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
   codingAgentSync,
@@ -324,4 +413,9 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   planRevisionSync,
   planPageVersionSync,
   agentBrowserTabSync,
+  messagesSync,
+  conversationsSync,
+  turnsSync,
+  asksSync,
+  codingAgentDelegationSync,
 ];

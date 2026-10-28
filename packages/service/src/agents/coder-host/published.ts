@@ -204,8 +204,8 @@ function nothing(agent: CodingAgent): Published {
 
 /**
  * A token that reads the agent's pull requests, minted for its one
- * repository on the installation of its task's workspace, as the account
- * asking reaches the task; refused as out of reach where either no longer
+ * repository on the installation of its workspace, as the account asking
+ * is a member of it; refused as out of reach where either no longer
  * stands.
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (

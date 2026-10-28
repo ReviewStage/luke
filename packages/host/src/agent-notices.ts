@@ -153,7 +153,7 @@ export interface AgentNoticesDependencies {
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
   /** Who is signed in now, by the account's own key, or nobody. */
   signedInAs: () => string | undefined;
-  /** The signed-in account's id, which an agent's starter is named by; none for an identity stored without one, which is told of every agent. */
+  /** The signed-in account's id, which an inbox item's starter is named by; none for an identity stored without one, which counts every item. */
   accountId: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
@@ -167,10 +167,8 @@ export interface AgentNoticesDependencies {
 }
 
 export interface AgentNotices {
-  /** Agents as an answer carried them: a task's list, or the one a Start or a Stop answered. */
-  observeAgents(agents: readonly CodingAgentSummary[]): void;
-  /** The agents with no plan as the plan list last carried them: the account's own are held, each with its automation's name. */
-  observeTaskless(agents: readonly TasklessAgent[]): void;
+  /** Agents as an answer carried them, on a plan or with none: a task's list, the plan list's agents with no plan, or the one a Start or a Stop answered. */
+  observeAgents(agents: readonly (CodingAgentSummary | TasklessAgent)[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
   observeStatus(agentId: string, status: CodingAgentStatus): void;
   /** The agent as the answer to a message carried it: running, with a line awaiting the turn it opens. */
@@ -561,37 +559,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       };
     }
 
-    /**
-     * Whether the ledger holds the agent: one on a plan as every plan read
-     * names it, and one with no plan only where the account started it.
-     * Note that a teammate's is left to its starter, because it asks its
-     * starter, whose key it runs on, and the plan list carries every
-     * member's, as an act on a teammate's agent's page answers it.
-     */
-    function heldHere(agent: Pick<CodingAgentSummary, "planId" | "startedBy">): boolean {
-      const accountId = dependencies.accountId();
-      return (
-        agent.planId !== null || accountId === undefined || agent.startedBy?.userId === accountId
-      );
-    }
-
+    // Note that the ledger holds every agent a read names, any member's, on a
+    // plan or with none, because a teammate's turn ending is news to whoever
+    // reads its page, whether or not it has a plan.
     const notices: AgentNotices = {
       observeAgents: (agents) => {
-        for (const agent of agents) {
-          if (!heldHere(agent)) continue;
-          observe(agent.id, heldOf(agent));
-        }
+        for (const agent of agents) observe(agent.id, heldOf(agent));
       },
-      observeTaskless: (agents) => {
-        for (const agent of agents) {
-          if (!heldHere(agent)) continue;
-          observe(agent.id, heldOf(agent));
-        }
-      },
-      observeMessaged: (agent) => {
-        if (!heldHere(agent)) return;
-        observe(agent.id, heldOf(agent));
-      },
+      observeMessaged: (agent) => observe(agent.id, heldOf(agent)),
       observeStatus: (agentId, status) => {
         const held = ledger.get(agentId);
         // The page's answer says nothing of quiet, so a quiet mark read while the turn ran is not taken as its end's.

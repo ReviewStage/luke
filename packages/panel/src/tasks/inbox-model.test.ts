@@ -746,6 +746,46 @@ test("a task done or canceled hides none of its items: its open ones need you an
   assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
 });
 
+test("To do keeps the reader's own update once it is opened and settled while its task is under way, and lets it go once the task is done, as it lets a settled ask, a resolved update, and a thread only the reader wrote on go; the first choice stays an ask that waits", () => {
+  const said = message({
+    text: "The pull request is ready for your review.",
+    createdAt: 1_000,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+  });
+  const asked = asking({ type: INBOX_ASK.ANSWER });
+  const answered = { ...asked, ask: { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.ANSWERED } };
+  const settled = { status: INBOX_STATUS.ANSWERED, startedBy: ME, needsReply: false } as const;
+  const tasks = [
+    {
+      holder: taskHolder({ ...BILLING, status: TASK_STATUS.IN_PROGRESS }),
+      items: [
+        item({ id: "update", thread: [said], ...settled, updatedAt: 3_000 }),
+        item({ id: "asked", thread: [said, answered], ...settled }),
+        item({ id: "resolved", thread: [said], ...settled, status: INBOX_STATUS.CLOSED }),
+        item({
+          id: "sent",
+          thread: [message({ text: "Check the PR?", createdAt: 1_000 })],
+          ...settled,
+        }),
+        item({ id: "waits", thread: [asked], startedBy: ME, updatedAt: 2_000 }),
+      ],
+    },
+    {
+      holder: taskHolder({ ...INVITES, status: TASK_STATUS.DONE }),
+      items: [item({ id: "done-update", thread: [said], ...settled })],
+    },
+  ];
+  const toDo = inboxList(tasks, {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.TO_DO,
+    readerId: ME.userId,
+    chosen: undefined,
+  });
+  assert.deepEqual(drawn(toDo), ["update", "waits"]);
+  assert.equal(inboxCounts(tasks, ME.userId)[INBOX_SHOW.TO_DO], 2);
+  assert.equal(firstChoice(toDo)?.item.id, "waits");
+});
+
 test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
   const list = inboxList(SHARED, {
     grouping: INBOX_GROUPING.NONE,

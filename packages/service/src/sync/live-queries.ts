@@ -9,17 +9,21 @@
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { messageStandingNow } from "@luke/database/models/message-reads";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
-import { TOPIC } from "@luke/database/sync/notification";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   agentBrowserTabSync,
   agentSectionEntrySync,
+  asksSync,
   attachmentSync,
   automationRunSync,
   automationSync,
   channelSync,
+  codingAgentDelegationSync,
   codingAgentSync,
+  conversationsSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   inboxItemReadSync,
@@ -28,19 +32,23 @@ import {
   invitationSync,
   macCommandSync,
   memberSync,
+  messagesSync,
   planPageVersionSync,
   planRevisionSync,
   repositoryPinSync,
   taskSectionEntrySync,
   taskSectionSync,
   taskSync,
+  turnsSync,
   userSync,
 } from "@luke/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
+import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   channelsLiveStatements,
@@ -352,6 +360,79 @@ export const taskBrowserTabsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/**
+ * A coding agent's transcript, or one of its workers' (`conversationId`,
+ * under the agent's own `parentConversationId`), started by `ownerId` and
+ * read by `readerId` while it is a member of the agent's workspace
+ * (`transcript-live.ts`). It is woken by a write to the transcript's
+ * messages, turns, asks, or conversation, to a worker's conversation or
+ * delegation under the agent's, to the agent itself, and to what admits the
+ * reader to its workspace or repository.
+ *
+ * Its newest messages (`window`, `windowParts`) are followed by cursor:
+ * where the reader holds them, the highest sequence it has and the journal
+ * revision it read at, as a page past a cursor reads them
+ * (`listMessagesPast`). Every write to a message locks its conversation and
+ * takes its sequence or revision from the conversation's counters, so they
+ * move in commit order, and a reader past a cursor read before its rows
+ * misses none. A rewind moves the conversation's rewound revision, and a
+ * reader whose cursor is older is answered the window whole.
+ *
+ * Note that a line's sender's name, and a sending agent's task, are read
+ * beside the line rather than written on it, so a change to either wakes no
+ * transcript and moves no line past the cursor: a cursor reader sees it the
+ * next time it reads the window whole, and a reader that names no cursor at
+ * the hold's end, within 25 s. A turn settling moves its journal's revision
+ * (`writer.ts`'s `reviseJournal`), so what the settled turn says of it is
+ * answered past the cursor.
+ */
+export const agentTranscriptLive = defineLiveQuery({
+  name: "agentTranscript",
+  params: ["ownerId", "conversationId", "parentConversationId", "agentId", "readerId"],
+  reads: [
+    messagesSync,
+    conversationsSync,
+    turnsSync,
+    asksSync,
+    codingAgentDelegationSync,
+    userSync,
+    codingAgentSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
+    const parent: readonly SyncTopic[] =
+      parentConversationId === conversationId ? [] : [[TOPIC.CONVERSATION, parentConversationId]];
+    return [
+      [TOPIC.CONVERSATION, conversationId],
+      ...parent,
+      [TOPIC.AGENT, agentId],
+      [TOPIC.ACCOUNT, readerId],
+    ];
+  },
+  statements: ({ ownerId, conversationId, parentConversationId, readerId }, past) =>
+    transcriptLiveStatements(
+      { userId: ownerId, conversationId },
+      parentConversationId,
+      agentFollowedBy(ownerId, parentConversationId, readerId),
+      past === undefined ? undefined : cursorOfWire(past),
+    ),
+  mode: LIVE_MODE.CURSOR,
+  cursor: {
+    parts: ["window", "windowParts"],
+    standing: ({ ownerId, conversationId }) =>
+      Effect.map(messageStandingNow(ownerId, conversationId), ({ cursor, rewound }) => ({
+        next: cursorToWire(cursor),
+        stands: (asked) =>
+          Option.match(rewound, {
+            onNone: () => true,
+            onSome: (at) => cursorOfWire(asked).revision >= at,
+          }),
+      })),
+  },
+});
+
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
   macCommandsLive,
@@ -366,4 +447,5 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentPagesLive,
   taskHistoryLive,
   taskBrowserTabsLive,
+  agentTranscriptLive,
 ]);
