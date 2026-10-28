@@ -1558,6 +1558,7 @@ export function InboxList({
   onMark,
   onClose,
   onAskMove,
+  onPointing,
 }: {
   view: InboxListView;
   /** The id of the item the pane shows. */
@@ -1582,6 +1583,8 @@ export function InboxList({
   onClose?: InboxCloser | undefined;
   /** Asks which channel a row's thread moves to, from its ⋯; none where the rows offer no move. */
   onAskMove?: ((listed: InboxListed) => void) | undefined;
+  /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
+  onPointing?: ((pointing: boolean) => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const regionId = useId();
@@ -1731,6 +1734,8 @@ export function InboxList({
       hidden={columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
+      onPointerEnter={() => onPointing?.(true)}
+      onPointerLeave={() => onPointing?.(false)}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} />
