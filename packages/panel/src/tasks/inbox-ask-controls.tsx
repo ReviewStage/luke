@@ -50,6 +50,7 @@ import {
   doDecision,
   fieldValueOf,
   type InboxDraft,
+  RECOMMENDED,
   shownTicks,
   withDoPress,
   withStep,
@@ -89,9 +90,6 @@ const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
-
-/** The badge an option the agent recommends wears, a choice's or a form's select's. */
-const RECOMMENDED = "Recommended";
 
 /** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 function choiceOptions(
@@ -461,12 +459,15 @@ interface AskDoors {
 function AskPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
+  recommended = false,
   pressed,
   disabled,
   onPress,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  /** Whether the agent recommends it, which its badge says. */
+  recommended?: boolean;
   pressed: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -475,6 +476,7 @@ function AskPress({
     <Button
       variant={variant}
       size={BUTTON_SIZE.COMPACT}
+      badge={recommended ? RECOMMENDED : undefined}
       pressed={pressed}
       disabled={disabled}
       onClick={onPress}
@@ -537,6 +539,7 @@ function OpenControls({
               <AskPress
                 key={option.label}
                 label={option.label}
+                recommended={recommendedLabels(ask).includes(option.label)}
                 pressed={picked}
                 disabled={disabled}
                 onPress={() => onDraft({ ...draft, choices: picked ? [] : [option.label] })}
@@ -635,11 +638,14 @@ function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
 function AnsweredPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
+  recommended = false,
   tone,
   pressed,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  /** Whether the agent recommended it, which its badge goes on saying. */
+  recommended?: boolean;
   tone: AnswerTone;
   pressed: boolean;
 }): React.JSX.Element {
@@ -647,6 +653,7 @@ function AnsweredPress({
     <Button
       variant={variant}
       size={BUTTON_SIZE.COMPACT}
+      badge={recommended ? RECOMMENDED : undefined}
       pressed={pressed}
       readOnly
       icon={pressed ? <ToneGlyph tone={tone} /> : undefined}
@@ -695,6 +702,7 @@ function LeftControls({
             <AnsweredPress
               key={option.label}
               label={option.label}
+              recommended={recommendedLabels(ask).includes(option.label)}
               tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
               pressed={draft.choices.includes(option.label)}
             />

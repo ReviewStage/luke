@@ -252,7 +252,7 @@ test("rows show no media until Media previews is checked in the view's menu, the
   assert.equal(mediaOf(page, "Expire after 7 days?"), null, "an item carrying none shows none");
   assert.equal(
     rowNamed(page, "Alert at 80%?").querySelector(".luke-list-row-description")?.textContent,
-    "Retry 3 times over an hour ★ / Retry once",
+    "Retry 3 times over an hour (recommended) / Retry once",
     "the preview's words stand over the media",
   );
 
@@ -844,12 +844,12 @@ test("grouped by person or by nothing, each row names its task on a line of its 
     {
       chip: "Billing usage alerts",
       firstLine: null,
-      preview: "Retry 3 times over an hour ★ / Retry once",
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
     },
     {
       chip: "Invites",
       firstLine: null,
-      preview: "Retry 3 times over an hour ★ / Retry once",
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
     },
   ]);
 
@@ -1315,7 +1315,7 @@ test("an item's row reads as two lines, its title and time over the last word in
   await settle();
   assert.deepEqual(rowLines(page, "Alert at 80%?"), [
     true,
-    "Retry 3 times over an hour ★ / Retry once",
+    "Retry 3 times over an hour (recommended) / Retry once",
   ]);
   assert.deepEqual(rowLines(page, "How is a failed email retried?"), [
     true,

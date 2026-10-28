@@ -1037,16 +1037,22 @@ test("picking an option in the draft reply stands it picked and lights Send, the
   assert.deepEqual(boxParts(pane), ["line: Reply", "row: Attach files, Dictate, Send"]);
 });
 
-test("an approve-or-request-changes ask is two small buttons in the draft reply: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
+test("an approve-or-request-changes ask is two small buttons in the draft reply, the one the agent recommends saying so: the one pressed stands pressed, pressed again it is let go, and the reply sent with words carries it, stamped as requested changes", async () => {
   const shown = threadItem([
     askingMessage({
       type: INBOX_ASK.DECIDE,
       options: [{ label: "Approve" }, { label: "Request changes" }],
+      recommended: "Approve",
     }),
   ]);
   const pane = await mountThread(shown);
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000012"));
   assert.deepEqual(openOptions(pane), [], "no radio list stands for a yes or no");
+  assert.deepEqual(
+    [askPress(pane, "Approve").textContent, askPress(pane, "Request changes").textContent],
+    ["ApproveRecommended", "Request changes"],
+    "the recommended press wears its badge",
+  );
 
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Approve").click());
@@ -1072,7 +1078,7 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
   );
   const reply =
     pane.querySelector(".inbox-thread > li:nth-last-child(2)") ?? assert.fail("the reply");
-  assert.equal(answeredCard(reply), "ApproveRequest changes");
+  assert.equal(answeredCard(reply), "ApproveRecommendedRequest changes");
   assert.equal(
     reply.querySelector('[aria-pressed="true"] .inbox-ask-pressed[data-tone="neutral"]')
       ?.parentElement?.textContent,
@@ -1582,10 +1588,14 @@ test("an answered decide's card leaves the agent's message for the head of the r
   );
 });
 
-test("an answered yes-or-no heads its reply with its two small buttons, the one pressed marked in its tone and neither pressable", async () => {
+test("an answered yes-or-no heads its reply with its two small buttons, the one pressed marked in its tone, the one recommended still saying so, and neither pressable", async () => {
   const pane = await mountThread(
     answeredThread(
-      { type: INBOX_ASK.DECIDE, options: [{ label: "Approve" }, { label: "Request changes" }] },
+      {
+        type: INBOX_ASK.DECIDE,
+        options: [{ label: "Approve" }, { label: "Request changes" }],
+        recommended: "Approve",
+      },
       { reply: INBOX_REPLY.CHOSE, choices: ["Request changes"] },
       "The banner overlaps the header.",
     ),
@@ -1593,7 +1603,7 @@ test("an answered yes-or-no heads its reply with its two small buttons, the one 
 
   assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(answeredPresses(answeredBox(pane)), [
-    ["Approve", false, undefined],
+    ["ApproveRecommended", false, undefined],
     ["Request changes", true, "neutral"],
   ]);
   assert.equal(answeredBox(pane).querySelector('[role="radio"]'), null, "no radio list stands");
