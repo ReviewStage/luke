@@ -10,6 +10,7 @@ import {
   QUEUE_CHANGE,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -27,6 +28,9 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
  * message it changes, so a retried press never doubles.
  */
 
+/** What a refused delete says in its dialog. */
+const DELETE_REFUSED = "Luke could not delete the message. Try again.";
+
 /** What a change answered where the act itself failed. */
 const UNANSWERED: CodingAgentQueueAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
 
@@ -39,6 +43,8 @@ export interface AgentQueueControl {
   readonly change: (change: AgentQueueChange) => Promise<CodingAgentQueueAnswerView>;
   /** The message at `from` put at `to`, as a drag drops it. */
   readonly move: (from: number, to: number) => void;
+  /** One message deleted, answered as a confirm reads it. */
+  readonly remove: (message: QueuedMessage) => Promise<ActionResult>;
 }
 
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
@@ -62,7 +68,14 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
     setMoved({ over: queue, order: ids });
     void change({ change: QUEUE_CHANGE.REORDER, order: ids });
   };
-  return { messages, paused: queue?.paused, change, move };
+  const remove = (message: QueuedMessage) =>
+    change({ change: QUEUE_CHANGE.DELETE, messageId: message.id }).then(
+      (answer): ActionResult =>
+        "failure" in answer
+          ? { status: ACTION_RESULT_STATUS.REJECTED, reason: DELETE_REFUSED }
+          : { status: ACTION_RESULT_STATUS.ACCEPTED },
+    );
+  return { messages, paused: queue?.paused, change, move, remove };
 }
 
 /** The box's words and files kept aside while it holds a queued message's words being edited. */
@@ -90,8 +103,9 @@ export interface QueueEditing {
  * The box's part in the queue. An edit moves the queued message's words into
  * the box, keeping what the box held aside, and holds the message out of the
  * hand-off, which passes over it meanwhile; Save writes the words back in its
- * place, and Cancel, Escape, an emptied box, or the tab closing lets it go as
- * it was. Its files stay with it, as the queue lists only their names.
+ * place once the queue took them, and Cancel, Escape, Save with the box
+ * emptied, or the tab closing lets it go as it was. Its files stay with it,
+ * as the queue lists only their names.
  */
 export function useQueueEditing(
   composer: AgentComposerControl,
@@ -100,6 +114,9 @@ export function useQueueEditing(
   const [stashed, setStashed] = useState<Stashed | undefined>();
   const held = useRef<string | undefined>(undefined);
   held.current = stashed?.id;
+  // The box's words as they stand now, which an answer that lands later reads rather than those of the draw that asked.
+  const draft = useRef(composer.draft);
+  draft.current = composer.draft;
   const { change } = queue;
   const latestChange = useRef(change);
   latestChange.current = change;
@@ -138,7 +155,7 @@ export function useQueueEditing(
         ...(attachments.length === 0 ? undefined : { attachments }),
       }).then((answer) => {
         // A message the queue did not take comes back into the box, where the box holds nothing newer.
-        if ("failure" in answer && composer.draft === "") {
+        if ("failure" in answer && draft.current === "") {
           composer.setDraft(text);
           composer.setAttachments(() => attachments);
         }
@@ -161,8 +178,10 @@ export function useQueueEditing(
       if (stashed === undefined) return;
       const text = composer.draft.trim();
       if (text === "") return cancel();
-      void change({ change: QUEUE_CHANGE.EDIT, messageId: stashed.id, text });
-      giveBack(stashed);
+      // Note that the edit stays open until the queue took the words, so a refused save loses none of them.
+      void change({ change: QUEUE_CHANGE.EDIT, messageId: stashed.id, text }).then((answer) => {
+        if (!("failure" in answer) && held.current === stashed.id) giveBack(stashed);
+      });
     },
     cancel,
   };

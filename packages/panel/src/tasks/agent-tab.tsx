@@ -2667,9 +2667,7 @@ function AgentTabView({
           onMove={queue.move}
           onSteer={(message) => queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })}
           onEdit={queueEditing.edit}
-          onDelete={(message) =>
-            queue.change({ change: QUEUE_CHANGE.DELETE, messageId: message.id })
-          }
+          onDelete={queue.remove}
           onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
         />
         {onUnarchive !== undefined ? (

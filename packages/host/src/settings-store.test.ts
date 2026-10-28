@@ -10,6 +10,7 @@ import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
+  AGENT_ENTER,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -204,6 +205,8 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
+  // Steer is the default, so Queue is the choice that has to survive a reopen.
+  agentEnter: AGENT_ENTER.QUEUE,
   // Each diff setting away from its default, the look a review tool's reader picked.
   lineNumbers: false,
   wordWrap: false,

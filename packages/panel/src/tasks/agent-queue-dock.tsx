@@ -1,4 +1,5 @@
 import { QUEUE_PAUSE, type QueuedMessage, type QueuePaused } from "@luke/features/agent-queue-wire";
+import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   BANNER_LOOK,
   Badge,
@@ -6,6 +7,9 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
@@ -16,8 +20,11 @@ import {
   PlayIcon,
   STATUS_TONE,
   Text,
+  useConfirmDialog,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { useState } from "react";
 import { useRowDrag } from "../desktop/use-row-drag.js";
 import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
 
@@ -28,7 +35,8 @@ import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
  * which gives way to the handle it is dragged by as the row is hovered
  * (`tasks.css`); on hover, Steer sends it into the turn now, the pencil
  * takes its words into the message box to edit (`agent-composer.tsx`), and
- * the trash deletes it. The message being edited stays in its place, marked
+ * the trash deletes it, asking first, since nothing brings its words and
+ * files back. The message being edited stays in its place, marked
  * so, and the turn's end passes over it. A queue standing paused says why
  * over its rows, after a Stop in the quiet tone and after a refusal in the
  * danger one, with Resume. Nothing is drawn while none is queued.
@@ -46,6 +54,15 @@ const WORDS = {
   TURN_FAILED: "Queue paused because the turn failed",
   REFUSED: "Queue paused: the next message could not be sent",
 } as const;
+
+/** What asking to delete a queued message says. */
+const DELETE_QUESTION: DialogQuestion = {
+  title: "Delete queued message?",
+  body: `It will not be sent, and any files it carries go with it. ${IRREVERSIBLE_WORDS}`,
+  verb: WORDS.DELETE,
+  running: "Deleting",
+  loss: CONFIRM_LOSS.IRREVERSIBLE,
+};
 
 /** Why a refused hand-off did not go, by the service's word for it, where the dock has words for it. */
 const REFUSAL_WORDS: Readonly<Record<string, string>> = {
@@ -82,10 +99,19 @@ export function AgentQueueDock({
   onMove: (from: number, to: number) => void;
   onSteer: (message: QueuedMessage) => void;
   onEdit: (message: QueuedMessage) => void;
-  onDelete: (message: QueuedMessage) => void;
+  /** Deletes the message once the dialog's Delete is pressed, answering how that went. */
+  onDelete: (message: QueuedMessage) => Promise<ActionResult>;
   onResume: () => void;
 }): React.JSX.Element | null {
   const drag = useRowDrag(onMove, { handle: "[data-queue-handle]" });
+  const [doomed, setDoomed] = useState<QueuedMessage>();
+  // The question goes with its message, which a hand-off may send while it is asked.
+  const asked = doomed !== undefined && messages.some((message) => message.id === doomed.id);
+  const confirm = useConfirmDialog({ subject: asked, surfaceOpen: true }, () =>
+    doomed === undefined
+      ? Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED })
+      : onDelete(doomed),
+  );
   if (messages.length === 0) return null;
   return (
     <div className={`agent-queue-dock ${COMPOSER_DOCK_CLASS}`}>
@@ -158,7 +184,10 @@ export function AgentQueueDock({
                         size={BUTTON_SIZE.COMPACT}
                         label={WORDS.DELETE}
                         icon={<GLYPH.DELETE />}
-                        onClick={() => onDelete(message)}
+                        onClick={() => {
+                          setDoomed(message);
+                          confirm.ask();
+                        }}
                       />
                     </>
                   )
@@ -168,6 +197,7 @@ export function AgentQueueDock({
           })}
         </List>
       </div>
+      <ConfirmDialog open confirm={confirm} question={DELETE_QUESTION} />
     </div>
   );
 }

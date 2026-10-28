@@ -544,12 +544,19 @@ export function AgentComposer({
     held,
     onRefusal: setRefusal,
   });
-  const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const editingQueued = queueing?.editing === true;
+  // Note that an edit's Save stands with the box emptied, since saving nothing gives the edit up.
+  const empty =
+    !sendsEmpty && !editingQueued && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending && !editingQueued;
   // While a turn runs and the box holds a message it may go two ways; holding ⌘ says on Send which a send takes.
   const queues =
-    queueing !== undefined && stoppable && !empty && !held && !files.reading && !editingQueued;
+    queueing !== undefined &&
+    status === CODING_AGENT_STATUS.RUNNING &&
+    !empty &&
+    !held &&
+    !files.reading &&
+    !editingQueued;
   const modifierHeld = useModifierHeld(queues);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
   const { planEditor } = useSideBundles();
@@ -683,7 +690,8 @@ export function AgentComposer({
       },
     },
     onNote: setRefusal,
-    onLeave,
+    // Escape with no list open gives up an edit of a queued message, the box keeping the caret.
+    onLeave: editingQueued ? queueing?.onCancel : onLeave,
     side: listSide,
   });
   const { dictation, dictating } = pickers;
@@ -709,13 +717,9 @@ export function AgentComposer({
     if (queuesNow) return queueing?.onQueue();
     steer();
   };
-  /** A key the queue takes: Escape cancels an edit, and ⌘↩ saves one, or sends the other way than Enter. */
+  /** A key the queue takes: ⌘↩ saves an edit, or sends the other way than Enter. */
   const queueKey = (event: KeyboardEvent): boolean => {
     if (queueing === undefined) return false;
-    if (editingQueued && event.key === "Escape") {
-      queueing.onCancel();
-      return true;
-    }
     if (!modEnterSends(event)) return false;
     if (editingQueued) {
       queueing.onSave();
@@ -836,11 +840,6 @@ export function AgentComposer({
             // Note that the words changing again takes the cut note down, so it never outlives the paste it was said of.
             setDraft={(text) => {
               setCut(false);
-              // An edit emptied is an edit given up, the queued message left as it was.
-              if (editingQueued && text.trim() === "") {
-                queueing?.onCancel();
-                return;
-              }
               composer.setDraft(text);
             }}
             onPasteCut={() => setCut(true)}
