@@ -2,9 +2,9 @@
  * turn-context.ts -- what a coding agent's turn opens with as a message of its own: the call's words, the time, and the task where it changed.
  *
  * The session's prompt (`instructions.ts`) is composed once, as the session
- * starts, and stands for its life, and every tool is offered on every turn
- * (`tool-set.ts`'s `runCallTool`), so the system message and the tools that
- * lead every request are the same whatever kind of turn it is. What does
+ * starts, and stands for its life, and every tool is offered on every turn,
+ * so the system message and the tools that lead every request are the same
+ * whatever kind of turn it is. What does
  * change from turn to turn rides as a user-role message of the turn's own,
  * which eve appends to the history after what came before
  * (`apps/dev/instructions/turn-message.ts`): the provider's prompt cache
@@ -13,8 +13,8 @@
  *
  * A spoken turn is the developer speaking on a call, through Luke's voice:
  * the first of a run of them opens with the words for a call: that every
- * word is heard, how to speak, the question queue, summarising rather than
- * reading out, and never waiting; an agent on a task is told too how to
+ * word is heard, how to speak, how to ask, summarising rather than reading
+ * out, and never waiting; an agent on a task is told too how to
  * talk its plan through, since on a call the agent is who the developer
  * plans with. A later spoken turn says in a line that the words stand, and
  * a typed turn after spoken ones that they no longer do. Then the task as
@@ -51,10 +51,10 @@ const DOCUMENT_SECTIONS = Object.values(PLAN_FIELD)
   )
   .join("\n");
 
-/** What every spoken turn is told: that it is heard, how to speak, the question queue, and never to wait. */
+/** What every spoken turn is told: that it is heard, how to speak, never to wait, and how to ask. */
 const SPOKEN_WORDS = `## This turn is spoken
 
-The developer is on a voice call with you, and this turn's message is what they said. Luke, the voice on the call, speaks for you: he says your words aloud and puts your questions to the developer one at a time while you keep working. What they said reaches you through a transcript, which can hold mistakes, unfinished phrases, and later corrections: go by the latest context and what you have verified, and where a detail you need is still unclear, ask for it rather than guess.
+The developer is on a voice call with you, and this turn's message is what they said. Luke, the voice on the call, speaks for you: he says your words aloud. What they said reaches you through a transcript, which can hold mistakes, unfinished phrases, and later corrections: go by the latest context and what you have verified, and where a detail you need is still unclear, ask for it rather than guess.
 
 Every word you write on this turn is heard, not read. A sentence you write in a step is said as soon as the calls before it have answered, and your final message is said as the turn ends, so:
 - Speak as a teammate would: short plain sentences, the outcome first, a sentence or two at a time. No Markdown, headings, lists, tables, code blocks, or links: name a file, a function, or a pull request by its name, never by its path or address.
@@ -64,9 +64,7 @@ Every word you write on this turn is heard, not read. A sentence you write in a 
 
 Speech never waits. On this turn never call \`${CODER_TOOL.SLEEP}\` or \`task_wait\`: hand slow research or a broad search to a worker with \`${CODER_TOOL.DELEGATE}\`, answer from what you already know until its result arrives, and never guess what it will find. Leave watching a pull request's checks or a deploy to a later turn, and say so.
 
-A question for the developer goes on Luke's queue with \`${CODER_TOOL.QUEUE_QUESTION}\`, never into your words and never to a thread while the call is up: queue it the moment you have it, with the answer you recommend and why in a few words, before you read further. Luke asks the questions you queue one at a time, in the order you queued them, the next once the developer has answered, so never queue one twice and never repeat a queued one in your words; take back one an answer made moot with \`${CODER_TOOL.WITHDRAW_QUESTION}\`. Finding facts is your job, never the developer's: anything about the code, what exists, where it lives, how it works, you look up yourself and leave off the queue. Only a decision whose answer changes what gets built or how it is checked is a question; a choice the developer would not mind either way you make yourself, and say aloud as a working assumption they can overrule.
-
-When the developer asks you to end the call, or has clearly said they are done with it ("bye", "that's all", "thanks, I'm done", "let's stop here"), call \`${CODER_TOOL.END_CALL}\` first and add nothing after it. Never call it on a bare "okay" or "thanks" mid-conversation, while they are mid-sentence, when they ask for it later ("end the call when the tests pass"), or because the work looks done.`;
+Ask the developer a question in your words, one at a time, with the answer you recommend and why in a few words, and never in a thread while the call is up. Finding facts is your job, never the developer's: anything about the code, what exists, where it lives, how it works, you look up yourself and never ask. Only a decision whose answer changes what gets built or how it is checked is a question; a choice the developer would not mind either way you make yourself, and say aloud as a working assumption they can overrule.`;
 
 /**
  * What a spoken turn of an agent on a task is told of talking its plan
@@ -87,11 +85,11 @@ Where the developer's template names its sections differently, hold each to the 
 
 Context and goal come first: don't design an approach for a problem you don't understand yet. Spend your effort where a teammate adds the most: push on the approach, name an alternative the developer has not considered and say which you would pick, and hunt for the hard parts before an agent finds them. Read the code for the types and signatures a change touches and propose the new shapes yourself for the developer to confirm; for each goal, ask what happens when it goes wrong, and put the cases that matter with your recommended behavior; and turn each goal and hard part into a "When ..., then ..." case with an exact result for them to confirm.
 
-Don't assume the developer arrives knowing what to build: while the idea is still rough, start from who it is for and what goes wrong today. When they are unsure, queue the same decision again as two or three concrete directions grounded in the code, with the one you recommend and why; if they still have no preference, take your recommendation as a working assumption and move on. A direction is settled only once they agreed to it.
+Don't assume the developer arrives knowing what to build: while the idea is still rough, start from who it is for and what goes wrong today. When they are unsure, ask the same decision again as two or three concrete directions grounded in the code, with the one you recommend and why; if they still have no preference, take your recommendation as a working assumption and move on. A direction is settled only once they agreed to it.
 
 Write what was settled: what the developer said, what you found, and what you proposed that they did not push back on; never a guess, and never a point the plan already holds. Put each point under the heading it answers, in its section's form. A section named under [sections the developer wrote] holds their own words: never reword or strike them, and raise anything that contradicts them with them.
 
-The plan is done when it is enough for a separate agent to build the change without coming back with a question: every section meets its bar or the developer agreed it does not apply, and every remaining choice they do not mind either way is stated as an assumption. Then queue nothing more, withdraw what is still queued, and say the plan is complete, with the working assumptions for them to hear.`;
+The plan is done when it is enough for a separate agent to build the change without coming back with a question: every section meets its bar or the developer agreed it does not apply, and every remaining choice they do not mind either way is stated as an assumption. Then ask nothing more, and say the plan is complete, with the working assumptions for them to hear.`;
 
 /** The line a turn's message rides behind, by whether it holds the task or the time alone. */
 const TURN_MESSAGE_LEAD = {

@@ -2,7 +2,7 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
-import { ACTION_RESULT_STATUS, type WireRecord, WireValueSchema } from "@luke/wire";
+import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Option, Schema } from "effect";
@@ -11,7 +11,6 @@ import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -27,10 +26,9 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
  * request the service opens for it (`pull-request.ts`), its reach to the
  * other coding agents of its workspace, a message to one among it
  * (`../coding-agent-tools.ts`, `agent-message.ts`), the load of one of its
- * repository's skills (`skills.ts`), and the pages it shows the developer
- * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
- * checks or a deploy with, and the call's own question queue and hang-up,
- * refused off a call (`runCallTool`). The worker's own rows name
+ * repository's skills (`skills.ts`), the pages it shows the developer
+ * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
+ * checks or a deploy with. The worker's own rows name
  * the few of the same tools its role is offered (`../agent-runtime/tools.ts`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -96,9 +94,6 @@ export const CODER_TOOL = {
   BROWSER: AGENT_TOOL.BROWSER,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
   SLEEP: AGENT_TOOL.SLEEP,
-  QUEUE_QUESTION: AGENT_TOOL.QUEUE_QUESTION,
-  WITHDRAW_QUESTION: AGENT_TOOL.WITHDRAW_QUESTION,
-  END_CALL: AGENT_TOOL.END_CALL,
 } as const;
 
 /** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, and the four that read and answer its comments. */
@@ -135,42 +130,6 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<Tas
     CODER_TOOL.LOOK_AT_PICTURE,
     ...COMMENT_TASK_TOOLS,
   ]);
-}
-
-/** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
-export type CallTool =
-  | typeof CODER_TOOL.QUEUE_QUESTION
-  | typeof CODER_TOOL.WITHDRAW_QUESTION
-  | typeof CODER_TOOL.END_CALL;
-
-/**
- * Why each of the call's own tools is refused on a turn that is not spoken:
- * a typed one, or the unheard one a call's last line opens once it has
- * ended. Note that they are offered on every turn, spoken or not, so the
- * tools a turn sends, which lead its prompt, are the same whichever kind it
- * is, and a call that starts mid-PR reads the agent's history from the
- * provider's cache; off a spoken turn each refuses as other tools refuse.
- * Note too that the words name the turn rather than the call, because a
- * line typed while a call stands opens a typed turn too (`channel.ts`).
- */
-const OFF_CALL_REASON = {
-  [CODER_TOOL.QUEUE_QUESTION]:
-    "This turn is not spoken (nothing you write is heard), so no one hears a queued question: post it to the developer in a thread instead.",
-  [CODER_TOOL.WITHDRAW_QUESTION]:
-    "This turn is not spoken (nothing you write is heard), so a queued question is taken back only on a spoken turn.",
-  [CODER_TOOL.END_CALL]:
-    "This turn is not spoken (nothing you write is heard), so it has no call to end.",
-} as const satisfies Record<CallTool, string>;
-
-/** One call of the call's own tools as the turn's kind answers it: its run on a spoken turn, refused on any other. */
-export function runCallTool(
-  turn: BrainHostTurn | undefined,
-  tool: CallTool,
-  run: () => WireRecord,
-): WireRecord {
-  return turn === BRAIN_HOST_TURN.SPOKEN
-    ? run()
-    : { status: ACTION_RESULT_STATUS.REJECTED, reason: OFF_CALL_REASON[tool] };
 }
 
 /** The tools only an agent working in a repository is offered: the pull request the service opens for it and `apply_patch`, which edits its checkout. */
@@ -276,10 +235,11 @@ export function offeredCoderTools(agent: CoderOfferedTo, memoryOn: boolean): rea
  * section since folded into `update_agent` and `update_task`, and the close
  * of and reply on an inbox item since folded into `withdraw_ask` and
  * `post_to_inbox`, that post and its read, since named `post_thread` and
- * `read_threads`, the four of the workspace's Chat, removed with it, and
+ * `read_threads`, the four of the workspace's Chat, removed with it,
  * `show_code`, `draw_on_board`, and `look_at_board`, removed with the Code
- * and Board tabs. A transcript written then names them, and reads back under
- * the same set.
+ * and Board tabs, and a voice call's `queue_question`, `withdraw_question`,
+ * and `end_call`, removed with GPT Live. A transcript written then names
+ * them, and reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -298,6 +258,9 @@ export const RETIRED_CODER_TOOL = {
   SHOW_CODE: RETIRED_TOOL.SHOW_CODE,
   DRAW_ON_BOARD: RETIRED_TOOL.DRAW_ON_BOARD,
   LOOK_AT_BOARD: RETIRED_TOOL.LOOK_AT_BOARD,
+  QUEUE_QUESTION: RETIRED_TOOL.QUEUE_QUESTION,
+  WITHDRAW_QUESTION: RETIRED_TOOL.WITHDRAW_QUESTION,
+  END_CALL: RETIRED_TOOL.END_CALL,
 } as const;
 
 /**

@@ -9,10 +9,8 @@ import {
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
-import { END_CALL_TOOL } from "../../tasks/end-call.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
@@ -265,18 +263,6 @@ const AUTHORED_TOOLS = {
     inputSchema: emitJsonSchema(SHOW_IMAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.SLEEP]: shown(SLEEP_TOOL),
-  [CODER_TOOL.QUEUE_QUESTION]: {
-    description: QUEUE_QUESTION_TOOL.description,
-    inputSchema: emitJsonSchema(QUEUE_QUESTION_TOOL.inputSchema),
-  },
-  [CODER_TOOL.WITHDRAW_QUESTION]: {
-    description: WITHDRAW_QUESTION_TOOL.description,
-    inputSchema: emitJsonSchema(WITHDRAW_QUESTION_TOOL.inputSchema),
-  },
-  [CODER_TOOL.END_CALL]: {
-    description: END_CALL_TOOL.description,
-    inputSchema: emitJsonSchema(END_CALL_TOOL.inputSchema),
-  },
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */

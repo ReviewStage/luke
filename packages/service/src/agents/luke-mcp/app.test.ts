@@ -51,7 +51,6 @@ import { INTEGRATION } from "../../integrations/integrations.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import { PICTURE_LOOK_REFUSAL, pictureNotLooked } from "../../tasks/picture-look.js";
-import { runQueueQuestion } from "../../tasks/queue-question.js";
 import {
   agentBrowserTestLayer,
   fakeCdpPeer,
@@ -86,8 +85,6 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
-import { type CallTool, runCallTool } from "../coder-host/tool-set.js";
-import { recordNativeTurnHanded } from "../coder-host/turn-message.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
@@ -292,23 +289,6 @@ const agentInSandbox = Effect.gen(function* () {
   return { ...agent, conversationId };
 });
 
-/** What the session's last message handed, as the send that wrote it to the runner records it (`runner-sessions.ts`): a spoken turn's words, or a typed turn's. */
-const handedTurn = (
-  agent: { readonly userId: string; readonly conversationId: string },
-  spoken: boolean,
-) =>
-  recordNativeTurnHanded(
-    { userId: agent.userId, conversationId: agent.conversationId },
-    spoken ? { spoken: true, callWords: true, opened: true } : { callWords: true, opened: true },
-  );
-
-/** The call's own tools, in the order the server lists them. */
-const CALL_TOOLS = [
-  "queue_question",
-  "withdraw_question",
-  "end_call",
-] as const satisfies readonly CallTool[];
-
 /** An SDK client connected under the bearer to the server at the path given, Luke's own unless another is named. */
 function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
   return Effect.promise(async () => {
@@ -386,9 +366,6 @@ const SERVED_TOOLS = [
   "reopen_thread",
   "run_on_mac",
   "browser",
-  "queue_question",
-  "withdraw_question",
-  "end_call",
 ] as const;
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
@@ -415,9 +392,7 @@ const commentTool =
  * a tool is to be this one's, so a tool routed to any other door, or to
  * none, answers otherwise.
  */
-const DOOR_OF: Readonly<
-  Record<Exclude<ServedTool, "run_on_mac" | "browser" | CallTool>, DirectCall>
-> = {
+const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
   post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
@@ -815,49 +790,6 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         assert.equal(first.isError, false, JSON.stringify(first));
         assert.equal(firstJson(retried).task.id, firstJson(first).task.id);
         assert.notEqual(firstJson(later).task.id, firstJson(first).task.id);
-      }),
-  );
-
-  it.effect(
-    "the call's own tools run on a spoken turn, the one the session's last message handed, and are refused off one as eve's are",
-    () =>
-      Effect.gen(function* () {
-        const fetch = yield* standing;
-        const agent = yield* agentInSandbox;
-        const client = yield* connected(fetch, agent.bearer);
-        const call = (name: string, input: Readonly<Record<string, unknown>> = {}) =>
-          Effect.promise(() => client.callTool({ name, arguments: input }));
-        const question = {
-          question: "Should a withdrawn invite tell the invitee who withdrew it?",
-          recommendation: "No: just say the invite is no longer valid.",
-        };
-        const inputs = [question, { question: question.question }, {}] as const;
-
-        // Off a call, each refuses as eve's does, and queues or ends nothing.
-        for (const [index, name] of CALL_TOOLS.entries()) {
-          const called = yield* call(name, inputs[index]);
-          const refused = runCallTool(undefined, name, () => ({ status: "accepted" }));
-          assert.equal(called.isError, true, name);
-          assert.deepEqual(firstJson(called), refused, name);
-        }
-        // A call's spoken ask handed to the agent puts it on a spoken turn, where each runs.
-        yield* handedTurn(agent, true);
-        for (const [index, name] of CALL_TOOLS.entries()) {
-          const called = yield* call(name, inputs[index]);
-          assert.deepEqual([called.isError, firstJson(called).status], [false, "accepted"], name);
-        }
-        // An unreadable call on a spoken turn is the tool's own refusal, never the off-call one.
-        const unreadable = yield* call("queue_question", {});
-        assert.deepEqual(
-          [unreadable.isError, firstJson(unreadable)],
-          [true, runQueueQuestion(unparsedWire({}))],
-        );
-        // A line handed after the call's as a typed or unheard turn puts the agent back off a call.
-        yield* handedTurn(agent, false);
-        const after = yield* call("end_call");
-        yield* Effect.promise(() => client.close());
-
-        assert.deepEqual([after.isError, firstJson(after).status], [true, "rejected"]);
       }),
   );
 

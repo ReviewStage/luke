@@ -54,8 +54,6 @@ export const CALL_KIND = {
   WEB_PAGE: "web-page",
   LOAD_SKILL: "load-skill",
   LOOK_AT_PICTURE: "look-at-picture",
-  QUEUE_QUESTION: "queue-question",
-  WITHDRAW_QUESTION: "withdraw-question",
   EDIT_PLAN: "edit-plan",
   TODOS: "todos",
   INBOX_POST: "inbox-post",
@@ -112,7 +110,6 @@ export const CALL_KIND = {
   UPDATE_ISSUE: "update-issue",
   /** A task made in the workspace (`create_task`), its row naming it once answered. */
   CREATE_TASK: "create-task",
-  END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
   /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
@@ -159,8 +156,6 @@ export const CALL_WORDS = {
   [CALL_KIND.WEB_PAGE]: { verb: "Fetched", code: true },
   [CALL_KIND.LOAD_SKILL]: { verb: "Loaded skill", code: true },
   [CALL_KIND.LOOK_AT_PICTURE]: { verb: "Looked at a picture in the plan", code: false },
-  [CALL_KIND.QUEUE_QUESTION]: { verb: "Queued a question", code: false },
-  [CALL_KIND.WITHDRAW_QUESTION]: { verb: "Withdrew a question", code: false },
   [CALL_KIND.EDIT_PLAN]: { verb: "Updated the plan:", code: false },
   [CALL_KIND.TODOS]: { verb: "Updated the to-dos:", code: false },
   [CALL_KIND.INBOX_POST]: { verb: "Posted a thread:", code: false },
@@ -198,7 +193,6 @@ export const CALL_WORDS = {
   [CALL_KIND.CREATE_ISSUE]: { verb: "Filed the issue", code: false },
   [CALL_KIND.UPDATE_ISSUE]: { verb: "Updated the issue", code: false },
   [CALL_KIND.CREATE_TASK]: { verb: "Made the task", code: false },
-  [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },

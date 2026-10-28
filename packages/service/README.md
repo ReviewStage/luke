@@ -1353,8 +1353,8 @@ delegation, so no sandbox opens there either.
 
 `src/agents/turn-events.ts`'s `projectTurnEvents` is what the voice's live
 agent hears of a turn while it runs, in process (above). Nothing is stored for
-it: the five events — a slow step began, a turn queued a question,
-every action settled, one sentence of the reply, the turn ended — are a
+it: the four events — a slow step began, every action settled, one
+sentence of the reply, the turn ended — are a
 projection over the turn row and the turn's journal, the assistant message the
 store writer opens under the turn's id and amends as each call is written
 ahead of its run, read again on every poll, and the projection only grows
@@ -2475,8 +2475,7 @@ journal as the steps after them — so the parked bound covers the turn from its
 delegation, and the follow still stops the moment the turn completes, fails, or
 is cancelled, or the socket's scope closes. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step, each question a turn queued, the
-actions settling, and, as the live agent's own and no event of the stream,
+mid-turn is the slow step, the actions settling, and, as the live agent's own and no event of the stream,
 each look's count of the turn's settled calls with the kind of the latest
 (`STEP_SETTLED`), never a call's input or output, which the service words as
 a build-fixed quiet progress note no sooner than `PROGRESS_NOTE_BOUNDS.GAP_MS`
@@ -2490,8 +2489,7 @@ end, so a reply is never said once per folded ask. Each delegation is an
 exchange of its own in the service, a revision of the request: a newer one
 silences the older exchange's reply, slow-step note, and end note, and leaves
 its run to finish rather than cancelling it, because a call
-delegates every answer while the exploration it began still runs; the
-questions a silenced run queues are still handed on. A refusal at the door is
+delegates every answer while the exploration it began still runs. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received

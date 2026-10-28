@@ -3,6 +3,7 @@ import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import type { HostedStore } from "@luke/database/models/hosted-store";
 import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { TASK_ACTIVITY_ACTION_MAX_CHARS } from "@luke/features/tasks-view";
 import {
   LIVE_AGENT_CANCEL,
@@ -63,7 +64,6 @@ import {
   type TurnEventKind,
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import type { CallBackend } from "./call-backend.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
@@ -382,10 +382,10 @@ function delegatedOf(journal: StoredUIMessage | undefined): boolean {
     .some((part) => DELEGATION_TOOLS.has(storedToolName(part)));
 }
 
-/** The calls about the task's questions rather than its work. */
+/** The calls about the task's questions rather than its work, which a turn journaled while they were offered still names. */
 const QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
-  QUEUE_QUESTION_TOOL.name,
-  WITHDRAW_QUESTION_TOOL.name,
+  RETIRED_TOOL.QUEUE_QUESTION,
+  RETIRED_TOOL.WITHDRAW_QUESTION,
 ]);
 
 /**

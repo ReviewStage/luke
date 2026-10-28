@@ -41,12 +41,10 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
-  type CallTool,
   type KindTool,
   kindToolsOf,
   type RepositoryTool,
   repositoryToolsOf,
-  runCallTool,
   type TaskTool,
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
@@ -212,17 +210,6 @@ export function offeredTaskTools(
       return taskToolsOf(agent.success);
     }),
   );
-}
-
-/**
- * One call of the call's own tools (`runCallTool`), for those tools' own
- * files: run on a spoken turn and refused on any other, the turn's kind
- * read off the request alone, with no admission, because the tools reach
- * nothing when they run: the journal carries their calls to the voice, and
- * a session the host does not admit runs no model step to call them from.
- */
-export function callTool(auth: SessionAuth, tool: CallTool, run: () => WireRecord): WireRecord {
-  return runCallTool(host.turnKind(auth), tool, run);
 }
 
 /**

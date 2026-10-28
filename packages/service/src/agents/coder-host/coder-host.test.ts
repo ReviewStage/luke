@@ -115,7 +115,7 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, runCallTool } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf } from "./tool-set.js";
 import {
   CURSOR_START,
   titleMayLand,
@@ -418,7 +418,7 @@ function codingTurn(
   ];
 }
 
-/** One spoken ask's turn as eve emits it on an agent's session: the ask received, a question queued for the voice, and a sentence of answer. */
+/** One spoken ask's turn as eve emits it on an agent's session: the ask received, a read of the task, and a sentence of answer. */
 function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): MessageStreamEvent[] {
   const sequence = 0;
   return [
@@ -438,11 +438,8 @@ function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): Messa
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: CODER_TOOL.QUEUE_QUESTION,
-            input: {
-              question: "Should a withdrawn invite say who withdrew it?",
-              recommendation: "No: just say it is no longer valid.",
-            },
+            toolName: CODER_TOOL.READ_TASK,
+            input: {},
           },
         ],
       },
@@ -457,7 +454,7 @@ function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): Messa
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: CODER_TOOL.QUEUE_QUESTION,
+          toolName: CODER_TOOL.READ_TASK,
           output: { status: ACTION_RESULT_STATUS.ACCEPTED },
         },
       },
@@ -2387,7 +2384,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const called = yield* turnOf(BRAIN_HOST_TURN.SPOKEN, typed.handed);
           for (const told of [
             "## This turn is spoken",
-            `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+            `\`${CODER_TOOL.DELEGATE}\``,
             "## Talking the plan through",
           ]) {
             assert.ok(called.text?.includes(told), told);
@@ -2412,29 +2409,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.ok(resumed.text?.includes("## This turn is spoken"), resumed.text ?? "");
           const typedAfter = yield* turnOf(BRAIN_HOST_TURN.TYPED, compacted);
           assert.ok(typedAfter.text?.startsWith("This turn is typed"), typedAfter.text ?? "");
-        }),
-    );
-
-    it.effect(
-      "the call's own tools run on a spoken turn and are refused on a typed or unheard one, so every kind is offered the same tools",
-      () =>
-        Effect.sync(() => {
-          const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED };
-          for (const tool of [
-            CODER_TOOL.QUEUE_QUESTION,
-            CODER_TOOL.WITHDRAW_QUESTION,
-            CODER_TOOL.END_CALL,
-          ] as const) {
-            assert.deepEqual(
-              runCallTool(BRAIN_HOST_TURN.SPOKEN, tool, () => accepted),
-              accepted,
-            );
-            for (const turn of [BRAIN_HOST_TURN.TYPED, BRAIN_HOST_TURN.UNHEARD]) {
-              const refused = runCallTool(turn, tool, () => accepted);
-              assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-              assert.match(String(refused.reason), /This turn is not spoken/u);
-            }
-          }
         }),
     );
 
@@ -2604,7 +2578,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const answer = page.messages[1];
           assert.ok(
             answer?.parts.some(
-              (part) => isToolUIPart(part) && part.type === `tool-${CODER_TOOL.QUEUE_QUESTION}`,
+              (part) => isToolUIPart(part) && part.type === `tool-${CODER_TOOL.READ_TASK}`,
             ),
           );
         }),
