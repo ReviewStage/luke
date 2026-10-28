@@ -58,8 +58,9 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
 
 /**
  * A read that moved, the ids of the transactions whose writes woke the looks
- * before it, each once, and the instant the first of them was heard (clock
- * milliseconds): none where it moved at the first look or its clock woke it.
+ * before it, each once, and the instant the first of the writes that woke the
+ * look that moved was heard (clock milliseconds): none where it moved at the
+ * first look or its clock woke it.
  */
 export interface Held<A> {
   readonly read: A;
@@ -89,9 +90,8 @@ export function heldUntil<A, E, R>(
       let standing = yield* read;
       while (!moved(standing)) {
         for (const txid of yield* watch.next) woken.add(txid);
-        // Note that the first write heard is the one kept, since it is the one that has waited longest.
-        const heard = yield* watch.heardAt;
-        heardAt = Option.orElse(heardAt, () => heard);
+        // Note that only the wake before the look that moved is kept, since an earlier one that moved nothing, as a parent's write may on a worker's read, is not what this read answers.
+        heardAt = yield* watch.heardAt;
         standing = yield* read;
       }
       return { read: standing, txids: [...woken], heardAt };

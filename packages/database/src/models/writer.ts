@@ -1367,8 +1367,9 @@ function holdJournal(context: WriterContext, turnId: string, row: MessageRow, di
 }
 
 /**
- * What a journal's growth costs to write: each amendment that lands rewrites
- * the turn's whole journal row, so its bytes climb with the turn's length.
+ * What a coding agent's journal growth costs to write: each amendment that
+ * lands rewrites the turn's whole journal row, so its bytes climb with the
+ * turn's length.
  * Sentry's metrics layer sends it as the histogram's `.sum`, `.count`,
  * `.min`, and `.max`. It carries a size and never a row, an id, or a txid.
  */
@@ -1397,10 +1398,13 @@ function landJournals(context: WriterContext): Write<void> {
               parts: held.row.parts,
             }),
             Effect.andThen(
-              Metric.update(
-                JOURNAL_METRIC.REWRITE_BYTES,
-                Buffer.byteLength(JSON.stringify(held.row.parts)),
-              ),
+              // Note that only a coding agent's journal is counted, since its transcript is what the measure is for.
+              context.kind === CONVERSATION_KIND.CODING_AGENT
+                ? Metric.update(
+                    JOURNAL_METRIC.REWRITE_BYTES,
+                    Buffer.byteLength(JSON.stringify(held.row.parts)),
+                  )
+                : Effect.void,
               Effect.sync(() => holdJournal(context, turnId, held.row, false)),
             ),
           )
