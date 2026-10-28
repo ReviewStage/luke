@@ -973,15 +973,18 @@ function QuestionClose({
 function Subject({
   item,
   heading,
+  first,
 }: {
   item: InboxItem;
   /** Takes the title's heading, which the bar watches scroll away (`useHeadingAway`). */
   heading: (element: HTMLElement | null) => void;
+  /** Whether it is the page's first heading, as on a phone, whose bar names what holds the item and whose list is not drawn beside it. */
+  first: boolean;
 }): React.JSX.Element {
   return (
     <header className="inbox-subject flex flex-col gap-tight-gap border-b border-border pb-block-gap">
       <Text
-        as={TEXT_ELEMENT.H2}
+        as={first ? TEXT_ELEMENT.H1 : TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
         ref={heading}
         className="inbox-subject-title"
@@ -1243,6 +1246,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
+  // A phone heads the item with its own row, the item standing alone in the list's place.
+  const phoneHead = phone !== undefined && onBack !== undefined;
   // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
   const by: ItemAgent = {
@@ -1309,7 +1314,7 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      {phone !== undefined && onBack !== undefined ? (
+      {phoneHead ? (
         <PhoneHead
           place="inbox-item"
           start={
@@ -1388,7 +1393,7 @@ export function InboxPane({
               images={control}
               code={doors.code}
             >
-              <Subject item={item} heading={setHeading} />
+              <Subject item={item} heading={setHeading} first={phoneHead} />
               <Stack
                 as={LAYOUT_ELEMENT.OL}
                 gap={GAP.NONE}

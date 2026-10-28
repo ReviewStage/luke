@@ -1723,6 +1723,13 @@ test("on a phone an item is headed by its way back's glyph, its task centred, wh
     INVITES.name,
     "the bar names the item's task, not the title its thread is headed by under it",
   );
+  assert.deepEqual(
+    [...page.querySelectorAll("h1")]
+      .filter((each) => each.closest("[hidden]") === null)
+      .map((each) => each.textContent),
+    ["Expire after 7 days?"],
+    "the thread's title is the page's one top heading",
+  );
 
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Item actions"]')?.click());
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
