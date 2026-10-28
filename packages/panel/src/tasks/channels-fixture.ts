@@ -778,6 +778,7 @@ THREADS.push(
         {
           type: INBOX_ASK.DECIDE,
           options: [{ label: "Match the list" }, { label: "Keep 10px" }],
+          recommended: "Match the list",
           status: INBOX_ASK_STATUS.ANSWERED,
         },
       ),

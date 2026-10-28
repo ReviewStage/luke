@@ -543,7 +543,7 @@ const findStoppedOn = SqlSchema.findAll({
  * Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and
  * changes nothing. A spoken ask keeps the place it joined a typed turn at, and a typed ask none,
  * since it is a line of the turn's own kind. A native runner names an ask's line by the ask's own
- * id, which is its delivery too (`brain-ask.ts`), so the ask is matched by that id as well: it binds
+ * id, which is its delivery too, so the ask is matched by that id as well: it binds
  * though the runner took its line before its dispatch wrote the delivery.
  */
 const bindDeliveredAsks = SqlSchema.findAll({

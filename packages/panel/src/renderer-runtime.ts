@@ -2,11 +2,10 @@
  * The renderer's Effect edge: the browser runtime the atoms' own work runs on,
  * and the registry that holds them.
  *
- * There is one of each per window: every window, a panel or the hidden voice
- * window, is its own document loading the one renderer bundle, so each
- * instantiates this module once, provides its own registry from the root,
- * and holds the one browser `ManagedRuntime` the factory builds inside it.
- * The panel and the voice window never share one. Nothing here
+ * There is one of each per window: every window is its own document loading
+ * the one renderer bundle, so each instantiates this module once, provides
+ * its own registry from the root, and holds the one browser `ManagedRuntime`
+ * the factory builds inside it. No two windows share one. Nothing here
  * may reach a layer that reaches `node:` — the renderer is a sandboxed browser
  * context, and a runtime is exactly the place a Node-reaching service would
  * arrive unnoticed.
@@ -36,10 +35,8 @@ export const rendererRegistry = AtomRegistry.make({ scheduleTask });
 
 /**
  * The services that runtime was built over, for work that is a fiber of its
- * own rather than an atom's: the voice window's call runs its session's life
- * and every bound of it under these, and `LiveVoiceOrchestrator` runs the
- * standing call's own lifecycle under them too, so a fiber outside the atoms
- * still stands on the one set of services this bundle has. The layer is built
+ * own rather than an atom's, so a fiber outside the atoms still stands on the
+ * one set of services this bundle has. The layer is built
  * synchronously, so there is nothing to wait for.
  */
 export const rendererServicesNow = (): Context.Context<never> =>

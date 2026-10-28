@@ -20,8 +20,8 @@ import { type ActSender, actPort } from "./base.js";
  * account-ask-procedures.ts -- the account's own asks of the host from Settings and a dictating box.
  *
  * The one check these procedures make is who asked: only a panel draws
- * Settings or records a clip, so every one refuses the takeover and the
- * hidden voice window, in its own sentence. A save's key and a dictated
+ * Settings or records a clip, so every one refuses the takeover and any
+ * other window, in its own sentence. A save's key and a dictated
  * clip each pass through to the host once and are noted nowhere, and what
  * the service answers comes back as the panel's own answer, or why there is
  * none. Nothing is held here.

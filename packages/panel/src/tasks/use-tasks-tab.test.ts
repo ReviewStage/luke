@@ -26,30 +26,16 @@ import {
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  type AppInboxTask,
-  type AppInboxTaskHolding,
-  type AppStateDelivery,
-  type AppStateSnapshot,
-  RUN_PROFILE,
-} from "@luke/host/app-state";
+import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
-import { LIVE_STATUS } from "@luke/live";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import {
-  IDLE_VOICE_VIEW,
-  VOICE_COMMAND,
-  type VoiceCommand,
-  type VoiceView,
-} from "@luke/voice/voice-view";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -58,7 +44,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { type ActHandle, pressAct } from "../act.js";
+import type { ActHandle } from "../act.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -71,23 +57,10 @@ import {
   type PanelSpan,
 } from "../panel-spans.js";
 import { PANEL_TAB } from "../panel-tabs.js";
-import { rendererRegistry, rendererRuntime } from "../renderer-runtime.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import {
-  FAKE_ANSWER,
-  fakeActPort,
-  fakeActs,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-  refusedOnPort,
-} from "../testing/app-bridge.js";
-import {
-  DESKTOP_CAPABILITIES,
-  deliveryOf,
-  handCapabilities,
-  handState,
-  stateWith,
-} from "../testing/app-state.js";
+import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -131,11 +104,6 @@ const readShown = Schema.decodeUnknownOption(
   }),
 );
 
-/** A voice command's payload, read back as the act's own schema admits it. */
-const readVoiceCommand = Schema.decodeUnknownOption(
-  Schema.Struct({ command: Schema.Literals(Object.values(VOICE_COMMAND)) }),
-);
-
 interface Standing {
   shown: boolean;
   tasks: TasksView;
@@ -172,8 +140,6 @@ function mount(
   const agentActs: PortActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
-  /** What the voice window was told to do, each time it was told. */
-  const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
@@ -252,18 +218,12 @@ function mount(
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
           }
-          const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
-          if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
-            voiceCommands.push(voiceCommand.command);
-          }
         }) as ActHandle["tell"],
       },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
       signedIn: held.signedIn,
       account: held.signedIn ? held.account : undefined,
-      voiceAvailable: true,
-      microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
       unseenAgents: held.unseenAgents,
       inboxWaiting: held.inboxWaiting,
@@ -293,7 +253,6 @@ function mount(
     told,
     agentActs,
     shownAgents,
-    voiceCommands,
     payloads,
     /** Every Settings link the tab followed, in order. */
     links,
@@ -3275,13 +3234,6 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   assert.equal(refreshes(named) - namedBefore, 0);
 });
 
-/** An agent of the open task's another's call speaks into. */
-const VOICE_CHAT_AGENT: CodingAgentSummary = {
-  ...RUNNING_AGENT,
-  id: "2f4a6c8e-0b1d-4e3f-a5c7-9e1b3d5f7a90",
-  status: CODING_AGENT_STATUS.STARTING,
-};
-
 /** The payload of every act of `kind` the tab asked, in order. */
 function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[] {
   return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
@@ -3414,165 +3366,6 @@ test("a task with no agent opens its new agent's draft with a hidden side panel 
     assert.ok(tab.control().agents.draft, "the task holds a draft");
   });
   assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the draft");
-});
-
-test("a platform with no voice takes no calls", async () => {
-  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.VOICE));
-  const web = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
-  await settle();
-  assert.equal(web.control().calls, undefined);
-});
-
-/** The voice as main delivers it, whose call a test stands by hand: a call into another agent landing after a first press. */
-function voiceDelivered(): { stand: (view: VoiceView) => Promise<void> } {
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(stateWith({}, {})),
-    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
-      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  });
-  return {
-    stand: async (view) => {
-      act(() => {
-        for (const listener of listeners) {
-          listener(stateWith({}, { version: 2, voice: { view } }));
-        }
-      });
-      await settle();
-    },
-  };
-}
-
-/** A call standing into another agent, of the open task. */
-const OTHER_CALL: VoiceView = {
-  ...IDLE_VOICE_VIEW,
-  voiceStatus: LIVE_STATUS.LISTENING,
-  call: { taskId: TASK.id, agentId: VOICE_CHAT_AGENT.id },
-};
-
-test("an agent's Call press opens a call into it at once, and over another agent's call ends that one at once, its toast's Undo calling it again", async () => {
-  const voice = voiceDelivered();
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined),
-    },
-    AtomRegistryModule.make(),
-  );
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().calls, "a desktop's agents take calls");
-  });
-  const onTask = { taskId: TASK.id, archived: false };
-  act(() => tab.control().calls?.onPress(AGENT_ID, onTask));
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID, taskId: TASK.id }]);
-
-  await voice.stand(OTHER_CALL);
-  act(() => tab.control().calls?.onPress(AGENT_ID, onTask));
-  await settle();
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
-    { agentId: AGENT_ID, taskId: TASK.id },
-    { agentId: AGENT_ID, taskId: TASK.id },
-  ]);
-  assert.equal(newestToastSays(), `Call on ${TASK.name} endedUndo`);
-
-  act(() => _undoButton().click());
-  await settle();
-  assert.deepEqual(
-    payloadsOf(tab, ACT_KIND.TASKS_TALK).at(-1),
-    { agentId: VOICE_CHAT_AGENT.id, taskId: TASK.id },
-    "Undo calls the earlier agent on its task again",
-  );
-});
-
-test("a Call press and each Retry main refuses say why in a toast", async () => {
-  voiceDelivered();
-  // Each refresh is refused in words of its own, so each Retry's toast is told from the one before.
-  let refreshes = 0;
-  fakeActPort({
-    [ACT_KIND.TASKS_TALK]: () => Promise.reject(refusedOnPort("The voice window is not standing.")),
-    [ACT_KIND.TASKS_REFRESH]: () =>
-      Promise.reject(refusedOnPort(`Refresh ${++refreshes} could not read the tasks.`)),
-  });
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-    AtomRegistryModule.make(),
-    pressAct,
-  );
-  // A press's toast is raised on the window's own registry, so its toasts stand beside the tab's.
-  const windowToasts = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(windowToasts);
-  act(() => windowToasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().calls, "a desktop's agents take calls");
-  });
-
-  act(() => tab.control().calls?.onPress(AGENT_ID, { taskId: TASK.id, archived: false }));
-  await settle();
-  const called = newestToastSays();
-  const retried: (string | undefined)[] = [];
-  for (const retry of ["onRetryList", "onRetryWorkspaces"] as const) {
-    await act(async () => tab.control()[retry]());
-    retried.push(newestToastSays());
-  }
-
-  assert.equal(called, "The voice window is not standing.");
-  assert.deepEqual(retried, [
-    "Refresh 1 could not read the tasks.",
-    "Refresh 2 could not read the tasks.",
-  ]);
-});
-
-/** The list as OPEN holds it, with no task open. */
-const { activeTaskId: _open, ...NO_TASK_OPEN } = OPEN;
-
-test("an agent's page takes a call into its agent with no task open, naming no task, ends another call at once with Undo, and an archived agent takes none", async () => {
-  const voice = voiceDelivered();
-  const tab = mount(
-    { shown: true, tasks: NO_TASK_OPEN },
-    { [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined) },
-    AtomRegistryModule.make(),
-  );
-  await vi.waitFor(async () => {
-    await settle();
-    assert.ok(tab.control().calls, "a desktop's agents take calls");
-  });
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: { kind: LINK_PLACE.AGENT, agentId: AGENT_ID },
-    }),
-  );
-  assert.equal(tab.control().agentView.agentId, AGENT_ID);
-  const tasklessPlace = { taskId: undefined, archived: false };
-
-  act(() => tab.control().calls?.onPress(AGENT_ID, { ...tasklessPlace, archived: true }));
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [], "an archived agent takes no call");
-  act(() => tab.control().calls?.onPress(AGENT_ID, tasklessPlace));
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
-
-  await voice.stand(OTHER_CALL);
-  act(() => tab.control().calls?.onPress(AGENT_ID, tasklessPlace));
-  await settle();
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
-    { agentId: AGENT_ID },
-    { agentId: AGENT_ID },
-  ]);
-  assert.equal(newestToastSays(), `Call on ${TASK.name} endedUndo`);
-
-  act(() => _undoButton().click());
-  await settle();
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK).at(-1), {
-    agentId: VOICE_CHAT_AGENT.id,
-    taskId: TASK.id,
-  });
 });
 
 test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {

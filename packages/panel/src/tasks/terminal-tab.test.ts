@@ -935,7 +935,7 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   const before = main.sent.length;
-  await tab.press("End zsh");
+  await tab.press("End shell");
   assert.equal(document.querySelector('[role="alertdialog"] h2')?.textContent, "End zsh?");
   assert.match(
     document.querySelector('[role="alertdialog"]')?.textContent ?? "",
@@ -1030,7 +1030,7 @@ test("a refused shell rename reopens its field holding the name typed, says unde
   assert.ok(!tab.container.textContent?.includes("could not be renamed"));
 });
 
-test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename, New shell and End shell", async () => {
+test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename and End shell", async () => {
   const tab = await mount();
   const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
   const row = item?.querySelector<HTMLButtonElement>(":scope > button, :scope button");
@@ -1053,7 +1053,7 @@ test("a shell row's ⋯, its right-click and the menu key open the same menu of 
     });
     await settle();
   };
-  const SAME = { label: "Shell actions", items: ["Rename", "New shell", "End shell"] };
+  const SAME = { label: "Shell actions", items: ["Rename", "End shell"] };
 
   act(() => more.click());
   assert.deepEqual(offered(), SAME, "the ⋯ opens it");
@@ -1190,7 +1190,7 @@ test("ending the shown shell starts one shell in its place, though the host says
   port.say({ type: "state", state: "attached" });
   const before = main.sent.length;
   main.holding.add(ACT_KIND.TERMINAL_KILL);
-  await tab.press("End zsh");
+  await tab.press("End shell");
   await confirmWith("End shell");
   // The host says the shell is gone, on the port the tab let go, before the end answers.
   port.say({ type: "state", state: "gone" });
@@ -1211,7 +1211,7 @@ test("an end the service refuses leaves the shown shell shown, attached again, a
   main.post(OLDEST).say({ type: "state", state: "attached" });
   main.down.add(ACT_KIND.TERMINAL_KILL);
   const before = main.sent.length;
-  await tab.press("End zsh");
+  await tab.press("End shell");
   await confirmWith("End shell");
   await settle();
   assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
@@ -1231,7 +1231,7 @@ test("an end still out when another shell is chosen leaves the chosen one shown"
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   main.holding.add(ACT_KIND.TERMINAL_KILL);
-  await tab.press("End zsh");
+  await tab.press("End shell");
   await confirmWith("End shell");
   await tab.choose("dev server");
   const before = main.sent.length;
@@ -1249,7 +1249,7 @@ test("an end still out when another shell is chosen leaves the chosen one shown"
 
 test("the question asked from the list goes when the tab leaves the screen", async () => {
   const tab = await mount();
-  await tab.press("End zsh");
+  await tab.press("End shell");
   assert.ok(document.querySelector('[role="alertdialog"]'), "the question stands");
   await tab.render(false);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);

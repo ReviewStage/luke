@@ -293,22 +293,17 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     phone
       ? [
           [
-            running
-              ? {
-                  label: "Stop",
-                  icon: <GLYPH.STOP />,
-                  detail: standingWords(standing),
-                  danger: true,
-                  disabled: standing.kind === "stopping",
-                  onSelect: stop,
-                }
-              : {
-                  label: "Run",
-                  icon: <PlayIcon aria-hidden />,
-                  detail: standingWords(standing),
-                  disabled: standing.kind === "starting",
-                  onSelect: run,
-                },
+            ...(running
+              ? []
+              : [
+                  {
+                    label: "Run",
+                    icon: <PlayIcon aria-hidden />,
+                    detail: standingWords(standing),
+                    disabled: standing.kind === "starting",
+                    onSelect: run,
+                  },
+                ]),
             {
               label: "Open in Terminal",
               icon: <GLYPH.TERMINAL />,
@@ -317,7 +312,20 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
               onSelect: opening.onPress,
             },
           ],
-        ]
+          // Stop ends what runs, so it stands last and alone, as an ending act does.
+          running
+            ? [
+                {
+                  label: "Stop",
+                  icon: <GLYPH.STOP />,
+                  detail: standingWords(standing),
+                  danger: true,
+                  disabled: standing.kind === "stopping",
+                  onSelect: stop,
+                },
+              ]
+            : [],
+        ].filter((group) => group.length > 0)
       : undefined,
   );
 

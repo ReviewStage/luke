@@ -551,14 +551,21 @@ test("on a phone the viewer's header is Close alone at its start, the file's nam
     document.querySelector<HTMLElement>('[role="dialog"] header') ?? assert.fail("a header");
   const named = (selector: string) =>
     [...head.querySelectorAll(selector)].map((button) => button.getAttribute("aria-label"));
-  assert.deepEqual(named("button"), ["Close", "File actions"], "one control in each corner");
+  assert.deepEqual(named("button"), ["Close", "Attachment actions"], "one control in each corner");
   assert.equal(head.querySelector("h2")?.textContent, "first.png");
 
-  viewer.press("File actions");
+  viewer.press("Attachment actions");
   const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   assert.deepEqual(
     items().map((item) => item.textContent),
-    ["Previous file1 of 2", "Next file1 of 2", "Copy image", "Zoom out", "Zoom in", "Download"],
+    [
+      "Previous file1 of 2",
+      "Next file1 of 2",
+      "Copy image",
+      "Zoom out",
+      "Zoom in",
+      "Download file",
+    ],
   );
   act(() => items()[1]?.click());
   assert.equal(viewer.state.at, 1, "Next file shows the next");

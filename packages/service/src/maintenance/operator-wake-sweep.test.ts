@@ -7,13 +7,8 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
-import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-} from "@luke/features/brain";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { RUN_EVENT, RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
 import { Duration, Effect, Option, Stream } from "effect";
@@ -133,17 +128,17 @@ const failedAt = (agent: CodingAgent, at: number) =>
     yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
     yield* writer.consume(target, {
       ...turn,
-      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      kind: RUN_EVENT.TURN_STARTED,
       sequence: 1,
-      origin: BRAIN_TURN_ORIGIN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
+      origin: RUN_TURN_ORIGIN.TYPED,
+      trigger: TURN_TRIGGER.ASK,
       at: at - 1,
     });
     yield* writer.consume(target, {
       ...turn,
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      kind: RUN_EVENT.TURN_ENDED,
       sequence: 2,
-      status: BRAIN_REQUEST_STATUS.FAILED,
+      status: RUN_STATUS.FAILED,
       responseIds: [],
       at,
     });

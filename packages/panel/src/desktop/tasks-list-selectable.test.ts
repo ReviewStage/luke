@@ -10,7 +10,6 @@ import { IDLE_TASKS_VIEW, TASKS_READ } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { selectableListBehaviour } from "@luke/ui/testing/selectable-list";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -98,8 +97,6 @@ async function mount() {
       run: { fixtureMode: false, profile: RUN_PROFILE.IDLE },
       signedIn: true,
       account: "dean@acme.dev",
-      voiceAvailable: true,
-      microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: true,
       unseenAgents: [],
       inboxWaiting: [],

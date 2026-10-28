@@ -63,9 +63,7 @@ function saidOf(at: number) {
       onOpen: () => undefined,
     }),
   );
-  const body = mount(
-    createElement(PlanBody, { task, live: false, reader: { readerId: DANA.userId } }),
-  );
+  const body = mount(createElement(PlanBody, { task, reader: { readerId: DANA.userId } }));
   return {
     row: row.querySelector(".sidebar-task-time time")?.textContent,
     edited: lineWords(body.querySelector(".plan-byline-edited")),

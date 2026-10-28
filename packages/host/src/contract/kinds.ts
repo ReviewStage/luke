@@ -321,8 +321,6 @@ export const TASKS_ACT_KIND = {
   ADMIN_FAVORITE: "admin.favorite",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
-  TASKS_TALK: "tasks.talk",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
@@ -463,27 +461,6 @@ export const UPDATE_ACT_KIND = {
 } as const;
 
 /**
- * The voice window's runtime: a command to it from a panel or the call
- * window; the call card's way back, Luke's window brought forward on the
- * call's own agent; the voice window as a GPT Live peer, its SDP offer handed
- * to the host, which creates the one session and answers the SDP, the
- * hang-up it asks the host to decide, and the two reports the host reads its
- * transport and its idle from, none carrying a credential; Escape's stop;
- * the voice diagnostics; and the microphone's privacy settings opened.
- */
-export const VOICE_RUNTIME_ACT_KIND = {
-  VOICE_COMMAND: "voice.command",
-  CALL_SHOW_AGENT: "call.showAgent",
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
-  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
-} as const;
-
-/**
  * The account's workspaces: one made under a name, answered as made, which
  * the account owns; one renamed by its owners and admins, answered under
  * its new name; one's photo set as a `data:` URL or removed with null by
@@ -541,8 +518,9 @@ export const WORKSPACE_ACT_KIND = {
 
 /**
  * What a window asks of the system it is drawn on: the microphone asked for
- * and its route read afresh, the notification settings opened, a new mail to the people who make Luke, the panel
- * focused, words copied, a file saved, and feedback sent.
+ * and its route read afresh, the microphone's and the notifications' settings
+ * opened, a new mail to the people who make Luke, the panel focused, words
+ * copied, a file saved, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
   MICROPHONE_REQUEST: "microphone.request",
@@ -553,6 +531,7 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * presses.
    */
   MICROPHONE_ROUTE: "microphone.route",
+  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
@@ -594,7 +573,6 @@ export const PORT_ACT_KIND = {
   ...TERMINAL_ACT_KIND,
   ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,
-  ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
 } as const;
@@ -611,7 +589,6 @@ export const PLATFORM_PORT_ACT_KIND = {
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
-  ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
 } as const;
 

@@ -34,8 +34,8 @@ export const THREAD_REVEAL_WORDS = {
   FILE_GONE: "That comment's file is no longer in this pull request's changes.",
   VIEW_FILES: "View in Files changed",
   VIEW_CONVERSATION: "View in Conversation",
-  /** The name of a thread's ⋯. */
-  THING: "Comment",
+  /** The name of a thread's ⋯, told from a plan comment's own ("Comment actions"). */
+  THING: "Review thread",
 } as const;
 
 /** An ask to bring one review thread of an agent's pull request into view, on one of its tab's views; counted, so each ask is its own. */

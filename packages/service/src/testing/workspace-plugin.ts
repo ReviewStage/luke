@@ -1,10 +1,14 @@
 import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
-import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
+import {
+  openMigratedPglite,
+  sqlClientOverPglite,
+  syncListenerOverPglite,
+} from "@luke/database/testing";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
 import { bearer, organization as organizationPlugin } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import {
   DISABLED_AUTH_PATHS,
@@ -26,7 +30,9 @@ import {
  * hands one out, so the plugin reads it back exactly as it reads the Mac's.
  * `sessionCookieOf` mints one as the cookie a signed-in browser carries,
  * spelled as the bearer plugin spells the cookie it reads a bearer as.
- * The database is closed with the scope that opened it.
+ * `database` carries a `SyncListener` on the same PGlite, as `getTestDB`'s
+ * does, so a test hears what the plugin's writes notify. The database is
+ * closed with the scope that opened it.
  */
 
 const SECRET = "workspace-plugin-test-secret-with-enough-length";
@@ -72,6 +78,6 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     resolveSessionUserId,
     sessionBearerOf,
     sessionCookieOf,
-    database: sqlClientOverPglite(client),
+    database: Layer.provideMerge(syncListenerOverPglite, sqlClientOverPglite(client)),
   };
 });

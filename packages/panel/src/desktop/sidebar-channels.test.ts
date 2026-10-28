@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import type { ChannelsControl } from "../tasks/use-channels.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -20,7 +21,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 /**
  * sidebar-channels.test.ts -- the sidebar's channels under the Inbox: a row
- * posted in since the reader looked stands in the unread weight, and Add
+ * posted in since the reader looked stands in the unread weight; its ⋯
+ * offers Copy link, Mark as read while it is unread, Edit, and Archive
+ * last and alone; Add
  * channel's Browse archived channels lists the archived standing channels,
  * each opened again by its Unarchive, or opened by a press; and Edit asks
  * for a channel's name and purpose, #general's name locked, sending what
@@ -101,13 +104,17 @@ function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(SidebarChannels, {
-          workspaceId: WORKSPACE_ID,
-          channels: control,
-          currentId: undefined,
-          shown: true,
-          onOpen: (channelId) => opened.push(channelId),
-        }),
+        createElement(
+          LinkWorkspaceProvider,
+          { value: WORKSPACE_ID },
+          createElement(SidebarChannels, {
+            workspaceId: WORKSPACE_ID,
+            channels: control,
+            currentId: undefined,
+            shown: true,
+            onOpen: (channelId) => opened.push(channelId),
+          }),
+        ),
       ),
     ),
   );
@@ -142,6 +149,21 @@ test("a channel posted in since the reader looked stands in the unread weight, o
     (row) => row.textContent,
   );
   assert.deepEqual(unread, ["app"]);
+});
+
+/** The open menu's items as words, a rule between groups drawn as "—". */
+function menuWords(): string[] {
+  const menu = document.querySelector('[role="menu"]') ?? assert.fail("the menu stands");
+  return [...menu.querySelectorAll('[role="menuitem"], [role="separator"]')].map((each) =>
+    each.getAttribute("role") === "separator" ? "—" : (each.textContent ?? ""),
+  );
+}
+
+test("a channel's ⋯ offers Copy link and Mark as read while it is unread, then Edit, then Archive last and alone", () => {
+  mount([channel("c-app", "app", { lookedAt: 1, latestPostedAt: 5 })], []);
+  act(() => button("Channel actions").click());
+  const words = menuWords().map((each) => each.replace(/[⇧⌥⌘⌃]+.$/u, ""));
+  assert.deepEqual(words, ["Copy link", "Mark as read", "—", "Edit…", "—", "Archive"]);
 });
 
 test("Browse archived channels lists the archived standing channels, Unarchive opens one again, and a press opens one", async () => {

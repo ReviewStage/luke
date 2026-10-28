@@ -5,9 +5,10 @@ import { type ReactNode, useRef } from "react";
  *
  * A control is pressed rather than read, so an app's reset keeps its words
  * from selecting. Some controls carry words a reader wants to copy, as an
- * agent's ask does: an option's label and detail, a step to take by hand.
- * Inside this region a choice's label and detail and a checkbox's words
- * select (readable-controls.css), and a press whose drag changed the
+ * agent's ask does: an option's label and detail, a step to take by hand,
+ * a field's name. Inside this region a choice's label and detail, a
+ * checkbox's words, and a field's name select (readable-controls.css), as
+ * a read-only button's words do anywhere, and a press whose drag changed the
  * selection is held back, so dragging over an option's words to copy them
  * never picks it, nor ticks a step. A press that selects nothing, and one
  * from the keyboard, presses as it always does. The region draws no box of

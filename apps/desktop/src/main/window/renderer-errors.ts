@@ -5,9 +5,8 @@
  * process's stderr, so an error that left a window half drawn says nothing in
  * the log of the run that drew it. A development build hands each error a
  * window's page logs to the reporter main writes its own lines through,
- * naming the document it came from, since the panels, the voice window, and
- * the call window share the renderer's chunks. Only errors cross: a warning or a
- * log line is the page's to keep, and DevTools shows it.
+ * naming the document it came from. Only errors cross: a warning or a log
+ * line is the page's to keep, and DevTools shows it.
  *
  * Note that an error naming an access token is withheld whole, as Sentry's
  * breadcrumbs withhold it (`sentry-breadcrumbs.ts`), because a run's output
@@ -19,7 +18,7 @@ import path from "node:path";
 import { withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
 import { app, type BrowserWindow } from "electron";
 
-/** The document a window's page is, by its file's name: `index.html`, `voice.html`, or `call.html`. */
+/** The document a window's page is, by its file's name, such as `index.html`. */
 function documentName(url: string): string {
   return URL.canParse(url) ? path.posix.basename(new URL(url).pathname) : url;
 }

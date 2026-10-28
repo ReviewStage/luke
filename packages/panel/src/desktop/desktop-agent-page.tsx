@@ -72,7 +72,6 @@ import {
   type AgentTerminalDoors,
   agentMenuGroups,
   useAgentActions,
-  useAgentCallDoors,
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
@@ -144,12 +143,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * leads its bar with the path to that automation, says under it what fired
  * the run, and steps through the automation's other runs' agents from the
  * bar's end (`automation-agent-run.tsx`). Escape leaves it for wherever it was
- * opened from, and so does any row of the sidebar. Its composer offers Call
- * as its tab's does, through the window's same press (`agent-actions.tsx`'s
- * `useAgentCallDoors`), told the agent's own task, or none, whatever task is
- * open: the call is keyed by the agent, and asks first where it would hang
- * another agent's call up. While its call stands its foot draws the call as
- * its tab's would.
+ * opened from, and so does any row of the sidebar.
  */
 
 /** What the page says where the agent could not be read. */
@@ -401,11 +395,6 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   useTaskAgentsFollow(tasks, agentId, agent);
-  // Its Call names the agent's own task, or none, and an archived agent takes none.
-  const calls = useAgentCallDoors(tasks.calls, {
-    taskId: agent?.planId ?? undefined,
-    archived: agent?.archivedAt !== undefined,
-  });
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -699,7 +688,6 @@ export function DesktopAgentPage({
                           subject={tab}
                         >
                           <AgentPane
-                            call={calls}
                             label={agentName(agent, control.models)}
                             tabbed={false}
                             tab={paneTab}

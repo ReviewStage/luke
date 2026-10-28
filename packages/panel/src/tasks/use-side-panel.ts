@@ -48,13 +48,12 @@ import {
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
  *
- * The task's column is the agents': its Call with Luke and its coding
- * agents (`use-main-tabs.ts`); everything else (the plan's document, the
- * task's Inbox and the plan's comments) stands in a panel at the window's
- * right that the developer opens and closes, as every devtool window's
- * secondary sidebar does. What opens it on its own is a page Luke shows on
- * a call (`use-panel-arrivals.ts`), each time he does, and an Inbox item the
- * developer has not seen (`onInboxRead`); a subagent's tab opened from an
+ * The task's column is the agents': its coding agents (`use-main-tabs.ts`);
+ * everything else (the plan's document, the task's Inbox and the plan's
+ * comments) stands in a panel at the window's right that the developer
+ * opens and closes, as every devtool window's secondary sidebar does. What
+ * opens it on its own is an Inbox item the developer has not seen
+ * (`onInboxRead`); a subagent's tab opened from an
  * agent's transcript opens it too. A task New task started with an agent
  * opens on the agent alone, its plan's tab closed there (`use-tasks-tab.ts`),
  * so the panel stands as it stood on every other task. Not to be confused

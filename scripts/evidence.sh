@@ -8,9 +8,6 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 LUKE_FIXTURE_SCENARIO=smoke
 LUKE_EVIDENCE_ROOT="$LUKE_ARTIFACT_ROOT/evidence"
 LUKE_EXPANDED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-expanded.png"
-LUKE_SPEAKING_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-speaking.png"
-LUKE_MUTED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-muted.png"
-LUKE_DUPLEX_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-duplex.png"
 LUKE_TASKS_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks.png"
 LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-transcript.png"
 LUKE_TASKS_WORK_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-work.png"
@@ -32,7 +29,7 @@ fi
 # The captures below launch the packaged app, so they prove the bundle runs but
 # not that electron-builder carried everything into it: a helper or
 # the icon can be missing from a bundle whose panel still paints.
-for helper in mac-output-volume; do
+for helper in mac-microphone-route; do
     if [[ ! -x "$PACKAGED_APP/Contents/Resources/$helper" ]]; then
         printf 'error: packaged app is missing the %s helper\n' "$helper" >&2
         exit 1
@@ -66,15 +63,6 @@ capture_evidence() {
 # The window opens on Plans: the fixture's synthetic plan list, with no plan
 # open.
 capture_evidence expanded --capture-evidence "$LUKE_EXPANDED_EVIDENCE_PATH"
-# Luke speaking: his meter beside his talking face in the sidebar.
-capture_evidence speaking --profile speaking --capture-evidence "$LUKE_SPEAKING_EVIDENCE_PATH"
-# The speaking run with the Mac's output off: the volume hint stands on the
-# voice's notice line with its Got it button. The state is the profile's own — a capture run reads no system
-# volume — so the frame is deterministic like every other.
-capture_evidence muted --profile muted --capture-evidence "$LUKE_MUTED_EVIDENCE_PATH"
-# Both speakers heard at once, the full-duplex frame, both drawn from the
-# profile's staged levels.
-capture_evidence duplex --profile duplex --capture-evidence "$LUKE_DUPLEX_EVIDENCE_PATH"
 # The panel's Plans tab over the fixture's synthetic plan: the open plan's
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
@@ -125,9 +113,6 @@ validate_evidence() {
 # (DESKTOP_WINDOW in apps/desktop/src/main/window/panel-manager.ts).
 for evidence_path in \
     "$LUKE_EXPANDED_EVIDENCE_PATH" \
-    "$LUKE_SPEAKING_EVIDENCE_PATH" \
-    "$LUKE_MUTED_EVIDENCE_PATH" \
-    "$LUKE_DUPLEX_EVIDENCE_PATH" \
     "$LUKE_TASKS_EVIDENCE_PATH" \
     "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH" \
     "$LUKE_TASKS_WORK_EVIDENCE_PATH"; do
@@ -135,9 +120,6 @@ for evidence_path in \
 done
 
 printf 'Expanded visual evidence: %s\n' "$LUKE_EXPANDED_EVIDENCE_PATH"
-printf 'Speaking visual evidence: %s\n' "$LUKE_SPEAKING_EVIDENCE_PATH"
-printf 'Muted visual evidence: %s\n' "$LUKE_MUTED_EVIDENCE_PATH"
-printf 'Duplex visual evidence: %s\n' "$LUKE_DUPLEX_EVIDENCE_PATH"
 printf 'Tasks visual evidence: %s\n' "$LUKE_TASKS_EVIDENCE_PATH"
 printf 'Tasks transcript visual evidence: %s\n' "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
 printf 'Tasks work visual evidence: %s\n' "$LUKE_TASKS_WORK_EVIDENCE_PATH"

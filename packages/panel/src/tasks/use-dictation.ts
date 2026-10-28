@@ -19,8 +19,8 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
 /**
  * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Luke's service, and the words put at the caret.
  *
- * The press opens the microphone the voice window would (the Mac's own
- * over a Bluetooth headset's, `./microphone-choice.ts`), after
+ * The press opens the preferred microphone (the Mac's own over a
+ * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
  * WebM at the wire's bitrate, measured by an analyser the strip draws.
  * Finishing hands the clip to main in one act, and main to Luke's service,

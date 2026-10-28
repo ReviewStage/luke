@@ -281,7 +281,7 @@
   }
 
   /* The panel's shell (`../components/sidebar/`, `row-mark/`, `search-match/`,
-     and the panel's own call card, settings rows, and mobile bar): a row's
+     and the panel's own settings rows and mobile bar): a row's
      end mark, the sidebar's head and its corner, a settings row's inset and
      least heights, the handover's field chip, and the room a settings search
      lands a line below. A search's wash and a name at a dialog's size are the
@@ -616,7 +616,7 @@
   --radius-toast: var(--luke-radius-14);
   --shadow-toast: 0 1px 2px var(--luke-color-shadow-soft), 0 12px 36px var(--luke-color-shadow);
   --shadow-toast-dismiss: 0 1px 3px var(--luke-color-shadow-soft);
-  /* The compact strip's shadow, the call card's in its window, kept within the few pixels such a window leaves. */
+  /* The compact strip's shadow, kept within a few pixels. */
   --shadow-toast-compact: 0 2px 6px var(--luke-color-shadow);
   --z-index-toast: var(--luke-z-toast);
 
@@ -784,7 +784,7 @@
 
   /* The content and text components' own (`components/text/`, `text-link/`,
      `inline-ref/`, `code-card/`, `shortcut/`, `glyph-slot/`, `mark-strip/`,
-     `saved-tick/`, `working-mark/`, `thinking-dots/`): the top bar's title
+     `saved-tick/`, `working-mark/`): the top bar's title
      role and the reading leading; a link's hairline corner and its
      underline, a faint wash of its words' own ink; the placement hooks a
      glyph's seat, a chord, and the working mark read, each with the size it
@@ -802,7 +802,6 @@
   --text-shortcut: var(--luke-shortcut-text, var(--luke-type-caption-size));
   --spacing-working-mark: var(--luke-working-mark-size, var(--luke-space-16));
   --color-mark-strip-ink: var(--luke-mark-strip-ink);
-  --spacing-thinking-dot: 5px; /* off-scale: a wait's dot */
   --color-code: var(--luke-color-code-text);
   --color-code-run: light-dark(
     var(--luke-code-run-light, var(--luke-color-code-text)),
@@ -863,10 +862,10 @@
     calc(100% - var(--luke-space-48))
   );
 
-  /* Chips, media, and call (`components/attachment-chip/`, `picture-set/`,
+  /* Chips and media (`components/attachment-chip/`, `picture-set/`,
      `picture-tile/`, `page-thumb/`, `video-player/`, `provider-button/`,
-     `card-press/`, `composer-frame/`, `call/`). Their lengths name the
-     scale's steps where one fits, and say so where none does. */
+     `card-press/`, `composer-frame/`). Their lengths name the scale's steps
+     where one fits, and say so where none does. */
   --spacing-page-thumb-row: 48px; /* off-scale: a row's media line */
   --spacing-icon-16: var(--luke-icon-16);
   --color-veil: var(--luke-color-veil);
@@ -914,14 +913,7 @@
      shadow rather than ringed by a dark edge. */
   --shadow-composer:
     0 1px 2px var(--luke-color-shadow-soft), 0 12px 32px -16px var(--luke-color-shadow);
-  /* A call's bar (`components/call/`): no wider than a page's measure and
-     as tall as its two lines; and a caption's small glyph. */
-  --spacing-call-row-max: var(--luke-page-measure);
-  --spacing-call-row: calc(
-    var(--luke-type-section-leading) +
-    var(--luke-space-2) +
-    var(--luke-type-caption-leading)
-  );
+  /* A caption's small glyph. */
   --spacing-icon-12: var(--luke-icon-12);
 
   /* The page patterns (`components/layout/`, `settings-*`,
@@ -980,10 +972,8 @@
     (var(--luke-toolbar-height) - var(--luke-control-height)) /
     2
   );
-  /* A detail column's end, clear of what a phone's call card takes of the
-     window's foot (`--luke-card-room`, which the shell says). A toast is an
-     overlay and takes nothing. */
-  --spacing-detail-page-end: max(var(--luke-detail-page-inset), var(--luke-card-room, 0px));
+  /* A detail column's end. A toast is an overlay and takes nothing. */
+  --spacing-detail-page-end: var(--luke-detail-page-inset);
   --spacing-public-page-start: var(--luke-public-page-start);
   --spacing-public-page-end: var(--luke-public-page-end);
   --container-public-page: 700px; /* off-scale: the site's reading column */

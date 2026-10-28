@@ -99,7 +99,6 @@ type Values<T> = T[keyof T];
 interface ServerEventProperties {
   [SERVER_EVENT.TASK_CREATE]: {
     source: Values<typeof SERVER_TASK_SOURCE>;
-    has_issue: boolean;
   };
   [SERVER_EVENT.AGENT_START]: {
     model: string;

@@ -48,7 +48,8 @@
  * `GET /api/live/workspace-invitations?workspaceId=` answers its pending
  * invitations as one, to an owner or an admin of it alone, with the origin
  * each accept link is built on, which the desktop needs since it builds the
- * links itself.
+ * links itself. Both are woken by a write to the workspace's topic
+ * (`workspaceMembersLive`, `workspaceInvitationsLive`).
  *
  * `GET /api/live/channels?workspaceId=` answers one workspace's channels as
  * two statements, its channels and where each one's threads stand
@@ -96,8 +97,6 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
-import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
-import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
@@ -122,6 +121,8 @@ import {
   macCommandsLive,
   sidebarLive,
   taskInboxLive,
+  workspaceInvitationsLive,
+  workspaceMembersLive,
 } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
@@ -447,9 +448,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         isWorkspaceMember(context.userId, input.workspaceId),
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = workspaceMembersLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        workspaceMembersLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     channels: signedIn.channels.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -472,9 +475,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (!MANAGING_ROLES.has(workspace.value.role)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       }
-      const statement = workspaceInvitationsLiveStatement(context.userId, input.workspaceId);
-      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      const sealed = yield* sealedParts({ invitations: statement.value }, input);
+      const sealed = yield* liveQueryParts(
+        workspaceInvitationsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
       return { ...sealed, origin: new URL(context.request.url).origin };
     }),
   };

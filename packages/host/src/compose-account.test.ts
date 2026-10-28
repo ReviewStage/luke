@@ -5,7 +5,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { OpenConsent } from "@luke/credentials";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
 import { SIGN_IN_FAILURE } from "@luke/features/words";
 import {
@@ -18,9 +18,9 @@ import {
   gatewayHost,
 } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
+import type { OpenSocket } from "@luke/voice/live-socket";
 import { scriptedOpenSocket } from "@luke/voice/testing";
-import { HTTP_STATUS, isRecord, type WireRecord, type WireValue } from "@luke/wire";
+import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { jsonResponse } from "@luke/wire/testing";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -28,13 +28,7 @@ import { composeAccount } from "./compose-account.js";
 import { composeSettings } from "./compose-settings.js";
 import { type CookieSessionDoor, cookieAccountSourceLayer } from "./cookie-account-source.js";
 import { HostKernelTag } from "./effect/kernel.js";
-import {
-  AppIdentity,
-  Environment,
-  SecretCipher,
-  ServiceOrigin,
-  SignInConsent,
-} from "./effect/seams.js";
+import { AppIdentity, Environment, SecretCipher, SignInConsent } from "./effect/seams.js";
 import { type HostKernel, hostKernelOver } from "./host-kernel.js";
 import { oauthAccountSourceLayer } from "./oauth-account-source.js";
 import { runModeFor } from "./run-mode.js";
@@ -299,42 +293,6 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
     }),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
   ),
-);
-
-it.effect("a packaged host handed a service origin opens its voice socket on that origin", () =>
-  Effect.gen(function* () {
-    const origin = "https://preview.example.test";
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-origin-");
-    const script = scriptedOpenSocket([
-      () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: HTTP_STATUS.FORBIDDEN }),
-    ]);
-    const account = yield* signedInAccount({
-      // The kernel as `hostKernelLayer` builds it over that origin.
-      kernel: hostKernelOver({
-        stateRoot,
-        runMode: runModeFor({ capture: false, fixture: false }),
-        accountBaseUrl: `${origin}/api/auth`,
-        now: () => 0,
-        createId: () => "id",
-        report: () => undefined,
-        emit: () => undefined,
-      }),
-      machine: Layer.merge(
-        Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: true }),
-        Layer.succeed(ServiceOrigin, origin),
-      ),
-      openSocket: script.openSocket,
-    });
-
-    yield* Effect.orDie(account.voiceCapabilities.apply());
-    const sessions = account.voiceCapabilities.liveSessions;
-    assert.ok(sessions);
-    yield* Effect.scoped(
-      sessions.create({ sdpOffer: "v=0\r\n", taskId: "task-1", agentId: "agent-1" }),
-    );
-
-    assert.equal(script.opens[0]?.url, `wss://preview.example.test${VOICE_SERVICE_PATH.SESSIONS}`);
-  }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
 );
 
 /** The browser tab's service, on the tab's own origin, as Better Auth and Luke's routes answer it. */

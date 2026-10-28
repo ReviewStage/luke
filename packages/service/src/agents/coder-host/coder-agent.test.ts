@@ -97,7 +97,7 @@ function coderChannel() {
   );
 }
 
-/** The developer's own principal as the deployment carries it, as a spoken ask, a stream read, a cancel, or a retire is admitted under. */
+/** The developer's own principal as the deployment carries it, as a cancel or a retire is admitted under. */
 function asCarriedAccount(admitted: SessionAuthContext | undefined) {
   assert.ok(admitted);
   return [
@@ -126,7 +126,7 @@ function doorOf(channel: ReturnType<typeof coderChannelInput>) {
   };
 }
 
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, its typed opening of the account's own conversation, its spoken ask, opening or following up, and its read of the session's stream are all minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier, so a call's ask joins the agent's typed turn under way; another account's session is refused", async () => {
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session and its typed opening of the account's own conversation are both minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; another account's session is refused", async () => {
   const channel = coderChannel();
   assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
   const door = doorOf(channel);
@@ -162,47 +162,9 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
     [developer.authenticator, developer.principalType, developer.principalId, carried.attributes],
   );
 
-  // A call speaking into the agent: the voice's asks, presented as the developer, so eve steers
-  // each into a typed turn under way rather than holding it behind that turn.
-  const spoken = await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN));
-  assert.deepEqual(asCarriedAccount(spoken.admitted), CARRIED_ACCOUNT);
-  assert.equal(spoken.admitted?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.SPOKEN);
-  const spokenOpening = await door(deploymentOpening(BRAIN_HOST_TURN.SPOKEN));
-  assert.deepEqual(asCarriedAccount(spokenOpening.admitted), CARRIED_ACCOUNT);
-  const stream = await door(
-    deploymentRequest(`${OWN_SESSION}/stream`, BRAIN_HOST_TURN.SPOKEN, "GET"),
-  );
-  assert.deepEqual(asCarriedAccount(stream.admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
-  assert.deepEqual(
-    await door(deploymentRequest(`${OTHER_SESSION}/stream`, BRAIN_HOST_TURN.SPOKEN, "GET")),
-    { refused: BRAIN_HOST_REFUSAL.NOT_OWNER },
-  );
-});
-
-test("a call's spoken line carries ahead of it into the agent's history the note that its answer is heard, short, and never waits, since eve may steer it into a typed turn under way that keeps that turn's words; a typed line carries none", async () => {
-  const channel = coderChannel();
-  const { onMessage } = channel;
-  assert.ok(onMessage !== undefined);
-  const door = doorOf(channel);
-  const contextOf = async (turn: string) => {
-    const request = deploymentRequest(OWN_SESSION, turn);
-    const { admitted } = await door(request);
-    assert.ok(admitted);
-    const result = await onMessage({ eve: { caller: admitted, request } }, "words");
-    assert.equal(result.auth?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], turn);
-    return result.context;
-  };
-
-  const spoken = await contextOf(BRAIN_HOST_TURN.SPOKEN);
-  assert.equal(spoken?.length, 1);
-  const [note] = spoken ?? [];
-  assert.ok(note !== undefined);
-  assert.ok(note.includes("voice call") && note.includes("aloud"), note);
-  assert.ok(note.includes(`\`${CODER_TOOL.SLEEP}\``), note);
-  assert.equal(await contextOf(BRAIN_HOST_TURN.TYPED), undefined);
 });
 
 test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the developer's own principal, with no row of the table, and refused on a session the account does not reach", async () => {

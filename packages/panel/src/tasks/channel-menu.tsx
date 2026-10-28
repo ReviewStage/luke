@@ -11,13 +11,14 @@ import { channelEditable, channelUnread } from "./channels-model.js";
 import type { ChannelsControl } from "./use-channels.js";
 
 /**
- * channel-menu.tsx -- a channel's menu, as its sidebar row's right-click and a phone's list's long press both offer it, and the question its Archive asks.
+ * channel-menu.tsx -- a channel's menu, as its sidebar row's ⋯, its right-click, and a phone's long press all offer it, and the question its Archive asks.
  *
  * The menu offers Copy link, the channel's own link (`channelPlace`); Mark
- * as read, which stamps the reader's look at it now and stands unavailable
- * while nothing in it is unread; Edit, which asks for its name and purpose,
- * #general's purpose alone, since no member renames it; and, on any channel
- * but #general, which is never archived, Archive. Archiving asks first, in
+ * as read, which stamps the reader's look at it now and stands only while
+ * something in it is unread, never dimmed; Edit, which asks for its name and
+ * purpose, #general's purpose alone, since no member renames it; and, last
+ * and alone, on any channel but #general, which is never archived, Archive,
+ * whose words end in no "…" because it only asks to be sure. Archiving asks first, in
  * the accent, since it can be undone but reaches everyone in the workspace
  * (`packages/panel/AGENTS.md`'s Confirms); the question goes with its
  * workspace, its channel, and its surface, and a refusal stands in the card.
@@ -26,7 +27,7 @@ import type { ChannelsControl } from "./use-channels.js";
 /** What a channel's menu says of each act. */
 const CHANNEL_MENU_WORDS = {
   EDIT: "Edit…",
-  ARCHIVE: "Archive…",
+  ARCHIVE: "Archive",
 } as const;
 
 /** A channel's menu as a surface holds it: each channel's groups, and the question to draw beside them. */
@@ -66,31 +67,27 @@ export function useChannelMenu({
   );
   const groups = (channel: Channel): MenuAction[][] => {
     const copyLink = copyLinkItem(channelPlace(channel.id));
-    const read: MenuAction = {
-      ...commandAction(PANEL_COMMAND.MARK_READ, () => channels.onLook(channel.id), false),
-      disabled: !channelUnread(channel),
-    };
+    const read = channelUnread(channel)
+      ? [commandAction(PANEL_COMMAND.MARK_READ, () => channels.onLook(channel.id), false)]
+      : [];
     const edit: MenuAction = {
       label: CHANNEL_MENU_WORDS.EDIT,
       icon: <GLYPH.RENAME />,
       onSelect: () => onEdit(channel),
     };
-    const manage: MenuAction[] = channelEditable(channel)
-      ? [
-          edit,
-          {
-            label: CHANNEL_MENU_WORDS.ARCHIVE,
-            icon: <GLYPH.ARCHIVE />,
-            onSelect: () => {
-              setDoomed({ channel, workspaceId });
-              archive.ask();
-            },
-          },
-        ]
-      : [edit];
-    return [[...(copyLink === undefined ? [] : [copyLink]), read], manage].filter(
-      (group) => group.length > 0,
-    );
+    const archiveItem: MenuAction = {
+      label: CHANNEL_MENU_WORDS.ARCHIVE,
+      icon: <GLYPH.ARCHIVE />,
+      onSelect: () => {
+        setDoomed({ channel, workspaceId });
+        archive.ask();
+      },
+    };
+    return [
+      [...(copyLink === undefined ? [] : [copyLink]), ...read],
+      [edit],
+      channelEditable(channel) ? [archiveItem] : [],
+    ].filter((group) => group.length > 0);
   };
   return {
     groups,

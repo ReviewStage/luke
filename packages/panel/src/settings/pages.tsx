@@ -6,7 +6,7 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon, SpeakerIcon } from "@luke/ui";
+import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon } from "@luke/ui";
 import { FlaskConicalIcon, GLYPH, InfoIcon } from "@luke/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
@@ -32,7 +32,6 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
   [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
-  [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
   [SETTINGS_VIEW.THIS_MAC]: { title: "This Mac", icon: <LaptopIcon /> },
   [SETTINGS_VIEW.EXPERIMENTAL]: { title: "Experimental", icon: <FlaskConicalIcon /> },

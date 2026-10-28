@@ -215,9 +215,6 @@ importers:
       '@luke/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../../packages/live
       '@luke/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -1089,9 +1086,6 @@ importers:
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1211,15 +1205,9 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1483,8 +1471,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-
-  tools/voice-samples: {}
 
 packages:
 

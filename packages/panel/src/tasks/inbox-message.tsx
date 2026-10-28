@@ -10,7 +10,6 @@ import type { InboxCodeDoors } from "./inbox-code-card.js";
 import { inboxCommentFiles, inboxFileChips } from "./inbox-model.js";
 import { InboxPicture, InboxPictures } from "./inbox-pictures.js";
 import { LoneLinkCards } from "./lone-link-card.js";
-import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { WordsWorkspace } from "./use-link-standing.js";
@@ -185,8 +184,6 @@ export function MessageWords({
         <div
           className="inbox-message-words m-0 leading-reading select-text"
           data-inbox-message-text=""
-          // The agent's words alone may be replied to, as in its tab, never a member's.
-          {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
         >
           {fromAgent ? (
             <TranscriptWords text={message.text} asDocument />

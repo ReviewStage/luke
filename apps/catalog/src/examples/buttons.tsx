@@ -37,7 +37,8 @@ import { CatalogSection } from "../section";
  * Reload whose arrows turn once at each press; the IconButton's looks and toggle;
  * ButtonLink's looks and an IconButtonLink; the round shape a call's
  * controls take, a danger toggle off and on; the compact marks a row reveals
- * at its end, and a compact labelled button among words; a message's submit in each of its states, and unavailable; and
+ * at its end, and a compact labelled button among words; a yes or no whose
+ * recommended press wears its badge, offered and recorded; a message's submit in each of its states, and unavailable; and
  * a long label in a narrow column.
  */
 
@@ -206,6 +207,32 @@ function Buttons(): React.JSX.Element {
             Unavailable
           </Button>
         </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-badge" title="With a badge, offered and recorded">
+        <Stack gap={GAP.TIGHT}>
+          <Inline gap={GAP.TIGHT}>
+            <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE} badge="Recommended">
+              Approve
+            </Button>
+            <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE}>
+              Decline
+            </Button>
+          </Inline>
+          <Inline gap={GAP.TIGHT}>
+            <Button
+              size={BUTTON_SIZE.COMPACT}
+              variant={BUTTON_VARIANT.OUTLINE}
+              badge="Recommended"
+              pressed
+              readOnly
+            >
+              Approve
+            </Button>
+            <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE} readOnly>
+              Decline
+            </Button>
+          </Inline>
+        </Stack>
       </CatalogSection>
       <CatalogSection id="buttons-submit" title="A message's submit">
         <Inline>

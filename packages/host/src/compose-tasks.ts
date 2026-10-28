@@ -1339,7 +1339,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const held = heldTaskOf(taskId);
     const listed = view.tasks.find((row) => row.id === taskId);
     if (held === undefined || listed === undefined) return;
-    const { agents: _agents, issues: _issues, ...row } = listed;
+    const { agents: _agents, ...row } = listed;
     const { updatedAt, document, agentEdits, lastEdit, sectionEdits } = held;
     const task: Task = {
       ...row,

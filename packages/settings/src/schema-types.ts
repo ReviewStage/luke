@@ -8,8 +8,6 @@ import type { RuntimeStatus } from "./status.js";
 export const SETTINGS_PAGE = {
   /** Who is signed in and the ways out, the page Settings opens on. */
   ACCOUNT: "account",
-  /** The voice and its controls, under a pointer to Codex's row in Agents, where the OpenAI key a call runs on is kept. */
-  VOICE: "voice",
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
@@ -38,15 +36,13 @@ export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
 
 /**
  * Which run of rows inside a page draws a setting. A page is not always one
- * list: the Voice page draws its controls below the permission that lets Luke
- * listen, and a setting has to say which run it stands in rather than leave
- * the section to pick its own members.
+ * list: This Mac draws its microphone's route under the permission that lets
+ * Luke listen, and a setting has to say which run it stands in rather than
+ * leave the section to pick its own members.
  */
 export const SETTING_SECTION = {
   /** The page's own plain run of rows, for a page that has only one. */
   MAIN: "main",
-  /** The voice controls, below the permission that lets Luke listen. */
-  CONTROLS: "controls",
   /** What a diff marks, the first group of how code and diffs are drawn under Appearance's own rows: its layout, changed words, indicators, and backgrounds. */
   DIFF: "diff",
   /** How lines run, the second: wrap, numbers, and minimized comments. */
@@ -59,12 +55,13 @@ export const SETTING_SECTION = {
   PRIVACY: "privacy",
   /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
   STARTUP: "startup",
+  /** The microphone dictation listens on, a group of its own on This Mac, under the permission that lets Luke listen. */
+  MICROPHONE: "microphone",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];
 
 export const SETTINGS_RESET_SCOPE = {
-  VOICE: "voice",
   APPEARANCE: "appearance",
 } as const;
 
@@ -116,27 +113,16 @@ export interface SettingGuardResult<Value> {
 export interface SettingsVisibility {
   /** The runtime facts a row's own condition is judged from, and the experiments the account has on. */
   settings: RuntimeStatus & { experiments: ExperimentChoices };
-  /**
-   * Voice available and the microphone granted: until both, the Voice page
-   * holds only the way in.
-   */
-  voiceControlsDrawn: boolean;
   /** Whether the Account section stands. */
   accountDrawn: boolean;
   /** What the platform offers, which a platform feature's row stands on. */
   capabilities: readonly HostCapability[];
 }
 
-/** One option a row's control draws: the token it stores by, the words it shows, and the clip it plays where it has one. */
+/** One option a row's control draws: the token it stores by, and the words it shows. */
 export interface SettingOption {
   value: string;
   label: string;
-  /** The path of a clip that lets it be heard before it is chosen, such as a voice's, under the panel's asset base. */
-  sample?: string;
-  /** The heading it stands under where the set is drawn in groups, such as a voice's language. */
-  group?: string;
-  /** A short word of what it is, drawn at the end of its row where the control has room for one. */
-  tag?: string;
 }
 
 /**

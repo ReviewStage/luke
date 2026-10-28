@@ -1,4 +1,3 @@
-import { UI_PART_STATE, UI_PART_TYPE } from "@luke/features/brain";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
@@ -10,6 +9,7 @@ import {
   PICTURE_OMISSION,
   type PictureOmission,
 } from "@luke/features/conversation-picture-wire";
+import { UI_PART_STATE, UI_PART_TYPE } from "@luke/features/turn-run";
 import {
   type DataUIPart,
   type FileUIPart,

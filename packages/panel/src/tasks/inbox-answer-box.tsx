@@ -1,13 +1,17 @@
 import { useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentAttachment,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
 import { pasteCutWords } from "@luke/features/words";
 import { EXPERIMENT } from "@luke/settings";
-import { ComposerBody, ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
+import { Checkbox, ComposerBody, ComposerFoot, type ComposerNote, STATUS_TONE } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type RefObject, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
@@ -85,7 +89,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * why under it. Files stand for the developer's own words where they
  * wrote none, and while they are read the reply waits for them.
  *
- * Words selected in the agent's part of the thread and answered with Reply
+ * Words selected in the thread over the box and answered with Reply
  * are laid into the box as a quote block where the caret stands, the box
  * then taking the caret, as the agent's own box takes them
  * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,
@@ -101,6 +105,15 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * Once the item is settled, answered or taken back, the same box writes a
  * message on its thread, which reaches the agent and leaves the item where
  * it stands.
+ *
+ * Where the page offers it, a checkbox under the card turns the next send
+ * into a new thread rather than a reply: "Send as a new thread to", the
+ * item's agent's chip, and the chip of the channel it lands in. Ticked, the
+ * line asks to start a thread and Send reads "Start thread"; the words and
+ * files go as the thread's first message, its first line standing for its
+ * title, and the box unticks once the thread is started, so the next send
+ * is a reply again. It stands only where no question's controls do, since
+ * a thread started there would leave the question waiting.
  */
 
 /** Whether the box holds neither words nor files. */
@@ -115,13 +128,25 @@ const NOTE_PLACEHOLDER = "Add a note";
 const REPLY_PLACEHOLDER = "Reply";
 
 /** What the note says while the editor bundle could not be loaded. */
-export const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
+const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /** What the box's round Send is called, which is its tooltip too. */
 const SEND = "Send";
 
 /** What Send is named while its send is out. */
 const SENDING = "Sending";
+
+/** What Send reads, in words, while the box starts a new thread. */
+const START_THREAD = "Start thread";
+
+/** What the line asks for while the box starts a new thread. */
+const NEW_THREAD_PLACEHOLDER = "Start a new thread";
+
+/** What the checkbox under the card says before the agent's chip. */
+const SEND_AS_NEW = "Send as a new thread to";
+
+/** What it says between the agent's chip and the channel's. */
+const NEW_THREAD_IN = "in";
 
 /** What Send reads on an empty notice that waits on the reader's nod, which settles it without messaging the agent. */
 const GOT_IT = "Got it";
@@ -140,7 +165,7 @@ function answerPlaceholder(asks: boolean, own: string | undefined): string {
 }
 
 /** A box's field as its owner holds it: its editor, the field it stands in, the editor's bundle, and its lists and dictation. */
-export interface AnswerField {
+interface AnswerField {
   readonly editor: RefObject<ComposerEditorHandle | undefined>;
   readonly room: RefObject<HTMLDivElement | null>;
   /** The editor's bundle, once it has loaded; none while it loads or where it could not. */
@@ -156,7 +181,7 @@ export interface AnswerField {
  * server's chip says what a send does with it, a turn opened or the running
  * one steered, by the agent the words go to.
  */
-export function useAnswerField({
+function useAnswerField({
   draft,
   placeholder,
   self,
@@ -239,6 +264,8 @@ interface AnswerFormProps {
   readonly says?: ComposerNote | undefined;
   /** Whether Send reads Got it, a nod that messages nobody. */
   readonly nod: boolean;
+  /** Whether Send reads Start thread, the box starting a new thread rather than replying. */
+  readonly starts?: boolean | undefined;
   readonly sending: boolean;
   /** Whether a send waits, while one is out or files are read. */
   readonly held: boolean;
@@ -256,7 +283,7 @@ interface AnswerFormProps {
  * right, a dictation's strip in their place, and what the box says under
  * them; Send reading Got it where the box nods.
  */
-export function AnswerForm({
+function AnswerForm({
   field,
   asks,
   messages,
@@ -273,6 +300,7 @@ export function AnswerForm({
   tools,
   says,
   nod,
+  starts = false,
   sending,
   held,
   sendable,
@@ -316,8 +344,8 @@ export function AnswerForm({
         actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
         strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
         send={{
-          label: nod ? GOT_IT : SEND,
-          inWords: nod,
+          label: nod ? GOT_IT : starts ? START_THREAD : SEND,
+          inWords: nod || starts,
           empty: !sendable,
           held,
           busy: sending,
@@ -326,6 +354,34 @@ export function AnswerForm({
         note={says}
       />
     </PromptInput>
+  );
+}
+
+/** The checkbox under the card that turns the next send into a new thread: to the agent's chip, in the channel's where there is one. */
+function NewThreadChoice({
+  offer,
+  checked,
+  held,
+  onChange,
+}: {
+  offer: AnswerNewThread;
+  checked: boolean;
+  /** Whether a send is out, which nothing changes until it lands. */
+  held: boolean;
+  onChange: (checked: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <div className="inbox-new-thread flex min-w-0 pt-luke-8 pl-luke-4 text-muted-foreground">
+      <Checkbox checked={checked} disabled={held} onChange={onChange}>
+        {SEND_AS_NEW} {offer.agent}
+        {offer.channel === undefined ? null : (
+          <>
+            {" "}
+            {NEW_THREAD_IN} {offer.channel}
+          </>
+        )}
+      </Checkbox>
+    </div>
   );
 }
 
@@ -354,6 +410,25 @@ interface AnswerBoxProps {
   replyScope: RefObject<HTMLElement | null>;
   /** Brings the item's agent back from the archive, offered after a send it refused for being archived. */
   onUnarchiveAgent: () => Promise<ActionResult>;
+  /** The new thread the checkbox under the card starts instead of a reply; none where the page offers none. */
+  newThread?: AnswerNewThread | undefined;
+}
+
+/** A new thread's first message, as the box hands it: its words and files, and the key the start goes under. */
+export interface NewThreadStart {
+  readonly text: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly clientKey: string;
+}
+
+/** A new thread the box can start instead of a reply: who it goes to and where it lands, as chips, and the start itself. */
+export interface AnswerNewThread {
+  /** The item's agent's chip, whom the thread goes to. */
+  readonly agent: ReactNode;
+  /** The chip of the channel the thread lands in; none where the window lists no channels. */
+  readonly channel: ReactNode | undefined;
+  /** Starts the thread, answering why it did not, or nothing once it did. */
+  readonly onStart: (start: NewThreadStart) => Promise<string | undefined>;
 }
 
 /** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
@@ -368,6 +443,7 @@ function AnswerCard({
   keywords,
   replyScope,
   onUnarchiveAgent,
+  newThread,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
@@ -375,7 +451,16 @@ function AnswerCard({
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   const draft = control.draftOf(item);
-  const sending = control.sending.has(item.id);
+  const asks = controls !== undefined;
+  // Note that the checkbox stands only where no question's controls do, and unticks once its thread is started.
+  const [asNew, setAsNew] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
+  const starts = newThread !== undefined && !asks && asNew;
+  // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
+  const standing = useRef(draft);
+  standing.current = draft;
+  const sending = control.sending.has(item.id) || starting;
   // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
     holder: {
@@ -388,12 +473,13 @@ function AnswerCard({
   const channels = useExperiment(EXPERIMENT.CHANNELS);
   const nodded = acknowledgedOnOpen(item, readerId, channels) && !control.failed;
   // Note that under Channels a notice waiting on a teammate offers no Got it, since it is theirs to settle.
-  const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded;
+  const nod = asksNod(item, readerId, channels) && emptyBox(draft) && !nodded && !starts;
   const held = sending || files.reading;
   // Note that Send lights only where the box holds a reply the service takes: an answer to the open ask attached, or words or files, a notice's nod being Got it's.
-  const sendable = nod || inboxThreadSend(thread, draft) !== undefined;
-  const asks = controls !== undefined;
-  const placeholder = answerPlaceholder(asks, undefined);
+  const sendable = starts
+    ? !emptyBox(draft) && draft.note.trim().length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS
+    : nod || inboxThreadSend(thread, draft) !== undefined;
+  const placeholder = starts ? NEW_THREAD_PLACEHOLDER : answerPlaceholder(asks, undefined);
   const field = useAnswerField({
     draft: draft.note,
     placeholder,
@@ -429,6 +515,30 @@ function AnswerCard({
     setRefusal(undefined);
     setCut(false);
     control.onAcknowledge(item);
+  };
+  // Note that the same words and files sent again go under the key they went under, so a retry starts one thread.
+  // The box lets go of what it sent at once, as a reply does, so words written while the start is out stay
+  // there; a start refused puts what it sent back only into a box that holds nothing, so neither is lost.
+  const start = (offer: AnswerNewThread) => {
+    const sent = { note: draft.note, attachments: draft.attachments };
+    const text = sent.note.trim();
+    const words = JSON.stringify([text, sent.attachments]);
+    const key = attempt.current?.words === words ? attempt.current.key : crypto.randomUUID();
+    attempt.current = { key, words };
+    setRefusal(undefined);
+    setCut(false);
+    setStarting(true);
+    control.onDraft(item, { ...draft, note: "", attachments: [] });
+    void offer.onStart({ text, attachments: sent.attachments, clientKey: key }).then((refused) => {
+      setStarting(false);
+      if (refused === undefined) {
+        attempt.current = undefined;
+        setAsNew(false);
+        return;
+      }
+      setRefusal(refused);
+      if (emptyBox(standing.current)) control.onDraft(item, { ...standing.current, ...sent });
+    });
   };
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
@@ -469,15 +579,20 @@ function AnswerCard({
               : { words: note }
         }
         nod={nod}
+        starts={starts}
         sending={sending}
         held={held}
         sendable={sendable}
         onSubmit={() => {
           if (files.reading) return;
-          if (nod) acknowledge();
+          if (starts) start(newThread);
+          else if (nod) acknowledge();
           else message();
         }}
       />
+      {newThread === undefined || asks ? null : (
+        <NewThreadChoice offer={newThread} checked={asNew} held={sending} onChange={setAsNew} />
+      )}
       {quotes ? (
         <ReplyToSelection
           scope={replyScope}

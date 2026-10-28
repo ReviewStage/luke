@@ -31,7 +31,7 @@ import {
 
 /**
  * The workspace acts, through the act port as a window calls them: only a
- * panel of this build's own renderer asks; the voice and call windows, and
+ * panel of this build's own renderer asks; any other window, and
  * a frame this build does not trust, are refused in each kind's own words
  * before the host is asked; a panel's ask reaches the host with its payload
  * as the kind's schema read it, and answers what the host answered; a write
@@ -44,9 +44,8 @@ import {
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const INVITATION = {
   id: "inv-1",
@@ -370,17 +369,15 @@ async function settled(client: ActPortClient, kind: WorkspaceKind, payload: AnyP
   }
 }
 
-it("the voice and call windows are refused every workspace act in the kind's own words, and the host is not asked", async () => {
-  for (const actor of [VOICE, CALL]) {
-    const { client, asked, browsed } = windowPort(actor);
-    for (const act of ACTS) {
-      assert.deepEqual(await settled(client, act.kind, act.payload), {
-        refused: REFUSAL[act.kind],
-      });
-    }
-    assert.deepEqual(asked, []);
-    assert.deepEqual(browsed, []);
+it("a window that is not a panel is refused every workspace act in the kind's own words, and the host is not asked", async () => {
+  const { client, asked, browsed } = windowPort(OTHER_WINDOW);
+  for (const act of ACTS) {
+    assert.deepEqual(await settled(client, act.kind, act.payload), {
+      refused: REFUSAL[act.kind],
+    });
   }
+  assert.deepEqual(asked, []);
+  assert.deepEqual(browsed, []);
 });
 
 it("a frame this build does not trust is refused every workspace act, even as a panel, and the host is not asked", async () => {
@@ -711,11 +708,11 @@ it("one workspace's people unfollow on its way holds no other workspace's follow
   await elsewhere.return(undefined);
 });
 
-it("the voice window is refused a workspace's people, and the host is not asked", async () => {
-  const { client, asked } = windowPort(VOICE);
+it("a window that is not a panel is refused a workspace's people, and the host is not asked", async () => {
+  const { client, asked } = windowPort(OTHER_WINDOW);
   try {
     await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-    assert.fail("the voice window's stream was opened");
+    assert.fail("the stream was opened");
   } catch (error) {
     assert.ok(error instanceof ORPCError);
     assert.equal(error.code, ACT_ERROR.REFUSED);

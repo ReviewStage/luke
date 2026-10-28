@@ -18,8 +18,7 @@ import { agoText, momentText, sinceText } from "@luke/features/time-format";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
-  MoreButton,
-  moreLabel,
+  IconButton,
   motionHeld,
   SavedTick,
   STATUS_TONE,
@@ -28,19 +27,17 @@ import {
   Text,
   TextButton,
   Tooltip,
-  useMenu,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import type { MarkdownTaskToggler } from "@luke/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
-import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import { useEditedLinksHost } from "../link-menu.js";
 import {
@@ -75,13 +72,6 @@ import {
 } from "./plan-document-editor.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { UNIT_ATTRIBUTED_CLASS, UNIT_BYLINE_CLASS, UNIT_MORE_CLASS } from "./plan-unit-look.js";
-import {
-  copyTaskLinkItem,
-  markReadItem,
-  type ReadMark,
-  renameTaskItem,
-  versionHistoryItem,
-} from "./task-menu-items.js";
 import {
   type ChaseState,
   chaseBehind,
@@ -175,12 +165,6 @@ interface LinkedTask {
   readonly taskId: string;
   readonly place: MentionPlace;
 }
-
-/** What a section's ⋯ is called. */
-const SECTION_THING = "Section";
-
-/** What the title's ⋯ is called. */
-const TITLE_THING = "Title";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
@@ -493,9 +477,6 @@ const UNIT_CLASS = "plan-unit";
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
 const WRITING_CLASS = "plan-writing";
 
-/** The class of the unit the caret waits at the end of, where it blinks. */
-const RESTING_CLASS = "plan-caret-resting";
-
 /** The class of a section changed since the developer last looked, tinted until they dismiss it. */
 const CHANGED_CLASS =
   "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-luke-6 after:-inset-y-luke-2 after:-z-1 after:rounded-luke-6 after:bg-plan-changed";
@@ -542,7 +523,7 @@ function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function useTaskChase(task: Task, live: boolean, reader: TaskReader): TaskChase {
+function useTaskChase(task: Task, reader: TaskReader): TaskChase {
   const [chase, setChase] = useState(() => opened(task));
   let current = chase;
   if (chase.taskId !== task.id || chase.body !== task.document.body) {
@@ -564,7 +545,7 @@ function useTaskChase(task: Task, live: boolean, reader: TaskReader): TaskChase 
   }, [behind]);
 
   return {
-    views: chaseView(current.state, live),
+    views: chaseView(current.state),
     behind,
     jumps: current.state.jumps,
   };
@@ -573,9 +554,6 @@ function useTaskChase(task: Task, live: boolean, reader: TaskReader): TaskChase 
 function unitClass(view: UnitView, changed: boolean): string {
   const lit = changed ? ` ${CHANGED_CLASS}` : "";
   if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
-  if (view.resting) {
-    return `${UNIT_CLASS} ${RESTING_CLASS}${lit}`;
-  }
   return `${UNIT_CLASS}${lit}`;
 }
 
@@ -741,51 +719,40 @@ function attributed(
 }
 
 /**
- * A unit's ⋯ at its row's end, a section's or the title's: the window's own
- * menu over `items`, shown while the pointer or the keyboard is on its unit.
+ * A unit's Copy link at its row's end, a section's or the title's: shown while
+ * the pointer or the keyboard is on its unit, and answered with the window's
+ * toast as Copy link in a menu is.
  */
-function UnitMenu({
-  thing,
-  items,
+function UnitLinkButton({
+  link,
   tabbable,
 }: {
-  /** What the unit is, which names its ⋯ and its menu. */
-  thing: string;
-  items: readonly MenuAction[];
+  /** The unit's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown. */
+  link: string;
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
 }): React.JSX.Element {
-  const menu = useMenu(true);
-  const trigger = menu.trigger();
+  const copy = useCopyToast();
   return (
-    <>
-      {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
-      <span className={UNIT_MORE_CLASS}>
-        <MoreButton
-          thing={thing}
+    <span className={UNIT_MORE_CLASS}>
+      <Tooltip label={LINK_COPY.LABEL}>
+        <IconButton
+          icon={<GLYPH.LINK />}
+          label={LINK_COPY.LABEL}
           tabbable={tabbable}
-          {...trigger}
           onClick={(event) => {
             // Note that the press stops here, because a click into a section opens its editor.
             event.stopPropagation();
-            trigger.onClick(event);
+            copy(link, LINK_COPY.COPIED);
           }}
         />
-      </span>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={moreLabel(thing)}
-          menu={menu.drawn}
-          groups={[items]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+      </Tooltip>
+    </span>
   );
 }
 
-/** A section's ⋯, holding the one item that copies the section's link. */
-function SectionMenu({
+/** A section's Copy link button. */
+function SectionLink({
   linked,
   anchor,
   tabbable,
@@ -794,49 +761,23 @@ function SectionMenu({
   anchor: string;
   tabbable: boolean;
 }): React.JSX.Element {
-  const copy = useCopyToast();
-  // Note that the link is the section's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown.
-  const copyLink = () =>
-    copy(
-      encodeMention({ kind: MENTION_KIND.SECTION, taskId: linked.taskId, anchor }, linked.place),
-      LINK_COPY.COPIED,
-    );
-  const item: MenuAction = {
-    label: LINK_COPY.LABEL,
-    icon: <LinkIcon aria-hidden="true" />,
-    onSelect: copyLink,
-  };
-  return <UnitMenu thing={SECTION_THING} items={[item]} tabbable={tabbable} />;
+  const link = encodeMention(
+    { kind: MENTION_KIND.SECTION, taskId: linked.taskId, anchor },
+    linked.place,
+  );
+  return <UnitLinkButton link={link} tabbable={tabbable} />;
 }
 
-/**
- * The title's ⋯, drawn as a section's is: Copy link, the plan's, as the plan's
- * own ⋯ menu offers it, then Mark as unread or read where the window keeps
- * the plan's looks, Rename where the title can be edited, and Version
- * history where the window opens it, and nothing more, since the plan's
- * menu holds the rest.
- */
-function TitleMenu({
+/** The title's Copy link button, copying the plan's link as the plan's own menu does. */
+function TitleLink({
   linked,
   tabbable,
-  readMark,
-  onRename,
-  onShowHistory,
 }: {
   linked: LinkedTask;
   tabbable: boolean;
-  readMark: ReadMark | undefined;
-  onRename: (() => void) | undefined;
-  onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
-  const copy = useCopyToast();
-  const items = [
-    copyTaskLinkItem(copy, linked.taskId, linked.place),
-    ...(readMark === undefined ? [] : [markReadItem(readMark)]),
-    ...(onRename === undefined ? [] : [renameTaskItem(onRename)]),
-    ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
-  ];
-  return <UnitMenu thing={TITLE_THING} items={items} tabbable={tabbable} />;
+  const link = encodeMention({ kind: MENTION_KIND.TASK, taskId: linked.taskId }, linked.place);
+  return <UnitLinkButton link={link} tabbable={tabbable} />;
 }
 
 /**
@@ -888,7 +829,6 @@ function sameView(left: UnitView, right: UnitView): boolean {
     left.heading === right.heading &&
     left.words === right.words &&
     left.writing === right.writing &&
-    left.resting === right.resting &&
     left.fresh === right.fresh &&
     sameEdit(left.edit, right.edit)
   );
@@ -986,7 +926,7 @@ const DocumentUnit = memo(function DocumentUnit({
   );
   const menu =
     linked === undefined || anchor === "" ? null : (
-      <SectionMenu linked={linked} anchor={anchor} tabbable={entry} />
+      <SectionLink linked={linked} anchor={anchor} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }, sameUnit);
@@ -1065,9 +1005,7 @@ export interface TitleRename {
 }
 
 /**
- * The task's document: its name as the title over its text. `live` is the
- * task's call in progress, which keeps the caret waiting where the typing
- * last stopped; `onShowHistory` opens the plan's version history from the
+ * The task's document: its name as the title over its text. `onShowHistory` opens the plan's version history from the
  * byline's "Last edited by", on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
@@ -1081,8 +1019,7 @@ export interface TitleRename {
  * the end under its last line, or anywhere where it has no text yet, and on
  * the nearest line beside it. `looks` are the sections changed since the developer last
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
- * none are. `readMark` is whether the plan is marked unread, which the
- * title's ⋯ offers to flip.
+ * none are.
  *
  * A memo boundary: the task's page drawn again over the same task and the
  * same doors, as its column's focus, its side panel's width, and the
@@ -1090,14 +1027,12 @@ export interface TitleRename {
  */
 export const PlanBody = memo(function PlanBody({
   task,
-  live,
   onShowHistory,
   onEdit,
   onRename,
   onDraftName = NO_DRAFT,
   rename,
   looks = NO_LOOKS,
-  readMark,
   sectionLinks,
   reader = NO_READER,
   agents,
@@ -1106,18 +1041,15 @@ export const PlanBody = memo(function PlanBody({
   titleActions = true,
 }: {
   task: Task;
-  live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
   onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
   onDraftName?: ((name: string | undefined) => void) | undefined;
-  /** The open task's rename door, which the title's ⋯ asks and whose asks put the caret in the title; without it, the ⋯ offers no Rename. */
+  /** The open task's rename door, whose asks put the caret in the title. */
   rename?: TitleRename | undefined;
   looks?: TaskLooks;
-  /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
-  readMark?: ReadMark;
   /** What the task's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
@@ -1131,7 +1063,7 @@ export const PlanBody = memo(function PlanBody({
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
 }): React.JSX.Element {
-  const { views, behind, jumps } = useTaskChase(task, live, reader);
+  const { views, behind, jumps } = useTaskChase(task, reader);
   const editable = onEdit !== undefined;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
@@ -1446,13 +1378,10 @@ export const PlanBody = memo(function PlanBody({
   const titled = editable && onRename !== undefined;
   const titleMenu =
     !titleActions || linked === undefined ? null : (
-      <TitleMenu
+      <TitleLink
         linked={linked}
-        // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
+        // Note that a document that cannot be edited has no block Tab stop, so the button is one.
         tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
-        readMark={readMark}
-        onRename={titled ? rename?.onBegin : undefined}
-        onShowHistory={onShowHistory}
       />
     );
   return (

@@ -78,7 +78,7 @@ import {
 } from "../agents/brain-host/eve-sessions.js";
 import { CODER_REFUSAL } from "../agents/coder-host/bounds.js";
 import { requestUserId } from "../auth/bearer.js";
-import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import { TURN_FAILURE } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -837,7 +837,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             conversationId: agent.conversationId,
             origin: TURN_ORIGIN.TYPED,
             status: TURN_STATUS.FAILED,
-            failure: BRAIN_REQUEST_FAILURE.MODEL,
+            failure: TURN_FAILURE.MODEL,
             failureDetail: `checkout: ${CODER_REFUSAL.NOT_REACHABLE}`,
           }),
         );
@@ -877,7 +877,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const ended = yield* turnThenLine(
           "Session ended",
           TURN_STATUS.FAILED,
-          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          TURN_FAILURE.SESSION_ENDED,
         );
         const awaiting = yield* turnThenLine("Line awaits", TURN_STATUS.SETTLED, null);
 
@@ -975,7 +975,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             conversationId: agent.conversationId,
             origin: TURN_ORIGIN.TYPED,
             status: TURN_STATUS.FAILED,
-            failure: BRAIN_REQUEST_FAILURE.ABANDONED,
+            failure: TURN_FAILURE.ABANDONED,
           }),
         );
 

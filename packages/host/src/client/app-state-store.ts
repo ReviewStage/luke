@@ -1,5 +1,5 @@
 /**
- * app-state-store.ts -- the one document every window of a client is drawn from: the store that holds it, the push that carries it out, the patches that move it, and the projections a window is handed.
+ * app-state-store.ts -- the one document every window of a client is drawn from: the store that holds it, the push that carries it out, and the patches that move it.
  */
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -9,13 +9,7 @@ import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import type { BuildCommit } from "@luke/settings/update";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
-import {
-  type AppState,
-  type AppStateSnapshot,
-  type AppWindowFacts,
-  NO_ACCESS,
-} from "../app-state.js";
-import { stagedCallState } from "../fixture-stage.js";
+import { type AppState, NO_ACCESS } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -156,49 +150,6 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
   };
 }
 
-/** Which window a document is handed to, as far as what it draws goes. */
-interface WindowRole {
-  readonly voice: boolean;
-  readonly call: boolean;
-}
-
-/**
- * The document as one window is handed it, its own facts beside it. The call
- * transcript reaches the panels alone, which draw it: the voice window
- * reports it and the call window draws no line of it. And the voice window
- * is handed no view, because the view is the one it reports itself
- * (`reportVoiceView`), and nothing else of the voice slice. Each
- * stream sends a window only what moved in what it is handed
- * (`push-procedures.ts`), so a caption the voice window reports reaches it
- * as nothing, and the call window as the view alone.
- */
-export function windowAppState(
-  held: AppState,
-  role: WindowRole,
-  window: AppWindowFacts,
-): AppStateSnapshot {
-  if (!role.voice && !role.call) return { ...held, window };
-  const { callTranscript: _callTranscript, ...drawn } = held;
-  return role.voice ? { ...drawn, voice: {}, window } : { ...drawn, window };
-}
-
-/**
- * The voice slice once the voice window that reported its view is gone: no
- * view, since an idle voice is what every panel draws in its place.
- */
-export function voiceWindowGone(): AppState["voice"] {
-  return {};
-}
-
-/**
- * The voice slice once the voice window has been given up on for the run:
- * gone as above, and voice unavailable until Luke is reopened, which every
- * panel says where it offers a call.
- */
-export function voiceWindowGaveUp(): AppState["voice"] {
-  return { ...voiceWindowGone(), unavailable: true };
-}
-
 /** What a launch knows of itself before the host answers anything, which is the run slice's own facts. */
 interface ClientRunFacts {
   readonly launch: {
@@ -215,11 +166,9 @@ interface ClientRunFacts {
 
 /**
  * The document as a launch begins it: this process's own facts, what the
- * platform offers, and an empty
- * standing for everything the host has not answered yet, but the call a
- * call profile's fixture run stages (`fixture-stage.ts`). Nothing here reads
- * a device or the host — the first bootstrap and the events after it are
- * what fill the rest in.
+ * platform offers, and an empty standing for everything the host has not
+ * answered yet. Nothing here reads a device or the host — the first bootstrap
+ * and the events after it are what fill the rest in.
  */
 export function initialAppState(
   config: ClientRunFacts,
@@ -227,8 +176,6 @@ export function initialAppState(
   capabilities: readonly HostCapability[],
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
-  // A call profile's fixture run opens on its staged call, as no voice window reports one.
-  const staged = stagedCallState(launch);
   return {
     run: {
       profile: launch.profile,
@@ -246,14 +193,13 @@ export function initialAppState(
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    voice: staged?.voice ?? {},
-    tasks: staged?.tasks ?? IDLE_TASKS_VIEW,
+    voice: {},
+    tasks: IDLE_TASKS_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
-    ...(staged === undefined ? undefined : { callTranscript: staged.callTranscript }),
   };
 }

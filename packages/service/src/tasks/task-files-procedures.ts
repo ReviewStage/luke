@@ -1,14 +1,12 @@
 /**
  * task-files-procedures.ts -- what a plan's tabs read beside its text, and a picture kept on it, as the hosted oRPC router answers them.
  *
- * `GET /api/plans/{id}/code` is every code Luke showed on the task, read
- * back from its conversation (`tasks/task-work-store.ts`).
- * `/api/plans/{id}/file` is a window of one file of the task's repository
- * for the File tab, read from GitHub as it stands now, or at the commit an
- * inbox item's code reference pins, through the App, under the rule
- * `show_code` is held to (`tasks/task-file.ts`); `/api/plans/{id}/tree` one
- * folder of it for the tree beside that tab, listed where and as the file is
- * read (`tasks/task-tree.ts`); and `/api/plans/{id}/skills` the skills a
+ * `GET /api/plans/{id}/file` is a window of one file of the task's
+ * repository for the File tab, read from GitHub as it stands now, or at the
+ * commit an inbox item's code reference pins, through the App, under the
+ * rule a shown file is held to (`tasks/task-file.ts`);
+ * `/api/plans/{id}/tree` one folder of it for the tree beside that tab,
+ * listed where and as the file is read (`tasks/task-tree.ts`); and `/api/plans/{id}/skills` the skills a
  * developer may choose of that repository, read where and as the file is
  * (`tasks/task-skills.ts`). `/api/plans/{id}/pages` is the pages agents
  * wrote for the task, each by its newest version, and
@@ -58,7 +56,6 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import { readTaskFile } from "./task-file.js";
 import { readTaskSkills } from "./task-skills.js";
 import { readTaskTree } from "./task-tree.js";
-import { readTaskCode } from "./task-work-store.js";
 
 export interface TaskFilesProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -121,10 +118,6 @@ function pageVersionOf(version: string): Effect.Effect<number, HostedRefusal> {
 export function taskFilesProcedures(seams: TaskFilesProcedureSeams) {
   const taskFiles = hosted.taskFiles.use(accountMiddleware(seams.resolveUserId));
   return {
-    code: taskFiles.code.effect(function* ({ input, context }) {
-      const taskId = yield* pathUuid(input.id);
-      return yield* found(yield* hostedStoreOrUnavailable(readTaskCode(context.userId, taskId)));
-    }),
     file: taskFiles.file.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
       const window = yield* fileWindowOf(input);
