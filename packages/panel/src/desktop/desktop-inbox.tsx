@@ -667,24 +667,27 @@ export function DesktopInbox({
               </div>
             </PageFind>
             {move.dialog}
+            {/* The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are. */}
             {drawing.panel ? (
-              <InboxSidePanel
-                tasks={tasks}
-                drawing={{ ...drawing, panel: drawing.panel }}
-                focused={sideFocused}
-                taskId={taskId}
-                panelFor={panelFor}
-                repository={chosenTask?.repository ?? agents.agentRepository ?? null}
-                pages={pages}
-                agents={named}
-                views={views}
-                mentions={mentions}
-                phone={
-                  room === SHELL_ROOM.NARROW && chosen !== undefined
-                    ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
-                    : undefined
-                }
-              />
+              <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+                <InboxSidePanel
+                  tasks={tasks}
+                  drawing={{ ...drawing, panel: drawing.panel }}
+                  focused={sideFocused}
+                  taskId={taskId}
+                  panelFor={panelFor}
+                  repository={chosenTask?.repository ?? agents.agentRepository ?? null}
+                  pages={pages}
+                  agents={named}
+                  views={views}
+                  mentions={mentions}
+                  phone={
+                    room === SHELL_ROOM.NARROW && chosen !== undefined
+                      ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                      : undefined
+                  }
+                />
+              </LinkWorkspaceProvider>
             ) : null}
           </div>
         </AutomationDirectory>
