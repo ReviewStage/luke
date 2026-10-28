@@ -52,7 +52,9 @@ export const SETTING_SECTION = {
   TEXT: "text",
   /** Where the account's Luke links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
-  /** Whether this Luke counts how its features are used, a group of its own on Account, under Links. */
+  /** What New task does once a task starts, a group of its own on Account, under Links. */
+  TASKS: "tasks",
+  /** Whether this Luke counts how its features are used, a group of its own on Account, under Tasks. */
   PRIVACY: "privacy",
   /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
   STARTUP: "startup",

@@ -32,7 +32,7 @@ import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -496,6 +496,42 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   tab.stand({ shown: false });
   tab.stand({ shown: true });
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
+});
+
+/** A start's payload, read back for whether it asked to open nothing. */
+const readQuiet = Schema.decodeUnknownOption(
+  Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),
+);
+
+test("with Open a task once it starts off, New task starts the task without opening it, and its toast's Open opens it", async () => {
+  handState({}, { settings: appSettingsWire(settingsView({ openNewTask: false })) });
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+
+  act(() => tab.control().onNewTask());
+  await act(async () => {
+    await tab.control().newTask.start("Dark mode", null, tab.control().newTask.workspaceId);
+  });
+  const started = {
+    quiet: tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
+      .map((asked) => Option.getOrUndefined(readQuiet(asked.payload))?.quiet),
+    dialog: tab.control().newTask.open,
+    says: newestToastSays(),
+  };
+  act(() => (newestToastAction() ?? assert.fail("the toast offers Open")).click());
+  await settle();
+
+  assert.deepEqual(started, { quiet: [true], dialog: false, says: "Task startedOpen" });
+  assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID]);
+  handState({});
 });
 
 /** A line of a file of the task's repository, as a place names it to open. */

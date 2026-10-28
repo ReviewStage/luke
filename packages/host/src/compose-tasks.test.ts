@@ -1295,23 +1295,31 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
-it.effect("a quiet start opens nothing and answers its task", () =>
-  Effect.gen(function* () {
-    const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
-    const { call, listed, last } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* listed();
-    service.createAnswer = {
-      ok: true,
-      answer: { task: task(INVITES, "Invitation expiry", "", 10) },
-    };
+it.effect(
+  "a quiet start opens nothing and answers its task, and its agent's start where it named one",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
+      const { call, listed, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const made = task(INVITES, "Invitation expiry", "", 10);
+      const refusal = { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE };
+      service.createAnswer = { ok: true, answer: { task: made } };
+      const started = yield* call(GATEWAY_METHOD.TASKS_START, {
+        name: "Invitation expiry",
+        quiet: true,
+      });
+      service.createAnswer = { ok: true, answer: { task: made, agent: refusal } };
+      const withAgent = yield* call(GATEWAY_METHOD.TASKS_START, {
+        agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+        quiet: true,
+      });
 
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
-      { planId: INVITES },
-    );
-    assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
-  }),
+      assert.deepEqual(started, { planId: INVITES });
+      assert.deepEqual(withAgent, { planId: INVITES, agentStart: refusal });
+      assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
+    }),
 );
 
 it.effect(
