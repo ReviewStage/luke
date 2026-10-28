@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { act, createElement } from "react";
@@ -29,7 +29,7 @@ afterEach(() => {
 
 /** The first line of the row an agent's turn draws for one finished call: its words, and the mark it leads with. */
 function rowOf(tool: string, input: WireRecord, output: WireRecord) {
-  const message: CodingAgentMessage = {
+  const message: AgentTranscriptMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [

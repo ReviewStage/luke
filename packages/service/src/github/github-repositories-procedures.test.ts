@@ -31,7 +31,7 @@ import {
   HOSTED_SERVICE_PATH,
   HostedTaskClient,
 } from "@luke/features";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   GITHUB_ACCESS,
   ISSUE_STATE,

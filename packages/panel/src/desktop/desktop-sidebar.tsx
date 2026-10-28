@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   inPinOrder,

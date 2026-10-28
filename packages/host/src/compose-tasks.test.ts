@@ -11,13 +11,13 @@ import {
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
 import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
+  AGENT_BRIEF,
+  AGENT_STATUS,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
@@ -1304,7 +1304,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       const made = task(INVITES, "Invitation expiry", "", 10);
-      const refusal = { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE };
+      const refusal = { failure: AGENT_CALL_FAILURE.INVALID_CHOICE };
       service.createAnswer = { ok: true, answer: { task: made } };
       const started = yield* call(GATEWAY_METHOD.TASKS_START, {
         name: "Invitation expiry",
@@ -1667,7 +1667,7 @@ it.effect(
         effort: "high",
         title: null,
         createdAt: 11,
-        status: CODING_AGENT_STATUS.STARTING,
+        status: AGENT_STATUS.STARTING,
         turnId: null,
       };
       const params = {
@@ -1679,14 +1679,14 @@ it.effect(
       const started = yield* call(GATEWAY_METHOD.TASKS_START, params);
       service.createAnswer = {
         ok: true,
-        answer: { task: made, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+        answer: { task: made, agent: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE } },
       };
       const refused = yield* call(GATEWAY_METHOD.TASKS_START, params);
 
       assert.deepEqual(started, { planId: INVITES, agentStart: { agent } });
       assert.deepEqual(refused, {
         planId: INVITES,
-        agentStart: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+        agentStart: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE },
       });
       assert.equal(last()?.activeTaskId, INVITES);
     }),
@@ -3700,7 +3700,7 @@ function agentRow(planId: string | null, ago: number) {
     effort: "high",
     contextWindow: null,
     title: "Invite flow",
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
     repository: "acme/relay",
     starterId: "user-dana",
     starterName: "Dana",
@@ -3786,11 +3786,11 @@ it.effect(
       assert.equal(drawn?.name, "Teammate invitations, live");
       assert.deepEqual(
         [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
-        [1, [CODING_AGENT_STATUS.STARTING]],
+        [1, [AGENT_STATUS.STARTING]],
       );
       assert.deepEqual(
         last()?.taskAgents?.map((each) => [each.planId, each.status, each.turnId]),
-        [[INVITES, CODING_AGENT_STATUS.STARTING, null]],
+        [[INVITES, AGENT_STATUS.STARTING, null]],
       );
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
@@ -3801,7 +3801,7 @@ it.effect(
       const ended = last()?.tasks[0]?.agents;
       assert.deepEqual(
         [ended?.working, ended?.agents.map((line) => line.status)],
-        [0, [CODING_AGENT_STATUS.FAILED]],
+        [0, [AGENT_STATUS.FAILED]],
       );
     }),
 );
@@ -3836,20 +3836,20 @@ it.effect(
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
-        [CODING_AGENT_STATUS.RUNNING],
+        [AGENT_STATUS.RUNNING],
       );
       yield* TestClock.adjust(Duration.minutes(3));
       yield* settled;
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
-        [CODING_AGENT_STATUS.RUNNING],
+        [AGENT_STATUS.RUNNING],
         "inside the line's grace",
       );
       yield* TestClock.adjust(Duration.minutes(2));
       yield* settled;
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
-        [CODING_AGENT_STATUS.FAILED],
+        [AGENT_STATUS.FAILED],
         "the line's grace ran out with no row moving",
       );
     }),

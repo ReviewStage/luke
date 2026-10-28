@@ -41,7 +41,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
+import { listAgents, readAgentByKey } from "@luke/database/models/agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
 import {
@@ -57,7 +57,7 @@ import {
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { CODING_AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
@@ -226,7 +226,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   idempotencyKey: string,
   organizationId: string,
 ): Effect.fn.Return<Option.Option<TaskStartAnswer>, HostedRefusal, DatabaseServices> {
-  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
+  const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, idempotencyKey));
   if (Option.isNone(made)) return Option.none();
   const task =
     made.value.taskId === null
@@ -246,7 +246,7 @@ const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
   Effect.gen(function* () {
-    const made = yield* readCodingAgentByKey(userId, idempotencyKey);
+    const made = yield* readAgentByKey(userId, idempotencyKey);
     if (Option.isNone(made) || made.value.taskId !== taskId) return Option.none();
     return Option.some(yield* summaryOf(userId, made.value));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
@@ -371,7 +371,7 @@ const runsOnChange = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { runsOn } = yield* reachedTask(userId, taskId);
   const stands =
     asked.machine === runsOn.machine &&
-    (asked.machine === CODING_AGENT_MACHINE.VERCEL || asked.deviceId === runsOn.deviceId);
+    (asked.machine === AGENT_MACHINE.VERCEL || asked.deviceId === runsOn.deviceId);
   if (!stands) return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
 });
 
@@ -553,7 +553,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       yield* runsOnChange(userId, taskId, changes.runsOn);
       const archiving = changes.archived === true;
       if (archiving) {
-        const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+        const agents = yield* hostedStoreOrUnavailable(listAgents(userId, taskId));
         // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
         if (!(yield* everyStopsForGood(agents))) {
           return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -625,7 +625,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const taskId = yield* pathUuid(input.id);
       const eveAt = yield* retiringReach(seams, request, userId);
       const agents = yield* hostedStoreOrUnavailable(
-        listCodingAgents(userId, taskId, { includeArchived: true }),
+        listAgents(userId, taskId, { includeArchived: true }),
       );
       yield* everyStoppedForGood(seams, writer, request, userId, agents);
       // The stopped agents' sessions are retired before the delete's transaction, so no lock waits on eve;

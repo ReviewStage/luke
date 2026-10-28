@@ -1,4 +1,4 @@
-import { PULL_REQUEST_STATE } from "./coding-agent-wire.js";
+import { PULL_REQUEST_STATE } from "./agent-wire.js";
 import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
 
 /**

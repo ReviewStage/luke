@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { INPUT_LINE } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
-import { claimCodingAgentRunnerLease } from "@luke/database/models/coding-agent-runner-lease";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { claimAgentRunnerLease } from "@luke/database/models/agent-runner-lease";
+import { createAgent } from "@luke/database/models/agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
 import { runnerLine } from "@luke/database/schemas/runner-line";
@@ -147,7 +147,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
@@ -558,7 +558,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const resumed = nativeSandbox(agent.id);
         api.sandboxes.push(resumed);
         const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.ok(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), NOW, heldUntil));
+        assert.ok(yield* claimAgentRunnerLease(agent.id, randomUUID(), NOW, heldUntil));
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 

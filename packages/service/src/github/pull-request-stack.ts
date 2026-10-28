@@ -12,7 +12,7 @@
  * stands on or under stands in none, which reads as no stack at all.
  */
 
-import { OVERVIEW_BOUNDS } from "@luke/features/coding-agent-wire";
+import { OVERVIEW_BOUNDS } from "@luke/features/agent-wire";
 
 /** One open pull request as a stack is worked out from: its number, its words, and its two branches. */
 export interface StackCandidate {

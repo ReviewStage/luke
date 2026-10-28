@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { INBOX_REPLY, type InboxAnswers } from "@luke/features/inbox-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
@@ -24,7 +24,7 @@ const SETTINGS: AppSettings = appSettingsWire(settingsView());
 const REPORTER = "panel-1";
 /** A task's agents run on the member's Studio. */
 const ON_STUDIO = {
-  machine: CODING_AGENT_MACHINE.DEVICE,
+  machine: AGENT_MACHINE.DEVICE,
   deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11",
 } as const;
 

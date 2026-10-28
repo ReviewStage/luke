@@ -1,9 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import {
-  base64Bytes,
-  CODING_AGENT_BOUNDS,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
@@ -893,7 +889,7 @@ function ReplyField({
   onSend: (
     words: string,
     clientKey: string,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
   ) => Promise<boolean>;
   onCancel: () => void;
   autoFocus: boolean;
@@ -1076,7 +1072,7 @@ function writtenOn(place: DraftPlace, threadId: string, entryId: string | undefi
 /** One comment's words and files as they are sent, under the key a send tried again goes under. */
 interface CommentSend {
   readonly words: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly key: string;
 }
 
@@ -1094,16 +1090,13 @@ const unsentAtom = heldLines<{ readonly place: PlanCommentPlace; readonly send: 
 /** Whether one comment carries these words and files: its words' bound, and a message's count of files and their bytes together. */
 function carried(send: Pick<CommentSend, "words" | "attachments">): boolean {
   if (send.words.length > PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS) return false;
-  if (send.attachments.length > CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) return false;
+  if (send.attachments.length > AGENT_BOUNDS.MAX_ATTACHMENTS) return false;
   const bytes = send.attachments.reduce((sum, each) => sum + base64Bytes(each.data), 0);
-  return bytes <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
+  return bytes <= AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
 }
 
 /** Whether two sends carry the same files, each the very one read, in the same order. */
-function sameFiles(
-  was: readonly CodingAgentAttachment[],
-  now: readonly CodingAgentAttachment[],
-): boolean {
+function sameFiles(was: readonly AgentAttachment[], now: readonly AgentAttachment[]): boolean {
   return was.length === now.length && was.every((file, at) => file === now[at]);
 }
 

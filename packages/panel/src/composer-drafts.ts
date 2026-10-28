@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { type CodingAgentAttachment, DIFF_SIDE } from "@luke/features/coding-agent-wire";
+import { type AgentAttachment, DIFF_SIDE } from "@luke/features/agent-wire";
 import {
   INBOX_REPLY,
   INBOX_STATUS,
@@ -263,7 +263,7 @@ type Owner = string | null;
 /** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled, and a thread's steps ticked and answer pressed. */
 export interface Draft {
   readonly text: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
   readonly steps?: readonly number[] | undefined;

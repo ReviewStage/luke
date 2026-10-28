@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
@@ -53,7 +53,7 @@ const agentStart = recordServerEvent(SERVER_EVENT.AGENT_START, "user-1", {
   start_kind: SERVER_AGENT_START_KIND.FRESH,
   is_from_automation: false,
   has_task: true,
-  agent_kind: CODING_AGENT_KIND.CODER,
+  agent_kind: AGENT_KIND.CODER,
 });
 
 describe("server events", () => {

@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -44,7 +44,7 @@ const JOURNAL = "journal";
 /** The words GitHub's line says, as a review on the agent's pull request reaches it. */
 const REVIEWED = "@devin-ai-integration[bot] reviewed your pull request #3016.";
 
-function agentOf(status: CodingAgentStatus): CodingAgentSummary {
+function agentOf(status: AgentStatus): AgentSummary {
   return {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -54,7 +54,7 @@ function agentOf(status: CodingAgentStatus): CodingAgentSummary {
     createdAt: 1_000,
     status,
     turnId: null,
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
     startedBy: DEAN,
   };
 }
@@ -73,7 +73,7 @@ function ran(callId: string): WireRecord {
 const STEP: WireRecord = { type: "step-start" };
 
 /** The turn's journal: a command a step, A, B, then C, and its last words once it has finished. */
-function journal(finished: boolean): CodingAgentMessage {
+function journal(finished: boolean): AgentTranscriptMessage {
   return {
     id: JOURNAL,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -92,15 +92,15 @@ function journal(finished: boolean): CodingAgentMessage {
 }
 
 /** GitHub's line, which the turn took in after its second step. */
-const GITHUB_LINE: CodingAgentMessage = {
+const GITHUB_LINE: AgentTranscriptMessage = {
   id: "github",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: REVIEWED }],
-  sentBy: { name: "devin-ai-integration[bot]", kind: CODING_AGENT_SENDER.GITHUB },
+  sentBy: { name: "devin-ai-integration[bot]", kind: AGENT_SENDER.GITHUB },
   arrivedIn: { journalId: JOURNAL, afterStep: 2 },
 };
 
-const TASK: CodingAgentMessage = {
+const TASK: AgentTranscriptMessage = {
   id: "task",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Make the video tile look good at any width." }],
@@ -117,8 +117,8 @@ afterEach(() => {
 
 /** The tab drawn over one page of `messages`, as the service answers it for an agent of `status`. */
 async function drawnTab(
-  messages: readonly CodingAgentMessage[],
-  status: CodingAgentStatus,
+  messages: readonly AgentTranscriptMessage[],
+  status: AgentStatus,
 ): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({
@@ -181,10 +181,7 @@ function openEveryFold(container: HTMLElement): void {
 
 test("in a finished turn, a line GitHub sent while it ran splits its fold, the steps before it folded above it and the steps after it below", async () => {
   // The service keeps the line ahead of the journal, which closed behind it.
-  const container = await drawnTab(
-    [TASK, GITHUB_LINE, journal(true)],
-    CODING_AGENT_STATUS.COMPLETED,
-  );
+  const container = await drawnTab([TASK, GITHUB_LINE, journal(true)], AGENT_STATUS.COMPLETED);
   const task = "line: task";
   const github = "line: github";
 
@@ -202,10 +199,7 @@ test("in a finished turn, a line GitHub sent while it ran splits its fold, the s
 });
 
 test("in a turn still running, a line GitHub sent stands between the steps before it and the steps after it", async () => {
-  const container = await drawnTab(
-    [TASK, journal(false), GITHUB_LINE],
-    CODING_AGENT_STATUS.RUNNING,
-  );
+  const container = await drawnTab([TASK, journal(false), GITHUB_LINE], AGENT_STATUS.RUNNING);
   openEveryFold(container);
 
   assert.deepEqual(drawnOrder(container), [
@@ -221,7 +215,7 @@ test("in a turn still running, a line GitHub sent stands between the steps befor
 
 test("a line from a service that kept no place for it stands where the order puts it, ahead of the turn", async () => {
   const { arrivedIn: _place, ...older } = GITHUB_LINE;
-  const container = await drawnTab([TASK, older, journal(true)], CODING_AGENT_STATUS.COMPLETED);
+  const container = await drawnTab([TASK, older, journal(true)], AGENT_STATUS.COMPLETED);
 
   assert.deepEqual(drawnOrder(container), ["line: task", "line: github", "fold: 3 tool calls"]);
 });

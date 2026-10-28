@@ -16,7 +16,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
   type DueStarterNotice,
   dueStarterNotices,
@@ -87,7 +87,7 @@ function noticeLine(notice: DueStarterNotice, step: string): string {
  */
 const tell = (eveFor: EveForAccount, due: DueStarterNotice) =>
   Effect.gen(function* () {
-    const starter = yield* readCodingAgent(due.userId, due.starterId);
+    const starter = yield* readAgent(due.userId, due.starterId);
     if (Option.isNone(starter) || starter.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);

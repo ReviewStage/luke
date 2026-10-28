@@ -15,11 +15,11 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  type CodingAgentInboxScope,
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  type AgentInboxScope,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import {
   INBOX_ASK_STATUS,
   INBOX_IMAGE_TYPE,
@@ -65,7 +65,7 @@ const ITEM: InboxItem = {
 
 const PICTURE = { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -412,7 +412,7 @@ async function until(ready: () => boolean): Promise<void> {
 
 it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const listeners = new Set<(changed: CodingAgentInboxChanged) => void>();
+  const listeners = new Set<(changed: AgentInboxChanged) => void>();
   const follows: Pick<
     HostAsk,
     "codingAgentInboxFollow" | "codingAgentInboxUnfollow" | "onInboxChanged"
@@ -429,7 +429,7 @@ it("a panel's inbox stream follows the inbox at the host, hears each change told
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
   const client = port.as(PANEL);
-  const scope: CodingAgentInboxScope = { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID };
+  const scope: AgentInboxScope = { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID };
 
   const one = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
   const two = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);

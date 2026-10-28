@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useState } from "react";
@@ -20,7 +20,7 @@ import { useAct } from "../act.js";
 
 /** The workspace's agents as the picker draws them: read, failed, or not yet read. */
 type AgentsRead =
-  | { readonly agents: readonly CodingAgentSummary[] }
+  | { readonly agents: readonly AgentSummary[] }
   | { readonly failed: true }
   | undefined;
 
@@ -40,7 +40,7 @@ export interface RunChoices {
   /** The workspace's agents on the repository, newest first, where the picker asks for them. */
   readonly agents: AgentsRead;
   /** The agents on the repository the last search found, standing until the next answers; nothing while no word is searched, or where it failed. */
-  readonly found: readonly CodingAgentSummary[] | undefined;
+  readonly found: readonly AgentSummary[] | undefined;
   /** Whether the search for the words typed did not answer, which is not the same as finding no agent. */
   readonly searchFailed: boolean;
   /** Reads the repository's agents again, and the search for the words typed with them, after either failed. */
@@ -64,7 +64,7 @@ export function useRunChoices(input: {
   const [defaultChoice, setDefaultChoice] = useState<ModelChoice | undefined>(undefined);
   const [defaultFailed, setDefaultFailed] = useState(false);
   const [agents, setAgents] = useState<AgentsRead>(undefined);
-  const [found, setFound] = useState<readonly CodingAgentSummary[] | undefined>(undefined);
+  const [found, setFound] = useState<readonly AgentSummary[] | undefined>(undefined);
   const [searchFailed, setSearchFailed] = useState(false);
   const [words, setWords] = useState("");
   // Each press of Retry reads the agents again, and the search with them.

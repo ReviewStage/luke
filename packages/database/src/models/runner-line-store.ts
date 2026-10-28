@@ -27,7 +27,7 @@ import { and, asc, eq, gt, gte, isNotNull, isNull, lt, or, sql } from "drizzle-o
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { runnerLine } from "../schemas/runner-line.js";
 
 type RunnerLineEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
@@ -72,16 +72,16 @@ const insertLine = SqlSchema.findAll({
           qb
             .select({
               id: sql<string>`gen_random_uuid()`.as("id"),
-              agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
-              userId: sql<string>`${codingAgent.userId}`.as("user_id"),
+              agentId: sql<string>`${agentTable.id}`.as("agent_id"),
+              userId: sql<string>`${agentTable.userId}`.as("user_id"),
               launch: sql<number>`${launch}::bigint`.as("launch"),
               text: sql<string>`${text}::text`.as("text"),
               lineId: sql<string | null>`${lineId}::uuid`.as("line_id"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
               acceptedAt: sql<Date | null>`null::timestamptz`.as("accepted_at"),
             })
-            .from(codingAgent)
-            .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+            .from(agentTable)
+            .where(and(eq(agentTable.id, agentId), eq(agentTable.userId, userId))),
         )
         // Note that a send repeated under its key is answered the line it queued first, in its
         // place. A message queued for whichever launch runs next (launch 0) is taken over by the

@@ -1,5 +1,5 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import type {
   AppInboxSlice,
   AppInboxTasklessItem,

@@ -1,4 +1,4 @@
-import { recordTurnFastRefused } from "@luke/database/models/coding-agent-store";
+import { recordTurnFastRefused } from "@luke/database/models/agent-store";
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";

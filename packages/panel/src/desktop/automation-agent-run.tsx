@@ -1,3 +1,4 @@
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   AGENT_STATUS_WORDS,
   type AutomationRunPlace,
@@ -5,7 +6,6 @@ import {
   automationRunLine,
   automationRunPlace,
 } from "@luke/features/automation-list-model";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { automationRun } from "@luke/features/model-label";
 import { momentText, sinceText } from "@luke/features/time-format";
 import {
@@ -57,7 +57,7 @@ const NEWER_RUN = "Newer run";
 
 /** The trail an agent an automation started leads its bar with; none for any other agent. */
 export function automationTrail(
-  agent: Pick<CodingAgentSummary, "automationId" | "automationName">,
+  agent: Pick<AgentSummary, "automationId" | "automationName">,
   tasks: Pick<TasksControl, "automationsView">,
 ): readonly ToolbarPlace[] | undefined {
   // Note that a run from before its origin was kept has no name to lead with, so it draws none.
@@ -83,7 +83,7 @@ export function automationTrail(
 
 /** Where the page's agent's run stands among its automation's runs, followed live; none for an agent no automation started, or while its run is not read. */
 export function useAutomationRunPlace(
-  agent: Pick<CodingAgentSummary, "id" | "automationId"> | undefined,
+  agent: Pick<AgentSummary, "id" | "automationId"> | undefined,
 ): AutomationRunPlace | undefined {
   const { read } = useAutomationRuns(agent?.automationId);
   if (agent === undefined || read === undefined || !("runs" in read)) return undefined;
@@ -97,7 +97,7 @@ export function AutomationRunStrip({
 }: {
   place: AutomationRunPlace;
   /** The agent's own status, read live with the page's agent rather than off the run. */
-  status: CodingAgentSummary["status"];
+  status: AgentSummary["status"];
 }): React.JSX.Element {
   const now = useMinute();
   const { run } = place;

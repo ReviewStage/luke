@@ -1,4 +1,4 @@
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { AgentPullRequest } from "@luke/features/agent-wire";
 import {
   CHIP_LOOK,
   CHIP_SIZE,
@@ -55,7 +55,7 @@ function PullRequestChip({
   pullRequest,
   onOpen,
 }: {
-  pullRequest: CodingAgentPullRequest;
+  pullRequest: AgentPullRequest;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
@@ -85,7 +85,7 @@ function PlanAgentRow({
   onOpenPullRequest,
 }: {
   entry: AddEntry;
-  pullRequest: CodingAgentPullRequest | undefined;
+  pullRequest: AgentPullRequest | undefined;
   onOpenPullRequest: () => void;
 }): React.JSX.Element {
   const { row, endMark, card } = entry;

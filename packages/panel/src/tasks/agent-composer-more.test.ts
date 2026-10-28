@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentContext,
+  type AgentPullRequestAnswer,
+  type AgentStatus,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentContext,
-  type CodingAgentPullRequestAnswer,
-  type CodingAgentStatus,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -51,7 +51,7 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-const PUBLISHED: CodingAgentPullRequestAnswer = {
+const PUBLISHED: AgentPullRequestAnswer = {
   repository: "acme/relay",
   branch: "fix/retry-backoff",
   pullRequest: {
@@ -66,7 +66,7 @@ const PUBLISHED: CodingAgentPullRequestAnswer = {
   },
 };
 
-const CONTEXT: CodingAgentContext = {
+const CONTEXT: AgentContext = {
   windowTokens: 1_000_000,
   compactionThresholdTokens: 900_000,
   inputTokens: 620_000,
@@ -97,7 +97,7 @@ afterEach(() => {
 });
 
 /** An agent's box with everything its foot can carry: a pull request, a model, and a step's context. */
-function Box({ status }: { status: CodingAgentStatus }): ReactNode {
+function Box({ status }: { status: AgentStatus }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
     taskId: "plan-1",
@@ -119,7 +119,7 @@ function Box({ status }: { status: CodingAgentStatus }): ReactNode {
 }
 
 /** The box drawn on a card `width` pixels wide. */
-async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_STATUS.COMPLETED) {
+async function drawnAt(width: number, status: AgentStatus = AGENT_STATUS.COMPLETED) {
   layContainersAt({ composer: width });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -141,7 +141,7 @@ async function drawnAt(width: number, status: CodingAgentStatus = CODING_AGENT_S
 }
 
 test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", async () => {
-  const box = await drawnAt(CARD.NARROWEST, CODING_AGENT_STATUS.RUNNING);
+  const box = await drawnAt(CARD.NARROWEST, AGENT_STATUS.RUNNING);
   act(() => box.press("Composer actions").click());
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,

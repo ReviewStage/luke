@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createAgent, renameAgent } from "@luke/database/models/agent-store";
 import { createAutomation } from "@luke/database/models/automation-store";
-import { createCodingAgent, renameCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask, updateTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
@@ -190,7 +190,7 @@ it.effect(
           }),
         );
         const task = yield* createTask(teammate, { organizationId: workspaceId, name: "Invites" });
-        const started = yield* createCodingAgent(teammate, {
+        const started = yield* createAgent(teammate, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -210,7 +210,7 @@ it.effect(
           reader,
         );
         yield* wakesTheWorkspace(
-          renameCodingAgent(teammate, agentId, "Invite flow"),
+          renameAgent(teammate, agentId, "Invite flow"),
           [[TOPIC.AGENT, agentId], ...onTheTask],
           reader,
         );

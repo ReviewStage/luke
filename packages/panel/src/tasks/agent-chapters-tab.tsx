@@ -1,4 +1,4 @@
-import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import type { AgentChangedFile } from "@luke/features/agent-wire";
 import {
   type Chapter,
   chapterHunks,
@@ -710,7 +710,7 @@ function ChaptersReading({
   read: ChaptersRead;
   changes: ChangesReads;
   /** Every file the pull request changes, as the read of its files answered. */
-  files: readonly CodingAgentChangedFile[];
+  files: readonly AgentChangedFile[];
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
 }): React.JSX.Element {

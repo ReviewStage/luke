@@ -13,55 +13,55 @@
  */
 
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentArchiveParams,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentChooseParams,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentDeleteAnswerView,
-  type CodingAgentGitHubImageParams,
-  type CodingAgentGitHubImageView,
-  type CodingAgentListAnswer,
-  type CodingAgentListParams,
-  type CodingAgentMessageParams,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentMessagesParams,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOperatorEnsureAnswerView,
-  type CodingAgentOperatorEnsureParams,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPageParams,
-  type CodingAgentPartParams,
-  type CodingAgentPartView,
-  type CodingAgentPinParams,
-  type CodingAgentPullRequestActionParams,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestParams,
-  type CodingAgentPullRequestReadParams,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentRenameParams,
-  type CodingAgentReviewOptionsAnswerView,
-  type CodingAgentRewindParams,
-  type CodingAgentServersParams,
-  type CodingAgentStartParams,
-  type CodingAgentStopParams,
-  type CodingAgentTranscriptChanged,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptOlderAnswer,
-  type CodingAgentTranscriptOlderParams,
-  type CodingAgentTranscriptPage,
-  type CodingAgentWorkspaceListParams,
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentArchiveParams,
+  type AgentChangesAnswerView,
+  type AgentChooseParams,
+  type AgentDefaultAnswer,
+  type AgentDeleteAnswerView,
+  type AgentGitHubImageParams,
+  type AgentGitHubImageView,
+  type AgentListAnswer,
+  type AgentListParams,
+  type AgentMessageParams,
+  type AgentMessagesAnswerView,
+  type AgentMessagesParams,
+  type AgentModelsAnswer,
+  type AgentOperatorEnsureAnswerView,
+  type AgentOperatorEnsureParams,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPageAnswerView,
+  type AgentPageParams,
+  type AgentPartParams,
+  type AgentPartView,
+  type AgentPinParams,
+  type AgentPullRequestActionParams,
+  type AgentPullRequestAnswerView,
+  type AgentPullRequestParams,
+  type AgentPullRequestReadParams,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+  type AgentRenameParams,
+  type AgentReviewOptionsAnswerView,
+  type AgentRewindParams,
+  type AgentServersParams,
+  type AgentStartParams,
+  type AgentStopParams,
+  type AgentTranscriptChanged,
+  type AgentTranscriptKey,
+  type AgentTranscriptOlderAnswer,
+  type AgentTranscriptOlderParams,
+  type AgentTranscriptPage,
+  type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
   type HostInstallTokenAnswerView,
   type HostsAnswerView,
   TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
@@ -72,73 +72,63 @@ import { streamed } from "./followed-stream.js";
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
   host: {
-    codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
-    codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
-    codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+    codingAgentModels(): Effect.Effect<AgentModelsAnswer>;
+    codingAgentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
+    codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
     hostsList(): Effect.Effect<HostsAnswerView>;
     hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
     hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
     hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
-    codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
-    codingAgentWorkspaceList(
-      params: CodingAgentWorkspaceListParams,
-    ): Effect.Effect<CodingAgentListAnswer>;
-    codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentMessages(
-      params: CodingAgentMessagesParams,
-    ): Effect.Effect<CodingAgentMessagesAnswerView>;
-    codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentPart(params: CodingAgentPartParams): Effect.Effect<CodingAgentPartView>;
+    codingAgentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
+    codingAgentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
+    codingAgentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
+    codingAgentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
     /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
-    transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
-    transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+    transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
+    transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
     /** The page of a transcript below the oldest message the window holds, read at once. */
-    transcriptOlder(
-      params: CodingAgentTranscriptOlderParams,
-    ): Effect.Effect<CodingAgentTranscriptOlderAnswer>;
-    onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
-    codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
+    transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
+    onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
+    codingAgentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
+    codingAgentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
     codingAgentEnsureOperator(
-      params: CodingAgentOperatorEnsureParams,
-    ): Effect.Effect<CodingAgentOperatorEnsureAnswerView>;
-    codingAgentDelete(params: CodingAgentStopParams): Effect.Effect<CodingAgentDeleteAnswerView>;
+      params: AgentOperatorEnsureParams,
+    ): Effect.Effect<AgentOperatorEnsureAnswerView>;
+    codingAgentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
-    codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+    codingAgentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
     codingAgentPullRequest(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentPullRequestAnswerView>;
-    codingAgentChanges(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentChangesAnswerView>;
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentPullRequestAnswerView>;
+    codingAgentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
     codingAgentOverviewPullRequest(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
     codingAgentReviewOptions(
-      params: CodingAgentPullRequestParams,
-    ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
+      params: AgentPullRequestParams,
+    ): Effect.Effect<AgentReviewOptionsAnswerView>;
     codingAgentOverviewChecks(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentOverviewChecksAnswerView>;
     codingAgentOverviewConversation(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
-    codingAgentGitHubImage(
-      params: CodingAgentGitHubImageParams,
-    ): Effect.Effect<CodingAgentGitHubImageView>;
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentOverviewConversationAnswerView>;
+    codingAgentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
     codingAgentPullRequestAction(
-      params: CodingAgentPullRequestActionParams,
-    ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+      params: AgentPullRequestActionParams,
+    ): Effect.Effect<AgentPullRequestWriteAnswerView>;
     codingAgentPullRequestViewed(
-      params: CodingAgentPullRequestReadParams,
-    ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
+      params: AgentPullRequestReadParams,
+    ): Effect.Effect<AgentPullRequestViewedAnswerView>;
   };
   /** Where every answer's agents and what an agent published are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -162,12 +152,12 @@ function noted<Answer>(
 
 /** A transcript as a key that equals another naming the same one. */
 class TranscriptStreamKey extends Data.Class<{
-  readonly kind: CodingAgentTranscriptKey["kind"];
+  readonly kind: AgentTranscriptKey["kind"];
   readonly owner: string;
   readonly callId: string | undefined;
 }> {}
 
-function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStreamKey {
+function transcriptKeyOf(transcript: AgentTranscriptKey): TranscriptStreamKey {
   return new TranscriptStreamKey({
     kind: transcript.kind,
     owner: transcript.agentId,
@@ -184,10 +174,10 @@ function transcriptKeyOf(transcript: CodingAgentTranscriptKey): TranscriptStream
 function transcriptPages(
   host: AgentProceduresDependencies["host"],
   open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
-  transcript: CodingAgentTranscriptKey,
-): Stream.Stream<CodingAgentTranscriptPage> {
+  transcript: AgentTranscriptKey,
+): Stream.Stream<AgentTranscriptPage> {
   const key = transcriptKeyOf(transcript);
-  return Stream.callback<CodingAgentTranscriptPage>((queue) =>
+  return Stream.callback<AgentTranscriptPage>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() =>
@@ -230,7 +220,7 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   /** How many streams stand open of each transcript, so the host lets one go only with the last. */
   const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
   // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
-  const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
+  const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
     Effect.tap(
       noted(answer, (value) => {
         if ("agent" in value) notices.observeAgents([value.agent]);
@@ -302,7 +292,7 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* noted(host.codingAgentList(input), (answer) => {
           if ("agents" in answer) notices.observeAgents(answer.agents);
-          else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
+          else if (answer.failure === AGENT_CALL_FAILURE.NOT_FOUND) {
             notices.observeTaskGone(input.taskId);
           }
         });

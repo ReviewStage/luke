@@ -1,3 +1,5 @@
+import { agentFailureWords } from "./agent-failure-words.js";
+import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
 import { SCHEDULE_PRESET } from "./automation-schedule.js";
 import {
   AUTOMATION_FIRING,
@@ -19,8 +21,6 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "./automation-wire.js";
-import { agentFailureWords } from "./coding-agent-failure-words.js";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
 import { titlesNothing } from "./task-wire.js";
 import { clockText } from "./time-format.js";
 import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
@@ -130,19 +130,19 @@ function agentLine(
   const holder = agent.ownKey === undefined ? keyHolder : agent.ownKey ? undefined : AGENT_OWNER;
   const why =
     agent.failureReason === undefined ? undefined : agentFailureWords(agent.failureReason, holder);
-  return agent.status === CODING_AGENT_STATUS.FAILED && why !== undefined
+  return agent.status === AGENT_STATUS.FAILED && why !== undefined
     ? `${standing}: ${why}`
     : standing;
 }
 
 /** Where a started run's agent stands, as its row's line says it; the admin pages say an agent's status in these words too. */
 export const AGENT_STATUS_WORDS = {
-  [CODING_AGENT_STATUS.STARTING]: "Starting…",
-  [CODING_AGENT_STATUS.RUNNING]: "Working",
-  [CODING_AGENT_STATUS.COMPLETED]: "Finished",
-  [CODING_AGENT_STATUS.FAILED]: "Failed",
-  [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
-} as const satisfies Record<CodingAgentStatus, string>;
+  [AGENT_STATUS.STARTING]: "Starting…",
+  [AGENT_STATUS.RUNNING]: "Working",
+  [AGENT_STATUS.COMPLETED]: "Finished",
+  [AGENT_STATUS.FAILED]: "Failed",
+  [AGENT_STATUS.CANCELLED]: "Stopped",
+} as const satisfies Record<AgentStatus, string>;
 
 /** The order the owners' groups stand in: the workspace's first, as the ones every member shares. */
 const OWNER_ORDER = [AUTOMATION_SCOPE.WORKSPACE, AUTOMATION_SCOPE.PERSONAL] as const;
@@ -317,10 +317,10 @@ export function automationRunStanding(run: AutomationRunSummary | null): Automat
   if (run === null) return AUTOMATION_RUN_STANDING.REST;
   if (run.status === AUTOMATION_RUN_STATUS.FAILED) return AUTOMATION_RUN_STANDING.FAILED;
   switch (run.agent?.status) {
-    case CODING_AGENT_STATUS.STARTING:
-    case CODING_AGENT_STATUS.RUNNING:
+    case AGENT_STATUS.STARTING:
+    case AGENT_STATUS.RUNNING:
       return AUTOMATION_RUN_STANDING.WORKING;
-    case CODING_AGENT_STATUS.FAILED:
+    case AGENT_STATUS.FAILED:
       return AUTOMATION_RUN_STANDING.FAILED;
     default:
       return AUTOMATION_RUN_STANDING.REST;

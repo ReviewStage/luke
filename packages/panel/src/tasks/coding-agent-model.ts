@@ -1,3 +1,4 @@
+import { agentFailureWords, ranDirectlyWords } from "@luke/features/agent-failure-words";
 import { recordedVideosOf } from "@luke/features/agent-pictures-model";
 import { harnessNameOf } from "@luke/features/agent-runtime-models";
 import {
@@ -7,44 +8,40 @@ import {
   EVE_TOOL,
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
-import { agentFailureWords, ranDirectlyWords } from "@luke/features/coding-agent-failure-words";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_KIND,
-  CODING_AGENT_PAYER,
-  CODING_AGENT_RUNTIME,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
+  AGENT_ARCHIVER,
+  AGENT_DELEGATE_TOOL,
+  AGENT_FAILURE,
+  AGENT_KIND,
+  AGENT_PAYER,
+  AGENT_RUNTIME,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentArchivedBy,
+  type AgentAttachment,
+  type AgentFailure,
+  type AgentKind,
+  type AgentPayer,
+  type AgentPullRequest,
+  type AgentPullRequestAnswer,
+  type AgentRuntime,
+  type AgentSender,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+  type AgentUsage,
   CONTEXT_WINDOW,
-  type CodingAgentArchivedBy,
-  type CodingAgentAttachment,
-  type CodingAgentFailure,
-  type CodingAgentKind,
-  type CodingAgentMessage,
-  type CodingAgentPartCut,
-  type CodingAgentPayer,
-  type CodingAgentPullRequest,
-  type CodingAgentPullRequestAnswer,
-  type CodingAgentRuntime,
-  type CodingAgentSender,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-  type CodingAgentUsage,
   type ContextWindow,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
   OPERATOR_QUIET_REPLY,
   PART_CUT_FIELD,
+  type PartCut,
   PULL_REQUEST_STATE,
   type PullRequestState,
   type RefusedDevice,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   FAILURE_REASON,
@@ -134,9 +131,9 @@ import {
 const LINE_SEPARATOR = " · ";
 
 /** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
-const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
-  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude subscription",
-  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT subscription",
+const PLAN_USAGE: Partial<Record<AgentPayer, string>> = {
+  [AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude subscription",
+  [AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT subscription",
 };
 
 /**
@@ -148,7 +145,7 @@ const PLAN_USAGE: Partial<Record<CodingAgentPayer, string>> = {
  * one place the window draws a price, and it is the whole run's, the agent's
  * own turns and its workers', at the catalog's list prices.
  */
-export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
+export function agentUsageLine(usage: AgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
   const tokens = `${formatCompact(usage.inputTokens + usage.outputTokens)} tokens`;
   const paid =
@@ -223,16 +220,16 @@ const UNNAMED_ARCHIVER = "another agent";
  * and the reason they gave. An agent archived along with its task says so.
  */
 export function archivedByReading(
-  by: CodingAgentArchivedBy,
+  by: AgentArchivedBy,
   readerId: string | undefined,
 ): ArchivedByReading {
   const member =
     by.member === undefined ? undefined : by.member.userId === readerId ? "you" : by.member.name;
   const forMember = member === undefined ? "" : ` for ${member}`;
   const archiver =
-    by.by === CODING_AGENT_ARCHIVER.MEMBER
+    by.by === AGENT_ARCHIVER.MEMBER
       ? member
-      : by.by === CODING_AGENT_ARCHIVER.LUKE
+      : by.by === AGENT_ARCHIVER.LUKE
         ? `Luke${forMember}`
         : `${by.agent?.name || UNNAMED_ARCHIVER}${forMember}`;
   const archived = by.withTask === true ? "Archived with its task" : "Archived";
@@ -257,7 +254,7 @@ export function subagentActor(model: string | undefined, state: GlyphState, name
 }
 
 /** Where an agent's work stands, as its tile wears it, read off its status. */
-export function agentActorState(status: CodingAgentStatus): ActorState {
+export function agentActorState(status: AgentStatus): ActorState {
   return ACTOR_STATE_OF_GLYPH[agentGlyphState(status)];
 }
 
@@ -269,8 +266,8 @@ export function agentActorState(status: CodingAgentStatus): ActorState {
 export function agentActor(
   agent: {
     readonly model: string;
-    readonly status?: CodingAgentStatus | undefined;
-    readonly kind?: CodingAgentKind | undefined;
+    readonly status?: AgentStatus | undefined;
+    readonly kind?: AgentKind | undefined;
   },
   name: string,
 ): Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }> {
@@ -278,7 +275,7 @@ export function agentActor(
     kind: ACTOR_KIND.AGENT,
     name,
     provider: providerOf(agent.model),
-    ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { operator: true } : undefined),
+    ...(agent.kind === AGENT_KIND.OPERATOR ? { operator: true } : undefined),
     state:
       agent.status === undefined
         ? ACTOR_STATE.REST
@@ -302,7 +299,7 @@ export function agentActor(
  * sender stands by its name on the outline of someone it cannot place.
  */
 export function lineSender(
-  sentBy: CodingAgentSender | undefined,
+  sentBy: AgentSender | undefined,
   readerId: string | undefined,
   members: readonly WorkspaceMember[] | undefined,
   former?: readonly FormerMember[] | undefined,
@@ -321,15 +318,15 @@ export function lineSender(
     };
   }
   switch (sentBy.kind) {
-    case CODING_AGENT_SENDER.LUKE:
+    case AGENT_SENDER.LUKE:
       return LUKE_ACTOR;
-    case CODING_AGENT_SENDER.AUTOMATION:
+    case AGENT_SENDER.AUTOMATION:
       return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
-    case CODING_AGENT_SENDER.GITHUB:
+    case AGENT_SENDER.GITHUB:
       return githubLoginActor(sentBy.name);
-    case CODING_AGENT_SENDER.FORMER:
+    case AGENT_SENDER.FORMER:
       return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER };
-    case CODING_AGENT_SENDER.MEMBER:
+    case AGENT_SENDER.MEMBER:
     case undefined:
       return sentBy.userId === undefined
         ? { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: sentBy.name }
@@ -338,10 +335,7 @@ export function lineSender(
 }
 
 /** The kinds of sender whose lines are the other side's words: Luke from a call, and GitHub. */
-const RECEIVED_SENDERS: ReadonlySet<string> = new Set([
-  CODING_AGENT_SENDER.LUKE,
-  CODING_AGENT_SENDER.GITHUB,
-]);
+const RECEIVED_SENDERS: ReadonlySet<string> = new Set([AGENT_SENDER.LUKE, AGENT_SENDER.GITHUB]);
 
 /**
  * Whether one of the developer's lines is the other side's words, drawn at
@@ -349,7 +343,7 @@ const RECEIVED_SENDERS: ReadonlySet<string> = new Set([
  * another coding agent's. A person's and an automation's, which runs on its
  * creator's behalf, stand at the right.
  */
-export function receivedLine(sentBy: CodingAgentSender | undefined): boolean {
+export function receivedLine(sentBy: AgentSender | undefined): boolean {
   if (sentBy === undefined) return false;
   return sentBy.agent === true || (sentBy.kind !== undefined && RECEIVED_SENDERS.has(sentBy.kind));
 }
@@ -373,48 +367,45 @@ export interface EndLineParts {
  * whole run's, which the model menu's foot says (`agentUsageLine`).
  */
 export function endLineParts(
-  status: CodingAgentStatus,
-  failure: CodingAgentFailure | undefined,
+  status: AgentStatus,
+  failure: AgentFailure | undefined,
   starter?: string,
   continuable = false,
   ranDirectly?: { readonly folder: string },
 ): EndLineParts | undefined {
   switch (status) {
-    case CODING_AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.CANCELLED:
       return { words: "Stopped", failed: false };
-    case CODING_AGENT_STATUS.FAILED: {
+    case AGENT_STATUS.FAILED: {
       if (ranDirectly !== undefined)
         return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };
     }
-    case CODING_AGENT_STATUS.STARTING:
-    case CODING_AGENT_STATUS.RUNNING:
-    case CODING_AGENT_STATUS.COMPLETED:
+    case AGENT_STATUS.STARTING:
+    case AGENT_STATUS.RUNNING:
+    case AGENT_STATUS.COMPLETED:
       return undefined;
   }
 }
 
 /** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
-export function endLineReason(
-  failure: CodingAgentFailure | undefined,
-  starter?: string,
-): FailureReason {
+export function endLineReason(failure: AgentFailure | undefined, starter?: string): FailureReason {
   // A teammate's key is theirs to mend, so the reader is offered no Settings of their own.
-  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY && starter === undefined
+  return failure === AGENT_FAILURE.PROVIDER_KEY && starter === undefined
     ? FAILURE_REASON.API_KEY
     : FAILURE_REASON.OTHER;
 }
 
 /** The statuses an agent may still write under, which is when it can be stopped. */
-const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+const FOLLOWED_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** Whether an agent in this status may still write more. */
-export function agentStillWriting(status: CodingAgentStatus): boolean {
+export function agentStillWriting(status: AgentStatus): boolean {
   return FOLLOWED_STATUSES.has(status);
 }
 
@@ -423,8 +414,8 @@ export function agentStillWriting(status: CodingAgentStatus): boolean {
  * a Stop would stop nothing (`stoppable`), as after a Stop already taken, so
  * a press is never dropped unheard. A starting agent has no turn yet to stop.
  */
-export function offersStop(agent: Pick<CodingAgentSummary, "status" | "stoppable">): boolean {
-  return agent.status === CODING_AGENT_STATUS.RUNNING && agent.stoppable !== false;
+export function offersStop(agent: Pick<AgentSummary, "status" | "stoppable">): boolean {
+  return agent.status === AGENT_STATUS.RUNNING && agent.stoppable !== false;
 }
 
 /**
@@ -432,14 +423,14 @@ export function offersStop(agent: Pick<CodingAgentSummary, "status" | "stoppable
  * still write, failed once its turn failed, and at rest once it finished
  * or the developer stopped it, since a stop is the developer's own doing.
  */
-export function agentGlyphState(status: CodingAgentStatus): GlyphState {
+export function agentGlyphState(status: AgentStatus): GlyphState {
   if (agentStillWriting(status)) return GLYPH_STATE.WORKING;
-  return status === CODING_AGENT_STATUS.FAILED ? GLYPH_STATE.FAILED : GLYPH_STATE.REST;
+  return status === AGENT_STATUS.FAILED ? GLYPH_STATE.FAILED : GLYPH_STATE.REST;
 }
 
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
-export function agentStateWords(status: CodingAgentStatus): string | undefined {
-  return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
+export function agentStateWords(status: AgentStatus): string | undefined {
+  return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELLED);
 }
 
 /** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
@@ -450,23 +441,22 @@ export const REPOSITORY_UNREACHED_NOTE = "Luke cannot reach this task's reposito
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
-  [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: REPOSITORY_UNREACHED_NOTE,
-  [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer.",
-  [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
-    "The agent is still starting. Try again in a moment.",
-  [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
+  [AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: REPOSITORY_UNREACHED_NOTE,
+  [AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer.",
+  [AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
+  [AGENT_CALL_FAILURE.AGENT_NOT_READY]: "The agent is still starting. Try again in a moment.",
+  [AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
   // Said where the service could not wait on the image past its answer.
-  [CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
+  [AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
     "The agent's image is taking too long to prepare. Try again in a few minutes.",
-  [CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+  [AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
+  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
     "The subscription paying for this agent is signed out. Its starter signs in again in Settings.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
+  [AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE]:
     "The subscription's provider didn't answer. Try again in a moment.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
+  [AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED]:
     "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+  [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
     "The subscription paying for this agent isn't eligible to run it.",
 } as const;
 
@@ -502,9 +492,9 @@ export const CONTINUED_IN = "Continued in";
  */
 function continuationsOf(
   agentId: string,
-  agents: readonly CodingAgentSummary[] | undefined,
-  archived: readonly CodingAgentSummary[] | undefined,
-): readonly CodingAgentSummary[] {
+  agents: readonly AgentSummary[] | undefined,
+  archived: readonly AgentSummary[] | undefined,
+): readonly AgentSummary[] {
   return [...(agents ?? []), ...(archived ?? [])]
     .filter((each) => each.from?.agentId === agentId && each.from.messageId === undefined)
     .sort((a, b) => a.createdAt - b.createdAt);
@@ -519,9 +509,9 @@ function continuationsOf(
  * list alone, and that a fork is never a continuation.
  */
 export function continuedByIds(
-  agent: CodingAgentSummary,
-  agents: readonly CodingAgentSummary[] | undefined,
-  archived: readonly CodingAgentSummary[] | undefined,
+  agent: AgentSummary,
+  agents: readonly AgentSummary[] | undefined,
+  archived: readonly AgentSummary[] | undefined,
 ): readonly string[] {
   const named = (agent.continuedBy ?? [])
     .filter((each) => !each.forked && each.messageId === undefined)
@@ -531,7 +521,7 @@ export function continuedByIds(
 }
 
 /** The titles the summary gives the agents that continue it, by id, for a page whose list does not hold them; none for one with no title yet. */
-export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string, string> {
+export function continuedByTitles(agent: AgentSummary): ReadonlyMap<string, string> {
   const titled = (agent.continuedBy ?? []).flatMap((each) =>
     each.title === null ? [] : [[each.agentId, each.title] as const],
   );
@@ -539,8 +529,8 @@ export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string
 }
 
 /** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
-function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
-  return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
+function endLineContinues(status: AgentStatus, endReason: FailureReason): boolean {
+  return status === AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
 }
 
 /**
@@ -552,7 +542,7 @@ function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): 
  * so the line offers none and one Continue stands on screen.
  */
 export function endLineOffersContinue(input: {
-  readonly status: CodingAgentStatus;
+  readonly status: AgentStatus;
   readonly endReason: FailureReason;
   readonly continued: boolean;
   readonly boxClosed: boolean;
@@ -565,31 +555,31 @@ export function endLineOffersContinue(input: {
 const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
 
 /** What a change of an agent's model that did not take says under its box. */
-export function chooseFailureNote(failure: CodingAgentCallFailure): string {
+export function chooseFailureNote(failure: AgentCallFailure): string {
   switch (failure) {
-    case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
+    case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
-    case CODING_AGENT_CALL_FAILURE.UNANSWERED:
-    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
-    case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
-    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
-    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
-    case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
-    case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
-    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
-    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
-    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
-    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+    case AGENT_CALL_FAILURE.UNANSWERED:
+    case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+    case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
+    case AGENT_CALL_FAILURE.AGENT_NOT_READY:
+    case AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case AGENT_CALL_FAILURE.DEVICE_REMOVED:
+    case AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+    case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+    case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -636,7 +626,7 @@ export function archiveWords(archived: boolean): {
 
 /** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, when a plan's reached limit resets where it is that and the provider said, and the provider whose credential is missing where it is that. */
 export interface RefusedCall {
-  readonly failure: CodingAgentCallFailure;
+  readonly failure: AgentCallFailure;
   readonly unreached?: RepositoryUnreached | undefined;
   readonly resetsAt?: number | undefined;
   readonly provider?: ModelProvider | undefined;
@@ -762,17 +752,16 @@ function credentialMissingWords(
 
 /** What a Start refused by the plan that would pay says, to its own member, beside the press that opens Settings. */
 const START_PLAN_REFUSAL = {
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
-    "Your subscription is signed out. Sign in again.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]: "Your subscription is signed out. Sign in again.",
+  [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
     "Your subscription isn't eligible to run this agent. Choose your API key.",
 } as const;
 
 /** The same refusals where no press beside them opens Settings, so the words name it. */
 const START_PLAN_REFUSAL_ALONE = {
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
+  [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
     "Your subscription is signed out. Sign in again in Settings to start an agent.",
-  [CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
+  [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
     "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
 } as const;
 
@@ -795,12 +784,12 @@ function settingsFailure(
   action: (typeof ACTION)[keyof typeof ACTION],
 ): Failure | undefined {
   switch (refused.failure) {
-    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+    case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingFailure(refused, action);
-    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+    case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return { reason: FAILURE_REASON.CONNECT_AGENTS, text: KEY_UNREADABLE_NOTE };
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return action === ACTION.START
         ? { reason: FAILURE_REASON.CONNECT_AGENTS, text: START_PLAN_REFUSAL[refused.failure] }
         : undefined;
@@ -826,9 +815,9 @@ function credentialMissingFailure(
  * its plan runs (`agent-runtime-choice.ts`); none for an agent on eve,
  * which a key pays for.
  */
-export function planPayerOf(runtime: CodingAgentRuntime | undefined): CodingAgentPayer | undefined {
-  if (runtime === CODING_AGENT_RUNTIME.CLAUDE_CODE) return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
-  if (runtime === CODING_AGENT_RUNTIME.CODEX) return CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION;
+export function planPayerOf(runtime: AgentRuntime | undefined): AgentPayer | undefined {
+  if (runtime === AGENT_RUNTIME.CLAUDE_CODE) return AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+  if (runtime === AGENT_RUNTIME.CODEX) return AGENT_PAYER.CHATGPT_SUBSCRIPTION;
   return undefined;
 }
 
@@ -840,9 +829,9 @@ const CLAUDE_PLAN_REFUSAL = {
 } as const;
 
 /** The plan's reached limit said with when it resets, in place of waiting for a reset no one named. */
-function limitResetsWords(payer: CodingAgentPayer | undefined, resetsAt: number): string {
+function limitResetsWords(payer: AgentPayer | undefined, resetsAt: number): string {
   const whose =
-    payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+    payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
       ? "Your Claude subscription has"
       : "The subscription paying for this agent has";
   return `${whose} reached its usage limit. It resets ${dayAndTimeText(resetsAt)}.`;
@@ -854,19 +843,16 @@ function limitResetsWords(payer: CodingAgentPayer | undefined, resetsAt: number)
  * the provider said; none for any other refusal. The agent waits on its
  * plan, never turning to another payer.
  */
-function planRefusalWords(
-  refused: RefusedCall,
-  payer: CodingAgentPayer | undefined,
-): string | undefined {
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
+function planRefusalWords(refused: RefusedCall, payer: AgentPayer | undefined): string | undefined {
+  if (refused.failure === AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
     if (refused.resetsAt !== undefined) return limitResetsWords(payer, refused.resetsAt);
-    return payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+    return payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
       ? CLAUDE_PLAN_REFUSAL.LIMIT_REACHED
       : undefined;
   }
   if (
-    refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT &&
-    payer === CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION
+    refused.failure === AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT &&
+    payer === AGENT_PAYER.CLAUDE_SUBSCRIPTION
   ) {
     return CLAUDE_PLAN_REFUSAL.SIGNED_OUT;
   }
@@ -879,10 +865,10 @@ export function startFailureNote(
   taskId: string | null,
   device?: RefusingDevice,
 ): Failure {
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
+  if (refused.failure === AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
   }
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+  if (refused.failure === AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
     return callFailure(
       localAgentRefusalWords(refused.localAgentRefusal, refused.refusedDevice ?? device),
     );
@@ -900,10 +886,10 @@ export function startFailureNote(
 export function continueFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   const note = startFailureNote(refused, taskId);
   switch (refused.failure) {
-    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+    case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return { ...note, text: keyUnreadableWords(ACTION.START) };
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return { ...note, text: START_PLAN_REFUSAL_ALONE[refused.failure] };
     default:
       return note;
@@ -971,7 +957,7 @@ function unreachedFailure(
     };
   }
   if (unreached === undefined || taskId === null) {
-    return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
+    return callFailure(SHARED_FAILURE_NOTE[AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
   }
   const { repository } = unreached;
   switch (unreached.reason) {
@@ -1013,49 +999,49 @@ function unreachedFailure(
 }
 
 /** What a Start that did not start says, by why. */
-function startFailureWords(failure: CodingAgentCallFailure): string {
+function startFailureWords(failure: AgentCallFailure): string {
   switch (failure) {
-    case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case AGENT_CALL_FAILURE.NO_REPOSITORY:
       return START_NEEDS_REPOSITORY;
-    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
-    case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
+    case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This task no longer exists.";
     // Note that only a dictated clip is refused for want of an OpenAI key, so a Start never hears it.
-    case CODING_AGENT_CALL_FAILURE.UNANSWERED:
-    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.UNANSWERED:
+    case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The agent could not be started.";
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
-    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
+    case AGENT_CALL_FAILURE.DEVICE_REMOVED:
       return HOST_REMOVED;
-    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
-    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
-    case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
-    case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
-    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+    case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
+    case AGENT_CALL_FAILURE.AGENT_NOT_READY:
+    case AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
-    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+    case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.START);
-    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+    case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return keyUnreadableWords(ACTION.START);
-    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+    case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return localAgentRefusalWords(undefined, undefined);
   }
 }
 
 /** What a teammate's agent says to a message its starter's own key refused: theirs to save in their Settings, which the reader's mend nothing of. */
-function starterKeyWords(failure: CodingAgentCallFailure, starter: string): string | undefined {
-  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE) {
+function starterKeyWords(failure: AgentCallFailure, starter: string): string | undefined {
+  if (failure === AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE) {
     return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
   }
-  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+  if (failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
     return `${starter} has no API key or subscription connected for this agent. They connect one in Settings to unblock it.`;
   }
   return undefined;
@@ -1071,18 +1057,17 @@ function starterKeyWords(failure: CodingAgentCallFailure, starter: string): stri
 export function messageFailureNote(
   refused: RefusedCall,
   taskId: string | null,
-  payer?: CodingAgentPayer | undefined,
+  payer?: AgentPayer | undefined,
   starter?: string | undefined,
 ): Failure {
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
+  if (refused.failure === AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED)
-    return callFailure(HOST_REMOVED);
+  if (refused.failure === AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
+  if (refused.failure === AGENT_CALL_FAILURE.DEVICE_REMOVED) return callFailure(HOST_REMOVED);
   // Note that a device away refuses a message in the words it refuses a Start in.
-  if (refused.failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+  if (refused.failure === AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
     return callFailure(
       localAgentRefusalWords(
         refused.localAgentRefusal ?? LOCAL_AGENT_REFUSAL.MAC_AWAY,
@@ -1092,8 +1077,8 @@ export function messageFailureNote(
   }
   // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
   if (
-    refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
-    payer === CODING_AGENT_PAYER.LUKE
+    refused.failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING &&
+    payer === AGENT_PAYER.LUKE
   ) {
     return callFailure(LUKE_PAID_REFUSAL);
   }
@@ -1106,13 +1091,13 @@ export function messageFailureNote(
 }
 
 /** What a message that did not reach the agent says beside the composer's Retry, which says to try again for it. */
-function messageNoteWords(failure: CodingAgentCallFailure): string {
+function messageNoteWords(failure: AgentCallFailure): string {
   switch (failure) {
-    case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
-    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
-    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return MESSAGE_NOT_SENT;
-    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+    case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
       return SHARED_FAILURE_NOTE[failure];
     default:
       return messageFailureWords(failure);
@@ -1120,50 +1105,49 @@ function messageNoteWords(failure: CodingAgentCallFailure): string {
 }
 
 /** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are, so a refusal trying again mends says so. */
-export function messageFailureWords(failure: CodingAgentCallFailure): string {
+export function messageFailureWords(failure: AgentCallFailure): string {
   switch (failure) {
-    case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
+    case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
     // A message names no repository, no model, and no clip, so none of these refusals is its own.
-    case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
-    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
-    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return `${MESSAGE_NOT_SENT} Try again.`;
     // A message is refused by a device only while it is away, in the words a Start on it is.
-    case CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+    case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return localAgentRefusalWords(LOCAL_AGENT_REFUSAL.MAC_AWAY, undefined);
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
-    case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+    case AGENT_CALL_FAILURE.UNANSWERED:
       return "Luke didn't hear back.";
-    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
-    case CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED:
+    case AGENT_CALL_FAILURE.DEVICE_REMOVED:
       return HOST_REMOVED;
-    case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
+    case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
       return `${SHARED_FAILURE_NOTE[failure]} Try again.`;
-    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
-    case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
-    case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
-    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
-    case CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
-    case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
+    case AGENT_CALL_FAILURE.AGENT_NOT_READY:
+    case AGENT_CALL_FAILURE.NOT_PERMITTED:
+    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
+    case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
+    case AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
-    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+    case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return credentialMissingWords(undefined, ACTION.MESSAGE);
-    case CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
+    case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
       return keyUnreadableWords(ACTION.MESSAGE);
   }
 }
 
 /** Whether a refusal is for good, so the composer closes on it rather than offering Retry: the agent's session has ended, or the host it ran on was removed. */
-export function closesComposer(failure: CodingAgentCallFailure): boolean {
+export function closesComposer(failure: AgentCallFailure): boolean {
   return (
-    failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED ||
-    failure === CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED
+    failure === AGENT_CALL_FAILURE.AGENT_RETIRED || failure === AGENT_CALL_FAILURE.DEVICE_REMOVED
   );
 }
 
@@ -1547,14 +1531,14 @@ export function effortLabel(effort: string): string {
 
 /** The agents with one agent as the service just answered it, in its place. */
 export function withAgent(
-  agents: readonly CodingAgentSummary[],
-  answered: CodingAgentSummary,
-): readonly CodingAgentSummary[] {
+  agents: readonly AgentSummary[],
+  answered: AgentSummary,
+): readonly AgentSummary[] {
   return agents.map((agent) => (agent.id === answered.id ? answered : agent));
 }
 
 /** Where an agent stands as a page or an answer read it: its status, and when the run under way began where the service said. */
-export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
+export type AgentRun = Pick<AgentSummary, "status" | "runStartedAt">;
 
 /**
  * The agents with one agent's run read from its own transcript page or an
@@ -1565,10 +1549,10 @@ export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
  * nothing that reads them.
  */
 export function withAgentRun(
-  agents: readonly CodingAgentSummary[],
+  agents: readonly AgentSummary[],
   agentId: string,
   run: AgentRun,
-): readonly CodingAgentSummary[] {
+): readonly AgentSummary[] {
   const standing = agents.find((agent) => agent.id === agentId);
   if (
     standing === undefined ||
@@ -1603,7 +1587,7 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
 /** A part its page carried cut (`cutParts`): its two ends and its whole size, and the message and index it is fetched whole by. */
-export type AgentPartCut = Omit<CodingAgentPartCut, "field"> & { readonly messageId: string };
+export type AgentPartCut = Omit<PartCut, "field"> & { readonly messageId: string };
 
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
@@ -1628,7 +1612,7 @@ export type AgentPart =
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER }
-  | { readonly kind: typeof AGENT_PART.ARRIVED; readonly line: CodingAgentMessage };
+  | { readonly kind: typeof AGENT_PART.ARRIVED; readonly line: AgentTranscriptMessage };
 
 function toolState(value: WireValue | undefined): ToolState {
   // SAFETY: membership in the set built from TOOL_STATE's values is what the union names.
@@ -1678,19 +1662,19 @@ const readUserMetadata = Schema.decodeUnknownOption(USER_MESSAGE_METADATA);
  * for the developer's own words, typed or spoken, or a row this build
  * cannot read.
  */
-export function agentMessageOf(message: CodingAgentMessage): AgentMessageMetadata | undefined {
+export function agentMessageOf(message: AgentTranscriptMessage): AgentMessageMetadata | undefined {
   const read = userMetadataOf(message);
   return read?.channel === MESSAGE_CHANNEL.AGENT_MESSAGE ? read : undefined;
 }
 
 /** What a member did on a thread that a line steered into the agent carries, and the item it is on; nothing for any other line. */
-export function threadLineOf(message: CodingAgentMessage): ThreadLineMetadata | undefined {
+export function threadLineOf(message: AgentTranscriptMessage): ThreadLineMetadata | undefined {
   const read = userMetadataOf(message);
   return read?.channel === MESSAGE_CHANNEL.THREAD ? read : undefined;
 }
 
 /** What GitHub said on the agent's pull request that a line steered into the agent carries; nothing for any other line. */
-export function githubLineOf(message: CodingAgentMessage): GitHubLineMetadata | undefined {
+export function githubLineOf(message: AgentTranscriptMessage): GitHubLineMetadata | undefined {
   const read = userMetadataOf(message);
   return read?.channel === MESSAGE_CHANNEL.GITHUB ? read : undefined;
 }
@@ -1759,7 +1743,7 @@ export function githubLineWords(line: GitHubLineMetadata): string {
 
 /** A user row's metadata where it names the channel that carried it; nothing for an assistant's row, an observation, or a row this build cannot read. */
 function userMetadataOf(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
 ): Extract<UserMessageMetadata, { readonly channel: unknown }> | undefined {
   if (message.role !== MESSAGE_ROLE.USER || message.metadata === undefined) return undefined;
   const read = Option.getOrUndefined(readUserMetadata(message.metadata));
@@ -1771,7 +1755,7 @@ function userMetadataOf(
  * of its own, or a call with no answer of its own, each with the ends it was
  * cut to; a part that is neither draws as it reads.
  */
-function cutAgentPart(part: WireValue, cut: CodingAgentPartCut, messageId: string): AgentPart {
+function cutAgentPart(part: WireValue, cut: PartCut, messageId: string): AgentPart {
   const { field: _field, ...ends } = cut;
   const marked = { ...ends, messageId };
   if (cut.field === PART_CUT_FIELD.TEXT) {
@@ -1782,7 +1766,7 @@ function cutAgentPart(part: WireValue, cut: CodingAgentPartCut, messageId: strin
 }
 
 /** The parts of a message as the tab draws them, in the row's order, each its page carried cut marked so. */
-export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
+export function agentParts(message: AgentTranscriptMessage): readonly AgentPart[] {
   const read = partsRead.get(message);
   if (read !== undefined) return read;
   const cuts = new Map((message.cutParts ?? []).map((cut) => [cut.index, cut]));
@@ -1817,10 +1801,10 @@ function storedPartRead(part: WireValue): AgentPart {
  * changed in place (a page that rewrites one hands a new one), and a
  * running agent's transcript reads every message's parts on every page.
  */
-const partsRead = new WeakMap<CodingAgentMessage, readonly AgentPart[]>();
+const partsRead = new WeakMap<AgentTranscriptMessage, readonly AgentPart[]>();
 
 /** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
-export function settledPlanEdits(messages: readonly CodingAgentMessage[]): number {
+export function settledPlanEdits(messages: readonly AgentTranscriptMessage[]): number {
   return messages
     .flatMap(agentParts)
     .filter(
@@ -1857,7 +1841,7 @@ const AGENT_LIST_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /** The answered calls of a transcript that change the task's agents or which stand archived, by call id: what the agents are read again on as each lands. */
-export function agentListCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+export function agentListCallIds(messages: readonly AgentTranscriptMessage[]): readonly string[] {
   return messages
     .flatMap(agentParts)
     .flatMap((part) =>
@@ -1868,7 +1852,7 @@ export function agentListCallIds(messages: readonly CodingAgentMessage[]): reado
 }
 
 /** The answered calls of a transcript that changed the sidebar (`changesSidebar`), by call id: what the tasks are read again on as each lands, so the sidebar draws the change. */
-export function sidebarCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+export function sidebarCallIds(messages: readonly AgentTranscriptMessage[]): readonly string[] {
   return messages
     .flatMap(agentParts)
     .flatMap((part) =>
@@ -1883,11 +1867,7 @@ export function sidebarCallIds(messages: readonly CodingAgentMessage[]): readonl
  * than a call's.
  */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return (
-    part.tool === CODING_AGENT_DELEGATE_TOOL ||
-    part.tool === EVE_TOOL.WORKER ||
-    nativeSubagent(part)
-  );
+  return part.tool === AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER || nativeSubagent(part);
 }
 
 /**
@@ -1961,7 +1941,7 @@ interface AgentTurnPlace {
   /** Where each call's subagent stands as its own session says, which its row draws over the call's own state, since a call may settle the moment its worker is under way. */
   readonly workers?: ReadonlyMap<string, ToolState>;
   /** The developer's lines that reached the turn while it ran (`arrivedIn`), each drawn among its parts after the steps it arrived after. */
-  readonly arrived?: readonly CodingAgentMessage[];
+  readonly arrived?: readonly AgentTranscriptMessage[];
 }
 
 /** The `connection_execute` calls among the parts that an integration's own call ran under, by their ids. */
@@ -2039,8 +2019,8 @@ function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
  * after, or at the end where that step has not begun.
  */
 function drawnParts(
-  message: CodingAgentMessage,
-  arrived: readonly CodingAgentMessage[] = [],
+  message: AgentTranscriptMessage,
+  arrived: readonly AgentTranscriptMessage[] = [],
 ): readonly AgentPart[] {
   const parts = agentParts(message);
   const ran = runConnectionCalls(parts);
@@ -2085,7 +2065,7 @@ function drawnParts(
 }
 
 /** The steps of its turn a line arrived after; none for a line no turn took in under way. */
-function afterStepOf(line: CodingAgentMessage): number {
+function afterStepOf(line: AgentTranscriptMessage): number {
   return line.arrivedIn?.afterStep ?? 0;
 }
 
@@ -2104,7 +2084,7 @@ function afterStepOf(line: CodingAgentMessage): number {
  * arrived, splitting the fold of a finished turn around it.
  */
 export function agentRows(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   moving: boolean,
   { newestTodos, workers = NO_WORKERS, arrived = [] }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
@@ -2127,13 +2107,13 @@ export function agentRows(
 
 /** One of a transcript's rows as the tab draws it, with the developer's lines that reached it while its turn ran. */
 export interface PlacedMessage {
-  readonly message: CodingAgentMessage;
+  readonly message: AgentTranscriptMessage;
   /** The lines its turn took in under way (`arrivedIn`), oldest first; none on any row but a turn's journal. */
-  readonly arrived: readonly CodingAgentMessage[];
+  readonly arrived: readonly AgentTranscriptMessage[];
 }
 
 /** Whether a turn's reply is the operator's quiet reply alone, a heartbeat that found nothing, which leaves the developer nothing to read. */
-function isQuietReply(message: CodingAgentMessage): boolean {
+function isQuietReply(message: AgentTranscriptMessage): boolean {
   return (
     message.role === MESSAGE_ROLE.ASSISTANT && messageWords(message).trim() === OPERATOR_QUIET_REPLY
   );
@@ -2151,14 +2131,14 @@ function isQuietReply(message: CodingAgentMessage): boolean {
  * agent's reply is placed whatever it says.
  */
 export function placedMessages(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   quiet = false,
 ): readonly PlacedMessage[] {
   const shown = quiet ? messages.filter((message) => !isQuietReply(message)) : messages;
   const journals = new Set(
     shown.filter((message) => message.role === MESSAGE_ROLE.ASSISTANT).map((each) => each.id),
   );
-  const arrived = new Map<string, CodingAgentMessage[]>();
+  const arrived = new Map<string, AgentTranscriptMessage[]>();
   for (const message of shown) {
     const journal = message.arrivedIn?.journalId;
     if (journal === undefined || !journals.has(journal)) continue;
@@ -2173,7 +2153,7 @@ export function placedMessages(
 
 /** A stretch of a turn's rows as the tab draws it: the turn's own rows, or a line that reached it while it ran, which stands between them as the developer's own message. */
 export type TurnStretch =
-  | { readonly line: CodingAgentMessage; readonly rows?: undefined }
+  | { readonly line: AgentTranscriptMessage; readonly rows?: undefined }
   | { readonly line?: undefined; readonly rows: readonly TurnRow<AgentPart>[] };
 
 /** A turn's rows cut at every line that reached it while it ran, so the tab draws each line as a message of its own between the turn's work before and after it. */
@@ -2234,7 +2214,7 @@ export const WORKING_PHASE_WORDS = {
  * the transcript shows.
  */
 export function agentWorkingPhase(
-  lines: readonly CodingAgentMessage[],
+  lines: readonly AgentTranscriptMessage[],
   sessionStarting: boolean,
   rewinding = false,
 ): WorkingPhase {
@@ -2254,25 +2234,23 @@ export function agentWorkingPhase(
  * running while it starts or works, at rest once it completed or was
  * stopped, whose own tab says which, and failed where it failed.
  */
-export function workerToolState(status: CodingAgentStatus): ToolState {
+export function workerToolState(status: AgentStatus): ToolState {
   switch (status) {
-    case CODING_AGENT_STATUS.STARTING:
-    case CODING_AGENT_STATUS.RUNNING:
+    case AGENT_STATUS.STARTING:
+    case AGENT_STATUS.RUNNING:
       return TOOL_STATE.INPUT_AVAILABLE;
-    case CODING_AGENT_STATUS.FAILED:
+    case AGENT_STATUS.FAILED:
       return TOOL_STATE.OUTPUT_ERROR;
-    case CODING_AGENT_STATUS.COMPLETED:
-    case CODING_AGENT_STATUS.CANCELLED:
+    case AGENT_STATUS.COMPLETED:
+    case AGENT_STATUS.CANCELLED:
       return TOOL_STATE.OUTPUT_AVAILABLE;
   }
 }
 
 /** Where a worker stands, read from its delegation's part: running until the call answers, then completed, or failed where the call ended in an error. */
-export function workerStatusOf(state: ToolState): CodingAgentStatus {
-  if (state === TOOL_STATE.OUTPUT_AVAILABLE) return CODING_AGENT_STATUS.COMPLETED;
-  return state === TOOL_STATE.OUTPUT_ERROR
-    ? CODING_AGENT_STATUS.FAILED
-    : CODING_AGENT_STATUS.RUNNING;
+export function workerStatusOf(state: ToolState): AgentStatus {
+  if (state === TOOL_STATE.OUTPUT_AVAILABLE) return AGENT_STATUS.COMPLETED;
+  return state === TOOL_STATE.OUTPUT_ERROR ? AGENT_STATUS.FAILED : AGENT_STATUS.RUNNING;
 }
 
 /** The id of the row a worker's tab draws its task on, which no row of the service's spells. */
@@ -2289,8 +2267,8 @@ const TASK_ROW_ID = "task";
  */
 export function workerLines(
   task: string,
-  messages: readonly CodingAgentMessage[],
-): readonly CodingAgentMessage[] {
+  messages: readonly AgentTranscriptMessage[],
+): readonly AgentTranscriptMessage[] {
   // A worker opened by its link carries no task's words, so the service's own first row's are the task.
   const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
   const words = task === "" && first !== undefined ? messageWords(first) : task;
@@ -2301,7 +2279,7 @@ export function workerLines(
 }
 
 /** A message's words: its text parts, one paragraph each, which is what a copy of a turn carries and what the developer's line reads as. */
-export function messageWords(message: CodingAgentMessage): string {
+export function messageWords(message: AgentTranscriptMessage): string {
   return agentParts(message)
     .flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : []))
     .join("\n\n");
@@ -2322,7 +2300,7 @@ const SENTENCE_END = /[.!?](?=\s|$)/u;
  * member nothing to read.
  */
 export function finishedReplyLead(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   quiet: boolean,
 ): { readonly messageId: string; readonly lead: string } | undefined {
   const reply = messages.findLast((message) => message.role === MESSAGE_ROLE.ASSISTANT);
@@ -2371,7 +2349,7 @@ export interface SentLine {
   /** The words as they went: trimmed, as the service keeps them. */
   readonly text: string;
   /** The files that went with them, drawn on the line as the service's row will draw them. */
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
   readonly state: SentLineState;
@@ -2384,7 +2362,7 @@ export interface SentLine {
 }
 
 /** The ids the developer's rows of a transcript were written under, which a sent line's row is one of once it lands. */
-function landedLines(messages: readonly CodingAgentMessage[]): ReadonlySet<string> {
+function landedLines(messages: readonly AgentTranscriptMessage[]): ReadonlySet<string> {
   return new Set(
     messages.flatMap((message) =>
       message.role === MESSAGE_ROLE.USER && message.clientId !== undefined
@@ -2402,7 +2380,7 @@ function landedLines(messages: readonly CodingAgentMessage[]): ReadonlySet<strin
  */
 export function unreadSentLines(
   sent: readonly SentLine[],
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
 ): readonly SentLine[] {
   const landed = landedLines(messages);
   return sent.filter((line) => line.state === SENT_LINE_STATE.UNDELIVERED || !landed.has(line.id));
@@ -2418,7 +2396,7 @@ export function unreadSentLines(
  */
 export function heldSentLines(
   sent: readonly SentLine[],
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
 ): readonly SentLine[] {
   const landed = landedLines(messages);
   return sent.filter((line) => line.taken !== true || !landed.has(line.id));
@@ -2429,12 +2407,12 @@ export function heldSentLines(
  * developer's line was written under, which the line drew under before
  * its row landed, so the row lands in its place; every other row's own id.
  */
-export function transcriptRowKey(message: CodingAgentMessage): string {
+export function transcriptRowKey(message: AgentTranscriptMessage): string {
   return message.role === MESSAGE_ROLE.USER ? (message.clientId ?? message.id) : message.id;
 }
 
 /** A sent line as the tab draws it before the service's row lands: the developer's row. */
-function sentLineMessage(line: SentLine): CodingAgentMessage {
+function sentLineMessage(line: SentLine): AgentTranscriptMessage {
   const files = line.attachments.map((file) => ({
     type: "file",
     mediaType: file.mediaType,
@@ -2456,7 +2434,7 @@ function sentLineMessage(line: SentLine): CodingAgentMessage {
 export function openingLineOf(words: {
   readonly key: string;
   readonly prompt: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
 }): SentLine {
   return {
     id: sentLineId(words.key),
@@ -2476,7 +2454,7 @@ export function openingLineOf(words: {
  */
 export function unreadOpeningLine(
   opening: SentLine | undefined,
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
 ): SentLine | undefined {
   if (opening === undefined) return undefined;
   return messages.some((message) => message.role === MESSAGE_ROLE.USER) ? undefined : opening;
@@ -2484,20 +2462,20 @@ export function unreadOpeningLine(
 
 /** The transcript's rows, with the lines sent and not yet read back at its end, in the order they went. */
 export function agentLines(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   sent: readonly SentLine[],
-): readonly CodingAgentMessage[] {
+): readonly AgentTranscriptMessage[] {
   return [...messages, ...sent.map(sentLineMessage)];
 }
 
 /** The tone a coding agent's status is named in on a badge: at work, done, failed, or stopped. */
 export const AGENT_STATUS_TONE = {
-  [CODING_AGENT_STATUS.STARTING]: STATUS_TONE.WORKING,
-  [CODING_AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
-  [CODING_AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
-  [CODING_AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
-  [CODING_AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
-} as const satisfies Record<CodingAgentStatus, StatusTone>;
+  [AGENT_STATUS.STARTING]: STATUS_TONE.WORKING,
+  [AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
+  [AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
+  [AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
+  [AGENT_STATUS.CANCELLED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<AgentStatus, StatusTone>;
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */
 export const PULL_REQUEST_STATE_LABEL = {
@@ -2527,22 +2505,20 @@ function githubPath(name: string): string {
 }
 
 /** Where the chip opens on GitHub: the pull request, or the branch compared against the repository's default where there is no pull request yet. */
-export function publishedUrl(published: CodingAgentPullRequestAnswer): string | undefined {
+export function publishedUrl(published: AgentPullRequestAnswer): string | undefined {
   if (published.pullRequest !== null) return published.pullRequest.url;
   if (published.branch === null || published.repository === null) return undefined;
   return `https://github.com/${published.repository}/compare/${githubPath(published.branch)}?expand=1`;
 }
 
 /** The number as the chip and the row spell it. */
-export function pullRequestNumberLabel(
-  pullRequest: Pick<CodingAgentPullRequest, "number">,
-): string {
+export function pullRequestNumberLabel(pullRequest: Pick<AgentPullRequest, "number">): string {
   return `#${pullRequest.number}`;
 }
 
 /** The word the row says where the pull request stands, only where that changes what the developer would do: a draft, merged, closed, or open in GitHub's merge queue, queued; nothing for one open otherwise. */
 export function pullRequestStateWord(
-  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+  pullRequest: Pick<AgentPullRequest, "state" | "queued">,
 ): string | undefined {
   const { state } = pullRequest;
   if (state !== PULL_REQUEST_STATE.OPEN) return PULL_REQUEST_STATE_LABEL[state];
@@ -2559,14 +2535,14 @@ export function queuedLabel(position: number | undefined): string {
 
 /** Where a pull request stands in one word, as its card heads it: Queued for an open one the merge queue holds, else its state's label. */
 export function pullRequestStateLabel(
-  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+  pullRequest: Pick<AgentPullRequest, "state" | "queued">,
 ): string {
   return pullRequestStateWord(pullRequest) ?? PULL_REQUEST_STATE_LABEL[pullRequest.state];
 }
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(
-  pullRequest: Pick<CodingAgentPullRequest, "number" | "state">,
+  pullRequest: Pick<AgentPullRequest, "number" | "state">,
 ): string {
   return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}`;
 }

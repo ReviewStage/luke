@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -69,7 +69,7 @@ test("an item an archived agent posted wears the harness that agent ran on, read
                     effort: "high",
                     title: "Retired sweep",
                     createdAt: AT,
-                    status: CODING_AGENT_STATUS.COMPLETED,
+                    status: AGENT_STATUS.COMPLETED,
                     turnId: null,
                     archivedAt: AT,
                   },

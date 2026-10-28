@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,8 +12,6 @@ import {
 } from "@luke/features/automation-wire";
 import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -237,7 +237,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Sweep the flaky tests",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: AT,
           automationId: null,
           workspaceId: ACME.id,
@@ -341,7 +341,7 @@ let openChannelsRefused = false;
 
 /** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
 const inboxes = followedInboxes((scope) => {
-  if (inboxRefused) return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  if (inboxRefused) return { failure: AGENT_CALL_FAILURE.UNANSWERED };
   if (scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === TASK_ID) {
     return { items: [WAITING, ANSWERED] };
   }

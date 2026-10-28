@@ -29,7 +29,7 @@ import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { hostInstallToken } from "../schemas/host-install-token.js";
 
@@ -281,9 +281,9 @@ const findHostAgents = SqlSchema.findAll({
   execute: ({ userId, deviceId }) =>
     Database.use((db) =>
       db
-        .select({ conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.userId, userId), eq(codingAgent.deviceId, deviceId))),
+        .select({ conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .where(and(eq(agentTable.userId, userId), eq(agentTable.deviceId, deviceId))),
     ),
 });
 

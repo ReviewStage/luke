@@ -14,7 +14,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS, accountInboxAnswerSchema } from "../account-inbox-wire.js";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../coding-agent-wire.js";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agent-wire.js";
 import {
   INBOX_BOUNDS,
   inboxAcknowledgeRequestSchema,

@@ -1,12 +1,12 @@
 /**
- * coding-agent-wakeups.ts -- the wakeups a native agent's released wait left, kept until the scheduled sweep delivers each.
+ * agent-wakeups.ts -- the wakeups a native agent's released wait left, kept until the scheduled sweep delivers each.
  *
  * A release replaces the agent's wakeups whole, since the CLI's own list as
  * it waited is the whole of what it would have fired. The same call with no
  * wakeups deletes them: on a Stop, which ends a CLI's wakeups with it, and
  * as any launch starts, since the CLI restores on resume the tasks it can
  * and the agent then owns them again, a copy Luke kept would fire twice or
- * after the agent cancelled it (`../schemas/coding-agent-wakeup.ts`).
+ * after the agent cancelled it (`../schemas/agent-wakeup.ts`).
  *
  * A claim takes the wakeups due, the longest due first and at most a batch,
  * under row locks a concurrent claim skips rather than waits on, and moves
@@ -26,19 +26,19 @@ import { asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
-import { codingAgentWakeup } from "../schemas/coding-agent-wakeup.js";
+import { agentTable } from "../schemas/agent.js";
+import { agentWakeupTable } from "../schemas/agent-wakeup.js";
 
 type WakeupEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
 /** One wakeup as a release names it: the instant it comes due and the prompt delivered then. */
-export interface CodingAgentWakeup {
+export interface AgentWakeup {
   readonly at: Date;
   readonly prompt: string;
 }
 
 /** One wakeup a claim took: its row, the agent it is for and that agent's starter, and the prompt to deliver. */
-export interface ClaimedCodingAgentWakeup {
+export interface ClaimedAgentWakeup {
   readonly id: string;
   readonly agentId: string;
   readonly userId: string;
@@ -49,9 +49,7 @@ export interface ClaimedCodingAgentWakeup {
 const deleteOfAgent = SqlSchema.void({
   Request: Schema.Struct({ agentId: Schema.String }),
   execute: ({ agentId }) =>
-    Database.use((db) =>
-      db.delete(codingAgentWakeup).where(eq(codingAgentWakeup.agentId, agentId)),
-    ),
+    Database.use((db) => db.delete(agentWakeupTable).where(eq(agentWakeupTable.agentId, agentId))),
 });
 
 const insertWakeups = SqlSchema.void({
@@ -62,7 +60,7 @@ const insertWakeups = SqlSchema.void({
   execute: ({ agentId, wakeups }) =>
     Database.use((db) =>
       db
-        .insert(codingAgentWakeup)
+        .insert(agentWakeupTable)
         .values(wakeups.map(({ at, prompt }) => ({ agentId, prompt, dueAt: at }))),
     ),
 });
@@ -73,14 +71,14 @@ const deleteSpent = SqlSchema.void({
   execute: ({ maxAttempts }) =>
     Database.use((db) =>
       db
-        .delete(codingAgentWakeup)
+        .delete(agentWakeupTable)
         .where(
-          sql`${gte(codingAgentWakeup.attempts, maxAttempts)} or ${inArray(
-            codingAgentWakeup.agentId,
+          sql`${gte(agentWakeupTable.attempts, maxAttempts)} or ${inArray(
+            agentWakeupTable.agentId,
             db
-              .select({ id: codingAgent.id })
-              .from(codingAgent)
-              .where(isNotNull(codingAgent.archivedAt)),
+              .select({ id: agentTable.id })
+              .from(agentTable)
+              .where(isNotNull(agentTable.archivedAt)),
           )}`,
         ),
     ),
@@ -101,18 +99,18 @@ const lockDue = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: codingAgentWakeup.id,
-          agentId: codingAgentWakeup.agentId,
-          userId: codingAgent.userId,
-          prompt: codingAgentWakeup.prompt,
-          dueAt: codingAgentWakeup.dueAt,
+          id: agentWakeupTable.id,
+          agentId: agentWakeupTable.agentId,
+          userId: agentTable.userId,
+          prompt: agentWakeupTable.prompt,
+          dueAt: agentWakeupTable.dueAt,
         })
-        .from(codingAgentWakeup)
-        .innerJoin(codingAgent, eq(codingAgent.id, codingAgentWakeup.agentId))
-        .where(lte(codingAgentWakeup.dueAt, now))
-        .orderBy(asc(codingAgentWakeup.dueAt), asc(codingAgentWakeup.id))
+        .from(agentWakeupTable)
+        .innerJoin(agentTable, eq(agentTable.id, agentWakeupTable.agentId))
+        .where(lte(agentWakeupTable.dueAt, now))
+        .orderBy(asc(agentWakeupTable.dueAt), asc(agentWakeupTable.id))
         .limit(limit)
-        .for("update", { of: codingAgentWakeup, skipLocked: true }),
+        .for("update", { of: agentWakeupTable, skipLocked: true }),
     ),
 });
 
@@ -121,9 +119,9 @@ const writeNextDelivery = SqlSchema.void({
   execute: ({ ids, next }) =>
     Database.use((db) =>
       db
-        .update(codingAgentWakeup)
-        .set({ dueAt: next, attempts: sql`${codingAgentWakeup.attempts} + 1` })
-        .where(inArray(codingAgentWakeup.id, ids)),
+        .update(agentWakeupTable)
+        .set({ dueAt: next, attempts: sql`${agentWakeupTable.attempts} + 1` })
+        .where(inArray(agentWakeupTable.id, ids)),
     ),
 });
 
@@ -133,22 +131,22 @@ const standsOne = SqlSchema.findAll({
   execute: ({ id }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgentWakeup.id })
-        .from(codingAgentWakeup)
-        .where(eq(codingAgentWakeup.id, id)),
+        .select({ id: agentWakeupTable.id })
+        .from(agentWakeupTable)
+        .where(eq(agentWakeupTable.id, id)),
     ),
 });
 
 const deleteOne = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String }),
   execute: ({ id }) =>
-    Database.use((db) => db.delete(codingAgentWakeup).where(eq(codingAgentWakeup.id, id))),
+    Database.use((db) => db.delete(agentWakeupTable).where(eq(agentWakeupTable.id, id))),
 });
 
 /** The agent's wakeups replaced by those given, none deleting them all. */
-export function replaceCodingAgentWakeups(
+export function replaceAgentWakeups(
   agentId: string,
-  wakeups: readonly CodingAgentWakeup[],
+  wakeups: readonly AgentWakeup[],
 ): WakeupEffect<void> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -165,12 +163,12 @@ export function replaceCodingAgentWakeups(
  * `next` should this delivery fail, after deleting those claimed
  * `maxAttempts` times already and an archived agent's.
  */
-export function claimDueCodingAgentWakeups(
+export function claimDueAgentWakeups(
   now: Date,
   next: Date,
   limit: number,
   maxAttempts: number,
-): WakeupEffect<readonly ClaimedCodingAgentWakeup[]> {
+): WakeupEffect<readonly ClaimedAgentWakeup[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -184,11 +182,11 @@ export function claimDueCodingAgentWakeups(
 }
 
 /** Whether the wakeup still stands, as a delivery asks just before it sends: a Stop or a launch since its claim deleted it. */
-export function codingAgentWakeupStands(id: string): WakeupEffect<boolean> {
+export function agentWakeupStands(id: string): WakeupEffect<boolean> {
   return Effect.map(standsOne({ id }), (rows) => rows.length > 0);
 }
 
 /** The wakeup delivered, so no claim takes it again. */
-export function deleteCodingAgentWakeup(id: string): WakeupEffect<void> {
+export function deleteAgentWakeup(id: string): WakeupEffect<void> {
   return deleteOne({ id });
 }

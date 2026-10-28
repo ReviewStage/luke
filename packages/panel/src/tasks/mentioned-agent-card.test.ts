@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   encodeMention,
   MENTION_KIND,
@@ -75,7 +75,7 @@ const BILLING: TaskSummary = {
   repository: "acme/relay",
 };
 
-function agentOf(id: string, overrides: Partial<CodingAgentSummary>): CodingAgentSummary {
+function agentOf(id: string, overrides: Partial<AgentSummary>): AgentSummary {
   return {
     id,
     planId: BILLING.id,
@@ -83,7 +83,7 @@ function agentOf(id: string, overrides: Partial<CodingAgentSummary>): CodingAgen
     effort: "high",
     title: "Prorate seat changes",
     createdAt: AT,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
     startedBy: { userId: "user-sam", name: "Sam Okafor" },
     ...overrides,
@@ -95,7 +95,7 @@ const PRORATE = agentOf("7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f", {});
 const SWEEPER = agentOf("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", {
   planId: null,
   title: "Sweep flaky tests",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   startedBy: { userId: ME, name: "Dean Stratakos" },
 });
 
@@ -103,14 +103,14 @@ const SWEEPER = agentOf("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", {
 const AUDITOR = agentOf("2a1b0c9d-8e7f-4a6b-9c5d-4e3f2a1b0c9d", {
   planId: null,
   title: "Audit retries",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
 });
 
 /** An agent on no task older than the workspace's newest, renamed since its chip was written, found only by its id. */
 const ARCHIVIST = agentOf("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", {
   planId: null,
   title: "Archive stale branches",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
 });
 
 /** Main's document holding the billing task, by which an agent of it names where it works. */
@@ -132,7 +132,7 @@ let answering = true;
 let pending = false;
 
 /** The pull request the prorater opened, as its Pull request tab reads it. */
-const SEAT_PULL_REQUEST: CodingAgentPullRequest = {
+const SEAT_PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Prorate seats on upgrade",
   url: "https://github.com/acme/relay/pull/42",
@@ -202,7 +202,7 @@ function answer(request: AnyAct): FakeActAnswer {
         }
       : {
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
+          value: { failure: AGENT_CALL_FAILURE.NOT_FOUND },
         };
   }
   return { status: FAKE_ANSWER.DONE, value: undefined };
@@ -293,7 +293,7 @@ async function settle(): Promise<void> {
 }
 
 /** An agent's mention, by the agent whichever task it works on, as its chip is written. */
-function mentionOf(agent: CodingAgentSummary, name: string): string {
+function mentionOf(agent: AgentSummary, name: string): string {
   return mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: agent.id }, name, PLACE);
 }
 

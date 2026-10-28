@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { planRevision } from "@luke/database/schemas/plan-revision";
@@ -73,7 +73,7 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
         yield* saveNotes(binding, [added("Context", "A member cannot bring a teammate in.")], {
           actor: PLAN_ACTOR.NOTETAKER,
         });
-        const started = yield* createCodingAgent(owner, {
+        const started = yield* createAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",

@@ -1,10 +1,10 @@
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import {
   automationOwner,
   automationRunStanding,
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { inboxWaitsOn } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -238,7 +238,7 @@ function AgentRow({
               <InlineEdit
                 value={rename.asked ?? subject.name}
                 label="Agent name"
-                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
                   endedByKey(edit.byKey);

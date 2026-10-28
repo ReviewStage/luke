@@ -5,13 +5,13 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, startTask } from "../../testing/index.js";
-import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
+import { archiveAgent, createAgent } from "../agent-store.js";
 import {
-  claimDueCodingAgentWakeups,
-  codingAgentWakeupStands,
-  deleteCodingAgentWakeup,
-  replaceCodingAgentWakeups,
-} from "../coding-agent-wakeups.js";
+  agentWakeupStands,
+  claimDueAgentWakeups,
+  deleteAgentWakeup,
+  replaceAgentWakeups,
+} from "../agent-wakeups.js";
 
 /**
  * The wakeups a native agent's released wait left, over a real dialect: a
@@ -41,7 +41,7 @@ const openAccount = Effect.gen(function* () {
 const openAgent = (userId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -55,7 +55,7 @@ const openAgent = (userId: string) =>
 
 /** The prompts a claim at `now` took of the agents named, in the order claimed. */
 const claimedOf = (now: Date, agentIds: readonly string[]) =>
-  Effect.map(claimDueCodingAgentWakeups(now, NEXT, EVERY, MAX_ATTEMPTS), (claimed) =>
+  Effect.map(claimDueAgentWakeups(now, NEXT, EVERY, MAX_ATTEMPTS), (claimed) =>
     claimed.filter((each) => agentIds.includes(each.agentId)),
   );
 
@@ -66,7 +66,7 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const agentId = yield* openAgent(owner);
-        yield* replaceCodingAgentWakeups(agentId, [
+        yield* replaceAgentWakeups(agentId, [
           { at: NOW, prompt: "Check the deploy." },
           { at: EARLIER, prompt: "Check CI on #42." },
           { at: LATER, prompt: "Remind me to push." },
@@ -86,7 +86,7 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
           "a second call in the minute takes none",
         );
 
-        for (const { id } of first) yield* deleteCodingAgentWakeup(id);
+        for (const { id } of first) yield* deleteAgentWakeup(id);
         assert.deepEqual(yield* claimedOf(NEXT, [agentId]), [], "a delivered wakeup is gone");
         assert.deepEqual(
           (yield* claimedOf(LATER, [agentId])).map(({ prompt }) => prompt),
@@ -101,16 +101,16 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const agentId = yield* openAgent(owner);
-        yield* replaceCodingAgentWakeups(agentId, [{ at: NOW, prompt: "Check CI on #42." }]);
+        yield* replaceAgentWakeups(agentId, [{ at: NOW, prompt: "Check CI on #42." }]);
         const [claimed] = yield* claimedOf(NOW, [agentId]);
         assert.ok(claimed !== undefined);
-        assert.equal(yield* codingAgentWakeupStands(claimed.id), true);
+        assert.equal(yield* agentWakeupStands(claimed.id), true);
 
         const [again] = yield* claimedOf(NEXT, [agentId]);
         assert.equal(again?.id, claimed.id, "claimed again past its lease");
 
-        yield* replaceCodingAgentWakeups(agentId, []);
-        assert.equal(yield* codingAgentWakeupStands(claimed.id), false, "a Stop deleted it");
+        yield* replaceAgentWakeups(agentId, []);
+        assert.equal(yield* agentWakeupStands(claimed.id), false, "a Stop deleted it");
       }),
   );
 
@@ -121,18 +121,16 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
         const owner = yield* openAccount;
         const agentId = yield* openAgent(owner);
         const other = yield* openAgent(owner);
-        yield* replaceCodingAgentWakeups(agentId, [{ at: EARLIER, prompt: "Old wakeup." }]);
-        yield* replaceCodingAgentWakeups(other, [{ at: EARLIER, prompt: "Another agent's." }]);
-        yield* replaceCodingAgentWakeups(agentId, [{ at: NOW, prompt: "New wakeup." }]);
+        yield* replaceAgentWakeups(agentId, [{ at: EARLIER, prompt: "Old wakeup." }]);
+        yield* replaceAgentWakeups(other, [{ at: EARLIER, prompt: "Another agent's." }]);
+        yield* replaceAgentWakeups(agentId, [{ at: NOW, prompt: "New wakeup." }]);
         assert.deepEqual(
           (yield* claimedOf(NOW, [agentId, other])).map(({ prompt }) => prompt),
           ["Another agent's.", "New wakeup."],
         );
 
-        yield* replaceCodingAgentWakeups(agentId, [
-          { at: LATER, prompt: "Stopped before it came." },
-        ]);
-        yield* replaceCodingAgentWakeups(agentId, []);
+        yield* replaceAgentWakeups(agentId, [{ at: LATER, prompt: "Stopped before it came." }]);
+        yield* replaceAgentWakeups(agentId, []);
         assert.deepEqual(yield* claimedOf(LATER, [agentId]), []);
       }),
   );
@@ -144,9 +142,9 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
         const owner = yield* openAccount;
         const failing = yield* openAgent(owner);
         const archived = yield* openAgent(owner);
-        yield* replaceCodingAgentWakeups(failing, [{ at: NOW, prompt: "Keeps failing." }]);
-        yield* replaceCodingAgentWakeups(archived, [{ at: NOW, prompt: "Archived since." }]);
-        yield* archiveCodingAgent(owner, archived, true);
+        yield* replaceAgentWakeups(failing, [{ at: NOW, prompt: "Keeps failing." }]);
+        yield* replaceAgentWakeups(archived, [{ at: NOW, prompt: "Archived since." }]);
+        yield* archiveAgent(owner, archived, true);
 
         let now = NOW;
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {

@@ -7,6 +7,7 @@ import {
   readAutomation,
 } from "@luke/database/models/automation-store";
 import { workspaceIntegrationInstallations } from "@luke/database/models/integration-installation-store";
+import { disabledServersSchema } from "@luke/features/agent-wire";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -27,7 +28,6 @@ import {
   scheduleTriggerSchema,
   sentryTriggerSchema,
 } from "@luke/features/automation-wire";
-import { disabledServersSchema } from "@luke/features/coding-agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";

@@ -24,10 +24,10 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  readCodingAgent,
+  type Agent,
+  readAgent,
   readVisibleAgentWorkspace,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -62,14 +62,14 @@ export function taskWorkspace(
  */
 export function agentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "id">,
+  agent: Pick<Agent, "id">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return readVisibleAgentWorkspace(userId, agent.id);
 }
 
 /**
  * The workspace of an agent acting as itself under its member, read as it
- * reads itself (`readCodingAgent`), its task's visibility left out; none
+ * reads itself (`readAgent`), its task's visibility left out; none
  * where the member no longer reaches the agent. Note that the task is left
  * out on purpose, because an agent keeps its own tools and skills while its
  * starter no longer sees its task; what a member reads of someone else's
@@ -77,18 +77,16 @@ export function agentWorkspace(
  */
 export function ownAgentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "id">,
+  agent: Pick<Agent, "id">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return Effect.map(
-    readCodingAgent(userId, agent.id),
+    readAgent(userId, agent.id),
     Option.map((found) => found.organizationId),
   );
 }
 
 /** The member an agent's GitHub reads act as: its starter where it recorded the token's access, and none otherwise. */
-export function agentMember(
-  agent: Pick<CodingAgent, "githubAccess" | "userId">,
-): string | undefined {
+export function agentMember(agent: Pick<Agent, "githubAccess" | "userId">): string | undefined {
   return agent.githubAccess === GITHUB_ACCESS.TOKEN ? agent.userId : undefined;
 }
 

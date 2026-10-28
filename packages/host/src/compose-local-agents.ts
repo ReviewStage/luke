@@ -4,12 +4,12 @@ import type {
   DeviceAgentDevice,
   HostedDeviceAgentClient,
 } from "@luke/features";
+import { DEVICE_BEAT } from "@luke/features/agent-wire";
 import {
   CHECKOUT_IDENTITY_SCRIPT,
   type CheckoutIdentity,
   checkoutIdentityEnv,
 } from "@luke/features/checkout-identity";
-import { DEVICE_BEAT } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,

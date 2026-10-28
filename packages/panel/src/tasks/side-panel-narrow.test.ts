@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,14 +29,14 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 /** The plan the tab stands on. */
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: TASK,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 

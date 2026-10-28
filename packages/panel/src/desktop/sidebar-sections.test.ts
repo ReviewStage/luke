@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type TasklessAgent } from "@luke/features/agent-wire";
 import {
   TASK_SECTION_ICON_COLOR,
   TASK_SECTION_ICON_KIND,
@@ -1478,7 +1478,7 @@ const SWEEP: TasklessAgent = {
   effort: "high",
   title: "Sweep flaky tests",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   startedBy: { userId: "user-ada", name: "Ada Lovelace" },
   automationId: null,

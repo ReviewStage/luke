@@ -16,23 +16,23 @@
  */
 
 import type {
-  CodingAgentAccountItems,
-  CodingAgentInboxAnsweredView,
-  CodingAgentInboxAnswerParams,
-  CodingAgentInboxAttachmentParams,
-  CodingAgentInboxAttachmentView,
-  CodingAgentInboxChanged,
-  CodingAgentInboxCloseParams,
-  CodingAgentInboxMessagedView,
-  CodingAgentInboxMessageParams,
-  CodingAgentInboxReadAllParams,
-  CodingAgentInboxReadAllView,
-  CodingAgentInboxReadStateParams,
-  CodingAgentInboxReadStateView,
-  CodingAgentInboxScope,
-  CodingAgentInboxStartParams,
-  CodingAgentPictureParams,
-} from "@luke/features/coding-agent-view";
+  AgentAccountItems,
+  AgentInboxAnsweredView,
+  AgentInboxAnswerParams,
+  AgentInboxAttachmentParams,
+  AgentInboxAttachmentView,
+  AgentInboxChanged,
+  AgentInboxCloseParams,
+  AgentInboxMessagedView,
+  AgentInboxMessageParams,
+  AgentInboxReadAllParams,
+  AgentInboxReadAllView,
+  AgentInboxReadStateParams,
+  AgentInboxReadStateView,
+  AgentInboxScope,
+  AgentInboxStartParams,
+  AgentPictureParams,
+} from "@luke/features/agent-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
@@ -42,37 +42,25 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
 export interface AgentInboxProceduresDependencies {
   host: {
     /** A task's or agent's inbox followed at the host, heard through `onInboxChanged`; following again starts over. */
-    codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
-    codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
-    onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
+    codingAgentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
+    codingAgentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
+    onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
     /** Every item the account reaches followed at the host, heard through `onAccountItemsChanged`; following again starts over, told whole. */
     codingAgentAccountItemsFollow(): Effect.Effect<void>;
     codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
-    onAccountItemsChanged(listener: (told: CodingAgentAccountItems) => void): () => void;
-    codingAgentInboxAnswer(
-      params: CodingAgentInboxAnswerParams,
-    ): Effect.Effect<CodingAgentInboxAnsweredView>;
-    codingAgentInboxClose(
-      params: CodingAgentInboxCloseParams,
-    ): Effect.Effect<CodingAgentInboxAnsweredView>;
-    codingAgentInboxMessage(
-      params: CodingAgentInboxMessageParams,
-    ): Effect.Effect<CodingAgentInboxMessagedView>;
-    codingAgentInboxStart(
-      params: CodingAgentInboxStartParams,
-    ): Effect.Effect<CodingAgentInboxMessagedView>;
+    onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
+    codingAgentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
+    codingAgentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
+    codingAgentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
+    codingAgentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
     codingAgentInboxReadState(
-      params: CodingAgentInboxReadStateParams,
-    ): Effect.Effect<CodingAgentInboxReadStateView>;
-    codingAgentInboxReadAll(
-      params: CodingAgentInboxReadAllParams,
-    ): Effect.Effect<CodingAgentInboxReadAllView>;
+      params: AgentInboxReadStateParams,
+    ): Effect.Effect<AgentInboxReadStateView>;
+    codingAgentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
     codingAgentInboxAttachment(
-      params: CodingAgentInboxAttachmentParams,
-    ): Effect.Effect<CodingAgentInboxAttachmentView>;
-    codingAgentPicture(
-      params: CodingAgentPictureParams,
-    ): Effect.Effect<CodingAgentInboxAttachmentView>;
+      params: AgentInboxAttachmentParams,
+    ): Effect.Effect<AgentInboxAttachmentView>;
+    codingAgentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   };
 }
 
@@ -89,10 +77,7 @@ const ACCOUNT_ITEMS = "account";
  * held, the scopes that moved told over those before, and one told with no
  * items left out. A whole change or a failure stands for itself.
  */
-function itemsFolded(
-  held: CodingAgentAccountItems,
-  told: CodingAgentAccountItems,
-): CodingAgentAccountItems {
+function itemsFolded(held: AgentAccountItems, told: AgentAccountItems): AgentAccountItems {
   if ("failure" in held || "failure" in told || told.whole) return told;
   const moved = told.scopes.map((each) => each.scope);
   const kept = held.scopes.filter(
@@ -104,10 +89,10 @@ function itemsFolded(
 export function agentInboxProcedures(dependencies: AgentInboxProceduresDependencies) {
   const { host } = dependencies;
   /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
-  const openInboxes: OpenFollows<CodingAgentInboxChanged["inbox"], CodingAgentInboxScope> =
+  const openInboxes: OpenFollows<AgentInboxChanged["inbox"], AgentInboxScope> =
     MutableHashMap.empty();
   /** The account's items while any window holds a stream of them open, every change told so far folded into one. */
-  const openItems: OpenFollows<CodingAgentAccountItems> = MutableHashMap.empty();
+  const openItems: OpenFollows<AgentAccountItems> = MutableHashMap.empty();
   return {
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW
@@ -115,11 +100,11 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const changes = followedStream(
         {
-          keyOf: (scope: CodingAgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
+          keyOf: (scope: AgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
           follow: host.codingAgentInboxFollow,
           unfollow: host.codingAgentInboxUnfollow,
           onChanged: host.onInboxChanged,
-          valueOf: (changed: CodingAgentInboxChanged, scope: CodingAgentInboxScope) =>
+          valueOf: (changed: AgentInboxChanged, scope: AgentInboxScope) =>
             changed.scope.kind === scope.kind && changed.scope.id === scope.id
               ? Option.some(changed.inbox)
               : Option.none(),
@@ -139,7 +124,7 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
           follow: host.codingAgentAccountItemsFollow,
           unfollow: host.codingAgentAccountItemsUnfollow,
           onChanged: host.onAccountItemsChanged,
-          valueOf: (changed: CodingAgentAccountItems) => Option.some(changed),
+          valueOf: (changed: AgentAccountItems) => Option.some(changed),
           fold: itemsFolded,
         },
         openItems,

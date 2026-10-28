@@ -32,16 +32,12 @@
  * changes.
  */
 
+import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
 import {
-  type CodingAgent,
-  hasRepository,
-  type WithRepository,
-} from "@luke/database/models/coding-agent-store";
-import {
-  type CodingAgentPullRequest,
+  type AgentPullRequest,
   PULL_REQUEST_STATE,
   type PullRequestMerging,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
@@ -139,8 +135,8 @@ const askedOfAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
 type OverviewRead<A, R> = (
   token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
-  pullRequest: CodingAgentPullRequest,
+  agent: WithRepository<Agent>,
+  pullRequest: AgentPullRequest,
   /** The member reading, whose own reads mark what is theirs. */
   userId: string,
 ) => Effect.Effect<A | null, PullRequestReadFailure, R>;
@@ -152,8 +148,8 @@ type OverviewRead<A, R> = (
  * no repository. Each part is a procedure of its own, so each lands on its own.
  */
 const overviewPart = <A, R>(
-  agent: CodingAgent,
-  pullRequest: CodingAgentPullRequest | null,
+  agent: Agent,
+  pullRequest: AgentPullRequest | null,
   userId: string,
   read: OverviewRead<A, R>,
 ) =>
@@ -168,7 +164,7 @@ const overviewPart = <A, R>(
   });
 
 /** Whether the pull request was open as last read, which is when the stack it stands in is worth a read of GitHub's open pull requests. */
-function stackable(pullRequest: CodingAgentPullRequest): boolean {
+function stackable(pullRequest: AgentPullRequest): boolean {
   return (
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT
   );
@@ -203,8 +199,8 @@ const memberCanEdit = (userId: string, repository: string, number: number) =>
  */
 const overviewPullRequestRead = (
   token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
-  pullRequest: CodingAgentPullRequest,
+  agent: WithRepository<Agent>,
+  pullRequest: AgentPullRequest,
   userId: string,
 ) =>
   Effect.gen(function* () {
@@ -229,8 +225,8 @@ const overviewPullRequestRead = (
  */
 const overviewChecksRead = (
   token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
-  pullRequest: CodingAgentPullRequest,
+  agent: WithRepository<Agent>,
+  pullRequest: AgentPullRequest,
 ) =>
   Effect.map(
     Effect.all(
@@ -263,8 +259,8 @@ const memberPendingReview = (userId: string, repository: string, number: number)
  */
 const overviewConversationRead = (
   token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
-  pullRequest: CodingAgentPullRequest,
+  agent: WithRepository<Agent>,
+  pullRequest: AgentPullRequest,
   userId: string,
 ) =>
   Effect.map(

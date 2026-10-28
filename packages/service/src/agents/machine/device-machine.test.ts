@@ -9,11 +9,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  createCodingAgent,
+  createAgent,
   hasRepository,
   latestTurnsOfReached,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+  recordAgentRunnerToken,
+} from "@luke/database/models/agent-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
@@ -28,13 +28,13 @@ import {
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollOwnDevice, removeHost } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { deviceAgentLine } from "@luke/database/schemas/device-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { DEVICE_LAYOUT, expectTopicsFire, getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -118,7 +118,7 @@ const openLocalAgentIn = (installation?: InstallationFixture) =>
         LINK_OUTCOME.LINKED,
       );
     }
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -126,7 +126,7 @@ const openLocalAgentIn = (installation?: InstallationFixture) =>
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository,
-      machine: CODING_AGENT_MACHINE.DEVICE,
+      machine: AGENT_MACHINE.DEVICE,
       deviceId,
     });
     const { agent } = Option.getOrThrow(started);
@@ -526,7 +526,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             lapsedLaunch.handle.command,
           );
           yield* claimedDeviceAgentLine(kept.userId, kept.deviceId, keptLaunch.handle.command);
-          yield* recordCodingAgentRunnerToken(lapsed.userId, lapsed.agent.id, "fixture-digest");
+          yield* recordAgentRunnerToken(lapsed.userId, lapsed.agent.id, "fixture-digest");
           const writer = yield* storeWriter({ tools: {} });
           for (const { userId, agent } of [lapsed, kept]) {
             const turnId = randomUUID();
@@ -549,9 +549,9 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           ]);
           const db = yield* Database;
           const [bearer] = yield* db
-            .select({ hash: codingAgent.runnerTokenHash })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, lapsed.agent.id));
+            .select({ hash: agentTable.runnerTokenHash })
+            .from(agentTable)
+            .where(eq(agentTable.id, lapsed.agent.id));
 
           const lapsedTurn = turns.get(lapsed.agent.conversationId);
           assert.equal(lapsedTurn?.status, TURN_STATUS.FAILED);

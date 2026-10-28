@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  type CodingAgentInboxAnswerView,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -1198,7 +1195,7 @@ test("on To do, an item answered on another Mac slides out from where its row st
 /** A read the test answers when it chooses. */
 interface PendingRead {
   readonly promise: Promise<ReadOutcome>;
-  readonly settle: (value: CodingAgentInboxAnswerView) => void;
+  readonly settle: (value: AgentInboxAnswerView) => void;
 }
 
 /** A read held until the test settles it. */

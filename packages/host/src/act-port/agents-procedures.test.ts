@@ -13,14 +13,14 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentTranscriptChanged,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptPage,
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentTranscriptChanged,
+  type AgentTranscriptKey,
+  type AgentTranscriptPage,
   TRANSCRIPT_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -51,12 +51,12 @@ const STARTED = {
     effort: "high",
     title: null,
     createdAt: 1_800_000_000_000,
-    status: CODING_AGENT_STATUS.STARTING,
+    status: AGENT_STATUS.STARTING,
     turnId: null,
   },
-} satisfies CodingAgentAgentAnswer;
+} satisfies AgentAgentAnswer;
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -383,7 +383,7 @@ it("a panel's Start reaches the host with the plan and the press's own key, hear
 
   assert.deepEqual(started, { answer: STARTED });
   assert.deepEqual(asked, [["codingAgentStart", { taskId: TASK_ID, idempotencyKey: "press-1" }]]);
-  assert.deepEqual(noted, [`agents:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`]);
+  assert.deepEqual(noted, [`agents:${AGENT_ID}=${AGENT_STATUS.STARTING}`]);
 });
 
 it("a rename, an archive, or a pin answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not", async () => {
@@ -429,8 +429,7 @@ it("a delete that took the agent reads the plan list again, so its sidebar row g
   });
   const refused = windowPort(PANEL, {
     answers: {
-      codingAgentDelete: () =>
-        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY }),
+      codingAgentDelete: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.AGENT_NOT_READY }),
     },
   });
 
@@ -438,7 +437,7 @@ it("a delete that took the agent reads the plan list again, so its sidebar row g
     answer: { deleted: true },
   });
   assert.deepEqual(await refused.call(AGENT_ACT_KIND.CODING_AGENTS_DELETE, { agentId: AGENT_ID }), {
-    answer: { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY },
+    answer: { failure: AGENT_CALL_FAILURE.AGENT_NOT_READY },
   });
 
   assert.deepEqual(deleted.asked, [["codingAgentDelete", { agentId: AGENT_ID }], ["tasksRefresh"]]);
@@ -468,12 +467,12 @@ it("an ensure of the operator that made one reads the plan list again, so its si
 it("a panel's reads are noted on their way: a task's agents or the task gone, and an agent's status, but a worker's page is no word on the agent", async () => {
   const { call, noted } = windowPort(PANEL, {
     answers: {
-      codingAgentList: () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
+      codingAgentList: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
       codingAgentMessages: () =>
         Effect.succeed({
           messages: [],
           cursor: "0",
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
           title: "Triage",
         }),
       codingAgentMessage: () => Effect.succeed(STARTED),
@@ -495,8 +494,8 @@ it("a panel's reads are noted on their way: a task's agents or the task gone, an
 
   assert.deepEqual(noted, [
     `gone:${TASK_ID}`,
-    `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
-    `messaged:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`,
+    `status:${AGENT_ID}=${AGENT_STATUS.RUNNING}`,
+    `messaged:${AGENT_ID}=${AGENT_STATUS.STARTING}`,
   ]);
 });
 
@@ -630,7 +629,7 @@ async function until(ready: () => boolean): Promise<void> {
 
 it("a panel's transcript stream follows the transcript at the host, hears each page told of it alone, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const listeners = new Set<(changed: CodingAgentTranscriptChanged) => void>();
+  const listeners = new Set<(changed: AgentTranscriptChanged) => void>();
   const transcripts: Pick<
     HostAsk,
     "transcriptFollow" | "transcriptUnfollow" | "onTranscriptChanged"
@@ -652,11 +651,11 @@ it("a panel's transcript stream follows the transcript at the host, hears each p
   const port = testActPort(agentProcedures({ host, notices }));
   ports.push(port);
   const client = port.as(PANEL);
-  const transcript: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
-  const page: CodingAgentTranscriptPage = {
+  const transcript: AgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
+  const page: AgentTranscriptPage = {
     messages: [],
     cursor: "1:0",
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     title: "Invites",
     caughtUp: false,
   };

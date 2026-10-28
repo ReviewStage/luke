@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { AgentStatus } from "@luke/features/agent-wire";
 import { agentName } from "@luke/features/model-label";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -26,7 +26,7 @@ interface ListedAgent {
   readonly id: string;
   readonly title: string | null;
   readonly model: string;
-  readonly status: CodingAgentStatus;
+  readonly status: AgentStatus;
   readonly automationName?: string | undefined;
 }
 

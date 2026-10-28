@@ -7,12 +7,12 @@ import {
 } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  type CodingAgentAttachment,
-  codingAgentMessageRequestSchema,
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_BOUNDS,
+  type AgentAttachment,
+  agentMessageRequestSchema,
   hasWordsOrFiles,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linkLabels } from "./mention-link.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
@@ -117,7 +117,7 @@ export const INBOX_BOUNDS = {
    * message to an agent, so a picture is one size in either direction, and
    * one a screenshot at a screen's own scale fits under.
    */
-  MAX_IMAGE_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  MAX_IMAGE_BYTES: AGENT_BOUNDS.MAX_IMAGE_BYTES,
   /**
    * The most bytes one video may hold: a WebM the agent recorded of what it
    * did, held to the bound a transcript keeps one under, which the
@@ -196,9 +196,9 @@ export const INBOX_BLOCK = {
 
 /** The pictures an image block may be, by the media type each is kept and served under; the bytes are sniffed for one of these, never trusted by name. */
 export const INBOX_IMAGE_TYPE = {
-  PNG: CODING_AGENT_ATTACHMENT_TYPE.PNG,
-  JPEG: CODING_AGENT_ATTACHMENT_TYPE.JPEG,
-  WEBP: CODING_AGENT_ATTACHMENT_TYPE.WEBP,
+  PNG: AGENT_ATTACHMENT_TYPE.PNG,
+  JPEG: AGENT_ATTACHMENT_TYPE.JPEG,
+  WEBP: AGENT_ATTACHMENT_TYPE.WEBP,
 } as const;
 
 export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_TYPE];
@@ -209,7 +209,7 @@ export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_
  * drew in its words as it draws a picture.
  */
 export const INBOX_FILE_TYPE = {
-  ...CODING_AGENT_ATTACHMENT_TYPE,
+  ...AGENT_ATTACHMENT_TYPE,
   WEBM: WEBM_TYPE,
 } as const;
 
@@ -1014,7 +1014,7 @@ export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">): stri
  */
 export const inboxMessageRequestSchema = EffectSchema.Struct({
   text: EffectSchema.Trim.check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
-  attachments: codingAgentMessageRequestSchema.fields.attachments,
+  attachments: agentMessageRequestSchema.fields.attachments,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
   /** The answer to the thread's open ask, which names it; absent on a plain reply. */
   answers: EffectSchema.optionalKey(inboxAnswersSchema),
@@ -1216,7 +1216,7 @@ function replyWords(reply: InboxReply): string {
 }
 
 /** The files an answer carries, by count alone: those sent with it, or those an item names as its answer's. */
-type AnswerFiles = readonly (CodingAgentAttachment | InboxAnswerFile)[];
+type AnswerFiles = readonly (AgentAttachment | InboxAnswerFile)[];
 
 /**
  * Whether an answer reaches the agent as one of the developer's messages:

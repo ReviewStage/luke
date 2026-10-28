@@ -1,8 +1,5 @@
+import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@luke/features/agent-view";
 import type { Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxMessagedView,
-} from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
@@ -353,8 +350,8 @@ export function DesktopInbox({
             clientKey: start.clientKey,
           })
             .catch(
-              (): CodingAgentInboxMessagedView => ({
-                failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+              (): AgentInboxMessagedView => ({
+                failure: AGENT_CALL_FAILURE.UNANSWERED,
               }),
             )
             .then((answer) => {
