@@ -648,6 +648,7 @@
   --spacing-chip-tight: var(--luke-space-4);
   --spacing-chip-compact: var(--luke-space-20);
   --spacing-chip-compact-inset: calc(var(--luke-space-8) - 1px);
+  --spacing-title-floor: var(--luke-title-floor);
   --spacing-chip-chevron: var(--luke-space-12);
   --spacing-chip-remove: calc(var(--luke-control-height) - var(--luke-space-12));
   --spacing-chip-remove-glyph: 10px; /* off-scale: the ×, a size under the chevron */
