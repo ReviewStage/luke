@@ -7,7 +7,12 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
 import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
-import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
+import {
+  getTestDB,
+  migrationStatements,
+  openWorkspace,
+  syncCaptureTakenOff,
+} from "../../testing/index.js";
 import { user } from "../auth.js";
 import { inboxItem } from "../inbox.js";
 import { inboxMessage } from "../inbox-message.js";
@@ -93,7 +98,8 @@ it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) =
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const place = yield* openAgent;
-        for (const statement of UNDO) yield* sql.unsafe(statement);
+        // The database as it stood before the migration: no sync capture yet, whose triggers name the columns undone.
+        for (const statement of [...syncCaptureTakenOff(), ...UNDO]) yield* sql.unsafe(statement);
 
         // Written as a deployment from before the migration writes them, naming none of its columns.
         // Note that the view columns a later migration dropped are left out, since only this migration is undone.

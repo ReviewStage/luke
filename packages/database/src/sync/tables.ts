@@ -16,10 +16,16 @@
  * write to them notifies the account it moves, so a read the account loses
  * is woken and answers without it.
  */
-import { member } from "../schemas/auth.js";
+import { attachment } from "../schemas/attachment.js";
+import { member, user } from "../schemas/auth.js";
+import { automation, automationRun } from "../schemas/automation.js";
+import { channel } from "../schemas/channel.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
+import { inboxItem } from "../schemas/inbox.js";
+import { inboxItemRead } from "../schemas/inbox-item-read.js";
+import { inboxMessage } from "../schemas/inbox-message.js";
 import { macCommand } from "../schemas/mac-command.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
@@ -63,6 +69,25 @@ export const memberSync = defineSyncTable(member, {
     { kind: TOPIC.WORKSPACE, column: member.organizationId },
     { kind: TOPIC.ACCOUNT, column: member.userId },
   ],
+});
+
+/**
+ * An account, on its own topic and, through its memberships, every
+ * workspace it is in, so a teammate's new name or picture reaches the
+ * workspace's reads. Note that when it last moved and how it last signed in
+ * are ignored, because every sign-in rewrites both and no view reads them.
+ */
+export const userSync = defineSyncTable(user, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: user.id },
+    {
+      through: member,
+      key: member.userId,
+      by: user.id,
+      topics: [{ kind: TOPIC.WORKSPACE, column: member.organizationId }],
+    },
+  ],
+  ignore: [user.updatedAt, user.lastLoginMethod],
 });
 
 /** A member's own GitHub token, on the member's topic. */
@@ -125,10 +150,117 @@ export const planCommentSync = defineSyncTable(planComment, {
   topics: [{ kind: TOPIC.TASK, column: planComment.taskId }],
 });
 
+/**
+ * An inbox item, on its task's topic, its agent's, and its workspace's, and,
+ * through the workspace's memberships, on the account of every member of
+ * it. Note that the accounts are named here, because the account's inbox and
+ * a workspace's channels are read per account, and a read's topics come
+ * from its params alone: waking them on the workspace's topic instead would
+ * re-run them on every plan save in it.
+ */
+export const inboxItemSync = defineSyncTable(inboxItem, {
+  topics: [
+    { kind: TOPIC.TASK, column: inboxItem.taskId },
+    { kind: TOPIC.AGENT, column: inboxItem.agentId },
+    { kind: TOPIC.WORKSPACE, column: inboxItem.organizationId },
+    {
+      through: member,
+      key: member.organizationId,
+      by: inboxItem.organizationId,
+      topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
+    },
+  ],
+});
+
+/** A message on an inbox item's thread, on its item's task and agent, which it names only by the item. */
+export const inboxMessageSync = defineSyncTable(inboxMessage, {
+  topics: [
+    {
+      through: inboxItem,
+      key: inboxItem.id,
+      by: inboxMessage.itemId,
+      topics: [
+        { kind: TOPIC.TASK, column: inboxItem.taskId },
+        { kind: TOPIC.AGENT, column: inboxItem.agentId },
+      ],
+    },
+  ],
+});
+
+/** Where a member read an inbox item through, or marked it unread, on the member's topic and on the item's task and agent. */
+export const inboxItemReadSync = defineSyncTable(inboxItemRead, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: inboxItemRead.userId },
+    {
+      through: inboxItem,
+      key: inboxItem.id,
+      by: inboxItemRead.itemId,
+      topics: [
+        { kind: TOPIC.TASK, column: inboxItem.taskId },
+        { kind: TOPIC.AGENT, column: inboxItem.agentId },
+      ],
+    },
+  ],
+});
+
+/**
+ * A file or a picture, on its task's topic and, for an inbox item's, the
+ * item's agent's. Note that its bytes are ignored, because only what the
+ * row says of them is read live, and an update comparing them would weigh
+ * every row's bytes.
+ */
+export const attachmentSync = defineSyncTable(attachment, {
+  topics: [
+    { kind: TOPIC.TASK, column: attachment.taskId },
+    {
+      through: inboxItem,
+      key: inboxItem.id,
+      by: attachment.inboxItemId,
+      topics: [{ kind: TOPIC.AGENT, column: inboxItem.agentId }],
+    },
+  ],
+  ignore: [attachment.bytes],
+});
+
+/** A workspace's channel, on the workspace's topic and, as an inbox item names them, the account of every member of it. */
+export const channelSync = defineSyncTable(channel, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: channel.organizationId },
+    {
+      through: member,
+      key: member.organizationId,
+      by: channel.organizationId,
+      topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
+    },
+  ],
+});
+
+/** An automation, on its workspace's topic and its creator's. */
+export const automationSync = defineSyncTable(automation, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: automation.organizationId },
+    { kind: TOPIC.ACCOUNT, column: automation.userId },
+  ],
+});
+
+/** One run of an automation, on its account's topic and, through the automation, its workspace's. */
+export const automationRunSync = defineSyncTable(automationRun, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: automationRun.userId },
+    {
+      through: automation,
+      key: automation.id,
+      by: automationRun.automationId,
+      topics: [{ kind: TOPIC.WORKSPACE, column: automation.organizationId }],
+    },
+  ],
+});
+
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
   codingAgentSync,
   memberSync,
+  userSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   taskSectionSync,
@@ -138,4 +270,11 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   macCommandSync,
   planCommentThreadSync,
   planCommentSync,
+  inboxItemSync,
+  inboxMessageSync,
+  inboxItemReadSync,
+  attachmentSync,
+  channelSync,
+  automationSync,
+  automationRunSync,
 ];

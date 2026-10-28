@@ -12,7 +12,8 @@
  * asks again (`sealedParts`). The hold looks again every 3 s, or every
  * second for a read someone watches move, or, for a read Luke Sync wakes
  * (`../sync/live-queries.ts`), whenever a write to its topics lands, and
- * then answers with that write's txid (`liveQueryParts`).
+ * then answers with that write's txid (`liveQueryParts`). The account's
+ * inbox is one such read (`inboxLive`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
  * account reaches and every agent of them and with no task, as two
@@ -53,7 +54,7 @@
  * two statements, its channels and where each one's threads stand
  * (`inbox-store.ts`'s `channelsLiveStatements`), after the account is read
  * as a member of it, so a workspace it is not in is not found, as its held
- * read answers.
+ * read answers; woken by Luke Sync (`channelsLive`).
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
@@ -67,12 +68,13 @@
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, their threads and files as two
  * more, after the plan or the agent is read as the account, so one it does
- * not reach is not found, as its held read answers.
+ * not reach is not found, as its held read answers; each woken by Luke Sync
+ * (`taskInboxLive`, `agentInboxLive`).
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
-import { ownFailedRunsLiveStatement, readAutomation } from "@luke/database/models/automation-store";
+import { readAutomation } from "@luke/database/models/automation-store";
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
@@ -112,14 +114,15 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import {
-  accountInboxLiveStatements,
-  channelsLiveStatements,
-  memberAgentInboxLiveStatements,
-  taskInboxLiveStatements,
-} from "../inbox/inbox-store.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { macCommandsLive, sidebarLive } from "../sync/live-queries.js";
+import {
+  agentInboxLive,
+  channelsLive,
+  inboxLive,
+  macCommandsLive,
+  sidebarLive,
+  taskInboxLive,
+} from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
@@ -287,13 +290,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const statements = Option.zipWith(
-        accountInboxLiveStatements(context.userId),
-        ownFailedRunsLiveStatement(context.userId),
-        (parts, failedRuns) => ({ ...parts, failedRuns }),
-      );
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(inboxLive, { userId: context.userId }, input);
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -421,18 +418,18 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const taskId = yield* pathUuid(input.id);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = taskInboxLiveStatements(context.userId, taskId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(taskInboxLive, { userId: context.userId, taskId }, input);
     }),
     agentInbox: signedIn.agentInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = memberAgentInboxLiveStatements(context.userId, agent.value.id);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        agentInboxLive,
+        { userId: context.userId, agentId: agent.value.id },
+        input,
+      );
     }),
     sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -460,9 +457,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         isWorkspaceMember(context.userId, input.workspaceId),
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = channelsLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        channelsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     workspaceInvitations: signedIn.workspaceInvitations.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
