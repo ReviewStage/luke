@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -9,16 +9,19 @@ import {
   INBOX_STATUS,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
-import { type InboxItemsControl, useInboxItems } from "./use-inbox-items.js";
+import {
+  type HolderInboxItems,
+  type InboxHolding,
+  useHolderInboxItems,
+} from "./use-holder-inbox-items.js";
 
 /**
- * use-inbox-items.test.ts -- the window's Inbox follows each listed task's
+ * use-holder-inbox-items.test.ts -- the window's Inbox follows each listed task's
  * items while it lists it, holds each push, lets a task go as it leaves the
  * list, says a task could not be read only of a task it still lists, so a
  * workspace switched to is not told of another's failure, and follows a
@@ -38,7 +41,11 @@ async function settle(): Promise<void> {
   });
 }
 
-const holding = (taskId: string): AppInboxTaskHolding => ({ taskId, items: 1, updatedAt: 1 });
+const holding = (taskId: string): InboxHolding => ({
+  kind: INBOX_SCOPE_KIND.PLAN,
+  id: taskId,
+  updatedAt: 1,
+});
 
 const ITEM: InboxItem = {
   id: "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b",
@@ -72,17 +79,17 @@ function bridge(main: ReturnType<typeof followedInboxes>) {
   fakeActPort(main.procedures);
 }
 
-function mount(holdings: readonly AppInboxTaskHolding[]) {
-  let control: InboxItemsControl | undefined;
-  function Probe({ listed }: { listed: readonly AppInboxTaskHolding[] }) {
-    control = useInboxItems({ holdings: listed });
+function mount(holdings: readonly InboxHolding[]) {
+  let control: HolderInboxItems | undefined;
+  function Probe({ listed }: { listed: readonly InboxHolding[] }) {
+    control = useHolderInboxItems(listed);
     return null;
   }
   root = createRoot(document.createElement("div"));
   act(() => root?.render(createElement(Probe, { listed: holdings })));
   return {
     control: () => control,
-    list: (listed: readonly AppInboxTaskHolding[]) =>
+    list: (listed: readonly InboxHolding[]) =>
       act(() => root?.render(createElement(Probe, { listed }))),
   };
 }
@@ -97,14 +104,14 @@ test("each listed plan is pending until its inbox is pushed, every push replaces
   const answered = { ...ITEM, revision: 2, status: INBOX_STATUS.ANSWERED };
   main.push({ kind: "plan", id: "acme-plan" }, { items: [answered] });
   await settle();
-  const after = control()?.items.get("acme-plan");
+  const after = control()?.items[INBOX_SCOPE_KIND.PLAN].get("acme-plan");
   list([]);
   await settle();
 
   assert.deepEqual([before, pushed], [true, false]);
   assert.deepEqual(after, [answered]);
   assert.equal(main.isFollowed({ kind: "plan", id: "acme-plan" }), false);
-  assert.deepEqual(control()?.items.get("acme-plan"), [answered]);
+  assert.deepEqual(control()?.items[INBOX_SCOPE_KIND.PLAN].get("acme-plan"), [answered]);
   assert.deepEqual(main.asked, ["plan:acme-plan"]);
 });
 
@@ -115,13 +122,13 @@ test("a plan main says changed later than its last push is pending until a push 
   await settle();
   const pushed = control()?.pending;
   list([{ ...holding("acme-plan"), updatedAt: 2 }]);
-  const behind = [control()?.pending, control()?.current.has("acme-plan")];
+  const behind = [control()?.pending, control()?.current[INBOX_SCOPE_KIND.PLAN].has("acme-plan")];
   main.push({ kind: "plan", id: "acme-plan" }, { items: [{ ...ITEM, updatedAt: 2 }] });
   await settle();
 
   assert.deepEqual([pushed, ...behind], [false, true, false]);
   assert.equal(control()?.pending, false);
-  assert.deepEqual(control()?.current, new Set(["acme-plan"]));
+  assert.deepEqual(control()?.current[INBOX_SCOPE_KIND.PLAN], new Set(["acme-plan"]));
 });
 
 test("a plan that could not be read says so only while it is listed, is let go, and is followed again on Try again", async () => {
@@ -148,6 +155,6 @@ test("a plan that could not be read says so only while it is listed, is let go, 
 
   assert.deepEqual([failed, followed, elsewhere], [true, false, false]);
   assert.equal(control()?.failed, false);
-  assert.deepEqual(control()?.items.get("personal-plan"), []);
+  assert.deepEqual(control()?.items[INBOX_SCOPE_KIND.PLAN].get("personal-plan"), []);
   assert.deepEqual(main.asked, ["plan:personal-plan", "plan:acme-plan", "plan:personal-plan"]);
 });

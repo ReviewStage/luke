@@ -187,29 +187,36 @@ export function tasklessRowSubject(
 }
 
 /**
- * An agent with no task as main's read of what waits on the developer names
- * it: its title, else its automation's name, else its model, its harness's tile at rest, and the
- * automation whose run started it. Note that the line says nothing of
- * where the agent stands, so its card's corner says nothing either.
+ * An agent with no task as the Inbox names it (`TasklessInboxAgent`): Luke
+ * for the member's operator, else its title, else the name of the automation
+ * the reader may read that started it, else its model (`agentName`), its
+ * harness's tile at rest, and that automation. Note that the line says
+ * nothing of where the agent stands, so its card's corner says nothing
+ * either.
  */
 export function tasklessSubject(
   line: {
-    readonly title: string | null;
-    readonly model: string;
+    readonly agentKind?: CodingAgentKind | undefined;
+    readonly agentTitle: string | null;
+    readonly agentModel: string;
     readonly automationId: string | null;
-    /** The name of the automation whose run started it, which an untitled agent goes by; none where the line names none. */
-    readonly automationName?: string | undefined;
+    readonly automationName: string | null;
   },
   models: readonly CatalogModel[] | undefined,
 ): AgentSubject {
   const name = agentName(
-    { title: line.title, model: line.model, automationName: line.automationName },
+    {
+      kind: line.agentKind,
+      title: line.agentTitle,
+      model: line.agentModel,
+      automationName: line.automationId === null ? null : line.automationName,
+    },
     models,
   );
   const tile: Actor = {
     kind: ACTOR_KIND.AGENT,
     name,
-    provider: providerOf(line.model),
+    provider: providerOf(line.agentModel),
     state: ACTOR_STATE.REST,
   };
   const reading: CardReading = {

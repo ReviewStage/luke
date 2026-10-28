@@ -169,6 +169,8 @@ export interface AppInboxTaskHolding {
  * member's operator above all.
  */
 export interface AppInboxTasklessItem extends AppInboxWaitingItem {
+  /** When the item last changed, by the service's clock, which a follow of its agent's inbox is current once it holds. */
+  updatedAt: number;
   /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
   agentKind?: CodingAgentKind;
   agentTitle: string | null;

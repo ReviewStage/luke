@@ -269,6 +269,7 @@ test("an item of an agent with no plan stands under the automation that started 
       agentId: SWEEP_AGENT,
       title: QUARANTINE.title,
       postedAt: QUARANTINE.postedAt,
+      updatedAt: QUARANTINE.updatedAt,
       agentTitle: "Sweep the flaky tests",
       agentModel: "anthropic/claude-opus-5.5",
       automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -312,6 +313,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
     agentId: SWEEP_AGENT,
     title: QUARANTINE.title,
     postedAt: QUARANTINE.postedAt,
+    updatedAt: QUARANTINE.updatedAt,
     agentTitle: "Sweep the flaky tests",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
@@ -401,6 +403,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
     agentKind: CODING_AGENT_KIND.OPERATOR,
     title: asked.title,
     postedAt: asked.postedAt,
+    updatedAt: asked.updatedAt,
     agentTitle: "Luke",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
@@ -527,7 +530,7 @@ test("an item's card names the automation that holds it by a chip that hangs the
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   const chip =
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip");
   restOn(chip);
   await settle();
@@ -554,7 +557,7 @@ test("an item from a service that names no workspace for it still names its auto
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   restOn(
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip"),
   );
 

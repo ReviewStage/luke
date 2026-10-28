@@ -66,6 +66,7 @@ import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { HOME_ROW_META } from "./home-row.js";
 import { fillInWords, WRITE_AN_ANSWER } from "./inbox-ask-words.js";
 import {
+  holderAutomationId,
   holderName,
   INBOX_HOLDER,
   INBOX_LINE,
@@ -80,6 +81,7 @@ import {
   itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
+  operatorHolder,
   RECOMMENDED,
   readersItem,
 } from "./inbox-model.js";
@@ -144,19 +146,9 @@ function itemSubject(
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject | undefined {
-  if (holder.kind === INBOX_HOLDER.AUTOMATION) {
-    const line = holder.agents.get(agentId);
-    return line === undefined
-      ? undefined
-      : tasklessSubject(
-          {
-            title: line.agentTitle,
-            model: line.agentModel,
-            automationId: line.automationId,
-            automationName: holder.automationId === null ? undefined : holder.name,
-          },
-          models,
-        );
+  if (holder.kind === INBOX_HOLDER.AGENT) {
+    const { agent } = holder;
+    return agent.agentId !== agentId ? undefined : tasklessSubject(agent, models);
   }
   const line = holder.task.agents?.agents.find((each) => each.id === agentId);
   return line === undefined ? undefined : lineSubject(line, models, readerId);
@@ -269,7 +261,7 @@ export function InboxItemCard({
   const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-row-card="">
-      <HolderLine holder={holder} workspaceId={itemWorkspaceId(holder, item.agentId)} />
+      <HolderLine holder={holder} workspaceId={itemWorkspaceId(holder)} />
       <HoverCardHead
         name={cardTitle(item.title)}
         sub={
@@ -359,9 +351,8 @@ function HolderRef({
   workspaceId: string | undefined;
 }): React.JSX.Element {
   const openPlace = useOpenPlace();
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
+  const automationId = holderAutomationId(holder);
+  const known = useAutomation(automationId ?? undefined);
   const glyph = <HolderGlyph holder={holder} />;
   const name = holderName(holder);
   const fallback = (
@@ -376,14 +367,14 @@ function HolderRef({
         glyph={glyph}
         label={name}
         card={
-          holder.automationId === null ? undefined : workspaceId === undefined ? (
+          automationId === null ? undefined : workspaceId === undefined ? (
             // Note that an older service names no workspace for the item, so only a directory around the card can know the automation.
             known === undefined ? undefined : (
               <AutomationCard {...known} />
             )
           ) : (
             <AutomationChipCard
-              automationId={holder.automationId}
+              automationId={automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
               reading={<ChipCardSkeleton glyph={glyph} name={name} />}
@@ -513,17 +504,16 @@ function TaskStatusChip({
  * group header draws them.
  */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
+  const automationId = holderAutomationId(holder);
+  const known = useAutomation(automationId ?? undefined);
   if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
-  if (holder.operator) return <WingFace />;
-  if (holder.automationId === null) return <GLYPH.AUTOMATION />;
+  if (operatorHolder(holder)) return <WingFace />;
+  if (automationId === null) return <GLYPH.AUTOMATION />;
   return (
     <ActorMark
       actor={
         known === undefined
-          ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
+          ? { kind: ACTOR_KIND.AUTOMATION, name: holderName(holder), state: ACTOR_STATE.REST }
           : automationActor(known.automation)
       }
     />
