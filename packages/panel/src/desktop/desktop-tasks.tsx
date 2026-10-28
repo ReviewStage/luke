@@ -964,10 +964,24 @@ function PlanDocument({
     repositoryMenu.request > answeredRequest
       ? repositoryMenu.request
       : undefined;
+  // A phone's Activity lists the panel's tabs over the plan while asked on this task (`task-pane-switcher.tsx`).
+  const activityListed =
+    activityAsked !== undefined &&
+    activityAsked.taskId === openedId &&
+    (activityAsked.opening ||
+      (activityAsked.tab === undefined
+        ? panelTab === undefined
+        : panelTab !== undefined && sameTab(activityAsked.tab, panelTab)));
+  // The plan is in sight: the panel shows it, and no Activity list stands over it.
+  const planInSight = planShown && !activityListed;
   const { onChoose: choosePanelTab } = tasks.sidePanel;
   useEffect(() => {
-    if (menuRequest !== undefined && !planShown) choosePanelTab(SIDE_PANEL_TAB.PLAN);
-  }, [menuRequest, planShown, choosePanelTab]);
+    if (menuRequest === undefined || planInSight) return;
+    if (!planShown) choosePanelTab(SIDE_PANEL_TAB.PLAN);
+    setActivityAsked(undefined);
+  }, [menuRequest, planShown, planInSight, choosePanelTab]);
+  // Note that the chip is handed the ask only once the plan is in sight, so its menu never opens behind a list.
+  const openRequest = planInSight ? menuRequest : undefined;
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
     () =>
       openedId === undefined
@@ -975,11 +989,11 @@ function PlanDocument({
         : {
             chooser: repositories,
             onChoose: chooseRepository,
-            openRequest: menuRequest,
+            openRequest,
             onAsked: setAnsweredRequest,
             note: repositoryNote,
           },
-    [openedId, repositories, chooseRepository, menuRequest, repositoryNote],
+    [openedId, repositories, chooseRepository, openRequest, repositoryNote],
   );
   const workspaceName = home?.name ?? "";
   const { macs: devices } = agents;
@@ -1218,13 +1232,6 @@ function PlanDocument({
   );
   // A phone heads the task with one row in place of the side panel's bar and toggle: the way back, what is on screen, and one ⋯.
   const switched = room === SHELL_ROOM.NARROW;
-  const activityListed =
-    activityAsked !== undefined &&
-    activityAsked.taskId === task.id &&
-    (activityAsked.opening ||
-      (activityAsked.tab === undefined
-        ? sidePanel.tab === undefined
-        : sidePanel.tab !== undefined && sameTab(activityAsked.tab, sidePanel.tab)));
   const onListed = (asked: boolean) =>
     setActivityAsked(
       asked ? { taskId: task.id, tab: sidePanel.tab, opening: !sidePanel.open } : undefined,
