@@ -163,7 +163,15 @@ function launch(
       ),
       Effect.forkScoped,
     );
-    return { cli: cli.record, prompted: cli.prompted, release: cli.release, write, writeText, run };
+    return {
+      cli: cli.record,
+      prompted: cli.prompted,
+      release: cli.release,
+      write,
+      writeText,
+      run,
+      closeStdin: Queue.end(stdin),
+    };
   });
 }
 
@@ -428,7 +436,7 @@ it.effect("a retire written behind a message is skipped, and the message's turn 
 );
 
 it.effect(
-  "takes Luke's lines from the read its config names, past its cursor, under its bearer",
+  "takes Luke's lines from the read its config names, past its cursor and its stdin's end",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -452,11 +460,12 @@ it.effect(
         const lines = [{ seq: 12, text: JSON.stringify({ ...FIRST_MESSAGE, uuid }) }];
         return Response.json({ lines });
       };
-      const { cli, write, run } = yield* launch(SHORT_TURN, {
+      const { cli, write, run, closeStdin } = yield* launch(SHORT_TURN, {
         ...luke,
         layer: fakeHttpClientLayer(respond),
       });
       yield* write({ ...CONFIG, linesUrl });
+      yield* closeStdin;
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
       assert.deepEqual(reads, [

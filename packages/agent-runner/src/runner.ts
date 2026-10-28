@@ -687,15 +687,32 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
   const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
-  // the session does can hold up a line Luke wrote.
+  // the session does can hold up a line Luke wrote. Its end ends Luke's lines
+  // only where the config names no read of them, since a launch that reads
+  // them from Luke goes on past it, and at once where it ended before the
+  // config, which then never comes.
   const lines = yield* Queue.unbounded<string, Cause.Done>();
-  yield* input.lines.pipe(Stream.runIntoQueue(lines), Effect.forkScoped);
+  const readsLines = yield* Deferred.make<boolean>();
+  const read = yield* Ref.make(0);
+  yield* input.lines.pipe(
+    Stream.runForEach((text) =>
+      Effect.andThen(
+        Ref.update(read, (count) => count + 1),
+        Queue.offer(lines, text),
+      ),
+    ),
+    Effect.andThen(Ref.get(read)),
+    Effect.flatMap((count) => (count === 0 ? Effect.succeed(false) : Deferred.await(readsLines))),
+    Effect.flatMap((reads) => (reads ? Effect.void : Queue.end(lines))),
+    Effect.forkScoped,
+  );
   const first = yield* Queue.take(lines).pipe(
     Effect.mapError(() => new RunnerFailed({ detail: "stdin closed before the config line" })),
   );
   const config = yield* decodeConfig(first).pipe(
     Effect.mapError(() => new RunnerFailed({ detail: "the config line is not a runner config" })),
   );
+  yield* Deferred.succeed(readsLines, config.linesUrl !== undefined);
 
   const sink = yield* makeEventSink({
     url: config.eventsUrl,
