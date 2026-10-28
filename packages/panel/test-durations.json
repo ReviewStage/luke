@@ -304,7 +304,6 @@
   "src/tasks/skill-picker.test.ts": 225,
   "src/tasks/starting-agent-tab.test.ts": 160,
   "src/tasks/subagent-tab.test.ts": 877,
-  "src/tasks/task-issue-links.test.ts": 2598,
   "src/tasks/task-key-chips.test.ts": 369,
   "src/tasks/task-link-chips.test.ts": 612,
   "src/tasks/task-standing-runs-on.test.ts": 119,

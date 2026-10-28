@@ -968,8 +968,7 @@ composer's MCP servers popover draws a row for it. Every token request is
 billed by Connect and rate-limited per team.
 
 **The workspace Linear connector.** A workspace's own Linear grant, which
-the New plan picker lists issues through and a plan started from an issue
-reads it through, is held on a connector of its own, named by
+a link to a Linear issue reads it through, is held on a connector of its own, named by
 `LINEAR_WORKSPACE_CONNECTOR_UID`, set as the others are. The accounts'
 Linear connector (`LINEAR_CONNECTOR_UID`) signs in through Linear's MCP
 server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a

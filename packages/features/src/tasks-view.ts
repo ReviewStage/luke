@@ -41,12 +41,6 @@ import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
-import {
-  taskIssueLinkAnswerSchema,
-  taskIssueLinkChangedAnswerSchema,
-  taskIssueLinksAnswerSchema,
-  taskIssueUnlinkAnswerSchema,
-} from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   planRevisionAnswerSchema,
@@ -372,8 +366,6 @@ export const TASK_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The repository named is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
-  LINEAR_UNAVAILABLE: "linear-unavailable",
   /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
@@ -390,10 +382,9 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
+/** Why a start answered no plan: a repository call's reasons, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
-  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   TASK_CALL_FAILURE.NOT_FOUND,
   TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 ] as const;
@@ -584,27 +575,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, or Linear unread. */
-const TASK_ISSUE_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
-] as const;
-
-export type TaskIssueCallFailure = (typeof TASK_ISSUE_CALL_FAILURES)[number];
-
-const taskIssueCallFailed = EffectSchema.Struct({
-  failure: EffectSchema.Literals(TASK_ISSUE_CALL_FAILURES),
-});
-
-/** A task's linked issues as the window hears them, each with where it stands now, or why there are none. */
-export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
-  taskIssueLinksAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueLinksAnswer = typeof tasksIssueLinksAnswerSchema.Type;
-
 /** A task's agents' Browser tabs, as its side panel asks the host for them: the task. */
 export const tasksBrowserTabsParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -677,30 +647,6 @@ export const taskBrowserTabsFollowedSchema = EffectSchema.Struct({
 });
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
-
-/** A link made, why the service made none, or why there is no answer. */
-export const tasksIssueLinkAnswerSchema = EffectSchema.Union([
-  taskIssueLinkAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueLinkAnswer = typeof tasksIssueLinkAnswerSchema.Type;
-
-/** A link as it stands once changed, or why there is no answer. */
-export const tasksIssueRelateAnswerSchema = EffectSchema.Union([
-  taskIssueLinkChangedAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueRelateAnswer = typeof tasksIssueRelateAnswerSchema.Type;
-
-/** That the link was let go, or why there is no answer. */
-export const tasksIssueUnlinkAnswerSchema = EffectSchema.Union([
-  taskIssueUnlinkAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueUnlinkAnswer = typeof tasksIssueUnlinkAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

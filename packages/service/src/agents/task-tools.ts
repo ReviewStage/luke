@@ -343,7 +343,6 @@ export function runCreateTask(
       }
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.AGENT,
-        has_issue: false,
       });
       return answer(made.value);
     }),
