@@ -11,7 +11,6 @@ import {
 } from "@luke/settings";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
-import { SampledChoiceRow } from "./sampled-choice-row.js";
 import { SelectRow } from "./select-row.js";
 import { SwitchRow } from "./switch-row.js";
 import type { SettingsWrites } from "./writes.js";
@@ -24,8 +23,7 @@ type SettingOption = NonNullable<
 /**
  * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
  * where the schema gives the set a search field and reads whole where it
- * does not. A set whose values have faces is a `PictureChoiceRow`, and a set
- * whose values are heard a `SampledChoiceRow`, never this.
+ * does not. A set whose values have faces is a `PictureChoiceRow`, never this.
  */
 function SchemaChoiceRow({
   id,
@@ -115,24 +113,6 @@ export function SchemaSettingRows({
       ];
     }
     if (entry.kind !== APP_SETTING_KIND.CHOICE || !control) return [];
-    // A set whose every value is heard, as the voices are, is chosen in a dialog that plays each as it is picked.
-    const sampled = control.options.flatMap(({ value, label, sample, group, tag }) =>
-      sample === undefined ? [] : [{ value, label, sample, group, tag }],
-    );
-    if (sampled.length > 0 && sampled.length === control.options.length) {
-      return [
-        <SampledChoiceRow
-          key={entry.id}
-          label={entry.label}
-          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
-          detail={detail}
-          changed={changed}
-          value={control.value}
-          options={sampled}
-          onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
-        />,
-      ];
-    }
     return [
       <SchemaChoiceRow
         key={entry.id}

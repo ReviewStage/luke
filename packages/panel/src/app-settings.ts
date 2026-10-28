@@ -86,7 +86,6 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
     }
     const microphone: MicrophoneControl = {
       status: audio.microphoneStatus,
-      voiceAvailable: settings?.voiceAvailable === true,
       onRequest: doors.onRequestMicrophone,
       onOpenSettings: () => press(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
     };

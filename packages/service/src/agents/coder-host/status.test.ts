@@ -14,7 +14,7 @@ import { DEVICE_KIND, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Duration } from "effect";
 import { expect, test } from "vitest";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
+import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
 import {
   codingAgentActivityAt,
@@ -127,7 +127,7 @@ test("a line sent while the newest turn was queued, and never taken, reads the a
 /** A turn the model call failed, eve's detail as given. */
 const failedOnModel = (failureDetail: string) => ({
   status: TURN_STATUS.FAILED,
-  failure: BRAIN_REQUEST_FAILURE.MODEL,
+  failure: TURN_FAILURE.MODEL,
   failureDetail,
 });
 

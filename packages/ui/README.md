@@ -244,14 +244,13 @@ The chips, media, and call components are drawn the same way: `PageThumb`
 stands on shadcn's aspect ratio, and `PictureSet`'s tiles and
 `VideoPlayer`'s inline frame on its card (`Card`), while `AttachmentChip`,
 `PictureTile`, `ProviderButton`'s gate, `CardPress`, `ComposerFrame` and its
-foot, and the call's `CallBar` and `CallLive` are drawn in
+foot, and the call's `CallBar` are drawn in
 the theme's utilities with no shadcn base, since shadcn/ui has no player,
 composer, or call, and its badge and button are a control's box where these
 are frames holding presses of their own. What answers a container's width,
-the call bar's, a message box's foot's, is a container query
+the call bar's, is a container query
 variant (`@max-[280px]/luke-call-bar:`) beside the rule it changes. Their
-sheets keep only keyframes and the rules that play them, and the foot's one
-`:has()` container.
+sheets keep only keyframes and the rules that play them.
 
 The page patterns follow: `SettingsRow` stands on shadcn's item and
 `EmptyState` on its empty, and `Stack`, `Inline`, `Fill`,
@@ -372,7 +371,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `FileText`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `RetryButton`, `MoreButton` (a header's ⋯; a row's is `ListRow`'s `menu`), `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
-| Calls | `CallBar`, `CallLive` (a call's status in a message box's foot), `CallMute`, `EndCallButton` (the one red End call) |
+| Calls | `CallBar`, `CallMute`, `EndCallButton` (the one red End call) |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click) |
 | Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState`, `FailureNote`, `NoteLine` |

@@ -202,6 +202,7 @@ function HostRow({
     <>
       <MenuRow
         thing="Machine"
+        alone
         actions={[
           {
             label: "Remove",

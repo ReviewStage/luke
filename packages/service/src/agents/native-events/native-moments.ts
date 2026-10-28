@@ -1,5 +1,5 @@
-import type { BrainRunUsage, ToolCallSettlement } from "@luke/features/brain";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import type { RunUsage, ToolCallSettlement } from "@luke/features/turn-run";
 import type { UnparsedWireValue, WireValue } from "@luke/wire";
 
 /**
@@ -133,9 +133,9 @@ export type NativeMoment =
       readonly key: string;
       readonly settlement: ToolCallSettlement;
     }
-  | { readonly kind: typeof NATIVE_MOMENT.USAGE; readonly usage: BrainRunUsage }
+  | { readonly kind: typeof NATIVE_MOMENT.USAGE; readonly usage: RunUsage }
   | { readonly kind: typeof NATIVE_MOMENT.CONTEXT; readonly usage: NativeContextUsage }
-  | { readonly kind: typeof NATIVE_MOMENT.USAGE_TOTAL; readonly total: BrainRunUsage }
+  | { readonly kind: typeof NATIVE_MOMENT.USAGE_TOTAL; readonly total: RunUsage }
   | { readonly kind: typeof NATIVE_MOMENT.RESULT; readonly failure?: string }
   | { readonly kind: typeof NATIVE_MOMENT.COMPACTED }
   | {

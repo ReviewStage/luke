@@ -148,7 +148,6 @@ function openPalette(
         settings: {
           rows: {
             settings: settingsView(),
-            voiceControlsDrawn: true,
             accountDrawn: true,
             capabilities,
           },
@@ -198,7 +197,6 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
               settings: {
                 rows: {
                   settings: settingsView(),
-                  voiceControlsDrawn: true,
                   accountDrawn: true,
                   capabilities: DESKTOP_CAPABILITIES,
                 },
@@ -311,7 +309,6 @@ const SETTINGS_PAGES = [
   "Agents",
   "Integrations",
   "Skills",
-  "Voice",
   "Appearance",
   "This Mac",
   "Experimental",
@@ -341,20 +338,13 @@ test("the Settings filter lists Memory after Workspace only while the account ha
   assert.ok(!rows().includes("Memory"), "Memory off lists no Memory page");
 });
 
-test("on a platform without voice or Mac commands, the Settings filter lists neither page, and finds none of their rows", () => {
-  const offered = DESKTOP_CAPABILITIES.filter(
-    (each) => each !== HOST_CAPABILITY.VOICE && each !== HOST_CAPABILITY.MAC_COMMANDS,
-  );
-  const shown = SETTINGS_PAGES.filter((page) => page !== "Voice" && page !== "This Mac");
+test("on a platform without Mac commands, the Settings filter lists no This Mac page, and finds none of its rows", () => {
+  const offered = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_COMMANDS);
+  const shown = SETTINGS_PAGES.filter((page) => page !== "This Mac");
   openPalette(undefined, undefined, undefined, offered);
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, shown.length), shown);
-  type("Quiet Music and Spotify");
-  assert.equal(
-    rows().some((row) => row.includes("Quiet Music and Spotify")),
-    false,
-  );
   type("Let agents run commands on this Mac");
   assert.equal(
     rows().some((row) => row.includes("Let agents run commands")),
@@ -927,7 +917,6 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       settings: {
         rows: {
           settings: settingsView(),
-          voiceControlsDrawn: true,
           accountDrawn: true,
           capabilities: DESKTOP_CAPABILITIES,
         },
@@ -2376,7 +2365,6 @@ function PinnableTask(): React.JSX.Element {
       settings: {
         rows: {
           settings: settingsView(),
-          voiceControlsDrawn: true,
           accountDrawn: true,
           capabilities: DESKTOP_CAPABILITIES,
         },
@@ -2446,7 +2434,6 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
           settings: {
             rows: {
               settings: settingsView(),
-              voiceControlsDrawn: true,
               accountDrawn: true,
               capabilities: DESKTOP_CAPABILITIES,
             },
@@ -2575,7 +2562,6 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
             settings: {
               rows: {
                 settings: settingsView(),
-                voiceControlsDrawn: true,
                 accountDrawn: true,
                 capabilities: DESKTOP_CAPABILITIES,
               },
@@ -2646,7 +2632,6 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
             settings: {
               rows: {
                 settings: settingsView(),
-                voiceControlsDrawn: true,
                 accountDrawn: true,
                 capabilities: DESKTOP_CAPABILITIES,
               },

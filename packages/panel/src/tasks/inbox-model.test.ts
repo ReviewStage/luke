@@ -1566,7 +1566,7 @@ test("a thread's row previews its latest message, an answer led by its answerer 
   assert.equal(inboxLineKind(settledNote), INBOX_LINE.SAID);
 });
 
-test("a thread's row says the ask itself while one is open: a choice's options, the recommended starred, the steps left and the next as its draft ticks them, or the fields; once none is open, the latest words, the agent's alone", () => {
+test("a thread's row says the ask itself while one is open: a choice's options, the recommended said so in words, the steps left and the next as its draft ticks them, or the fields; once none is open, the latest words, the agent's alone", () => {
   const rowOf = (ask: InboxAsk, ticked?: readonly number[]) =>
     inboxPreview(item({ id: "t3", thread: [asking(ask)] }), previewName, ticked);
   const lineOf = (ask: InboxAsk) => inboxLineKind(item({ id: "t3", thread: [asking(ask)] }));
@@ -1574,7 +1574,7 @@ test("a thread's row says the ask itself while one is open: a choice's options, 
   assert.equal(rowOf({ type: INBOX_ASK.DECIDE, options }), "7 days / 14 days / 30 days");
   assert.equal(
     rowOf({ type: INBOX_ASK.DECIDE, options, multiple: true, recommended: "14 days" }),
-    "7 days / 14 days ★ / 30 days",
+    "7 days / 14 days (recommended) / 30 days",
   );
   assert.equal(
     rowOf({
@@ -1584,7 +1584,7 @@ test("a thread's row says the ask itself while one is open: a choice's options, 
       recommended: "7 days",
       recommendations: ["7 days", "30 days"],
     }),
-    "7 days ★ / 14 days / 30 days ★",
+    "7 days (recommended) / 14 days / 30 days (recommended)",
   );
   assert.equal(lineOf({ type: INBOX_ASK.DECIDE, options }), INBOX_LINE.DECIDE);
   const steps = { type: INBOX_ASK.DO, steps: ["Open **it**", "Add it", "Redeploy"] } as const;

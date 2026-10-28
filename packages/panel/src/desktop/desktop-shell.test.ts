@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import {
   ACCOUNT_ACT_KIND,
   AGENT_ACT_KIND,
@@ -30,10 +29,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { useAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
-import { CallCardContext, type CallCardInput, callControls } from "../call/call-card.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -68,7 +65,6 @@ const SETTINGS: SettingsPanelProps = {
   onViewChange: ignore,
   microphone: {
     status: MICROPHONE_STATUS.GRANTED,
-    voiceAvailable: true,
     onRequest: ignore,
     onOpenSettings: ignore,
   },
@@ -1046,10 +1042,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   assert.deepEqual(closed, [], "nothing closes it");
 });
 
-/** The task the call in progress is about, which none of the places below shows with its call bar. */
-const CALL_TASK_NAME = "Checkout redesign";
-
-/** Every place in the window the developer can stand while a call goes on about another task, as the shell is handed it. */
+/** Every place in the window the developer can stand, as the shell is handed it. */
 const PLACE = {
   HOME: "a new account's welcome",
   OTHER_TASK: "another plan",
@@ -1063,19 +1056,6 @@ const PLACE = {
 } as const;
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
-
-/** The column at the window's left in each place: the tasks' sidebar, which folds, or a column of the place's own, which does not. */
-const LEFT_COLUMN = {
-  [PLACE.HOME]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.OTHER_TASK]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.INBOX]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.AGENT_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.PERSON_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.AUTOMATIONS]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.SIDE_PANEL_FULL_SCREEN]: { selector: "aside.desktop-sidebar", folds: true },
-  [PLACE.SETTINGS]: { selector: 'nav[aria-label="Settings pages"]', folds: false },
-  [PLACE.VERSION_HISTORY]: { selector: 'nav[aria-label="Versions"]', folds: false },
-} as const satisfies Record<Place, { selector: string; folds: boolean }>;
 
 /** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
@@ -1104,28 +1084,19 @@ function placed(place: Place) {
   };
 }
 
-/** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
-function CallShell({
+/** The shell standing in a place. */
+function PlacedShell({
   place,
-  folded,
   patch,
 }: {
   place: Place;
-  folded: boolean;
   /** What the tasks' state holds beyond the place's own. */
   patch?: Partial<TasksControl>;
 }): React.JSX.Element {
-  const { press } = useAct();
   const placedIn = placed(place);
   const tab = placedIn.tab;
   const tasks = { ...placedIn.tasks, ...patch };
-  // The card is handed down as the window's root hands it, past every page between.
-  const call: CallCardInput = {
-    card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
-    speakerMuted: false,
-    controls: callControls(press, false),
-  };
-  const shell = createElement(DesktopShell, {
+  return createElement(DesktopShell, {
     gates: {
       accountRequired: false,
       onBeginSignIn: ignore,
@@ -1146,7 +1117,7 @@ function CallShell({
       onLeave: ignore,
     },
     sidebar: {
-      collapsed: folded,
+      collapsed: false,
       compact: false,
       overlay: SIDEBAR_OVERLAY.CLOSED,
       width: 264,
@@ -1159,7 +1130,6 @@ function CallShell({
     settingsStep: { listed: true, onList: ignore },
     settings: SETTINGS,
   });
-  return createElement(CallCardContext.Provider, { value: call }, shell);
 }
 
 /** Every act the window sent over the bridge, by kind, in order. */
@@ -1204,28 +1174,6 @@ async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
   });
 }
 
-/** Where the window draws the call card: on which surface, and whether at the foot of the column at the window's left. */
-function cardStanding(page: HTMLElement, place: Place) {
-  const cards = page.querySelectorAll<HTMLElement>('section.call-card[aria-label="Call"]');
-  assert.equal(cards.length, 1, `one call card stands over ${place}`);
-  const [card] = cards;
-  assert.ok(card);
-  const foot = card.closest(".sidebar-foot");
-  return {
-    surface: card.dataset.surface ?? "",
-    docked: foot !== null && foot.parentElement === page.querySelector(LEFT_COLUMN[place].selector),
-  };
-}
-
-/** Presses the card's way back to the call's task. */
-function pressReturn(page: HTMLElement): void {
-  const button = page.querySelector<HTMLButtonElement>(
-    `section.call-card button[aria-label="Open ${CALL_TASK_NAME}"]`,
-  );
-  assert.ok(button, "the card offers the way back to the call's plan");
-  act(() => button.click());
-}
-
 const PLACES = Object.values(PLACE);
 
 test("the side panel's toggle stands on a plan and on an agent's page, which keeps a panel of its own, and nowhere else the plan's place is taken", async () => {
@@ -1236,9 +1184,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   const registry = AtomRegistry.make();
   const toggled: Partial<Record<Place, boolean>> = {};
   for (const place of PLACES) {
-    act(() =>
-      root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
-    );
+    act(() => root?.render(onRegistry(registry, createElement(PlacedShell, { place }))));
     await settle();
     toggled[place] = [...container.querySelectorAll("button")].some((button) =>
       ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
@@ -1279,10 +1225,7 @@ test("the side panel's toggle stands for the Inbox's chosen item, in the Inbox n
     root = createRoot(container);
     act(() =>
       root?.render(
-        onRegistry(
-          AtomRegistry.make(),
-          createElement(CallShell, { place: PLACE.INBOX, folded: false, patch }),
-        ),
+        onRegistry(AtomRegistry.make(), createElement(PlacedShell, { place: PLACE.INBOX, patch })),
       ),
     );
     await settle();
@@ -1303,11 +1246,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    act(() =>
-      root?.render(
-        onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded: false })),
-      ),
-    );
+    act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PlacedShell, { place }))));
     await settle();
     act(() => {
       runAppCommand(APP_COMMAND.FIND);
@@ -1330,62 +1269,6 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     [PLACE.SETTINGS]: false,
     [PLACE.VERSION_HISTORY]: true,
   });
-});
-
-test("walking every place in the window during a call about another plan, the card stays at the foot of the column at the window's left, and its way back asks for the call's plan from each", async () => {
-  await handBridge();
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-  const registry = AtomRegistry.make();
-  const standing: Record<string, ReturnType<typeof cardStanding>> = {};
-  for (const place of PLACES) {
-    act(() =>
-      root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
-    );
-    await settle();
-    standing[place] = cardStanding(container, place);
-    sentActs = [];
-    pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
-  }
-  assert.deepEqual(
-    standing,
-    Object.fromEntries(PLACES.map((place) => [place, { surface: "sidebar", docked: true }])),
-  );
-});
-
-test("with the plans' sidebar folded, the card floats in the window's corner wherever the sidebar would have held it, and stays at the foot of Settings' and a version history's own columns, which do not fold", async () => {
-  await handBridge();
-  const standing: Record<string, ReturnType<typeof cardStanding>> = {};
-  for (const place of PLACES) {
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    act(() =>
-      root?.render(
-        onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded: true })),
-      ),
-    );
-    await settle();
-    standing[place] = cardStanding(container, place);
-    sentActs = [];
-    pressReturn(container);
-    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_AGENT], `the way back from ${place}`);
-    act(() => root?.unmount());
-    container.remove();
-  }
-  assert.deepEqual(
-    standing,
-    Object.fromEntries(
-      PLACES.map((place) => [
-        place,
-        LEFT_COLUMN[place].folds
-          ? { surface: "floating", docked: false }
-          : { surface: "sidebar", docked: true },
-      ]),
-    ),
-  );
 });
 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {

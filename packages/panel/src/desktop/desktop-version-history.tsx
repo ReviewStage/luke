@@ -41,14 +41,14 @@ import {
   useMinute,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
-import { ArrowUpRightIcon, GLYPH, LinkIcon, RotateCcwIcon } from "@luke/ui/icons";
+import { ArrowUpRightIcon, GLYPH, RotateCcwIcon } from "@luke/ui/icons";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { ColumnFoot } from "../call/call-card.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
-import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { useCopyToast } from "../copy-feedback.js";
+import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { centreWithin } from "../scroll-within.js";
@@ -232,7 +232,7 @@ function RevisionRow({
   onOpenSections,
   source,
   onRestore,
-  onCopyLink,
+  copyLink,
   summary,
 }: {
   line: PlanRevisionLine;
@@ -247,23 +247,19 @@ function RevisionRow({
   source: SourceDoor | undefined;
   /** Restores the version, asking nothing; none for the plan as it stands. */
   onRestore: (() => void) | undefined;
-  /** Copies the version's link; none for a history with no link of its own. */
-  onCopyLink: (() => void) | undefined;
+  /** Copy link, the version's; none for a history with no link of its own. */
+  copyLink: MenuAction | undefined;
   /** What the revision did, in a few words. */
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
   const groups = [
     [
+      ...(copyLink === undefined ? [] : [copyLink]),
       ...(onOpenSections === undefined
         ? []
         : [{ label: SECTIONS_LABEL, icon: <GLYPH.SECTION />, onSelect: onOpenSections }]),
       ...(source === undefined ? [] : [sourceItem(source)]),
-      ...(onCopyLink === undefined
-        ? []
-        : [
-            { label: LINK_COPY.LABEL, icon: <LinkIcon aria-hidden="true" />, onSelect: onCopyLink },
-          ]),
     ],
     onRestore === undefined
       ? []
@@ -349,13 +345,14 @@ function SectionsHead({
   );
 }
 
-/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn. */
+/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn; its right-click offering Copy link and its revision's source. */
 function SectionRow({
   section,
   selected,
   rowRef,
   onSelect,
   source,
+  copyLink,
 }: {
   section: ChangedSection;
   selected: boolean;
@@ -363,8 +360,14 @@ function SectionRow({
   onSelect: () => void;
   /** The way to the place that wrote its revision, which its right-click offers. */
   source: SourceDoor | undefined;
+  /** Copy link, its revision's, since a link names no section of a version; none for a history with no link of its own. */
+  copyLink: MenuAction | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
+  const items = [
+    ...(copyLink === undefined ? [] : [copyLink]),
+    ...(source === undefined ? [] : [sourceItem(source)]),
+  ];
   return (
     <ListRow
       ref={rowRef}
@@ -372,7 +375,7 @@ function SectionRow({
       meta={word}
       current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
       onPress={onSelect}
-      menu={source === undefined ? undefined : rowMenu(SECTION_THING, [[sourceItem(source)]])}
+      menu={items.length === 0 ? undefined : rowMenu(SECTION_THING, [items])}
     />
   );
 }
@@ -679,8 +682,8 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
 
 /**
  * A version history over the whole window: the versions where the sidebar
- * stands, with the way back at their head and the call card at their foot,
- * as the sidebar holds them, and the version chosen beside them. `onExit`
+ * stands, with the way back at their head, and the version chosen beside
+ * them. `onExit`
  * leaves for wherever it was opened from, and `onRestored` for what a
  * restore landed on. A narrow room, or a history narrower than the split's
  * line by its own width (`column-split.ts`), shows the list or the version,
@@ -724,7 +727,19 @@ export function DesktopVersionHistory({
   const members = useWorkspaceMembers(subject.workspace);
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const linked = subject.task;
+  const versionLinkItem = (revision: number): MenuAction | undefined =>
+    linked === undefined
+      ? undefined
+      : copyLinkItem(
+          copy,
+          linkOf(
+            { kind: LINK_PLACE.VERSION, planId: linked.taskId, revision },
+            linked.place.workspace,
+          ),
+          chord,
+        );
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
@@ -871,22 +886,7 @@ export function DesktopVersionHistory({
                             opensSections(line) ? () => openSections(line.seq) : undefined
                           }
                           onRestore={restoreOf(line)}
-                          onCopyLink={
-                            linked === undefined
-                              ? undefined
-                              : () =>
-                                  copy(
-                                    linkOf(
-                                      {
-                                        kind: LINK_PLACE.VERSION,
-                                        planId: linked.taskId,
-                                        revision: line.seq,
-                                      },
-                                      linked.place.workspace,
-                                    ),
-                                    LINK_COPY.COPIED,
-                                  )
-                          }
+                          copyLink={versionLinkItem(line.seq)}
                           summary={subject.summary(line)}
                         />
                       );
@@ -941,6 +941,7 @@ export function DesktopVersionHistory({
                           }}
                           onSelect={() => chooseUnit(section.unit)}
                           source={openedSource}
+                          copyLink={opened === undefined ? undefined : versionLinkItem(opened.seq)}
                         />
                       ))}
                     </List>
@@ -950,7 +951,6 @@ export function DesktopVersionHistory({
             </ScrollArea>
           </Fill>
         </div>
-        <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>

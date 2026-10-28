@@ -144,7 +144,7 @@ function Version(): ReactNode {
 test("a transcript, the plan, and a version draw a link they have no chip for as one plain link, a bare address cut short", () => {
   const surfaces = [
     drawn(createElement(TranscriptWords, { text: WORDS })),
-    drawn(createElement(PlanBody, { task: TASK, live: false, sectionLinks: SECTION_LINKS })),
+    drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS })),
     drawn(createElement(Version)),
   ];
 
@@ -158,7 +158,6 @@ test("the plan's editor draws a plain link as every place does, whole", async ()
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
       sectionLinks: SECTION_LINKS,
     }),
@@ -178,7 +177,6 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
       sectionLinks: SECTION_LINKS,
     }),
@@ -239,7 +237,6 @@ test("a plain link to an address the window refuses to open is drawn going nowhe
         ...TASK,
         document: { body: `## Rollout\n\n[the long page](${long})`, assumptions: [] },
       },
-      live: false,
       sectionLinks: SECTION_LINKS,
     }),
   );

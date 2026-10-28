@@ -85,7 +85,6 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
-import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
   LUKE_MCP_PATH,
@@ -178,10 +177,6 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
 /** A sandbox no call opens: a tool that reads no file never asks for it. */
 const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-/** A checkout no call opens: a tool that runs no command never asks for it. */
-const NO_CHECKOUT: RepositorySandboxDoor = () =>
-  Promise.reject(new Error("the checkout was opened"));
-
 /** The server's group over the test's database, the sandbox door and the browser given, and any services that stand in for the ones given, as a fetch a client is handed. */
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
@@ -192,7 +187,7 @@ const standingOver = (
     const base = yield* doorServices;
     const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
-      lukeMcpApp({ sandbox: () => ({ files: sandbox, repository: NO_CHECKOUT }), browser }).pipe(
+      lukeMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
         HttpRouter.provideRequest(services),
       ),
       { disableLogger: true },

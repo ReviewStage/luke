@@ -28,7 +28,7 @@
     color: var(--luke-color-text);
   }
 
-  button.luke-choice:hover:not(:disabled) {
+  button.luke-choice:hover:not(:disabled, [aria-disabled="true"]) {
     --luke-choice-fill: var(--luke-color-fill-strong);
   }
 
@@ -57,7 +57,7 @@
   /* A card wears the row's box, its head's radio none. */
   .luke-choice-card-head > .luke-choice,
   .luke-choice-card-head > .luke-choice[aria-checked="true"],
-  .luke-choice-card-head > button.luke-choice:hover:not(:disabled) {
+  .luke-choice-card-head > button.luke-choice:hover:not(:disabled, [aria-disabled="true"]) {
     background: none;
     box-shadow: none;
   }

@@ -567,17 +567,14 @@ agent runs, and Claude Code or Codex itself start with every Linux capability
 dropped, so none of them can read another process's environment or a file
 kept from it, or become root.
 
-**Code on screen during a call.** When a coding agent wants to
-show you code, it names a file and lines, and our service reads them from
-its sandbox checkout. The path, the commit the checkout read it at, the
-line numbers, the lines (at most 200, each cut to 400 characters), and the
-model's note on why it showed them (at most 280 characters) are stored with
-the agent's transcript; nothing is read from
-your Mac's disk, and Luke on your Mac neither draws nor keeps them. The
-service refuses a path outside the checkout and never
-reads a file named `.env` or starting with `.env`. The voice model is told
-the path and line numbers on screen, so the voice can refer to them. It is
-never part of the task's plan.
+**Code an agent showed in an earlier version.** Earlier versions let a
+coding agent show you code: it named a file and lines, and our service read
+them from its sandbox checkout, never a file named `.env` or starting with
+`.env`. The path, the commit the checkout read it at, the line numbers, the
+lines (at most 200, each cut to 400 characters), and the model's note on why
+it showed them (at most 280 characters) stay stored with that agent's
+transcript, and are deleted with it. No agent shows code now, and none of
+it is part of the task's plan.
 
 **A whole file in a File tab.** A file named in a mention or an inbox item
 opens whole in a File tab. Our service reads the file from GitHub at the
@@ -1072,7 +1069,7 @@ service recorded it. Settings › Account › "Share usage data" turns these
 counts off (see "Your choices").
 
 Our service also counts, under the same account, the work done through it:
-a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
+a task or a workspace made (with where it was started from), a coding agent started (with the model and effort
 it runs on, and whether an automation started it), a pull request an agent
 opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
 answered, an issue filed, an automation made (with

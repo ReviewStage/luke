@@ -5,19 +5,6 @@
    not cover. Their timing and easing belong to the rule that names them,
    over the `--luke-duration-*` and `--luke-spring-fast` tokens. */
 
-@keyframes luke-card-rise {
-  from {
-    transform: translateY(var(--luke-space-8));
-  }
-}
-
-@keyframes luke-card-leave {
-  to {
-    opacity: 0;
-    transform: translateY(var(--luke-space-8));
-  }
-}
-
 @keyframes luke-card-grow {
   from {
     transform: scale(0.96);

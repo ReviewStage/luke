@@ -59,7 +59,6 @@ import {
   Environment,
   LocalAgentPlatform,
   type LocalAgentSandbox,
-  type LocalAgentSandboxCommand,
   Reporter,
 } from "./effect/seams.js";
 import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
@@ -133,8 +132,8 @@ import type { RunMode } from "./run-mode.js";
  * and a sleeping machine stretches a long wait but not the hour; it hands
  * it to the sandbox, which keeps
  * it outside every folder the VM mounts, so the agent only ever sees a
- * placeholder. A tool's command runs in the VM rather than on the device,
- * since the worktree is the agent's to rig.
+ * placeholder. The check of its folder for unsaved work runs in the VM
+ * rather than on the device, since the worktree is the agent's to rig.
  *
  * Agents on This Mac ran directly on it before every agent ran in a VM
  * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
@@ -576,9 +575,9 @@ export function composeLocalAgents(
 
         /**
          * The agent's VM started by `start` and held for as long as the scope
-         * it is run in stands, by its runner or by one of its tools' commands
+         * it is run in stands, by its runner or by a check of its folder
          * between turns; whether it stands. The last hold let go of stops the
-         * VM, so a command between turns never leaves it running, and never
+         * VM, so a check between turns never leaves it running, and never
          * stops it under a runner. A VM a discard deleted is held by nothing.
          */
         const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
@@ -1179,21 +1178,13 @@ export function composeLocalAgents(
             );
             if (claimed === undefined || !("agentId" in claimed)) return;
             const layout = deviceAgentLayout(folder, claimed.agentId);
-            const env = { ...shellVariables, TMPDIR: layout.temp };
-            // Note that an agent's command runs in its VM, never on the device, since its worktree is the agent's to rig.
-            const sandbox = platform.sandbox;
-            const inVm = {
-              woken: vmHeld(claimed.agentId, sandbox.woken(claimed.agentId)),
-              exec: (command: Omit<LocalAgentSandboxCommand, "agentId" | "folder">) =>
-                sandbox.exec({ ...command, agentId: claimed.agentId, folder: layout.folder }),
-            };
-            const answer = yield* answeredLocalAgentRequest(layout, claimed, env, inVm).pipe(
+            const answer = yield* answeredLocalAgentRequest(layout, claimed).pipe(
               Effect.provideContext(services),
             );
             yield* asked(client.answerRequest(deviceId, claimed.id, answer));
           });
 
-        /** The requests read, each answered on its own fiber, so a slow command holds up neither the reads nor the others. */
+        /** The requests read, each answered on its own fiber, so a slow read holds up neither the reads nor the others. */
         const requestsFollowed = Effect.forever(
           Effect.gen(function* () {
             const requests = yield* asked(client.requests(deviceId));

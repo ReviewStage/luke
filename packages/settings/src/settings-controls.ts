@@ -12,9 +12,7 @@ import type { RunningBuild, UpdateSnapshot } from "./update.js";
  */
 export interface MicrophoneControl {
   status: MicrophoneStatus;
-  /** Whether there is anything to talk to, which is the microphone's only use. */
-  voiceAvailable: boolean;
-  /** Asks the system for access, settling once asked, for the button that waits on it. Using the microphone is the talk key's job. */
+  /** Asks the system for access, settling once asked, for the button that waits on it. Using the microphone is dictation's job. */
   onRequest: () => void | Promise<void>;
   /** Opens the one place the system's own grant can be changed. */
   onOpenSettings: () => void;

@@ -13,15 +13,11 @@ import { LINEAR_IDENTIFIER, readLinearIssue } from "./link-grammar.js";
  * `/api/workspaces/linear/connected`, which settles it and lands on the
  * integrations landing page. `POST /api/workspaces/linear/disconnect` ends
  * it and answers the workspace. `POST /api/workspaces/linear/issues`
- * answers the issues a member may start a plan from, newest changed first,
- * or those a search matches, or the one issue an identifier names,
- * as a link to it drawn in Luke's words, or a key or link pasted into New
- * task, asks for its title and state (`link-grammar.ts`'s `readLinearIssue`,
- * `linearIssueIdentifierIn`). A plan started from one names it by its id
- * (`taskCreateRequestSchema`'s `linearIssueId`), and the service reads the
- * issue itself through the workspace's grant and links what it read to the
- * task (`task-issue-wire.ts`), so the task keeps it after Linear is
- * disconnected. No answer carries a token. The requests that name a
+ * answers the issues the grant reaches, newest changed first, or those a
+ * search matches, or the one issue an identifier names, as a link to it
+ * drawn in Luke's words, or a key or link pasted into New task, asks for its
+ * title and state (`link-grammar.ts`'s `readLinearIssue`,
+ * `linearIssueIdentifierIn`). No answer carries a token. The requests that name a
  * workspace are `workspace-wire.ts`'s, beside its GitHub's.
  */
 
@@ -37,7 +33,7 @@ export const LINEAR_BOUNDS = {
 } as const;
 
 /** A Linear issue's own id, as Linear minted it. */
-export const linearIssueIdSchema = EffectSchema.String.check(
+const linearIssueIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_ID_CHARS),
 );

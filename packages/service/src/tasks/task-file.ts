@@ -29,28 +29,26 @@ import {
 /**
  * task-file.ts -- a whole file of a task's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.
  *
- * The Code tab shows the lines `show_code` read from the brain session's
- * checkout; the File tab opens the whole file they came from. Outside a
- * brain turn there is no handle on that session's sandbox, so the file is
- * read from GitHub instead, at the head of the repository's default branch,
- * through the same reach the checkout is made through: the task is read under
+ * The File tab opens a whole file of the task's repository. Outside an
+ * agent's turn there is no handle on its sandbox, so the file is read from
+ * GitHub, at the head of the repository's default branch, through the same
+ * reach a checkout is made through: the task is read under
  * the account first, so a task another account owns reads as no task, then
  * the Luke GitHub App confirms the installation of the task's workspace
  * reaches the task's repository and mints a token for that one repository
  * with contents read (`github-app.ts`'s `repositoryReadToken`). The token is used for the one
  * read and goes nowhere else: not into the answer, a log line, or a trace.
- * What is shown is decided by the rule `show_code` is held to
+ * What is shown is decided by the rule a shown file is held to
  * (`shown-file.ts`), so a secret file is refused before anything is asked of
  * GitHub, and a link, a directory, a file too large, or one that is not text
- * reads as refused; each line travels cut as `show_code` cuts it. A raw
+ * reads as refused; each line travels cut to that rule's bound. A raw
  * read, which a copy or a download of the file asks, carries the file's
  * whole text instead, its lines uncut, held to the same rule and the same
  * bound on the file's size.
  *
- * Note that GitHub's head may differ from the checkout the snippet was read
- * from, whose clone is the default branch as it stood when the session first
- * read the repository: the window is the file as it is now, and a file gone
- * since reads as missing, naming the branch GitHub found nothing on. A read
+ * Note that GitHub's head may differ from an agent's checkout, whose clone
+ * is the branch as it stood when the agent first read the repository: the
+ * window is the file as it is now, and a file gone since reads as missing, naming the branch GitHub found nothing on. A read
  * that names a commit, as an inbox item's code reference does so that the
  * lines it points at never move, is read at that commit instead, through the
  * same reach, and names the commit where it would name the branch.

@@ -30,7 +30,6 @@ import {
 import { beatDevice, deviceLayout } from "@luke/database/models/device-store";
 import { openMacLaunchSecrets, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { storeWriter } from "@luke/database/models/writer";
-import { BRAIN_REQUEST_FAILURE } from "@luke/features/brain";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_LAUNCH_REFUSAL,
@@ -39,6 +38,7 @@ import {
   deviceAgentLaunchPayloadSchema,
   deviceAgentLaunchSecretsSchema,
 } from "@luke/features/device-agent-wire";
+import { TURN_FAILURE } from "@luke/features/turn-run";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
@@ -231,7 +231,7 @@ export function settledDeviceAgentLine(
             ),
           ),
           undefined,
-          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          TURN_FAILURE.SESSION_ENDED,
         );
     return true;
   });

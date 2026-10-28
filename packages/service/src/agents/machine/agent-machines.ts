@@ -49,8 +49,6 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
     kill: (handle) => of(handle.machine).kill(handle),
     readFile: (session, path, bound) =>
       bySession(session, (machine) => machine.readFile(session, path, bound)),
-    runRepositoryCommand: (session, command) =>
-      bySession(session, (machine) => machine.runRepositoryCommand(session, command)),
   };
 }
 

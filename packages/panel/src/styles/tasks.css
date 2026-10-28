@@ -22,14 +22,6 @@
   color: inherit;
 }
 
-/* The caret waiting where the last word went in, blinking as an editor's
-   idle cursor does, and held by `--luke-loop-motion` like every animation with no
-   end of its own. */
-.plan-caret-resting .markdown-caret {
-  animation: plan-caret-blink 1060ms steps(1, end) infinite;
-  animation-play-state: var(--luke-loop-motion);
-}
-
 /* The unit the caret is typing in: a small ring in the accent turning after
    its heading on the window's one spinner turn (`spinner.tsx`), held by
    `--luke-loop-motion` like every animation with no end of its own and still
@@ -47,12 +39,6 @@
   animation: luke-spinner-turn 900ms linear infinite;
   animation-play-state: var(--luke-loop-motion);
   content: "";
-}
-
-@keyframes plan-caret-blink {
-  50% {
-    opacity: 0;
-  }
 }
 
 /* The byline's people (`DocumentByline`) each take a press a finger's
@@ -614,13 +600,6 @@
   transform: translate(-50%, var(--luke-space-4));
 }
 
-/* The scroller ends clear of a phone's call card standing over it
-   (`--luke-card-room`, `call.css`), past Pierre's container, which Pierre
-   sizes itself. */
-[data-diff-list-scroller] {
-  padding-block-end: var(--luke-card-room, 0px);
-}
-
 /* Pierre's own container, which it draws the files into inside the scroller. */
 [data-diff-list-scroller] > :first-child {
   padding-inline: var(--luke-list-inset);
@@ -1114,12 +1093,9 @@
   mask-repeat: no-repeat;
 }
 
-/* The Conversation's scroller ends a page's inset short of the foot, or, on
-   a phone, clear of the call card standing over it (`--luke-card-room`,
-   `call.css`). Note that this stays a rule, because it is the larger of
-   the two. */
+/* The Conversation's scroller ends a page's inset short of the foot. */
 .pull-request-page {
-  padding-bottom: max(var(--luke-page-inset), var(--luke-card-room, 0px));
+  padding-bottom: var(--luke-page-inset);
 }
 
 /* On the web, the Conversation's scroller (`.pull-request-page`) stands at
@@ -1634,8 +1610,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
 }
 
-/* An inline span of code, in a transcript, a pull request's description, or
-   a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
+/* An inline span of code, in a transcript, a to-do's step, a pull request's
+   description, or a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
    prose.css) in its padding, tint, face and size, and the corner role nearest
    its own, so code reads the same wherever words carry it. */
 .transcript-inline-code,

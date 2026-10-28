@@ -198,17 +198,17 @@ import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
   AssistantMessageBuilder,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
   sessionKey,
   TURN_ORIGIN,
+  TURN_TRIGGER,
   userMessage,
   userMetadataOf,
 } from "../core.js";
@@ -1689,12 +1689,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           eveTurnId: "turn_0",
         });
         yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
         // eve's receipt takes the Start's line into the turn, as the relay does.
@@ -4526,12 +4526,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           eveTurnId: "turn_0",
         });
         yield* writer.consume(target, {
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
         // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
@@ -4539,11 +4539,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(Result.getOrUndefined(taken)?.length, 1);
         if (!turn.running) {
           yield* writer.consume(target, {
-            kind: BRAIN_RUN_EVENT.TURN_ENDED,
+            kind: RUN_EVENT.TURN_ENDED,
             conversationId: sessionKey(target.conversationId),
             turnId,
             sequence: 2,
-            status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+            status: RUN_STATUS.SUCCEEDED,
             responseIds: [],
             at: 0,
           });
@@ -5291,7 +5291,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const stepBegun = (step: number) =>
           writer.consume(target, {
             ...turn,
-            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            kind: RUN_EVENT.STEP_STARTED,
             sequence: step + 2,
             step,
           });
@@ -5305,7 +5305,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         answer.text("Renamed it.");
         yield* writer.consume(target, {
           ...turn,
-          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          kind: RUN_EVENT.MESSAGE_COMPLETED,
           sequence: 6,
           message: answer.finish(randomUUID()),
         });
@@ -6841,23 +6841,23 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        kind: RUN_EVENT.MESSAGE_COMPLETED,
         sequence: 2,
-        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
+        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(TURN_TRIGGER.ASK)),
       });
       yield* writer.consume(target, {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        kind: RUN_EVENT.TURN_ENDED,
         sequence: 3,
-        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        status: RUN_STATUS.SUCCEEDED,
         responseIds: [],
         at: 0,
       });
@@ -8235,7 +8235,7 @@ const transcriptRow = (
           parts: parts as never,
           metadata:
             role === MESSAGE_ROLE.USER
-              ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK)
+              ? userMetadataOf(TURN_TRIGGER.ASK)
               : { author: MESSAGE_AUTHOR.MODEL },
           placedAt: new Date(),
         })
@@ -8407,12 +8407,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const turnId = randomUUID();
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
       yield* writer.consume(target, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         conversationId: sessionKey(target.conversationId),
         turnId,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       });
       // The source's lines are the turn's, so none of them reads as awaiting a turn of its own.
@@ -8911,16 +8911,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
         const bodies = [
           {
-            kind: BRAIN_RUN_EVENT.TURN_STARTED,
-            origin: BRAIN_TURN_ORIGIN.TYPED,
-            trigger: BRAIN_TURN_TRIGGER.ASK,
+            kind: RUN_EVENT.TURN_STARTED,
+            origin: RUN_TURN_ORIGIN.TYPED,
+            trigger: TURN_TRIGGER.ASK,
             at: 0,
           },
-          { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 },
-          { kind: BRAIN_RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
+          { kind: RUN_EVENT.STEP_STARTED, step: 1 },
+          { kind: RUN_EVENT.TEXT_DRAFTED, step: 1, text: "Halfway through the mailer." },
           {
-            kind: BRAIN_RUN_EVENT.TURN_ENDED,
-            status: BRAIN_REQUEST_STATUS.FAILED,
+            kind: RUN_EVENT.TURN_ENDED,
+            status: RUN_STATUS.FAILED,
             responseIds: [],
             at: 1,
           },

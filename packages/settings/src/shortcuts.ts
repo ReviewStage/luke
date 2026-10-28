@@ -58,8 +58,6 @@ export const APP_COMMAND = {
   ACTUAL_SIZE: "actual-size",
   ZOOM_IN: "zoom-in",
   ZOOM_OUT: "zoom-out",
-  TOGGLE_MICROPHONE: "toggle-microphone",
-  TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
   MOVE_ROW_UP: "move-row-up",
@@ -405,8 +403,7 @@ export interface AppShortcut {
  * row of a list that reorders up or down it, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
  * close the window as Chrome and VS Code have them,
- * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
- * speaker beside it, ⌘K for the command palette as Linear, Slack, and
+ * ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
  * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
@@ -529,16 +526,6 @@ export const APP_SHORTCUTS = {
     label: "Zoom out",
     chord: { key: SHORTCUT_KEY.MINUS },
     capability: HOST_CAPABILITY.DESKTOP_APP,
-  },
-  [APP_COMMAND.TOGGLE_MICROPHONE]: {
-    label: "Mute or unmute microphone",
-    chord: { key: SHORTCUT_KEY.M, shift: true },
-    capability: HOST_CAPABILITY.VOICE,
-  },
-  [APP_COMMAND.TOGGLE_SPEAKER]: {
-    label: "Mute or unmute speaker",
-    chord: { key: SHORTCUT_KEY.S, shift: true },
-    capability: HOST_CAPABILITY.VOICE,
   },
   [APP_COMMAND.MOVE_TAB_LEFT]: {
     label: "Move tab left",
@@ -881,11 +868,6 @@ export const APP_SHORTCUT_GROUPS = [
     ],
   },
   {
-    title: "Call",
-    keys: [],
-    commands: [APP_COMMAND.TOGGLE_MICROPHONE, APP_COMMAND.TOGGLE_SPEAKER],
-  },
-  {
     title: "Navigation",
     keys: [
       IN_CONTEXT_KEY.SWITCHER_NEXT,
@@ -1139,7 +1121,7 @@ export interface WritingShortcut {
  * and the Keyboard shortcuts page, the toolbars, and the menus list. The
  * chords are TipTap's own, which are Google Docs' for the most part, with two
  * moved off the window's: Strikethrough takes ⇧⌘X, as Google Docs has it,
- * rather than ⇧⌘S, which is Toggle speaker, and Code block takes none rather
+ * and Code block takes none rather
  * than ⌥⌘C, which copies the plan or a transcript, since ``` makes one as quickly. Bold's ⌘B is
  * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
  * an editor stops the chords it answers on their way to the window's keymap

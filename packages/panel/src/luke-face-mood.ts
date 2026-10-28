@@ -1,31 +1,6 @@
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@luke/brand";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
-/**
- * Everything Luke reacts to: who is being heard on the call. A face that knew
- * something the panel did not would be a second, quieter source of truth.
- */
-export interface FaceContext {
-  speaking: boolean;
-  microphoneLive: boolean;
-}
-
-/**
- * What Luke settles into, which is usually nothing whatever. A rest repeats for
- * as long as it is true, so the only motions allowed to be one are the two
- * that stay true while they hold: speech going into an open microphone, and
- * the microphone open without it.
- *
- * Everything else rests as a still face — the drawing, and no motion — and
- * spends its moments on gestures instead: a face that never stops moving is
- * one you stop reading.
- */
-function restingMotion(context: FaceContext): FaceMotion | undefined {
-  if (context.speaking) return FACE_MOTION.TALKING;
-  if (context.microphoneLive) return FACE_MOTION.LISTENING;
-  return undefined;
-}
-
 /** One thing Luke might do with a moment, and how much of the pool it takes. */
 interface WeightedAside {
   motion: FaceMotion;
@@ -38,7 +13,7 @@ interface WeightedAside {
  * sit at the bottom, rare enough to stay surprises. They are what keeps a
  * permanent fixture from reading as a dead one — a face that never moves is a
  * screenshot — and between them the face is simply still. Nothing here means
- * anything: what does is chosen by `restingMotion`.
+ * anything.
  *
  * The same gesture twice running is allowed, and has to be. Two blinks a
  * half-minute apart is what a calm face does, and forbidding a repeat would
@@ -166,20 +141,16 @@ interface PlayingGesture {
 interface FacePlay {
   /** Absent while the face is still, which is most of the time. */
   motion?: FaceMotion | undefined;
-  /** Set while the motion is a rest, which is the only kind that repeats. */
-  repeat: boolean;
   /** Which play this is, so that asking twice for one motion plays it twice. */
   play: number;
 }
 
 /**
- * What Luke is playing: a rest, a gesture that has the face for one play, or
- * nothing at all. Gestures always give the face back — nothing here can leave it
- * stuck saying something that has stopped being true — and what they give it
- * back to is stillness.
+ * What Luke is playing: a gesture that has the face for one play, or nothing
+ * at all. Gestures always give the face back, and what they give it back to
+ * is stillness: a face that never stops moving is one you stop reading.
  */
-export function useFaceMotion(context: FaceContext, still: boolean, hovered = false): FacePlay {
-  const resting = restingMotion(context);
+export function useFaceMotion(still: boolean, hovered = false): FacePlay {
   const [gesture, setGesture] = useState<PlayingGesture>();
   const plays = useRef(0);
 
@@ -209,42 +180,22 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
     setGesture({ motion: chooseAside(HOVER_ASIDES, Math.random()), play: plays.current });
   }, [hovered, still]);
 
-  // Stillness, and then something small. Waiting is only scheduled while nothing
-  // is resting on the face and nothing is already playing, so the gaps never
-  // overlap what they are gaps between.
+  // Stillness, and then something small. Waiting is only scheduled while
+  // nothing is already playing, so the gaps never overlap what they are gaps
+  // between.
   useEffect(() => {
-    if (still || resting !== undefined || gesture !== undefined) return;
+    if (still || gesture !== undefined) return;
     const timer = window.setTimeout(() => {
       plays.current += 1;
       setGesture({ motion: chooseAside(IDLE_ASIDES, Math.random()), play: plays.current });
     }, stillnessDelay());
     return () => window.clearTimeout(timer);
-  }, [gesture, resting, still]);
-
-  // A gesture a rest has taken the face back from is over, not paused: left set,
-  // it would surface partway through its own timer the moment the rest ended,
-  // which reads as a glitch rather than a gesture.
-  useEffect(() => {
-    if (resting !== undefined && gesture !== undefined) setGesture(undefined);
-  }, [resting, gesture]);
+  }, [gesture, still]);
 
   // Held still, the face is simply the drawing: the stylesheet stops every loop,
   // and asking for no motion at all stops the poses changing underneath it.
-  if (still) return { repeat: false, play: 0 };
-  // The rest if there is one, the gesture if there is not, and stillness if
-  // there is neither. A rest owns the face outright, because each of the
-  // two says something that is true right now — and they carry the face's
-  // colour, which is how the face reports an open microphone. Deciding it here rather than in an effect that runs
-  // afterwards is what keeps a microphone opened mid gesture from going
-  // untinted until the gesture runs out.
-  //
+  if (still) return { play: 0 };
   // Each gesture gets its own play, so each one is drawn afresh and each one
-  // is therefore played. A rest keeps one play throughout, so its loop is
-  // never rebuilt underneath itself — and a gesture the rest is covering is
-  // not being played at all, so it does not get one either.
-  return {
-    motion: resting ?? gesture?.motion,
-    repeat: resting !== undefined,
-    play: resting === undefined ? (gesture?.play ?? 0) : 0,
-  };
+  // is therefore played.
+  return { motion: gesture?.motion, play: gesture?.play ?? 0 };
 }

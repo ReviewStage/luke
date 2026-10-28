@@ -47,7 +47,14 @@ export function useChordLinks(): readonly string[] {
   return useAtomValue(chordLinksAtom);
 }
 
-/** Copy link, copying `link` through `copy`, the window's menu copy (`useCopyToast`), and printing ⇧⌘C where the chord copies the same link, one of `chord` (`useChordLinks`). */
+/**
+ * Copy link, copying `link`, a Luke link, through `copy`, the window's menu
+ * copy (`useCopyToast`): the one item every Copy link in a menu draws,
+ * printing ⇧⌘C where the chord copies the same link, one of `chord`
+ * (`useChordLinks`). Note that a GitHub address is no Luke link and is
+ * offered as Copy GitHub link (`PANEL_COMMAND.COPY_GITHUB_LINK`), and a
+ * link's own right-click keeps its browser's Copy link (`link-menu.tsx`).
+ */
 export function copyLinkItem(
   copy: (words: string, label: string) => void,
   link: string,

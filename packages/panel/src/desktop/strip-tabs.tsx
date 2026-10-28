@@ -264,9 +264,18 @@ export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuAction
   return [rename, terminal, copies, archive, deletion].filter((group) => group.length > 0);
 }
 
-/** The chosen tab's actions as a strip's ⋯ offers them: what its body hands up while it is drawn (`handed`), first, then `contentActionGroups`. */
+/**
+ * The chosen tab's actions as a strip's ⋯ offers them: what its body hands
+ * up while it is drawn (`handed`), first, then `contentActionGroups`. Note
+ * that a tab's Copy link leads even what its body hands up, alone in its
+ * group, because Copy link leads every menu that holds one.
+ */
 export function tabContentGroups(doors: TabDoors): TabActionGroups {
-  return [...(doors.handed ?? []), ...contentActionGroups(doors)].filter(
+  const { handed, copyLink } = doors;
+  if (handed === undefined || copyLink === undefined) {
+    return [...(handed ?? []), ...contentActionGroups(doors)].filter((group) => group.length > 0);
+  }
+  return [[copyLink], ...handed, ...contentActionGroups({ ...doors, copyLink: undefined })].filter(
     (group) => group.length > 0,
   );
 }

@@ -1,11 +1,13 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   dropBelowStart,
+  IconButton,
   MoreButton,
   moreLabel,
   opensMenu,
   SettingsRow,
   type SettingsRowControl,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { type KeyboardEvent, type ReactNode, useRef } from "react";
@@ -20,7 +22,9 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
  * menu at the pointer, and the menu key or ⇧F10 on the row opens it under the
  * row. The ⋯ is always drawn, muted as a toolbar's glyphs are until the pointer
  * is on it, because a ⋯ shown only on hover leaves an empty gap at the end of
- * the row. A row with no act that applies now draws no ⋯ and opens nothing. An
+ * the row. A row with no act that applies now draws no ⋯ and opens nothing, and
+ * a row given `alone` that holds exactly one act draws it as an icon button
+ * of its own (named and tipped by the act's words) rather than a ⋯ over one item. An
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
  *
@@ -77,6 +81,7 @@ export function MenuRow({
   actions,
   heading,
   anchor,
+  alone = false,
   row,
   children,
 }: MenuRowBody & {
@@ -87,14 +92,29 @@ export function MenuRow({
   heading?: string;
   /** The id a pressed search result lands on. */
   anchor?: string;
+  /** Whether a lone act stands as a button of its own rather than behind a ⋯; a row whose acts may grow keeps its ⋯. */
+  alone?: boolean;
 }): React.JSX.Element {
   // The page is drawn whenever the row is, so the menu needs no surface of
   // its own to close with: it closes with the row unmounting.
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
-  const acting = groups.length > 0;
-  const more = !acting ? null : <MoreButton ref={door} thing={thing} {...menu.trigger()} />;
+  const only = alone && groups.length === 1 && groups[0]?.length === 1 ? groups[0][0] : undefined;
+  const acting = groups.length > 0 && only === undefined;
+  const more =
+    only !== undefined ? (
+      <Tooltip label={only.label}>
+        <IconButton
+          icon={only.icon}
+          label={only.label}
+          disabled={only.disabled}
+          onClick={only.onSelect}
+        />
+      </Tooltip>
+    ) : acting ? (
+      <MoreButton ref={door} thing={thing} {...menu.trigger()} />
+    ) : null;
   // Note that the menu hangs under the row but hands focus back to what held the keyboard, the ⋯ or a control beside it, since the row itself takes none.
   const keyMenu = (event: KeyboardEvent<HTMLElement>) => {
     if (!opensMenu(event)) return;

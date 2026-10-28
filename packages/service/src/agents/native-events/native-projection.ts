@@ -3,15 +3,15 @@ import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
   addModelUsage,
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  type BrainRequestStatus,
-  type BrainRunEvent,
-  type BrainRunEventBody,
-  type BrainRunUsage,
   finishedSentencesOf,
+  RUN_EVENT,
+  RUN_STATUS,
+  type RunEvent,
+  type RunEventBody,
+  type RunStatus,
+  type RunUsage,
   sessionKey,
+  TURN_FAILURE,
 } from "../../core.js";
 import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
 import {
@@ -174,7 +174,7 @@ export const NATIVE_WRITE = {
 
 export type NativeWrite =
   | { readonly kind: typeof NATIVE_WRITE.ENQUEUE; readonly turnId: string }
-  | { readonly kind: typeof NATIVE_WRITE.EVENT; readonly event: BrainRunEvent }
+  | { readonly kind: typeof NATIVE_WRITE.EVENT; readonly event: RunEvent }
   | {
       readonly kind: typeof NATIVE_WRITE.TAKE_LINE;
       readonly turnId: string;
@@ -255,7 +255,7 @@ class Fold {
   }
 
   /** Tells the writer one event of the turn, numbered after the last. */
-  #tell(turn: Turn, body: BrainRunEventBody): Turn {
+  #tell(turn: Turn, body: RunEventBody): Turn {
     const told = turn.told + 1;
     this.writes.push({
       kind: NATIVE_WRITE.EVENT,
@@ -278,7 +278,7 @@ class Fold {
     const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
     const opened = this.#tell(
       { id, told: 0, steps: 0, calls: {}, taken: false, openedAt: this.#context.now },
-      { kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
+      { kind: RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
     );
     this.#setTurn(opened);
     return opened;
@@ -291,7 +291,7 @@ class Fold {
       whole && forming.length > 0 ? joinedWords(completed, forming) : tellable(step.draft);
     if (text.length <= step.draft.told) return { ...turn, step };
     const told = this.#tell(turn, {
-      kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
+      kind: RUN_EVENT.TEXT_DRAFTED,
       step: turn.steps,
       text,
     });
@@ -318,10 +318,7 @@ class Fold {
     }
     const closed = this.#closed(turn);
     const steps = closed.steps + 1;
-    const opened = this.#tell(
-      { ...closed, steps },
-      { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: steps },
-    );
+    const opened = this.#tell({ ...closed, steps }, { kind: RUN_EVENT.STEP_STARTED, step: steps });
     const fresh = { open: true, draft: EMPTY_DRAFT, reasoning: 0 };
     const next: Turn = { ...opened, step: key === undefined ? fresh : { ...fresh, key } };
     this.#setTurn(next);
@@ -342,7 +339,7 @@ class Fold {
     if (step === undefined) return;
     const id = reasoningItemId(this.#context.conversationId, turn.id, turn.steps, step.reasoning);
     const told = this.#tell(turn, {
-      kind: BRAIN_RUN_EVENT.REASONING_COMPLETED,
+      kind: RUN_EVENT.REASONING_COMPLETED,
       summary: text,
       item: { id, summary: text },
     });
@@ -357,7 +354,7 @@ class Fold {
     const turn = this.#step(undefined);
     if (turn.calls[moment.callId] !== undefined) return;
     const told = this.#tell(turn, {
-      kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+      kind: RUN_EVENT.TOOL_CALL_STARTED,
       callId: moment.callId,
       name: moment.name,
       input: moment.input,
@@ -371,7 +368,7 @@ class Fold {
     if (turn === undefined || name === undefined) return;
     this.#setTurn(
       this.#tell(withSettledSubagents(turn, moment.callId), {
-        kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+        kind: RUN_EVENT.TOOL_CALL_SETTLED,
         callId: moment.callId,
         name,
         settlement: moment.settlement,
@@ -418,15 +415,15 @@ class Fold {
     if (held === undefined) return;
     const turn = this.#closed(held);
     const status = statusOf(moment.ending, turn.failure);
-    const failed = status === BRAIN_REQUEST_STATUS.FAILED;
+    const failed = status === RUN_STATUS.FAILED;
     const detail = [moment.detail, turn.failure, this.state.rateLimit]
       .filter((word) => word !== undefined)
       .join("; ");
     const model = this.#context.model;
     this.#tell(turn, {
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      kind: RUN_EVENT.TURN_ENDED,
       status,
-      ...(failed ? { failure: BRAIN_REQUEST_FAILURE.MODEL } : undefined),
+      ...(failed ? { failure: TURN_FAILURE.MODEL } : undefined),
       ...(failed && detail.length > 0 ? { failureDetail: detail } : undefined),
       ...(turn.usage !== undefined ? { usage: turn.usage } : undefined),
       ...(turn.usage !== undefined && model !== undefined
@@ -441,13 +438,13 @@ class Fold {
     this.state = rest;
   }
 
-  #usage(usage: BrainRunUsage): void {
+  #usage(usage: RunUsage): void {
     const turn = this.turn();
     this.#setTurn({ ...turn, usage: addModelUsage(turn.usage, usage) });
   }
 
   /** A running total metered: the turn under way takes what it grew by; with no turn under way it is only noted, so it is not metered again. */
-  #usageTotal(total: BrainRunUsage): void {
+  #usageTotal(total: RunUsage): void {
     const grown = usageGrowth(this.state.metered, total);
     this.state = { ...this.state, metered: total };
     const turn = this.state.turn;
@@ -585,7 +582,7 @@ type Usage = typeof UsageSchema.Type;
  * was metered or where it is smaller (a new thread counts from nothing), and
  * nothing where it did not grow.
  */
-function usageGrowth(before: Usage | undefined, total: Usage): BrainRunUsage | undefined {
+function usageGrowth(before: Usage | undefined, total: Usage): RunUsage | undefined {
   const grown = {
     inputTokens: total.inputTokens - (before?.inputTokens ?? 0),
     outputTokens: total.outputTokens - (before?.outputTokens ?? 0),
@@ -602,14 +599,14 @@ function usageGrowth(before: Usage | undefined, total: Usage): BrainRunUsage | u
 function statusOf(
   ending: (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING],
   failure: string | undefined,
-): BrainRequestStatus {
+): RunStatus {
   switch (ending) {
     case NATIVE_ENDING.DONE:
-      return failure === undefined ? BRAIN_REQUEST_STATUS.SUCCEEDED : BRAIN_REQUEST_STATUS.FAILED;
+      return failure === undefined ? RUN_STATUS.SUCCEEDED : RUN_STATUS.FAILED;
     case NATIVE_ENDING.STOPPED:
-      return BRAIN_REQUEST_STATUS.CANCELLED;
+      return RUN_STATUS.CANCELLED;
     case NATIVE_ENDING.FAILED:
-      return BRAIN_REQUEST_STATUS.FAILED;
+      return RUN_STATUS.FAILED;
   }
 }
 

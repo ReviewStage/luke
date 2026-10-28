@@ -93,7 +93,8 @@ import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
-import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { useCopyToast } from "../copy-feedback.js";
+import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -449,8 +450,8 @@ function useMembersRead(workspace: Workspace) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ their profile, where the window offers one, Copy link to
- * their person page, and what the reader may do to them (`memberActs`).
+ * then in its ⋯ Copy link to their person page, their profile, where the
+ * window offers one, and what the reader may do to them (`memberActs`).
  * Make admin and Make member take hold at once, since either is undone by
  * the other; Make owner and Remove from workspace ask first. A role change
  * refused is said under the row. A row with no ⋯ in a list where others
@@ -496,7 +497,13 @@ function MemberRow({
   };
   const openPerson = useOpenPerson();
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const profileActs = [
+    copyLinkItem(
+      copy,
+      linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
+      chord,
+    ),
     ...(openPerson === undefined
       ? []
       : [
@@ -506,15 +513,6 @@ function MemberRow({
             onSelect: () => openPerson(userId, member.name, workspaceId),
           },
         ]),
-    {
-      label: LINK_COPY.LABEL,
-      icon: <GLYPH.LINK />,
-      onSelect: () =>
-        copy(
-          linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
-          LINK_COPY.COPIED,
-        ),
-    },
   ];
   const roleActs = [
     ...(may.promote
@@ -1195,6 +1193,7 @@ function Invitations({
         <MenuRow
           key={one.id}
           thing={one.email}
+          alone
           actions={[
             {
               label: "Cancel invitation",
@@ -1440,8 +1439,8 @@ function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactN
  * The workspace's Linear, for an owner or an admin: Connect while none is,
  * or Reconnect once its sign-in expired, which opens Linear's
  * sign-in in the browser, a sign-in that could not be begun saying why
- * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
- * a connected row quiet, whose menu holds Disconnect, which asks first. A
+ * under the row; and a Disconnect button once one stands, an icon button
+ * that asks first, since a ⋯ over one item would only hide it. A
  * plan already started from an issue keeps what it read. The row is
  * `MenuRow`'s `SettingsRow` led by Linear's mark, its press the outline
  * `Button`.
@@ -1487,6 +1486,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Linear"
+        alone
         actions={actions}
         row={{
           leading: LINEAR_MARK,
@@ -1605,9 +1605,12 @@ function ManagedSentry({
   );
   const actions = [
     sentry.installations.map((installation) => ({
+      // Note that a lone installation's act stands as a button of its own, so it says only Disconnect.
       label:
-        installation.account === undefined ? "Disconnect" : `Disconnect ${installation.account}`,
-      icon: <TrashIcon />,
+        installation.account === undefined || sentry.installations.length === 1
+          ? "Disconnect"
+          : `Disconnect ${installation.account}`,
+      icon: <GLYPH.DISCONNECT />,
       danger: true,
       onSelect: () => {
         setLeaving(installation);
@@ -1619,6 +1622,7 @@ function ManagedSentry({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Sentry"
+        alone
         actions={actions}
         row={{
           leading: SENTRY_MARK,

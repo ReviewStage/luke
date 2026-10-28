@@ -13,7 +13,6 @@
 
 import { TURN_STATUS } from "@luke/wire";
 import { Option, Schema } from "effect";
-import { BRAIN_REQUEST_FAILURE } from "./brain/requests.js";
 import {
   CODING_AGENT_BOUNDS,
   TURN_ENDING,
@@ -22,6 +21,7 @@ import {
   type TurnTokens,
 } from "./coding-agent-wire.js";
 import { catalogIdOf } from "./model-label.js";
+import { TURN_FAILURE } from "./turn-run/requests.js";
 
 /** The row's fields a record is read from. */
 export interface RecordedTurn {
@@ -56,9 +56,7 @@ function choiceOf(recorded: string | null): string | undefined {
 function endingOf(turn: RecordedTurn): TurnEnding | undefined {
   if (turn.status === TURN_STATUS.CANCELLED) return TURN_ENDING.STOPPED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
-  return turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED
-    ? TURN_ENDING.ABANDONED
-    : TURN_ENDING.FAILED;
+  return turn.failure === TURN_FAILURE.ABANDONED ? TURN_ENDING.ABANDONED : TURN_ENDING.FAILED;
 }
 
 /** The turn's tokens as its row summed them, or nothing where it recorded none or a shape this build cannot read. */
