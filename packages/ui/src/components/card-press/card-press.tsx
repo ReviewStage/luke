@@ -61,7 +61,8 @@ import { SelectBox, type SelectBoxPlace } from "../selection/select-box.js";
  * reach and is described as selected. Where the card says where
  * (`selectBox`), the press draws the row's box beside itself (`SelectBox`),
  * the pointer's way to choose it: in the card, after the button, since a
- * button holds no control.
+ * button holds no control. An unavailable card draws none, as no other way
+ * chooses it.
  *
  * A press that is an item of a roving set (`roving`), a list's or a board
  * column's whose box `useRovingKeys` keeps, is one of the set's items: the
@@ -257,7 +258,7 @@ export function CardPress({
         {children}
         <span className={REACH} data-focus-ring="" aria-hidden="true" />
       </button>
-      {choosable && selectBox !== undefined ? (
+      {choosable && !disabled && selectBox !== undefined ? (
         <SelectBox selectKey={selectKey} place={selectBox} />
       ) : null}
     </>

@@ -414,7 +414,14 @@ test("the bar's buttons are one Tab stop, ←→ walking them", () => {
  * together in one region, the lists runs of their own where `runs`; each
  * place opened is listed after it.
  */
-function ChoosingCards({ runs = false }: { runs?: boolean }): React.JSX.Element {
+function ChoosingCards({
+  runs = false,
+  off = [],
+}: {
+  runs?: boolean;
+  /** The places whose cards are unavailable. */
+  off?: readonly string[];
+}): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [opened, setOpened] = useState<string[]>([]);
   const list = (names: readonly string[]) =>
@@ -428,6 +435,7 @@ function ChoosingCards({ runs = false }: { runs?: boolean }): React.JSX.Element 
           createElement(CardPress, {
             selectKey: name,
             selectBox: SELECT_BOX_PLACE.GUTTER,
+            disabled: off.includes(name),
             onPress: () => setOpened((held) => [...held, name]),
             children: name,
           }),
@@ -512,6 +520,14 @@ test("a card's box and X on the card in hand each put it in and take it out, ope
   key("x");
   expect(chosen()).toBe("Automations");
   expect(page.querySelector("[data-opened]")?.textContent).toBe("");
+});
+
+test("an unavailable card offers no box to choose it by, as no other way chooses it", () => {
+  const page = draw(createElement(ChoosingCards, { off: ["Board"] }));
+  const card = (name: string) =>
+    page.querySelector(`[data-select-key="${name}"]`)?.parentElement ?? document.body;
+  expect(card("Tasks").querySelector('[role="checkbox"]')).not.toBeNull();
+  expect(card("Board").querySelector('[role="checkbox"]')).toBeNull();
 });
 
 test("where the lists are runs, a ⇧-click reaches only across the run its card stands in", () => {
