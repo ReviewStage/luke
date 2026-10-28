@@ -212,6 +212,26 @@ test("a message sent stands in the transcript at once, the box empty and taking 
   assert.equal(tab.lines("Now the dark variant.").length, 1);
 });
 
+test("a line whose row landed before its send answered offers Edit only once the service took it, since it may yet withdraw the row", async () => {
+  vi.spyOn(crypto, "randomUUID").mockReturnValue(KEY);
+  const row: CodingAgentMessage = {
+    id: "row-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Now the dark variant." }],
+    clientId: sentLineId(KEY),
+    sentAt: 90_000,
+  };
+  const tab = await drawnTab([row]);
+  const edit = () =>
+    tab.container.querySelector('[data-message-id="row-1"] button[aria-label="Edit"]');
+  await tab.send("Now the dark variant.");
+  await tab.landRow();
+
+  assert.ok(edit() === null, "no Edit while the send is out");
+  await tab.answer(0, TAKEN);
+  assert.ok(edit(), "Edit once the service took it");
+});
+
 test("a message sent to an agent at rest draws the working line at once, before the service takes it", async () => {
   const tab = await drawnTab([]);
   assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
