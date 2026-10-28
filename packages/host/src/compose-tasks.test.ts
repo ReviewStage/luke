@@ -156,10 +156,17 @@ interface FakeService extends TasksClient {
   folders: Record<string, TaskTreeAnswer>;
   /** What the service answers for each task's skills, by task id; a task with none answers nothing, as a service that did not answer. */
   skills: Record<string, TaskSkillsAnswer>;
-  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its folders by path, and its skills. */
+  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its files' windows and its folders by path, and its skills. */
   places: Record<
     string,
-    Record<string, { folders: Record<string, TaskTreeAnswer>; skills: TaskSkillsAnswer }>
+    Record<
+      string,
+      {
+        files: Record<string, TaskFileAnswer>;
+        folders: Record<string, TaskTreeAnswer>;
+        skills: TaskSkillsAnswer;
+      }
+    >
   >;
   /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
@@ -806,6 +813,8 @@ function fakeService(tasks: Task[]): FakeService {
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
     readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
+    readRepositoryFile: (place, window) =>
+      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.files[window.path]),
     readRepositoryTree: (place, folder) =>
       Effect.sync(
         () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
@@ -2681,7 +2690,7 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
 );
 
 it.effect(
-  "a folder and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
+  "a file, a folder, and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2702,14 +2711,42 @@ it.effect(
           ],
         },
       });
+      const file = (path: string): TaskFileAnswer => ({
+        file: {
+          path,
+          repository: "acme/relay",
+          branch: "main",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["const seats = 3;"],
+        },
+      });
       service.places[ACME.id] = {
-        "acme/relay": { folders: { src: folder("src") }, skills: skills("release") },
+        "acme/relay": {
+          files: { "src/seats.ts": file("src/seats.ts") },
+          folders: { src: folder("src") },
+          skills: skills("release"),
+        },
       };
+      service.files["docs/plan.md"] = file("docs/plan.md");
       service.folders.docs = folder("docs");
       service.skills[INVITES] = skills("review");
       const { call } = yield* subject(service);
       const place = { workspaceId: ACME.id, repository: "acme/relay" };
 
+      const window = { firstLine: 1, lastLine: 1 };
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, { ...place, path: "src/seats.ts", ...window }),
+        file("src/seats.ts"),
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_FILE, {
+          taskId: INVITES,
+          path: "docs/plan.md",
+          ...window,
+        }),
+        file("docs/plan.md"),
+      );
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.TASKS_TREE, { ...place, path: "src" }),
         folder("src"),

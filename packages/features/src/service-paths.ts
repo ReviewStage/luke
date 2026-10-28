@@ -243,6 +243,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
   /**
+   * A window of one file of a repository a workspace's installation
+   * reaches, as GitHub holds it now or at a commit (GET), named as
+   * `GITHUB_REPOSITORY_TREE` names it, its window queried as a plan's File
+   * tab queries its own; the answer is a plan's file's (`task-wire.ts`).
+   */
+  GITHUB_REPOSITORY_FILE: "/api/github/repositories/file",
+  /**
    * The skills a developer may choose of a repository a workspace's
    * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
    * the answer is a plan's skills' (`plan-wire.ts`).
