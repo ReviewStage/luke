@@ -2849,6 +2849,7 @@ function PullRequestTabBody({
     overview === undefined || overviewHead === undefined
       ? undefined
       : { number: overview.number, head: overviewHead },
+    () => refreshAllNow.current(),
   );
   const title = overview ?? published;
   // Review stands at the end of the tabs once the pull request is held, whatever it stands as, because GitHub takes a review of one merged or closed too; where GitHub refuses one, as on a locked conversation, the panel says why in GitHub's words.

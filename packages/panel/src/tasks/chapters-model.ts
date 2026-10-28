@@ -22,8 +22,8 @@ import type { DiffLineSpan } from "../diff-view/contract.js";
  * Generate where the deployment can make them; chapters being made, by this
  * window's own Generate or someone else's; a generation that failed; or the
  * chapters ready, stale where they were made for a head the pull request
- * has moved on from, as the tab's own read of it now holds it where it does
- * (`chaptersStale`). "Other changes" is always read last
+ * has moved on from, or for another push than the files drawn, as the tab's
+ * own reads now hold them where they do (`chaptersStale`). "Other changes" is always read last
  * (`orderedChapters`). A chapter is viewed once every file it holds is
  * marked viewed on GitHub (`chapterViewed`), and marking it marks each of
  * them, or unmarks them all where all were (`chapterMarks`), so a file two
@@ -88,15 +88,16 @@ export function chaptersModelLabel(model: string): string {
   return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;
 }
 
-/** Whether chapters were made for a head the pull request has since moved on from: the tab's own where it holds one, else the answer's. */
+/** Whether chapters were made for a head other than any the tab holds, else than the answer's: the pull request moved on, or the files drawn are of another push. */
 function chaptersStale(
   pullRequest: Pick<Answer, "headSha" | "chapters">,
-  head: string | undefined,
+  heads: readonly (string | undefined)[],
 ): boolean {
   const { chapters } = pullRequest;
-  return (
-    chapters.status !== PULL_REQUEST_CHAPTERS_STATE.NONE &&
-    chapters.headSha !== (head ?? pullRequest.headSha)
+  if (chapters.status === PULL_REQUEST_CHAPTERS_STATE.NONE) return false;
+  const held = heads.filter((head) => head !== undefined);
+  return (held.length === 0 ? [pullRequest.headSha] : held).some(
+    (head) => head !== chapters.headSha,
   );
 }
 
@@ -119,8 +120,8 @@ export function chaptersShown(
   out: boolean,
   /** When this window's own Generate was pressed, while it is out. */
   generating: number | undefined,
-  /** The pull request's head as the tab's own read of it holds it now, where it holds one. */
-  head?: string,
+  /** The heads the tab's own reads hold now, its pull request's and its files', each where it holds one. */
+  heads: readonly (string | undefined)[] = [],
 ): ChaptersShown {
   if (generating !== undefined) {
     return { kind: CHAPTERS_SHOWN.GENERATING, startedAt: generating, ours: true };
@@ -146,7 +147,7 @@ export function chaptersShown(
         kind: CHAPTERS_SHOWN.READY,
         chapters: orderedChapters(chapters.chapters),
         model: chapters.model,
-        stale: chaptersStale(pullRequest, head),
+        stale: chaptersStale(pullRequest, heads),
         generatable,
       };
   }

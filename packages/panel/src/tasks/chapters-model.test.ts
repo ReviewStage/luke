@@ -188,9 +188,12 @@ test("chapters made for an older head are stale, those for the head now are not,
   );
 });
 
-test("chapters are stale against the head the tab holds now where it holds one, rather than the head the read was answered with", () => {
+test("chapters are stale against any head the tab holds now that differs from theirs, rather than the head the read was answered with", () => {
   const pushedSince = "c".repeat(40);
-  const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, pushedSince);
+  const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, [
+    pushedSince,
+    HEAD,
+  ]);
 
   assert.equal(shown.kind === CHAPTERS_SHOWN.READY && shown.stale, true);
 });

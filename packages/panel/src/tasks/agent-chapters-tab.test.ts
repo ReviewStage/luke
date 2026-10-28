@@ -330,8 +330,8 @@ interface Answers {
   readonly generateChapters?: CodingAgentsControl["generateChapters"];
   /** The files marked viewed on GitHub; the marks are unread where none are named. */
   readonly viewed?: readonly string[];
-  /** The head the overview's merge box reads; none where it says none. */
-  readonly overviewHead?: string;
+  /** The head GitHub holds as each read of the overview and the files asks; theirs where none is named, the overview's merge box saying none. */
+  readonly head?: () => string;
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
@@ -358,7 +358,7 @@ function controlAnswering(answers: Answers): CodingAgentsControl {
     readOverviewPullRequest: () =>
       Promise.resolve({
         pullRequest:
-          answers.overviewHead === undefined
+          answers.head === undefined
             ? PULL_REQUEST
             : {
                 ...PULL_REQUEST,
@@ -368,7 +368,7 @@ function controlAnswering(answers: Answers): CodingAgentsControl {
                   queue: false,
                   queued: null,
                   autoMerge: null,
-                  headSha: answers.overviewHead,
+                  headSha: answers.head(),
                   review: null,
                   checks: CHECK_SUMMARY.PASSING,
                 },
@@ -376,10 +376,14 @@ function controlAnswering(answers: Answers): CodingAgentsControl {
       }),
     readOverviewConversation: () => Promise.resolve({ pullRequest: CONVERSATION }),
     readOverviewChecks: () => Promise.resolve({ pullRequest: { checks: [] } }),
-    readChanges: () =>
-      Promise.resolve({
-        pullRequest: { url: PAGE, headSha: HEAD, truncated: false, files: FILES },
-      }),
+    readChanges: () => {
+      const head = answers.head?.() ?? HEAD;
+      // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
+      const files = head === HEAD ? FILES : [];
+      return Promise.resolve({
+        pullRequest: { url: PAGE, headSha: head, truncated: false, files },
+      });
+    },
     readPullRequestViewed: () =>
       Promise.resolve(
         answers.viewed === undefined
@@ -710,22 +714,25 @@ test("chapters made for an older head stand under a line saying new commits came
   assert.equal(generates, 1);
 });
 
-test("chapters a Generate made for a head pushed since the tab read the pull request are not stale, though the read after it still names the tab's older head", async () => {
+test("chapters a Generate made for a head pushed since the tab read the pull request draw their diff once the tab has read that head again", async () => {
+  let head = OLDER;
   let generated = false;
   const tab = await draw(
     controlAnswering({
-      overviewHead: OLDER,
+      head: () => head,
       // The read answers the head it was named, as the service does where the tab names one.
-      readChapters: (_agentId, _number, head) =>
+      readChapters: (_agentId, _number, named) =>
         Promise.resolve({
           pullRequest: {
             number: 42,
-            headSha: head ?? HEAD,
+            headSha: named ?? HEAD,
             generatable: true,
             chapters: generated ? ready() : { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         }),
       generateChapters: () => {
+        // A push the tab has not read yet, which the Generate tells the chapters for.
+        head = HEAD;
         generated = true;
         return Promise.resolve(answering(ready()));
       },
@@ -739,6 +746,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
     tab.querySelector(".luke-tab-notice")?.textContent ?? "",
     /New commits since/u,
   );
+  assert.notDeepEqual(listed(), [], "the chapter's diff is drawn from the files of its head");
 });
 
 test("a generation that failed says why with Retry, chapters someone else is making offer Refresh, and a deployment that cannot make them says so", async () => {

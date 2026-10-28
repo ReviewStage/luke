@@ -32,7 +32,7 @@ export interface ChaptersHeld {
 /** A pull request's chapters as the Pull request tab holds them: the read, its door, and this window's own Generate. */
 export interface ChaptersRead {
   readonly answer: PullRequestChaptersAnswerView | undefined;
-  /** The head the chapters are stale against: the one this window's Generate last answered until the tab's own read moves on, else the tab's own, where it holds one, else the answer's. */
+  /** The head the tab's own read of the pull request holds, where it holds one. */
   readonly head: string | undefined;
   readonly out: boolean;
   readonly ask: () => void;
@@ -48,7 +48,8 @@ export interface ChaptersRead {
  * head settles (`useAgentRead`), and again after a Generate. A read names the
  * number and the head the tab's own read of the pull request holds, where it
  * holds them, so the service answers from what it keeps rather than asking
- * GitHub for the pull request again. A Generate's own
+ * GitHub for the pull request again; a Generate that finds the head moved
+ * past it reads the tab again, so its files catch up. A Generate's own
  * answer is drawn as soon as it lands and stands until the read asked after
  * it does, so the chapters made never give way to what was there before.
  */
@@ -57,6 +58,8 @@ export function useChaptersRead(
   control: CodingAgentsControl,
   shown: boolean,
   held: ChaptersHeld | undefined,
+  /** Reads the tab again, its files among them, where a Generate found a head the tab's reads have not seen. */
+  onMoved: () => void,
 ): ChaptersRead {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
@@ -75,12 +78,8 @@ export function useChaptersRead(
     { readonly of: unknown; readonly answer: PullRequestChaptersAnswerView } | undefined
   >(undefined);
   const [generating, setGenerating] = useState<number | undefined>(undefined);
-  // The head a Generate told the chapters for, and the tab's head it was pressed over, which it stands in for until the tab's own read moves on.
-  const [generatedHead, setGeneratedHead] = useState<
-    { readonly over: string | undefined; readonly head: string } | undefined
-  >(undefined);
-  const latest = useRef({ control, number, read, held });
-  latest.current = { control, number, read, held };
+  const latest = useRef({ control, number, read, held, onMoved });
+  latest.current = { control, number, read, held, onMoved };
   // Note that whether a Generate is out is a ref too, because two presses in one frame would both read the state as none.
   const out = useRef(false);
   const generate = useCallback(() => {
@@ -95,20 +94,20 @@ export function useChaptersRead(
         out.current = false;
         setGenerating(undefined);
         setGenerated({ of: latest.current.read.answer, answer });
-        // Note that GitHub was asked for the head just now, so it is newer than a tab's read from before a push.
-        if ("pullRequest" in answer && answer.pullRequest !== null) {
-          setGeneratedHead({ over: latest.current.held?.head, head: answer.pullRequest.headSha });
-        }
         latest.current.read.ask();
+        // Note that GitHub was asked for the head just now, so one other than the tab's means a push its reads have not seen.
+        const { held, onMoved } = latest.current;
+        const moved =
+          held !== undefined &&
+          "pullRequest" in answer &&
+          answer.pullRequest !== null &&
+          answer.pullRequest.headSha !== held.head;
+        if (moved) onMoved();
       });
   }, [agentId]);
   const answer =
     generated !== undefined && generated.of === read.answer ? generated.answer : read.answer;
-  const head =
-    generatedHead !== undefined && generatedHead.over === held?.head
-      ? generatedHead.head
-      : held?.head;
-  return { answer, head, out: read.out, ask: read.ask, generate, generating };
+  return { answer, head: held?.head, out: read.out, ask: read.ask, generate, generating };
 }
 
 /** How many chapters the Chapters tab counts: those ready, stale or not; none before then. */
