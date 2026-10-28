@@ -6,21 +6,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import {
   type InboxViewChoices,
+  useChannelScopes,
   useInboxTaskFolds,
   useInboxViewChoices,
 } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
-  EVERYONES,
   firstChoice,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
   type InboxGroup,
   type InboxListed,
-  type InboxShow,
-  type InboxWhose,
   inboxCounts,
   listedItems,
   type TasklessInboxAgent,
@@ -51,10 +49,10 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
  * (`channelGroups`), under a scope of the channel's own: All of everyone's
- * each time a channel opens, since a channel is everyone's threads on one
- * topic, and whatever the reader turns it to while that channel stays
- * shown, never kept. Its grouping, its order, and the rest of its view are
- * the Inbox's own.
+ * until the reader turns it, since a channel is everyone's threads on one
+ * topic, and then whatever they turned it to, kept for that channel across
+ * a switch away and a launch (`useChannelScopes`). Its grouping, its order,
+ * and the rest of its view are the Inbox's own.
  */
 
 /** A New thread just opened, before the Inbox it opened on has named the item it stands over. */
@@ -89,32 +87,22 @@ function holdingGroups(
   });
 }
 
-/** A channel's own scope, as the reader last turned it while that channel stood. */
-interface ChannelScope {
-  readonly channelId: string;
-  readonly show: InboxShow;
-  readonly whose: InboxWhose;
-}
-
 /**
  * The Inbox's view choices, narrowed to a channel where one is given: its
- * scope the channel's own, All of everyone's as it opens, held only while
- * it stands; the Inbox's kept choices where none is.
+ * scope the channel's own, kept for it as the reader turns it; the Inbox's
+ * kept choices where none is.
  */
 function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   const kept = useInboxViewChoices();
-  const [scope, setScope] = useState<ChannelScope | undefined>(undefined);
-  // Note that a scope is forgotten once its channel is left, so the channel opens on All of everyone's again.
-  if (scope !== undefined && scope.channelId !== channelId) setScope(undefined);
+  const scopes = useChannelScopes();
   if (channelId === undefined) return kept;
-  const standing =
-    scope?.channelId === channelId ? scope : { channelId, show: INBOX_SHOW.ALL, whose: EVERYONES };
+  const standing = scopes.scopeOf(channelId);
   return {
     ...kept,
     show: standing.show,
-    onShow: (show) => setScope({ ...standing, show }),
+    onShow: (show) => scopes.onScope(channelId, { ...standing, show }),
     whose: standing.whose,
-    onWhose: (whose) => setScope({ ...standing, whose }),
+    onWhose: (whose) => scopes.onScope(channelId, { ...standing, whose }),
   };
 }
 
