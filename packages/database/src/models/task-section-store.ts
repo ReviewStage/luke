@@ -22,7 +22,7 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
-  agentReachableBy,
+  agentVisibleTo,
   isWorkspaceMember,
   taskReachableBy,
   workspaceReachableBy,
@@ -87,7 +87,7 @@ function agentEntryStands(userId: string) {
     eq(agentSectionEntry.userId, userId),
     eq(AGENT_WORKSPACE, taskSection.organizationId),
     isNull(codingAgent.taskId),
-    agentReachableBy(userId),
+    agentVisibleTo(userId),
   );
 }
 
@@ -277,7 +277,7 @@ const findAgentIn = SqlSchema.findOneOption({
             eq(codingAgent.id, agentId),
             eq(AGENT_WORKSPACE, organizationId),
             isNull(codingAgent.taskId),
-            agentReachableBy(userId),
+            agentVisibleTo(userId),
           ),
         )
         .limit(1),

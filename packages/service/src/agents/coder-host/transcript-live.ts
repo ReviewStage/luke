@@ -7,7 +7,7 @@ import {
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
 import type { MessageCursor } from "@luke/database/models/message-reads";
-import { agentReachableBy } from "@luke/database/models/workspace-store";
+import { agentVisibleTo } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
@@ -328,7 +328,7 @@ export function agentFollowedBy(
         and(
           eq(codingAgent.conversationId, parentConversationId),
           eq(codingAgent.userId, ownerId),
-          agentReachableBy(readerId),
+          agentVisibleTo(readerId),
         ),
       ),
   );

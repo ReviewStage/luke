@@ -31,8 +31,9 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  * repository reaches it, but its messages and a start from it, continued or
  * forked, are refused before eve, GitHub, or its sandbox is asked; a
  * teammate who keeps no token reaches nothing. And an agent the App reaches,
- * on a task on its owner's token, takes no message from a teammate who
- * reaches the agent but not the task, nor reads its pull requests. Synthetic accounts, tasks, and words
+ * on a task on its owner's token, is none by id to a teammate who reaches
+ * the agent but not the task, takes no message from them, nor reads them its
+ * pull requests. Synthetic accounts, tasks, and words
  * throughout; eve and GitHub answer nothing.
  */
 
@@ -104,7 +105,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
   );
 
   it.effect(
-    "a teammate who reaches the agent but not its task's GitHub visibility is refused its messages and its pull requests",
+    "a teammate who reaches the agent but not its task's GitHub visibility reads it as none by id, and is refused its messages and its pull requests",
     () =>
       Effect.gen(function* () {
         const { owner, tokenless, workspace, task } = yield* openTokenAgent;
@@ -128,7 +129,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           mount: EVE_MOUNT.CODER,
         });
 
-        assert.ok(Option.isSome(yield* readCodingAgent(tokenless, agent.id)));
+        assert.ok(Option.isNone(yield* readCodingAgent(tokenless, agent.id)));
         const refused = yield* Effect.flip(
           steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
             text: "Carry on.",

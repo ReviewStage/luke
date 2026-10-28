@@ -765,6 +765,45 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "an agent the App reaches, on a task on its starter's own token, is read and written by id by its starter and by no teammate who does not reach the task",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const task = yield* createTask(starter, {
+          organizationId: workspace,
+          name: "Billing",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const started = yield* createCodingAgent(starter, {
+          taskId: task.id,
+          planSnapshot: "# Billing",
+          prompt: null,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.APP,
+        });
+        const agentId = Option.getOrThrow(started).agent.id;
+
+        assert.deepEqual(
+          [
+            Option.isNone(yield* readCodingAgent(teammate, agentId)),
+            yield* listPublishedCodingAgentsById(teammate, [agentId]),
+            Option.isNone(yield* renameCodingAgent(teammate, agentId, "Taken over")),
+          ],
+          [true, [], true],
+        );
+        const kept = Option.getOrThrow(yield* readCodingAgent(starter, agentId));
+        assert.equal(kept.title, null, "the teammate's rename landed nowhere");
+      }),
+  );
 });
 
 it.layer(getTestDB())("the coding-agent store's archive of an agent left as it was read", (it) => {

@@ -86,8 +86,6 @@ import { stampConversationsDeleted } from "./soft-delete.js";
 import { TaskAgentUnstopped } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
-  agentReachableBy,
-  agentSeenBy,
   agentVisibleTo,
   reachableTask,
   taskReachableBy,
@@ -559,9 +557,9 @@ const TasklessAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The agent under this id, where the account is a member of its workspace; any other id reads as no agent. */
+/** The agent under this id, where the account may read and write it (`agentVisibleTo`), its task included; any other id reads as no agent. */
 function reachableAgent(userId: string, agentId: string): SQL | undefined {
-  return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
+  return and(eq(codingAgent.id, agentId), agentVisibleTo(userId));
 }
 
 /** The task row under its own lock, where the account is a member of its workspace. */
@@ -869,7 +867,7 @@ const lockAgentMentionedServers = SqlSchema.findOneOption({
       db
         .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
         .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
+        .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId)))
         .limit(1)
         .for("update"),
     ),
@@ -1499,11 +1497,11 @@ const AgentsOfTaskSchema = Schema.Struct({
   includeArchived: Schema.Boolean,
 });
 
-/** The condition that an agent stands on the task the account reaches, and is one the account sees as its GitHub access allows, archived only where asked for; read joined to its task. */
+/** The condition that an agent stands on the task the account reaches, and is one the account may read (`agentVisibleTo`), archived only where asked for; read joined to its task. */
 function ofReachedTask({ userId, taskId, includeArchived }: typeof AgentsOfTaskSchema.Type) {
   return and(
     reachableTask(userId, taskId),
-    agentSeenBy(userId),
+    agentVisibleTo(userId),
     includeArchived ? undefined : isNull(codingAgent.archivedAt),
   );
 }
@@ -1596,7 +1594,7 @@ const AgentsOfWorkspaceSchema = Schema.Struct({
 function ofReachedWorkspace(request: typeof AgentsOfWorkspaceSchema.Type) {
   const { userId, organizationId, repository, taskId, words, includeArchived, ownOnly } = request;
   return and(
-    agentReachableBy(userId),
+    agentVisibleTo(userId),
     eq(AGENT_WORKSPACE, organizationId),
     ownOnly ? eq(codingAgent.userId, userId) : undefined,
     includeArchived ? undefined : isNull(codingAgent.archivedAt),
@@ -1657,7 +1655,7 @@ const findTasklessAgents = SqlSchema.findAll({
         .where(
           and(
             isNull(codingAgent.taskId),
-            agentReachableBy(userId),
+            agentVisibleTo(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
@@ -1738,8 +1736,7 @@ const findAgentsOfTasks = SqlSchema.findAll({
         .where(
           and(
             inArray(task.id, [...taskIds]),
-            taskReachableBy(userId),
-            agentSeenBy(userId),
+            agentVisibleTo(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
@@ -1785,7 +1782,7 @@ const findPublishedAgentsById = SqlSchema.findAll({
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
         .from(codingAgent)
-        .where(and(inArray(codingAgent.id, [...agentIds]), agentReachableBy(userId)))
+        .where(and(inArray(codingAgent.id, [...agentIds]), agentVisibleTo(userId)))
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
     ),
 });
@@ -1819,7 +1816,7 @@ const findStartedFrom = SqlSchema.findAll({
           and(
             // Note that the source is matched on the expression its index is built on.
             inArray(sql`(${codingAgent.startedFrom}->>'agentId')`, [...agentIds]),
-            agentReachableBy(userId),
+            agentVisibleTo(userId),
           ),
         )
         .as("ranked");
@@ -1970,7 +1967,7 @@ const findAgentHeaderOfConversation = SqlSchema.findOneOption({
       db
         .select(CODING_AGENT_HEADER_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
+        .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId))),
     ),
 });
 
@@ -1982,7 +1979,7 @@ const findAgentOfConversation = SqlSchema.findOneOption({
       db
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
+        .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId)))
         .limit(1),
     ),
 });

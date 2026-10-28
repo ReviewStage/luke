@@ -527,22 +527,24 @@ export function agentSeenBy(userId: string): SQL {
 }
 
 /**
- * The condition that the account may read and write the coding agent row a
- * statement reads: it is a member of the agent's workspace, an agent with no
- * task as much as one on a task, sees it as its GitHub access allows, and the
- * agent is no teammate's operator. Note that an operator is private to its
- * member, because it reads their inbox, DMs, and every agent they reach, so
- * every read and write gated here refuses or leaves out another member's.
+ * The condition that the account reaches the coding agent row itself: it is
+ * a member of the agent's workspace, an agent with no task as much as one on
+ * a task, sees it as its GitHub access allows, and the agent is no
+ * teammate's operator. Note that an operator is private to its member,
+ * because it reads their inbox, DMs, and every agent they reach. Only
+ * `agentVisibleTo` reads it, since the agent's task is asked beside it.
  */
-export function agentReachableBy(userId: string): SQL {
+function agentReachableBy(userId: string): SQL {
   return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)} and ${agentNoTeammatesOperator(userId)})`;
 }
 
 /**
- * The condition that the account sees the coding agent row whole: it reaches
- * the agent (`agentReachableBy`), and for an agent on a task that task too
- * (`taskReachableBy`). Note that the task is asked as well, because a read of
- * an agent by its id would otherwise skip the GitHub visibility of its task.
+ * The condition that the account may read and write the coding agent row a
+ * statement reads, the one rule every list and every read or write by id
+ * keeps: it reaches the agent (`agentReachableBy`), and for an agent on a
+ * task that task too (`taskReachableBy`). Note that the task is asked as
+ * well, because a read of an agent by its id would otherwise skip the GitHub
+ * visibility of its task, which a list of the task's agents keeps.
  */
 export function agentVisibleTo(userId: string): SQL {
   const taskReached = exists(

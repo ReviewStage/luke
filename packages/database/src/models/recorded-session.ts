@@ -38,7 +38,7 @@ import { Database, type DatabaseServices, type QueryError, queryBuilder } from "
 import { codingAgent } from "../schemas/coding-agent.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
-import { agentReachableBy } from "./workspace-store.js";
+import { agentVisibleTo } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 const StandingSessionSchema = Schema.Struct({
@@ -104,7 +104,7 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
     queryBuilder
       .select({ one: codingAgent.id })
       .from(codingAgent)
-      .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
+      .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId))),
   );
 }
 

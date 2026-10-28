@@ -18,8 +18,8 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentNoTeammatesOperator,
-  agentReachableBy,
   agentSeenBy,
+  agentVisibleTo,
   isWorkspaceMember,
   taskReachableBy,
   workspaceReachableBy,
@@ -563,9 +563,28 @@ function itemAgentSeenBy(userId: string): SQL {
   return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
 }
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it. */
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it. Only `itemVisibleTo` reads it, since the item's task is asked beside it. */
 function itemReachableBy(userId: string): SQL {
   return sql`(${workspaceReachableBy(userId, ITEM_WORKSPACE)} and ${itemAgentSeenBy(userId)})`;
+}
+
+/**
+ * The condition that the account may read the item a statement reads, the
+ * one rule every Inbox and channel read keeps, a count as much as a list or
+ * a read by id: it reaches the item (`itemReachableBy`), and for an item on a
+ * task that task too (`taskReachableBy`). Note that the task is asked as
+ * well, because a teammate's agent may reach the reader while its task, on
+ * a token the reader's reads no repository of, does not, and then its items
+ * stand nowhere the reader looks, as the agent does (`agentVisibleTo`).
+ */
+function itemVisibleTo(userId: string): SQL {
+  const taskReached = exists(
+    queryBuilder
+      .select({ one: task.id })
+      .from(task)
+      .where(and(eq(task.id, inboxItem.taskId), taskReachableBy(userId))),
+  );
+  return sql`(${itemReachableBy(userId)} and (${inboxItem.taskId} is null or ${taskReached}))`;
 }
 
 /** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
@@ -591,11 +610,7 @@ const lockAgent = SqlSchema.findOneOption({
         })
         .from(codingAgent)
         .where(
-          and(
-            eq(codingAgent.id, agentId),
-            eq(codingAgent.userId, userId),
-            agentReachableBy(userId),
-          ),
+          and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), agentVisibleTo(userId)),
         )
         .for("update"),
     ),
@@ -795,7 +810,7 @@ const findOpenAsk = SqlSchema.findOneOption({
         .where(
           and(
             eq(inboxItem.id, itemId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
             ASK_KEPT_OPEN,
           ),
@@ -871,7 +886,7 @@ const findAttachment = SqlSchema.findOneOption({
           and(
             eq(attachment.inboxItemId, itemId),
             eq(attachment.id, attachmentId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
           ),
         ),
     ),
@@ -975,13 +990,13 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the task's or the agent's where the account is a member of their workspace, or the agent's under the account that started it. */
+/** The rows a scope names: the task's or the agent's where the account may read them (`itemVisibleTo`), or the agent's own under the account that started it, which its tools read. */
 function inScope(scope: InboxScope) {
   switch (scope.scope) {
     case INBOX_SCOPE.TASK:
-      return and(eq(inboxItem.taskId, scope.id), itemReachableBy(scope.userId));
+      return and(eq(inboxItem.taskId, scope.id), itemVisibleTo(scope.userId));
     case INBOX_SCOPE.AGENT_OF_WORKSPACE:
-      return and(eq(inboxItem.agentId, scope.id), itemReachableBy(scope.userId));
+      return and(eq(inboxItem.agentId, scope.id), itemVisibleTo(scope.userId));
     case INBOX_SCOPE.AGENT:
       return and(eq(inboxItem.agentId, scope.id), eq(inboxItem.userId, scope.userId));
   }
@@ -1075,8 +1090,8 @@ const findSettledStamps = SqlSchema.findAll({
  */
 function accountWaiting(userId: string) {
   return and(
-    taskReachableBy(userId),
-    itemAgentSeenBy(userId),
+    isNotNull(inboxItem.taskId),
+    itemVisibleTo(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
   );
 }
@@ -1085,7 +1100,7 @@ function accountWaiting(userId: string) {
 function tasklessWaiting(userId: string) {
   return and(
     isNull(inboxItem.taskId),
-    itemReachableBy(userId),
+    itemVisibleTo(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
   );
 }
@@ -1107,15 +1122,17 @@ function toDoCount(userId: string): SQL<number> {
 }
 
 /**
- * The settled items still unread that wait on the reader (`WAITS_ON`) on
- * the tasks of their workspaces: what To do lists beside the open items, so
- * their read marks and new messages on those items move the account's cursor
- * as an open item's change does. Note that who it waits on is spelled out
- * against the joined task rather than read through `WAITS_ON`, because the
- * starter's side then reaches the items by the reader's own index
+ * The settled items still unread that wait on the reader (`WAITS_ON`) among
+ * those they may read, a task's and an agent's with no task alike: what To
+ * do lists beside the open items, so their read marks and new messages on
+ * those items move the account's cursor as an open item's change does. Note
+ * that who it waits on is spelled out against the task joined on the left
+ * rather than read through `WAITS_ON`, because the starter's side then
+ * reaches the items by the reader's own index
  * (`inbox_item_user_status_updated`) and the assignee's by the task's,
  * where a `coalesce` would read every settled item of their workspaces on
- * each look; an item addressed to someone waits on them alone.
+ * each look; an item addressed to someone waits on them alone, and one on
+ * no task, which has no assignee, on its starter.
  */
 function accountUnreadSettled(userId: string) {
   const derived = or(
@@ -1123,8 +1140,7 @@ function accountUnreadSettled(userId: string) {
     eq(task.assigneeId, userId),
   );
   return and(
-    isNotNull(inboxItem.taskId),
-    taskReachableBy(userId),
+    itemVisibleTo(userId),
     or(eq(inboxItem.addresseeId, userId), and(isNull(inboxItem.addresseeId), derived)),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
     unreadFor(userId),
@@ -1179,7 +1195,6 @@ const findWaitingItems = SqlSchema.findAll({
           channelId: inboxItem.channelId,
         })
         .from(inboxItem)
-        .innerJoin(task, eq(task.id, inboxItem.taskId))
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
         .where(accountWaiting(userId))
         .orderBy(...LATEST_FIRST),
@@ -1251,7 +1266,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** Where every item the account's read names or counts stands: a task's or an agent's with no task open, and the reader's own settled ones still unread, which its tasks' To do counts. Note that the task is joined on the left, because an item with no task has none to join. */
+/** Where every item the account's read names or counts stands: a task's or an agent's with no task open, and the reader's own settled ones still unread, a task's or an agent's alike, which To do lists. Note that the task is joined on the left, because an item with no task has none to join. */
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
@@ -1296,8 +1311,7 @@ const findTasksWithItems = SqlSchema.findAll({
           updatedAt: LATEST_ITEM,
         })
         .from(inboxItem)
-        .innerJoin(task, eq(task.id, inboxItem.taskId))
-        .where(and(taskReachableBy(userId), itemAgentSeenBy(userId)))
+        .where(and(isNotNull(inboxItem.taskId), itemVisibleTo(userId)))
         .groupBy(inboxItem.taskId)
         .orderBy(desc(LATEST_ITEM), desc(inboxItem.taskId)),
     ),
@@ -1331,7 +1345,7 @@ const findAutomationsWithItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        .where(and(isNull(inboxItem.taskId), itemReachableBy(userId)))
+        .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
         .groupBy(automation.id)
         .orderBy(desc(LATEST_ITEM), desc(automation.id)),
     ),
@@ -1382,7 +1396,6 @@ export function accountInboxLiveStatements(
       ),
     )
     .from(inboxItem)
-    .innerJoin(task, eq(task.id, inboxItem.taskId))
     .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
     .where(accountWaiting(userId));
   const planless = queryBuilder
@@ -1427,8 +1440,7 @@ export function accountInboxLiveStatements(
       updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
     })
     .from(inboxItem)
-    .innerJoin(task, eq(task.id, inboxItem.taskId))
-    .where(and(taskReachableBy(userId), itemAgentSeenBy(userId)))
+    .where(and(isNotNull(inboxItem.taskId), itemVisibleTo(userId)))
     .groupBy(inboxItem.taskId);
   const automations = queryBuilder
     .select({
@@ -1442,7 +1454,7 @@ export function accountInboxLiveStatements(
       automation,
       and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
     )
-    .where(and(isNull(inboxItem.taskId), itemReachableBy(userId)))
+    .where(and(isNull(inboxItem.taskId), itemVisibleTo(userId)))
     .groupBy(automation.id);
   return Option.all({
     items: liveStatementOf(items),
@@ -1637,7 +1649,7 @@ const findItem = SqlSchema.findOneOption({
       db
         .select(inboxColumns(userId))
         .from(inboxItem)
-        .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+        .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
     ),
 });
 
@@ -1723,7 +1735,7 @@ const upsertRead = SqlSchema.findOneOption({
               markedUnread: sql<boolean>`false`.as(inboxItemRead.markedUnread.name),
             })
             .from(inboxItem)
-            .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+            .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
@@ -1750,7 +1762,7 @@ const upsertUnread = SqlSchema.findOneOption({
               markedUnread: sql<boolean>`true`.as(inboxItemRead.markedUnread.name),
             })
             .from(inboxItem)
-            .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+            .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
@@ -1770,19 +1782,9 @@ const findReachedItem = SqlSchema.findOneOption({
       db
         .select({ id: inboxItem.id })
         .from(inboxItem)
-        .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+        .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
     ),
 });
-
-/**
- * The items the account's Inbox lists, open or settled, whichever member's
- * agent posted each: those on the tasks of its workspaces, and those of
- * agents with no task in its workspaces. Note that the task is joined on
- * the left, because an item with no task has none.
- */
-function inboxListed(userId: string) {
-  return or(taskReachableBy(userId), and(isNull(inboxItem.taskId), itemReachableBy(userId)));
-}
 
 /** Every item the account's Inbox lists that is unread for it, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
 const upsertAllRead = SqlSchema.findAll({
@@ -1801,10 +1803,9 @@ const upsertAllRead = SqlSchema.findAll({
               markedUnread: sql<boolean>`false`.as(inboxItemRead.markedUnread.name),
             })
             .from(inboxItem)
-            .leftJoin(task, eq(task.id, inboxItem.taskId))
             .where(
               and(
-                inboxListed(userId),
+                itemVisibleTo(userId),
                 workspaceId === null ? undefined : eq(inboxItem.organizationId, workspaceId),
                 unreadFor(userId),
               ),
@@ -1849,7 +1850,7 @@ const answerItem = SqlSchema.findOneOption({
         .where(
           and(
             eq(inboxItem.id, itemId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.revision, revision),
             eq(inboxItem.openAskMessageId, askId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
@@ -1892,7 +1893,7 @@ const acknowledgeNotice = SqlSchema.findOneOption({
         .where(
           and(
             eq(inboxItem.id, itemId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.revision, revision),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
             NOTICE,
@@ -1978,7 +1979,7 @@ const memberCloseItem = SqlSchema.findOneOption({
         .where(
           and(
             eq(inboxItem.id, itemId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.revision, revision),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
@@ -2573,7 +2574,7 @@ const findChannelThreads = SqlSchema.findAll({
   Result: Schema.Struct({ ...ChannelThreadRowSchema.fields, askingReader: Schema.Boolean }),
   execute: ({ userId, channelId, before }) =>
     Database.use((db) => {
-      const inChannel = and(eq(inboxItem.channelId, channelId), itemReachableBy(userId));
+      const inChannel = and(eq(inboxItem.channelId, channelId), itemVisibleTo(userId));
       const latest = queryBuilder
         .select({ id: inboxItem.id })
         .from(inboxItem)
@@ -2617,7 +2618,7 @@ const findChannelPostTallies = SqlSchema.findAll({
           threads: sql<number>`count(*)::int`,
         })
         .from(inboxItem)
-        .where(and(eq(inboxItem.organizationId, organizationId), itemReachableBy(userId)))
+        .where(and(eq(inboxItem.organizationId, organizationId), itemVisibleTo(userId)))
         .groupBy(inboxItem.channelId),
     ),
 });
@@ -2635,7 +2636,7 @@ const findChannelWaiting = SqlSchema.findAll({
           and(
             eq(inboxItem.organizationId, organizationId),
             askingReader(userId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
           ),
         )
         .groupBy(inboxItem.channelId),
@@ -2745,7 +2746,7 @@ const findChannelThread = SqlSchema.findOneOption({
       db
         .select({ ...inboxColumns(userId), channelId: inboxItem.channelId, agent: THREAD_AGENT })
         .from(inboxItem)
-        .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+        .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
     ),
 });
 
@@ -2837,7 +2838,7 @@ export function channelsLiveStatements(
       updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
     })
     .from(inboxItem)
-    .where(and(eq(inboxItem.organizationId, organizationId), itemReachableBy(userId)))
+    .where(and(eq(inboxItem.organizationId, organizationId), itemVisibleTo(userId)))
     .groupBy(inboxItem.channelId);
   return Option.all({ channels: liveStatementOf(channels), threads: liveStatementOf(threads) });
 }
@@ -2944,7 +2945,7 @@ const withdrawAnswer = SqlSchema.findOneOption({
         .where(
           and(
             eq(inboxItem.id, itemId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.answerKey, answerKey),
             eq(inboxItem.status, INBOX_STATUS.ANSWERED),
           ),
@@ -3056,7 +3057,7 @@ const withdrawClose = SqlSchema.findOneOption({
         .where(
           and(
             eq(inboxItem.id, itemId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.answerKey, closeKey),
             eq(inboxItem.status, INBOX_STATUS.CLOSED),
             // The agent's own close since, which always says why, is never opened by taking the member's back.
@@ -3640,7 +3641,7 @@ const findStemKeys = SqlSchema.findAll({
     ),
 });
 
-/** The agent, where the member is a member of its workspace, sees it, and it is no teammate's operator, as an item of its reaches them (`itemReachableBy`). */
+/** The agent, where the member may read it (`agentVisibleTo`), as an item of its reaches them (`itemVisibleTo`). */
 const findReachedAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -3649,14 +3650,7 @@ const findReachedAgent = SqlSchema.findOneOption({
       db
         .select({ id: codingAgent.id })
         .from(codingAgent)
-        .where(
-          and(
-            eq(codingAgent.id, agentId),
-            agentReachableBy(userId),
-            agentSeenBy(userId),
-            agentNoTeammatesOperator(userId),
-          ),
-        ),
+        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId))),
     ),
 });
 
@@ -3897,7 +3891,7 @@ const findAgentItem = SqlSchema.findOneOption({
             eq(inboxItem.userId, userId),
             eq(inboxItem.agentId, agentId),
             eq(inboxItem.key, key),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
           ),
         ),
     ),
@@ -4112,7 +4106,7 @@ const findMemberOpenAsks = SqlSchema.findAll({
           and(
             sql`${WAITS_ON} = ${userId}`,
             eq(inboxItem.organizationId, workspaceId),
-            itemReachableBy(userId),
+            itemVisibleTo(userId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
         )

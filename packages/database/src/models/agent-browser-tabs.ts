@@ -8,7 +8,7 @@
  * service's and reads no account, as the sandbox's terminal lease reads
  * none. A member's side reads through the rules every agent route keeps: a
  * task's tabs are listed only to a member who reaches the task, and a coding
- * agent's only to one who sees that agent (`agentReachableBy`); any other
+ * agent's only to one who sees that agent (`agentVisibleTo`); any other
  * reads as none at all. Whether the member may drive the tab, which a coding
  * agent on its starter's own token keeps to the starter, is the service's to
  * decide from the agent this answers beside the tab.
@@ -38,7 +38,7 @@ import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
-import { agentReachableBy, reachableTask, taskReachableBy, taskSeenBy } from "./workspace-store.js";
+import { agentVisibleTo, reachableTask, taskReachableBy, taskSeenBy } from "./workspace-store.js";
 
 type BrowserTabEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -165,7 +165,7 @@ function reachedTabs(userId: string, taskId: string, tabId?: string) {
           eq(agentBrowserTab.taskId, taskId),
           tabId === undefined ? undefined : eq(agentBrowserTab.id, tabId),
           taskReachableBy(userId),
-          agentReachableBy(userId),
+          agentVisibleTo(userId),
         ),
       )
       .orderBy(asc(agentBrowserTab.createdAt), asc(agentBrowserTab.id)),
@@ -668,6 +668,6 @@ export function taskBrowserTabsLiveStatement(
       )
       // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
       .innerJoin(codingAgent, eq(codingAgent.conversationId, agentBrowserTab.conversationId))
-      .where(and(eq(agentBrowserTab.taskId, taskId), taskSeenBy(userId), agentReachableBy(userId))),
+      .where(and(eq(agentBrowserTab.taskId, taskId), taskSeenBy(userId), agentVisibleTo(userId))),
   );
 }

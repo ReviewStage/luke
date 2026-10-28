@@ -19,7 +19,7 @@ import { planPageVersion } from "../schemas/plan-page.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
-import { agentReachableBy, reachableTask, taskReachableBy } from "./workspace-store.js";
+import { agentVisibleTo, reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
  * plan-pages.ts -- the pages shown on a task or on a coding agent with no task: write a page or its next version as who showed it, list an owner's pages, and read one version, by its owner or by the page's id alone.
@@ -30,7 +30,7 @@ import { agentReachableBy, reachableTask, taskReachableBy } from "./workspace-st
  * two writes of one page never take one number and an owner deleted
  * meanwhile reads as gone rather than written back into being. Every
  * statement names the account beside the owner and gates on the owner's own
- * rule of who may read it (`taskReachableBy`, `agentReachableBy`), so a member
+ * rule of who may read it (`taskReachableBy`, `agentVisibleTo`), so a member
  * reads and writes the pages a teammate's agent wrote, and an owner the
  * account does not reach reads and writes as no owner, exactly as in
  * `task-store.ts` and `coding-agent-store.ts`. A version a coding agent showed
@@ -73,7 +73,7 @@ function ownedBy(owner: PageOwner): SQL | undefined {
 
 /** The condition that the account reaches the owner of a version, for a statement that joins the version's task and its agent: by the task's rule where it stands on one, and by the agent's where it does not. */
 function ownerReachableBy(userId: string): SQL | undefined {
-  return or(and(isNull(planPageVersion.taskId), agentReachableBy(userId)), taskReachableBy(userId));
+  return or(and(isNull(planPageVersion.taskId), agentVisibleTo(userId)), taskReachableBy(userId));
 }
 
 /** The owner a version names, as the columns read it. */
@@ -99,7 +99,7 @@ const lockOwner = SqlSchema.findOneOption({
         : db
             .select({ id: codingAgent.id })
             .from(codingAgent)
-            .where(and(eq(codingAgent.id, owner.agentId), agentReachableBy(userId)))
+            .where(and(eq(codingAgent.id, owner.agentId), agentVisibleTo(userId)))
             .for("update"),
     ),
 });
