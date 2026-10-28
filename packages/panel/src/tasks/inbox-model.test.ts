@@ -699,7 +699,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   );
 });
 
-test("a task done or canceled hides none of its items: its open ones need you and its unread ones wait, To do listing and counting them as any task's, and one is the next", () => {
+test("a task done or canceled hides none of its items: its open ones need you, To do listing and counting them as any task's, and one is the next, while its unread settled ones are All's", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
@@ -717,51 +717,12 @@ test("a task done or canceled hides none of its items: its open ones need you an
     },
   ];
   const counts = inboxCounts(finished, undefined);
-  assert.equal(counts[INBOX_SHOW.TO_DO], 4);
+  assert.equal(counts[INBOX_SHOW.TO_DO], 2);
   assert.equal(counts[INBOX_SHOW.ALL], 4);
   const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
   const toDo = inboxList(finished, { ...view, show: INBOX_SHOW.TO_DO });
-  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open", "done-unread", "canceled-unread"]);
+  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open"]);
   assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
-});
-
-test("To do keeps the reader's own update once it is opened and settled while its task is under way, and lets it go once the task is done, as it lets a settled ask, a resolved update, and a thread only the reader wrote on go", () => {
-  const said = message({
-    text: "The pull request is ready for your review.",
-    createdAt: 1_000,
-    author: INBOX_MESSAGE_AUTHOR.AGENT,
-  });
-  const asked = asking({ type: INBOX_ASK.ANSWER });
-  const answered = { ...asked, ask: { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.ANSWERED } };
-  const settled = { status: INBOX_STATUS.ANSWERED, startedBy: ME, needsReply: false } as const;
-  const tasks = [
-    {
-      holder: taskHolder({ ...BILLING, status: TASK_STATUS.IN_PROGRESS }),
-      items: [
-        item({ id: "update", thread: [said], ...settled, updatedAt: 3_000 }),
-        item({ id: "asked", thread: [said, answered], ...settled }),
-        item({ id: "resolved", thread: [said], ...settled, status: INBOX_STATUS.CLOSED }),
-        item({
-          id: "sent",
-          thread: [message({ text: "Check the PR?", createdAt: 1_000 })],
-          ...settled,
-        }),
-        item({ id: "waits", thread: [asked], startedBy: ME, updatedAt: 2_000 }),
-      ],
-    },
-    {
-      holder: taskHolder({ ...INVITES, status: TASK_STATUS.DONE }),
-      items: [item({ id: "done-update", thread: [said], ...settled })],
-    },
-  ];
-  const toDo = inboxList(tasks, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.TO_DO,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
-  assert.deepEqual(drawn(toDo), ["update", "waits"]);
-  assert.equal(inboxCounts(tasks, ME.userId)[INBOX_SHOW.TO_DO], 2);
 });
 
 test("a teammate's open item is never the next that needs you, which goes to the reader's own", () => {
@@ -822,7 +783,7 @@ const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   ],
 }));
 
-test("To do lists the reader's own open items and their own unread ones, a settled thread written on again among them, never a teammate's however unread, and All lists every item; each counts its own", () => {
+test("To do lists the reader's own open items, read or not, never a settled one however unread nor a teammate's, and All lists every item; each counts its own", () => {
   const rows = (show: InboxShow) =>
     drawn(
       inboxList(UNREAD_SHARED, {
@@ -832,7 +793,7 @@ test("To do lists the reader's own open items and their own unread ones, a settl
         chosen: undefined,
       }),
     );
-  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-followed", "mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-invites", "mine", "unnamed"]);
   assert.deepEqual(rows(INBOX_SHOW.ALL), [
     "danas-answered",
     "danas",
@@ -843,7 +804,7 @@ test("To do lists the reader's own open items and their own unread ones, a settl
     "unnamed",
   ]);
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId), {
-    [INBOX_SHOW.TO_DO]: 4,
+    [INBOX_SHOW.TO_DO]: 3,
     [INBOX_SHOW.ALL]: 7,
   });
 });

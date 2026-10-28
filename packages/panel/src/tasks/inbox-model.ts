@@ -50,7 +50,7 @@ import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
-import { TASK_STATUS, type TaskFileRequest, type TaskSummary } from "@luke/features/task-wire";
+import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
 import { matchesTokens } from "@luke/ui/search-tokens";
@@ -1533,48 +1533,14 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
 }
 
 /**
- * Whether a listed item is one the reader is not done with: one that needs
- * them (`needsYou`), or one of theirs (`readersItem`) still unread, such as
- * a settled thread its agent wrote on again. What the first choice and the
- * next item that needs you reach.
+ * Whether a listed item is one the reader is not done with, as the next
+ * item that needs you steps to it: one that needs them (`needsYou`), or one
+ * of theirs (`readersItem`) still unread, such as a settled thread a
+ * teammate wrote on.
  */
 function toDo(listed: InboxListed, readerId: string | undefined): boolean {
   return (
     needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
-  );
-}
-
-/** Whether a thread is an agent's update: its agent wrote on it and none of its messages asks anything, so nothing of it is answered but a nod. */
-function isUpdate(item: InboxItem): boolean {
-  const thread = item.thread ?? [];
-  return (
-    thread.some((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT) &&
-    thread.every((message) => message.ask === undefined)
-  );
-}
-
-/** Whether a holder is a task still under way, neither Done nor Canceled; one from a service before statuses reads as under way. */
-function taskUnderWay(holder: InboxHolder): boolean {
-  if (holder.kind !== INBOX_HOLDER.TASK) return false;
-  const status = holder.task.status;
-  return status !== TASK_STATUS.DONE && status !== TASK_STATUS.CANCELED;
-}
-
-/**
- * Whether For you lists an item: one the reader is not done with (`toDo`),
- * or an update of theirs acknowledged on a task still under way. Note that
- * an acknowledged update stays, because opening it settles it as Got it
- * does (`acknowledgedOnOpen`) and what it says holds until its task is
- * done, while one resolved without answering, which is closed, leaves.
- */
-function forYou(listed: InboxListed, readerId: string | undefined): boolean {
-  if (toDo(listed, readerId)) return true;
-  const { holder, item } = listed;
-  return (
-    item.status === INBOX_STATUS.ANSWERED &&
-    readersItem(item, readerId) &&
-    isUpdate(item) &&
-    taskUnderWay(holder)
   );
 }
 
@@ -1799,11 +1765,17 @@ export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
 }
 
-/** Whether a scope lists the item: To do what For you holds (`forYou`), and All all of them. */
+/**
+ * Whether a scope lists the item: To do what needs the reader (`needsYou`),
+ * the open threads that wait on them, a question or an update not yet
+ * opened, which are what the sidebar's Inbox row counts
+ * (`places-waiting.ts`), and All all of them. Note that a thread of theirs
+ * settled and unread is left to All, because main counts no settled item.
+ */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.TO_DO:
-      return forYou(listed, readerId);
+      return needsYou(listed, readerId);
     case INBOX_SHOW.ALL:
       return true;
   }

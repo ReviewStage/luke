@@ -18,7 +18,7 @@ import {
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS } from "@luke/features/task-wire";
-import type { AppInboxTaskHolding } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, onTestFinished, test, vi } from "vitest";
@@ -98,6 +98,7 @@ import {
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { playMotions } from "../testing/pane-motion.js";
+import { waitingOf } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
@@ -560,35 +561,6 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything);
 });
 
-test("To do lists what needs you and anything of yours unread: a thread you answered that its agent writes on again comes back to it, which waiting on you alone would leave out", async () => {
-  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  const { page } = mount([], { chosen: ON_EXPIRY });
-  await settle();
-  assert.deepEqual(listed(page), [
-    "# Invites",
-    "▸ *Expire after 7 days?",
-    "# Billing usage alerts",
-    "*Alert at 80%?",
-  ]);
-
-  // The retry question's agent writes again on the thread you answered, as main says its task changed.
-  world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, updatedAt: 6_000, unread: true }]);
-  act(() =>
-    world.setHolding([
-      { taskId: BILLING.id, items: 2, updatedAt: 6_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
-    ]),
-  );
-  await settle();
-  assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
-    "How is a failed email retried?",
-    "*Alert at 80%?",
-    "# Invites",
-    "▸ *Expire after 7 days?",
-  ]);
-});
-
 /** The number the window's sidebar draws on its Inbox row; none where it draws none. */
 function sidebarInboxCount(page: HTMLElement): number | undefined {
   const row =
@@ -604,10 +576,11 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).filter((row) => !row.startsWith("# ")).length;
 }
 
-test("the sidebar's Inbox counts the questions waiting on you, as main counts each task's, while To do still lists an unread notice and a thread you answered written on again: reading one moves nothing, and answering a question drops it at once", async () => {
+test("the sidebar's Inbox counts what For you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question, and drops a question the moment it is answered", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const NOTE: InboxItem = {
     ...noticeOf(item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500)),
+    needsReply: false,
     unread: true,
   };
   const SEEN: InboxItem = {
@@ -622,35 +595,32 @@ test("the sidebar's Inbox counts the questions waiting on you, as main counts ea
     ...item("a1b2c3d4-0000-4000-8000-000000000013", "Rotate the key?", 3_800),
     startedBy: TEAMMATE,
   };
-  // Note that the thread written on again changed before the open ask, so the item chosen as the Inbox opens is one opening never reads out of To do.
   const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
   world.inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }, NOTE, THEIRS]);
-  // Main counts each task's one open ask, never the notice, the thread written on again, or the teammate's ask.
+  // Note that main counts each task's one open ask, never the notice, which the sidebar counts from main's open items.
   const holding: readonly AppInboxTaskHolding[] = [
     { taskId: BILLING.id, items: 3, toDo: 1, updatedAt: 4_500 },
     { taskId: INVITES.id, items: 3, toDo: 1, updatedAt: 4_000 },
   ];
-  const { page } = mount([], { holding, withSidebar: true });
+  // Main lists the open items that wait on the reader, the notice among them, as the service's read does.
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
+    { taskId: INVITES.id, items: [waitingOf(EXPIRY), { ...waitingOf(NOTE), asking: false }] },
+  ];
+  const { page } = mount([], { holding, waiting, withSidebar: true });
   await settle();
-  assert.equal(toDoRows(page), 4, "To do still lists the notice and the thread written on again");
-  assert.equal(sidebarInboxCount(page), 2, "the sidebar counts the two questions alone");
-  world.readMarks = [];
+  assert.equal(toDoRows(page), 3, "the two questions and the update");
+  assert.equal(sidebarInboxCount(page), 3, "the sidebar counts the rows For you lists");
 
-  // Opening the thread written on again reads it, and moves nothing of the count.
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  await settle();
-  assert.deepEqual(world.readMarks, [`read:${followed.id}`]);
-  assert.equal(sidebarInboxCount(page), 2);
-
-  // Answering the open ask drops it the moment it is sent.
+  // Answering the open ask drops it from both the moment it is sent.
   const { sent } = gatedAnswers();
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.equal(sidebarInboxCount(page), 1);
+  assert.equal(sidebarInboxCount(page), 2);
 });
 
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {
@@ -855,33 +825,6 @@ test("grouped by person or by nothing, each row names its task on a line of its 
       ["Invites", null],
     ],
   );
-});
-
-test("on To do, your unread update opened keeps its row, gray, once opening it reads it, so J steps on from it and K finds it gone once left", async () => {
-  world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
-  window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
-  const { page } = mount();
-  await settle();
-  const keys = standKeymap();
-  act(() => rowNamed(page, "How is a failed email retried?").click());
-  await settle();
-  assert.equal(readTitle(page), "How is a failed email retried?");
-  assert.deepEqual(
-    listed(page),
-    ["▸ How is a failed email retried?", "*Expire after 7 days?", "*Alert at 80%?"],
-    "the row read stays where it stood while it is chosen",
-  );
-  pressKey("j");
-  assert.equal(readTitle(page), "Expire after 7 days?");
-  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
-  pressKey("k");
-  assert.equal(
-    readTitle(page),
-    "Expire after 7 days?",
-    "the read update left once it was left, and is no step",
-  );
-  act(() => keys.unmount());
 });
 
 test("a folded plan counts what in it needs you, and one where nothing does counts nothing", async () => {

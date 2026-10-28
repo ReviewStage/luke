@@ -219,10 +219,9 @@ import { cardTitle } from "./tool-call-model.js";
  * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers the view's
- * menu: first what the list holds, For you, the developer's own items they are
- * not done with, asks waiting on them and anything of theirs unread, a
- * settled thread its agent wrote on again among them, and their updates on
- * a task still under way, read or not, or All, every item,
+ * menu: first what the list holds, For you, the open threads that wait on
+ * the developer, a question or an update not yet opened, as the sidebar's
+ * Inbox row counts them, or All, every item,
  * the head naming All after the Inbox's name; then Group by, None, one
  * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each

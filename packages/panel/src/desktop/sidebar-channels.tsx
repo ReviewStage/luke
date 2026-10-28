@@ -77,7 +77,7 @@ function ChannelRow({
   onOpen,
 }: {
   channel: Channel;
-  /** How many of the questions the Inbox counts live in it (`useChannelWaiting`). */
+  /** How many of the threads the Inbox counts live in it (`useChannelWaiting`). */
   waiting: number;
   workspaceId: string | undefined;
   current: boolean;
@@ -190,7 +190,7 @@ export function SidebarChannels({
 }: {
   workspaceId: string | undefined;
   channels: ChannelsControl;
-  /** How many of the questions the Inbox counts live in each channel, by channel (`useChannelWaiting`), so the rows add up to the Inbox's row. */
+  /** How many of the threads the Inbox counts live in each channel, by channel (`useChannelWaiting`), so the rows add up to the Inbox's row. */
   waiting: ReadonlyMap<string, number>;
   /** The channel the Inbox is narrowed to, none while it lists every channel. */
   currentId: string | undefined;
