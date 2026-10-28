@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
+import { createChannel } from "@luke/database/models/channel-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { queueMacCommand } from "@luke/database/models/mac-command-store";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -14,6 +15,7 @@ import { INBOX_ASK } from "@luke/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveAnswerSchema,
+  accountInboxItemsLiveRowsSchema,
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
@@ -44,11 +46,11 @@ import {
 } from "@luke/features/workspace-live";
 import type { WireBoundaryInput } from "@luke/wire";
 import { sql } from "drizzle-orm";
-import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { postInboxThread } from "../inbox/inbox-store.js";
+import { moveChannelThread, postInboxThread } from "../inbox/inbox-store.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
@@ -551,7 +553,7 @@ it.layer(getTestDB())("a held live read's looks", (it) => {
 
 it.layer(getTestDB())("the account's inbox items' live read", (it) => {
   it.effect(
-    "a poll held on where the items stand stays held when only the reader's `since` moved past the items it was answered",
+    "a poll held on where the items stand stays held when only the reader's `since` moved past the items it was answered, and is answered once an item moves between channels",
     () =>
       Effect.gen(function* () {
         const dana = yield* openUser;
@@ -566,7 +568,7 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
           prompt: null,
         });
         assert.ok(Option.isSome(started));
-        yield* postInboxThread(
+        const posted = yield* postInboxThread(
           { userId: dana, taskId: task.id, agentId: started.value.agent.id },
           {
             key: "review",
@@ -600,6 +602,37 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
         );
         assert.equal(held.queries.stamps.rows, undefined, "the poll was held to its end");
         assert.equal(liveDigestOn(held.queries, ACCOUNT_INBOX_ITEMS.HELD_ON), after);
+
+        // A move between channels changes nothing of the item but its channel, which its stamp carries.
+        const reviews = Result.getOrThrow(
+          yield* createChannel(
+            dana,
+            task.workspaceId,
+            { name: "reviews", purpose: "Where reviews wait.", project: false },
+            new Date(yield* Clock.currentTimeMillis),
+          ),
+        );
+        const itemId = Result.getOrThrow(posted).id;
+        assert.ok(Result.isSuccess(yield* moveChannelThread(dana, itemId, reviews.id)));
+        const again = yield* Effect.forkChild(
+          ask({
+            bearer: dana,
+            path: itemsPath({ since, [LIVE_POLL.QUERY]: LIVE_POLL.ON, [LIVE_POLL.AFTER]: after }),
+          }),
+        );
+        yield* TestClock.adjust(Duration.seconds(25));
+        const moved = Schema.decodeUnknownSync(accountInboxItemsLiveAnswerSchema)(
+          (yield* Fiber.join(again)).body,
+        );
+        assert.deepEqual(
+          moved.queries.stamps.rows === undefined
+            ? undefined
+            : Schema.decodeUnknownSync(accountInboxItemsLiveRowsSchema.fields.stamps)(
+                moved.queries.stamps.rows,
+              ).map((stamp) => stamp.channelId),
+          [reviews.id],
+          "the moved item's stamp is answered",
+        );
       }),
   );
 });

@@ -1644,8 +1644,8 @@ function accountItemReach(userId: string): SQL | undefined {
  * `since` whole, with their threads and files, as a scope's inbox carries
  * them (`itemsLiveStatements`). A stamp carries what moves an item without
  * moving its last change: whether it is unread for the reader, who it waits
- * on, and how many messages its thread holds, which a withdrawn message
- * moves. Note that the instants are bound rather than read from the clock,
+ * on, the channel it lives in, which a move between channels changes, and
+ * how many messages its thread holds, which a withdrawn message moves. Note that the instants are bound rather than read from the clock,
  * because a live read measures nothing from it. None where a statement
  * names a value Realtime cannot carry.
  */
@@ -1671,6 +1671,7 @@ export function accountItemsLiveStatements(
             status: inboxItem.status,
             unread: unreadFor(userId),
             waitsOn: WAITS_ON,
+            channelId: inboxItem.channelId,
             messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
           },
           { updatedAt: inboxItem.updatedAt },

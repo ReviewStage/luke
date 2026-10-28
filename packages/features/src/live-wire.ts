@@ -746,7 +746,8 @@ export type AccountInboxItemsLiveAnswer = typeof accountInboxItemsLiveAnswerSche
  * Where one item stands as its row carries it: its plan, null for an item
  * of an agent with no task, and its agent; its stamp; whether it is unread
  * for the reader, which a read mark moves without moving `updatedAt`; who
- * it waits on; and how many messages its thread holds, which a withdrawn
+ * it waits on; the channel it lives in, which a move between channels
+ * changes alone; and how many messages its thread holds, which a withdrawn
  * message moves.
  */
 const inboxItemStampRowSchema = EffectSchema.Struct({
@@ -759,6 +760,7 @@ const inboxItemStampRowSchema = EffectSchema.Struct({
   updatedAt: countedNumber,
   unread: EffectSchema.Boolean,
   waitsOn: EffectSchema.String,
+  channelId: EffectSchema.String,
   messages: countedNumber,
 });
 
