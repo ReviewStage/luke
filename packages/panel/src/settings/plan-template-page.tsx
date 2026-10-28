@@ -461,7 +461,6 @@ function TemplateDocument({
     <TemplateFrame>
       <PlanBody
         task={templateDocument(template.text, template.lastEdit)}
-        live={false}
         reader={reader}
         onEdit={template.edit}
         onShowHistory={onShowHistory}

@@ -48,8 +48,7 @@ import {
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
  *
- * The task's column is the agents': its Call with Luke and its coding
- * agents (`use-main-tabs.ts`); everything else (the plan's document, the
+ * The task's column is the agents': its coding agents (`use-main-tabs.ts`); everything else (the plan's document, the
  * task's Inbox, the whiteboard, and the plan's
  * comments) stands in a panel at the window's right that the developer
  * opens and closes, as every devtool window's secondary sidebar does. What

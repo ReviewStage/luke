@@ -110,7 +110,10 @@ async function everyKindRefused(client: ActPortClient) {
       client[SETTINGS_ACT_KIND.SETTING_UPDATE]({ field: "theme", value: THEME.DARK }),
     ),
     [SETTINGS_ACT_KIND.SETTINGS_RESET]: await refusal(
-      client[SETTINGS_ACT_KIND.SETTINGS_RESET]({ scope: SETTINGS_RESET_SCOPE.VOICE, kept: [] }),
+      client[SETTINGS_ACT_KIND.SETTINGS_RESET]({
+        scope: SETTINGS_RESET_SCOPE.APPEARANCE,
+        kept: [],
+      }),
     ),
     [SETTINGS_ACT_KIND.EXPERIMENT_SET]: await refusal(
       client[SETTINGS_ACT_KIND.EXPERIMENT_SET]({ experiment: "browser", on: true }),
@@ -182,7 +185,7 @@ it("a value its field's guard refuses, or a key the payload does not take, is re
 
 it("a reset or an experiment switch carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
   const { client, writes } = windowPort();
-  const reset = { scope: SETTINGS_RESET_SCOPE.VOICE, kept: [], unexpected: true } as const;
+  const reset = { scope: SETTINGS_RESET_SCOPE.APPEARANCE, kept: [], unexpected: true } as const;
   const experiment = { experiment: "browser", on: true, unexpected: true } as const;
 
   assert.equal(

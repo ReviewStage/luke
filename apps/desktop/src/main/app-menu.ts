@@ -317,9 +317,8 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * every Mac app's Edit does; the system's reload, the window's
  * columns, the system's full screen, and its zoom are View's, reload first
  * as Safari's View keeps it, the zoom in
- * the order Chrome's View keeps it, the call's microphone and speaker are
- * Call's, the command palette, the places, back and forward (as Finder and
- * Safari keep them) and the tab moves are Go's, the
+ * the order Chrome's View keeps it, the command palette, the places, back
+ * and forward (as Finder and Safari keep them) and the tab moves are Go's, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), a command item is
@@ -561,13 +560,6 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.PREVIOUS_TASK),
         commandItem(APP_COMMAND.NEXT_TASK),
         ...(developerTools ? [SEPARATOR, developerItem(developerTools)] : []),
-      ],
-    },
-    {
-      label: "Call",
-      submenu: [
-        commandItem(APP_COMMAND.TOGGLE_MICROPHONE),
-        commandItem(APP_COMMAND.TOGGLE_SPEAKER),
       ],
     },
     {

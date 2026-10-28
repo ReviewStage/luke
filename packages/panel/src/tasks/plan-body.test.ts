@@ -114,7 +114,6 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   const { readerId, account: _account, ...rest } = drawn;
   const body = createElement(PlanBody, {
     task,
-    live: false,
     reader: { readerId },
     ...rest,
   });
@@ -164,7 +163,7 @@ function cardOf(
 }
 
 test("the saved body is drawn as Markdown", () => {
-  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK, live: false }));
+  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
 
   assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);

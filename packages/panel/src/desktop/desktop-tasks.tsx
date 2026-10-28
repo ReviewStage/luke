@@ -88,9 +88,8 @@ import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/u
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCallingAgent } from "../use-voice-view.js";
 import type { MenuAction } from "./action-menu.js";
-import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
+import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
 import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
@@ -137,7 +136,7 @@ import {
 
 /**
  * The work column while Tasks is chosen: the open task's column, its
- * toolbar above and the call bar below, and the side panel beside it, the
+ * toolbar above, and the side panel beside it, the
  * window's full height, while that is open (or over it, while it fills the
  * window); or, with none open, a new account's welcome (`desktop-welcome.tsx`),
  * every other account resting on a page standing in its place instead
@@ -150,8 +149,8 @@ import {
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * The column's summary stands at its right, under the toolbar and over the
- * call bar, listing what both "+" menus open, with its button last in the
+ * The column's summary stands at its right, under the toolbar, listing what
+ * both "+" menus open, with its button last in the
  * toolbar, after the ⋯ menu (`task-summary.tsx`).
  *
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
@@ -159,11 +158,9 @@ import {
  * showing its transcript and its composer at the document's measure, and
  * the draft agent's. A task with no agent's tab to show shows a new
  * agent's draft (`use-main-tabs.ts`), whose composer starts an agent on
- * what is typed, or a voice chat from its Call. Start and the ⋯ menu are the task's, not an agent's,
+ * what is typed. Start and the ⋯ menu are the task's, not an agent's,
  * so only the plan's own tab draws them, while their chords (Copy plan,
- * Archive, Permanently delete) answer on every tab; the call bar is the
- * task's too, and stands on every tab: a call is about the task whichever
- * tab is read. The document stays laid out while an agent's tab is shown,
+ * Archive, Permanently delete) answer on every tab. The document stays laid out while an agent's tab is shown,
  * so coming back to it finds it where it was left.
  *
  * ⌘T opens the "+" of the column holding the window's focus, ⌘W closes
@@ -696,8 +693,6 @@ function PlanDocument({
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
-  // The agent of this task a call is in progress into, whose tab wears the live mark.
-  const calling = useCallingAgent();
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -779,8 +774,6 @@ function PlanDocument({
         );
   const { mainTabs, sidePanel, agents } = tasks;
   const { tab } = mainTabs;
-  // The column's agents take calls on the open task.
-  const calls = useAgentCallDoors(tasks.calls, { taskId });
   const home =
     opened === undefined
       ? undefined
@@ -1149,7 +1142,6 @@ function PlanDocument({
     >
       <PlanBody
         task={task}
-        live={tasks.live}
         reader={reader}
         agents={editAgents}
         onShowHistory={showHistory}
@@ -1291,7 +1283,6 @@ function PlanDocument({
                               keys={tasks.shown && !sideFocused}
                               shown={tasks.shown}
                               onOpenTerminal={terminalDoors.onOpenTerminal}
-                              calling={calling}
                             />
                           }
                           actions={
@@ -1338,7 +1329,7 @@ function PlanDocument({
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
                         {/* The summary stands beside what the column shows, under the
-            toolbar and over the call bar, which both span the column. */}
+            toolbar, which spans the column. */}
                         <TaskBody>
                           <FindScope
                             className="desktop-task-column"
@@ -1355,7 +1346,6 @@ function PlanDocument({
                               ) : null
                             ) : (
                               <AgentPane
-                                call={calls}
                                 label={mainTabLabel(tab, agents)}
                                 tabbed
                                 tab={tab}

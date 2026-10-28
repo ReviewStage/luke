@@ -46,7 +46,6 @@ import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { ColumnFoot } from "../call/call-card.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
@@ -686,8 +685,8 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
 
 /**
  * A version history over the whole window: the versions where the sidebar
- * stands, with the way back at their head and the call card at their foot,
- * as the sidebar holds them, and the version chosen beside them. `onExit`
+ * stands, with the way back at their head, and the version chosen beside
+ * them. `onExit`
  * leaves for wherever it was opened from, and `onRestored` for what a
  * restore landed on. A narrow room, or a history narrower than the split's
  * line by its own width (`column-split.ts`), shows the list or the version,
@@ -961,7 +960,6 @@ export function DesktopVersionHistory({
             </ScrollArea>
           </Fill>
         </div>
-        <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>

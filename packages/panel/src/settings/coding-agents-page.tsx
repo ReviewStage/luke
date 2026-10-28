@@ -78,7 +78,7 @@ import { ThisMacHostRow } from "./this-mac-host-row.js";
 import type { SettingsWrites } from "./writes.js";
 
 /**
- * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on, a voice chat's as a Start's, there being no voice default of its own.
+ * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on.
  *
  * The page opens on one line of what it is for, then the harnesses' rows,
  * each saying how Claude Code or Codex is connected and opening the dialog

@@ -79,8 +79,7 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * where the column has room to keep the document at its measure beside it,
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
- * agent's transcript, and the call bar's row under them, centred again in
- * the room it leaves, with a chevron at its top right, shown while the
+ * agent's transcript, centred again in the room it leaves, with a chevron at its top right, shown while the
  * pointer or the keys are on it, that collapses it from the very spot the
  * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a

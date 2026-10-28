@@ -31,7 +31,7 @@
  * chosen in a File tab's tree would, a Settings page opens as the Settings
  * sidebar's row for it does, and a setting lands on its row as the settings
  * search does. The pages are the sidebar's own list, and a page found ranks
- * above every setting found, so "voice" offers the page before its rows. The
+ * above every setting found, so "appearance" offers the page before its rows. The
  * files are the open task's repository read whole in the one listing the File
  * tab's search reads, the first time a file is searched, and fuzzy-matched on
  * their paths.
@@ -43,8 +43,8 @@
  * task's name. One chosen opens in the Inbox, as its row there would.
  *
  * It is the nearest layer while it stands: no key pressed in it goes on to
- * the window, so Escape closes the palette and nothing else, a call's reply
- * included, and no chord changes what stands behind it. Closing hands focus
+ * the window, so Escape closes the palette and nothing else, and no chord
+ * changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
  * acts from where the developer was, as its shortcut would have. It then
  * fades out as the dialog does.

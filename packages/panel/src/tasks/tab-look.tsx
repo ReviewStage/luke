@@ -88,8 +88,6 @@ export type TabSubject =
       /** Its tab's label (`agentName`), or what a pin last called it; the word for an agent where none is known. */
       readonly name: string | undefined;
       readonly agent: AgentStanding | undefined;
-      /** Whether a call into the agent is in progress, which its glyph wears as the live mark. */
-      readonly calling?: boolean | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.SUBAGENT;
@@ -185,26 +183,6 @@ export function AgentGlyph({ agent }: { agent: AgentStanding | undefined }) {
   return <StateGlyph glyph={<AgentMark provider={provider} />} state={state} />;
 }
 
-/** What a reader is told of an agent's glyph while a call into it is in progress. */
-const CALLING_WORDS = "On a call";
-
-/**
- * An agent's glyph while a call into it is in progress: the voice's live
- * mark in the live tint, in the glyph's own footprint, as a call's divider
- * marks the call live (`call-card.tsx`), whatever the agent is doing.
- */
-function CallingGlyph(): React.JSX.Element {
-  return (
-    <span
-      className="state-glyph agent-calling-glyph text-complete"
-      role="img"
-      aria-label={CALLING_WORDS}
-    >
-      <GLYPH.CALL />
-    </span>
-  );
-}
-
 /** A subagent's glyph wearing where it stands, as `AgentGlyph` wears an agent's. */
 function SubagentGlyph({ model, state }: { model: string | undefined; state: GlyphState }) {
   return <StateGlyph glyph={<SubagentMark model={model} />} state={state} />;
@@ -240,7 +218,7 @@ export function tabLook(subject: TabSubject): KindLook {
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
     case TAB_KIND.AGENT:
       return {
-        icon: subject.calling === true ? <CallingGlyph /> : <AgentGlyph agent={subject.agent} />,
+        icon: <AgentGlyph agent={subject.agent} />,
         label: subject.name ?? TAB_WORDS.CODING_AGENT,
       };
     case TAB_KIND.SUBAGENT:

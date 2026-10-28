@@ -1,5 +1,5 @@
 {
-  "instead": "Draw a call's controls with CallBar, CallMute and CallLive from @luke/ui, and the voice's notices as toasts (voice-notice-toast.ts).",
+  "instead": "Draw a call's controls with CallBar and CallMute from @luke/ui.",
   "classes": [
     { "class": "call-bar", "allow": ["packages/ui/src/components/call/"] },
     { "class": "call-controls", "allow": ["packages/ui/src/components/call/"] },

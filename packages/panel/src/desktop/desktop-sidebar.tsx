@@ -124,7 +124,6 @@ import {
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
-import { ColumnFoot } from "../call/call-card.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
@@ -2349,16 +2348,14 @@ function SidebarColumn({
         </ScrollArea>
       </Fill>
 
-      <ColumnFoot docked={!sidebar.collapsed}>
-        <SidebarFoot
-          account={account}
-          updates={updates}
-          shown={overlay.inSight}
-          settingsOpen={tab === PANEL_TAB.SETTINGS}
-          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
-          onSignOut={onSignOut}
-        />
-      </ColumnFoot>
+      <SidebarFoot
+        account={account}
+        updates={updates}
+        shown={overlay.inSight}
+        settingsOpen={tab === PANEL_TAB.SETTINGS}
+        onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
+        onSignOut={onSignOut}
+      />
       {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
