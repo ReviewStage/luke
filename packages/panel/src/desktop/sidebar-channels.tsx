@@ -69,6 +69,7 @@ const READING_ROWS = ["56%", "72%", "44%"] as const;
 /** One channel's row: its glyph, its name, in the unread weight while something in it is unread, what waits on the reader in it, its card, and its menu. */
 function ChannelRow({
   channel,
+  waiting,
   workspaceId,
   current,
   shown,
@@ -76,6 +77,8 @@ function ChannelRow({
   onOpen,
 }: {
   channel: Channel;
+  /** How many of the questions the Inbox counts live in it (`useChannelWaiting`). */
+  waiting: number;
   workspaceId: string | undefined;
   current: boolean;
   shown: boolean;
@@ -96,8 +99,8 @@ function ChannelRow({
           current={current ? NAV_CURRENT.PAGE : undefined}
           unread={channelUnread(channel)}
           count={{
-            value: channel.waiting,
-            noun: needsYouNoun(channel.waiting),
+            value: waiting,
+            noun: needsYouNoun(waiting),
             tone: STATUS_TONE.ATTENTION,
           }}
           contextMenu={menu.contextMenu(ellipsis)}
@@ -180,12 +183,15 @@ function AddChannelRow({
 export function SidebarChannels({
   workspaceId,
   channels,
+  waiting,
   currentId,
   shown,
   onOpen,
 }: {
   workspaceId: string | undefined;
   channels: ChannelsControl;
+  /** How many of the questions the Inbox counts live in each channel, by channel (`useChannelWaiting`), so the rows add up to the Inbox's row. */
+  waiting: ReadonlyMap<string, number>;
   /** The channel the Inbox is narrowed to, none while it lists every channel. */
   currentId: string | undefined;
   /** Whether the sidebar is in sight, which its menus and questions close with. */
@@ -213,6 +219,7 @@ export function SidebarChannels({
           <ChannelRow
             key={channel.id}
             channel={channel}
+            waiting={waiting.get(channel.id) ?? 0}
             workspaceId={workspaceId}
             current={channel.id === currentId}
             shown={shown}

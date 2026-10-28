@@ -90,6 +90,30 @@ test("an editor opened on the words a click landed on stands its caret in them, 
   assert.deepEqual(finished, [1]);
 });
 
+test("an editor opened on words a press selected selects them again, from where the selection started to where it ended", () => {
+  const text = "## Goal\n\nShip it.\n\nShip the invite flow.\n";
+  const at = (said: string, offset: number) => ({
+    section: 0,
+    text: said,
+    occurrence: 0,
+    offset,
+    code: false,
+    top: 0,
+  });
+  // Selected backwards, from the second line's "invite" up into the first line's "it".
+  const { element } = mount(text, {
+    x: 0,
+    y: 0,
+    from: at("Ship the invite flow.", 15),
+    words: at("Ship it.", 5),
+  });
+  const selection = window.getSelection();
+
+  assert.equal(selection?.toString(), "it.Ship the invite");
+  assert.equal(selection?.anchorNode, element.querySelectorAll("p")[1]?.firstChild);
+  assert.equal(selection?.focusOffset, 5, "the caret where the press ended");
+});
+
 test("words a click landed on outside code are not found in a diagram's code of the same words, which the text drew as its picture", () => {
   const text = "## Flow\n\n```mermaid\nShip it.\n```\n\nShip it.\n";
   const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };

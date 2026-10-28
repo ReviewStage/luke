@@ -49,13 +49,15 @@ function tasklessAgentOf(
   if (brief !== undefined) return brief;
   const agent = agents.find((each) => each.id === agentId);
   if (agent === undefined) return undefined;
+  // Note that the agent's kind is kept, so Luke's settled thread still stands under Luke once main lists none of his.
   return {
     agentId,
+    ...(agent.kind === undefined ? undefined : { agentKind: agent.kind }),
     agentTitle: agent.title,
     agentModel: agent.model,
     automationId: agent.automationId,
     automationName: agent.automationName ?? null,
-    repository: agent.repository ?? "",
+    repository: agent.repository ?? null,
     ...(agent.workspaceId === undefined ? undefined : { workspaceId: agent.workspaceId }),
   };
 }

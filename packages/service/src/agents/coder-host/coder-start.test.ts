@@ -10,7 +10,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
+import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { and, eq, isNotNull } from "drizzle-orm";
@@ -118,6 +118,51 @@ function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: 
   };
 }
 
+/**
+ * The agent's lines once eve took the first message its Start opened the
+ * session with and told of it as its first turn's received message, and
+ * whether it has heard from another account by then.
+ */
+const openedThroughRelay = (owner: string, conversationId: string, opened: readonly EveMessage[]) =>
+  Effect.gen(function* () {
+    const target = { userId: owner, conversationId };
+    const handed = opened[0];
+    assert.ok(handed !== undefined && typeof handed.message === "string");
+    const relay = new StreamRelay({
+      writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
+      asks: { binding: askRecord(), stopTurn: () => Effect.void },
+      now: () => Date.UTC(2026, 9, 23),
+      report: () => undefined,
+    });
+    const standing = {
+      sessionId: `wrun_${randomUUID()}`,
+      target,
+      turn: EVE_HOST_TURN.TYPED,
+      state: memoryRelayState(),
+    };
+    const turn = { turnId: "turn_0", sequence: 0 };
+    for (const event of [
+      stampedEveEvent({ type: "turn.started", data: turn }, 0),
+      stampedEveEvent({ type: "message.received", data: { ...turn, message: handed.message } }, 0),
+    ]) {
+      yield* relay.handle(event, standing);
+    }
+
+    const db = yield* Database;
+    const lines = yield* db
+      .select({
+        sender: messages.sender,
+        senderUserId: messages.senderUserId,
+        metadata: messages.metadata,
+        taken: isNotNull(messages.turnId),
+      })
+      .from(messages)
+      .where(
+        and(eq(messages.conversationId, conversationId), eq(messages.role, MESSAGE_ROLE.USER)),
+      );
+    return { lines, heard: yield* heardFromAnotherAccount(target) };
+  });
+
 it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   it.effect(
     "a Start opens one agent on no plan in the workspace, on the repository, handed the task, and a retry under its key opens nothing again",
@@ -190,58 +235,26 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a fresh agent on eve, whose prompt stands as its first line, the Start's brief sent by its starter, and eve's receipt takes that line rather than writing a typed one, has heard from no one but its starter, so its Mac is still its own",
+    "a fresh agent on eve, whose prompt stands as its first line, the Start's brief sent by its starter, and eve's receipt takes that line rather than writing a typed one, has heard from no one but its starter, so its Mac is still its own, unless the automation's run that started it handed it a webhook's body",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
-        const { opened, eve } = fakeEve();
-        const { agent } = yield* startCodingAgent(eve, owner, workspaceAsk(workspaceId)).pipe(
-          Effect.provide(services),
-        );
-        const target = { userId: owner, conversationId: agent.conversationId };
-        // eve's session takes the prompt the Start handed it and tells of it as its first turn's received message.
-        const handed = opened[0];
-        assert.ok(handed !== undefined && typeof handed.message === "string");
-        const relay = new StreamRelay({
-          writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
-          asks: { binding: askRecord(), stopTurn: () => Effect.void },
-          now: () => Date.UTC(2026, 9, 23),
-          report: () => undefined,
+        const openedOnEve = (ask: StartAsk) =>
+          Effect.gen(function* () {
+            const { opened, eve } = fakeEve();
+            const { agent } = yield* startCodingAgent(eve, owner, ask).pipe(
+              Effect.provide(services),
+            );
+            return yield* openedThroughRelay(owner, agent.conversationId, opened);
+          });
+        const ranFor = (firing: AutomationFiring): StartAsk => ({
+          ...workspaceAsk(workspaceId),
+          automationOrigin: { name: "Triage", firing, prompt: TASK },
         });
-        const standing = {
-          sessionId: `wrun_${randomUUID()}`,
-          target,
-          turn: EVE_HOST_TURN.TYPED,
-          state: memoryRelayState(),
-        };
-        const turn = { turnId: "turn_0", sequence: 0 };
-        for (const event of [
-          stampedEveEvent({ type: "turn.started", data: turn }, 0),
-          stampedEveEvent(
-            { type: "message.received", data: { ...turn, message: handed.message } },
-            0,
-          ),
-        ]) {
-          yield* relay.handle(event, standing);
-        }
 
-        const db = yield* Database;
-        const lines = yield* db
-          .select({
-            sender: messages.sender,
-            senderUserId: messages.senderUserId,
-            metadata: messages.metadata,
-            taken: isNotNull(messages.turnId),
-          })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.conversationId, agent.conversationId),
-              eq(messages.role, MESSAGE_ROLE.USER),
-            ),
-          );
+        const byHand = yield* openedOnEve(workspaceAsk(workspaceId));
         assert.deepEqual(
-          lines,
+          byHand.lines,
           [
             {
               sender: MESSAGE_SENDER.MEMBER,
@@ -252,7 +265,13 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
           ],
           "the prompt is the conversation's one line",
         );
-        assert.equal(yield* heardFromAnotherAccount(target), false);
+        assert.equal(byHand.heard, false, "by hand");
+        const scheduled = yield* openedOnEve(
+          ranFor({ kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 }),
+        );
+        assert.equal(scheduled.heard, false, "a schedule's run, its owner's prompt alone");
+        const hooked = yield* openedOnEve(ranFor({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }));
+        assert.equal(hooked.heard, true, "a webhook's run, its caller's body beside the prompt");
       }),
   );
 });

@@ -299,9 +299,15 @@ const LUKE_LINE_METADATA = EffectSchema.Struct({
 
 export type LukeLineMetadata = EffectSchema.Schema.Type<typeof LUKE_LINE_METADATA>;
 
-/** An automation line is an automation's run's prompt, the agent's first line or a later one. */
+/**
+ * An automation line is an automation's run's prompt, the agent's first line
+ * or a later one, and whether what fired the run put words its owner did not
+ * write beside that prompt, such as a webhook's body, which `run_on_mac`
+ * reads; absent from a line kept before it was said.
+ */
 const AUTOMATION_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.AUTOMATION),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type AutomationLineMetadata = EffectSchema.Schema.Type<typeof AUTOMATION_LINE_METADATA>;

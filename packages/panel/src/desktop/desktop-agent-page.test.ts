@@ -1553,7 +1553,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show terminal, Copy link, the transcript's two copies, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1564,11 +1564,51 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Show ter
     (each) => each.textContent,
   );
   assert.deepEqual(offered, [
-    "Rename",
-    "Show terminal⌘J",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
+    "Rename",
+    "Show terminal⌘J",
+    "Archive",
+    "Permanently delete",
+  ]);
+});
+
+test("a taskless agent the sidebar lists gains its row's own items on its page's ⋯: Mark as unread beside Rename, then Pin and Move to section, and Pin pins it", async () => {
+  const pins: { agentId: string; pinned: boolean }[] = [];
+  const listed = {
+    ...PAGE,
+    automationName: "Flaky sweep",
+    activityAt: 2,
+  };
+  const page = mount(
+    tasksControl({
+      listedAgents: { standing: [listed], archived: [] },
+      onPinAgent: (agentId, pinned) => {
+        pins.push({ agentId, pinned });
+      },
+    }),
+  );
+  await settle();
+  const offered = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+  const pin = pageMenuItem(page, "Pin");
+  act(() => pin.click());
+  assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
+
+  const mark = pageMenuItem(page, "Mark as unread");
+  act(() => mark.click());
+  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  assert.deepEqual(offered(), [
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Rename",
+    "Mark as read",
+    "Pin",
+    "Move to section",
+    "Show terminal⌘J",
     "Archive",
     "Permanently delete",
   ]);
@@ -1591,7 +1631,7 @@ test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, no
   assert.equal(page.querySelector("h1")?.textContent, "Luke");
   assert.deepEqual(
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Show terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+    ["Copy link", "Copy concise transcript", "Copy full transcript", "Show terminal⌘J"],
   );
 });
 

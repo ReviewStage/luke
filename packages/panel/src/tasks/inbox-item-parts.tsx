@@ -40,6 +40,7 @@ import {
   Text,
   Time,
   VisuallyHidden,
+  WingFace,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import {
@@ -507,14 +508,16 @@ function TaskStatusChip({
 
 /**
  * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the automation glyph for the agents no
- * automation names, as the holder's group header draws them.
+ * automation's clock tile, Luke's face for the member's operator, and the
+ * automation glyph for the agents no automation names, as the holder's
+ * group header draws them.
  */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
   if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
+  if (holder.operator) return <WingFace />;
   if (holder.automationId === null) return <GLYPH.AUTOMATION />;
   return (
     <ActorMark

@@ -51,6 +51,7 @@ import {
   Tooltip,
   useMenu,
   useMinute,
+  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -1191,11 +1192,13 @@ function Crumbs({
           onPress: () => onOpenHolder?.(),
         }
       : undefined;
+  // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
+  const operator = holder.kind === INBOX_HOLDER.AUTOMATION && holder.operator;
   const crumbs: Crumb[] = [
-    task ?? automation,
+    task ?? (operator ? undefined : automation),
     {
       label: name,
-      glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+      glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
       hint: name,
       card: <AgentCard subject={by.subject} models={by.models} />,
       onPress: () => by.onOpen(),

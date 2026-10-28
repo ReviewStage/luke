@@ -6,12 +6,14 @@
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
  */
+import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
 import { TOPIC } from "@luke/database/sync/notification";
 import {
+  agentBrowserTabSync,
   agentSectionEntrySync,
   attachmentSync,
   automationRunSync,
@@ -26,6 +28,7 @@ import {
   invitationSync,
   macCommandSync,
   memberSync,
+  planPageVersionSync,
   planRevisionSync,
   repositoryPinSync,
   taskSectionEntrySync,
@@ -33,6 +36,7 @@ import {
   taskSync,
   userSync,
 } from "@luke/database/sync/tables";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
@@ -43,6 +47,9 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
+import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
+import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { defineLiveQuery, LIVE_MODE, liveQueryRegistry } from "./live-query.js";
 
 /**
@@ -114,7 +121,7 @@ const ITEM_GATES = [memberSync, githubPersonalTokenSync, githubRepositoryReadSyn
  */
 export const inboxLive = defineLiveQuery({
   name: "inbox",
-  params: ["userId"],
+  params: ["userId", "repositoryless"],
   reads: [
     inboxItemSync,
     inboxItemReadSync,
@@ -125,9 +132,10 @@ export const inboxLive = defineLiveQuery({
     ...ITEM_GATES,
   ],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) =>
+  // Note that an agent with no repository is carried only to a reader that asks (`ACCOUNT_INBOX_REPOSITORYLESS`), since a build before it fails its whole read on one null.
+  statements: ({ userId, repositoryless }) =>
     Option.zipWith(
-      accountInboxLiveStatements(userId),
+      accountInboxLiveStatements(userId, repositoryless === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
       ownFailedRunsLiveStatement(userId),
       (parts, failedRuns) => ({ ...parts, failedRuns }),
     ),
@@ -230,6 +238,120 @@ export const workspaceInvitationsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/**
+ * An open task's record: when its plan was last saved and each page's
+ * newest version, woken by a save of the task and a page shown on it, both
+ * of which name the task. Its calls and code answer no rows.
+ */
+export const taskRecordLive = defineLiveQuery({
+  name: "taskRecord",
+  params: ["userId", "taskId"],
+  reads: [
+    taskSync,
+    planPageVersionSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) => taskRecordLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** One task's pages, each at its newest version, woken by a page shown on the task. */
+export const taskPagesLive = defineLiveQuery({
+  name: "taskPages",
+  params: ["userId", "taskId"],
+  reads: [
+    taskSync,
+    planPageVersionSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) => taskPagesLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** One coding agent's own pages on no task, woken by a page it shows and by the agent's own row, both of which name the agent. */
+export const agentPagesLive = defineLiveQuery({
+  name: "agentPages",
+  params: ["userId", "agentId"],
+  reads: [
+    codingAgentSync,
+    planPageVersionSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId }) => [
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId }) => agentPagesLiveStatements(userId, agentId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One task's newest page of plan history, woken by a revision written or
+ * moved on, and by the task and its agents, all of which name the task.
+ * Note that an editor's own name, read beside each revision, wakes no
+ * history, because an account's row names only it and its workspaces, and
+ * waking every open history in a workspace on each of its writes is not
+ * worth a rename: one shows at the hold's end.
+ */
+export const taskHistoryLive = defineLiveQuery({
+  name: "taskHistory",
+  params: ["userId", "taskId"],
+  reads: [
+    planRevisionSync,
+    taskSync,
+    codingAgentSync,
+    userSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) => taskHistoryLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One task's Browser tabs, the agent's pointer on each among them, woken by
+ * a tab opened, moved, pointed at, taken over, or closed, and by the agents
+ * on the task, all of which name the task.
+ */
+export const taskBrowserTabsLive = defineLiveQuery({
+  name: "taskBrowserTabs",
+  params: ["userId", "taskId"],
+  reads: [
+    agentBrowserTabSync,
+    taskSync,
+    codingAgentSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId }) =>
+    Option.map(taskBrowserTabsLiveStatement(userId, taskId), (tabs) => ({ tabs })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
   macCommandsLive,
@@ -239,4 +361,9 @@ export const LIVE_QUERIES = liveQueryRegistry([
   channelsLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
+  taskRecordLive,
+  taskPagesLive,
+  agentPagesLive,
+  taskHistoryLive,
+  taskBrowserTabsLive,
 ]);

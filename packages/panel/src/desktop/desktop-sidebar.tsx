@@ -162,7 +162,12 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, useInboxWaiting, useTasksWaiting } from "./places-waiting.js";
+import {
+  needsYouNoun,
+  useChannelWaiting,
+  useInboxWaiting,
+  useTasksWaiting,
+} from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -1786,6 +1791,7 @@ function SidebarColumn({
   const shownChannelId =
     channelState.kind === CHANNEL_SHOWN.CHANNEL ? channelState.channel.id : undefined;
   const waiting = useInboxWaiting(tasks);
+  const channelWaiting = useChannelWaiting(tasks);
   const waitingOn = useTasksWaiting(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
@@ -2126,6 +2132,7 @@ function SidebarColumn({
           <SidebarChannels
             workspaceId={tasks.workspace?.id}
             channels={channels}
+            waiting={channelWaiting}
             currentId={shownChannelId}
             shown={tasks.shown && overlay.inSight}
             onOpen={chosen(openChannel)}

@@ -57,9 +57,10 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  *
  * An agent's call runs on the Mac of the account its conversation is
  * under, its starter's, and only while no one else has put words into that
- * conversation: a teammate who messages the agent, or an agent of theirs
- * that does, could otherwise have it run their command on the starter's
- * Mac, so such a conversation is refused for the rest of its life.
+ * conversation: a teammate who messages the agent, an agent of theirs that
+ * does, or a webhook's caller whose body an automation's run hands the
+ * agent, could otherwise have it run their command on the starter's Mac,
+ * so such a conversation is refused for the rest of its life.
  */
 
 const MAC_COMMAND_SERVICE = {
@@ -97,8 +98,9 @@ const MAC_COMMAND_REFUSAL = {
     "Not run: `command` must be one non-empty shell command, and `timeout_seconds` a whole " +
     `number from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
   NOT_STARTERS_OWN:
-    "Not run: someone other than the developer who started this agent has messaged it, so it " +
-    "no longer runs commands on their Mac. Ask the developer to run what you need themselves.",
+    "Not run: someone other than the developer who started this agent has put words into it, " +
+    "such as a teammate's message or a webhook's body, so it no longer runs commands on their " +
+    "Mac. Ask the developer to run what you need themselves.",
 } as const;
 
 /** Why a call ran nothing by its kind: no Mac that runs that kind listening, or an ask the Mac's read would refuse. */
