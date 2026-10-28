@@ -29,6 +29,7 @@ import {
   type SchemaPath,
   type SchemaRefusal,
   type SpokenAskMetadata,
+  type StartLineMetadata,
   type StoredMessageMetadata,
   type ThreadLineMetadata,
   TURN_ORIGIN,
@@ -387,7 +388,8 @@ function senderNameOf(sender: LineSender | undefined): string | null {
  * write it: its words, the files attached to it, each image with what was
  * kept of it, the client's key for the send, what sent it, and what the row
  * says carried it: the developer's typed ask where it names nothing else,
- * or another coding agent's message, a thread, a plan comment, GitHub, Luke, or an
+ * or another coding agent's message, a thread, a plan comment, a Start's
+ * brief, GitHub, Luke, or an
  * automation's run.
  */
 interface AwaitingLineWrite {
@@ -406,6 +408,7 @@ export type AwaitingLineMetadata =
   | AgentMessageMetadata
   | ThreadLineMetadata
   | CommentLineMetadata
+  | StartLineMetadata
   | GitHubLineMetadata
   | LukeLineMetadata
   | AutomationLineMetadata;

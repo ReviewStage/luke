@@ -23,7 +23,12 @@ import {
   type StoredTask,
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
-import { AUTOMATION_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
+import {
+  AUTOMATION_LINE_METADATA,
+  type AwaitingLineMetadata,
+  type LineSender,
+  storeWriter,
+} from "@luke/database/models/writer";
 import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
@@ -64,6 +69,7 @@ import {
 } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import { bothInOrder, failureKind } from "@luke/runtime/effect";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -138,6 +144,7 @@ import {
 } from "./replay-summary.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentSummary, summaryAccounts, summaryDevices } from "./status.js";
+import { agentLineSender } from "./steer.js";
 import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -407,6 +414,8 @@ export type StartAsk = StartPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The coding agent whose `start_agent` asks, which the first line names as its sender; none for a Start by a member or an automation. */
+  readonly startedBy?: CodingAgent | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
   readonly title?: string | undefined;
   /** How the summary of the steps a replay cannot keep is written, for a Start from another agent; none leaves those steps out unsummarized. */
@@ -1004,6 +1013,46 @@ function startMachineOf(
 }
 
 /**
+ * Who a Start's first line names as its sender and what it says it is: an
+ * automation's run says its prompt as the automation, as its later lines do
+ * (`automation-runs.ts`); any other Start's is its brief, sent by the agent
+ * whose `start_agent` asked, or else by the member who started it.
+ */
+function openingOf(
+  agent: CodingAgent,
+  ask: Pick<StartAsk, "automationOrigin" | "startedBy">,
+  brief: { readonly prompt: string | null },
+  /** The agent it takes over from, continued or forked; none for a fresh Start. */
+  taken: { readonly source: CodingAgent; readonly continued: boolean } | undefined,
+): { readonly sender: LineSender; readonly metadata: AwaitingLineMetadata } {
+  const { automationOrigin, startedBy } = ask;
+  if (automationOrigin !== undefined) {
+    return {
+      sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
+      metadata: AUTOMATION_LINE_METADATA,
+    };
+  }
+  const sender: LineSender =
+    startedBy === undefined
+      ? { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId }
+      : agentLineSender(startedBy);
+  const metadata: AwaitingLineMetadata =
+    taken === undefined
+      ? {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.START,
+          brief: brief.prompt === null ? START_LINE_BRIEF.PLAN : START_LINE_BRIEF.PROMPT,
+        }
+      : {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.START,
+          brief: taken.continued ? START_LINE_BRIEF.CONTINUE : START_LINE_BRIEF.FORK,
+          source_agent_id: taken.source.id,
+        };
+  return { sender, metadata };
+}
+
+/**
  * The first message of a native agent's Start, written as the line awaiting
  * its turn under a fresh key, as a steer's is (`steer.ts`), and its line id,
  * which the runner is handed and names back as it takes the line. Its
@@ -1015,7 +1064,7 @@ const openingLine = (
   text: string,
   files: readonly HandedFile[],
   mentioned: string | undefined,
-  automation: StoredAutomationOrigin | undefined,
+  opened: { readonly sender: LineSender; readonly metadata: AwaitingLineMetadata },
 ) =>
   Effect.gen(function* () {
     const clientKey = randomUUID();
@@ -1028,13 +1077,7 @@ const openingLine = (
           clientKey,
           attachments: files,
           mentioned,
-          // An automation's run says its prompt as the automation, as its later lines do (`automation-runs.ts`).
-          ...(automation === undefined
-            ? { sender: { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId } }
-            : {
-                sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
-                metadata: AUTOMATION_LINE_METADATA,
-              }),
+          ...opened,
         },
         Effect.succeed(true),
       ),
@@ -1264,7 +1307,18 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     // A line that could not be written discards the agent, as a refused launch does, so a retry
     // under the same key starts it afresh rather than finding an agent that was never launched.
     const line = isNativeRuntime(runtime.runtime)
-      ? yield* openingLine(agent, handed, files, mentioned, ask.automationOrigin).pipe(
+      ? yield* openingLine(
+          agent,
+          handed,
+          files,
+          mentioned,
+          openingOf(
+            agent,
+            ask,
+            brief,
+            from === undefined ? undefined : { source: from.source, continued },
+          ),
+        ).pipe(
           Effect.tapError(() =>
             Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
           ),

@@ -46,8 +46,9 @@ export const MESSAGE_AUTHOR = {
 /**
  * How a developer's ask arrived, or what else carried a line steered into a
  * coding agent: another coding agent's message, a thread's reply, answer or
- * close, a plan comment thread a member sent it, GitHub's word on its pull
- * request, a line Luke sent, or an automation's run.
+ * close, a plan comment thread a member sent it, the brief a Start opened it
+ * with, GitHub's word on its pull request, a line Luke sent, or an
+ * automation's run.
  */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
@@ -55,6 +56,7 @@ export const MESSAGE_CHANNEL = {
   AGENT_MESSAGE: "agent_message",
   THREAD: "thread",
   COMMENT: "comment",
+  START: "start",
   GITHUB: "github",
   LUKE: "luke",
   AUTOMATION: "automation",
@@ -66,6 +68,20 @@ export const THREAD_LINE_EVENT = {
   ANSWER: "answer",
   CLOSE: "close",
 } as const;
+
+/** What a Start handed a new agent as its first line: the developer's prompt, the plan, or another agent it continues or forks. */
+export const START_LINE_BRIEF = {
+  PROMPT: "prompt",
+  PLAN: "plan",
+  CONTINUE: "continue",
+  FORK: "fork",
+} as const;
+
+/** The briefs that take over from another agent, and so name it. */
+const FROM_AGENT_BRIEFS: ReadonlySet<string> = new Set([
+  START_LINE_BRIEF.CONTINUE,
+  START_LINE_BRIEF.FORK,
+]);
 
 /** What GitHub said on a pull request that a line steered into its agent carries. */
 export const GITHUB_LINE_EVENT = {
@@ -135,7 +151,7 @@ const spanInstant = nonNegativeInteger;
  * A user row is one of these things, and the shape says which: the
  * developer's typed ask, a spoken ask cut from a voice session, a line
  * steered into a coding agent by what carried it (another coding agent's
- * message, a thread, a plan comment, GitHub, Luke, or an automation), or an observation the
+ * message, a thread, a plan comment, a Start, GitHub, Luke, or an automation), or an observation the
  * brain wrote down for itself. A struct each rather than one with every field optional, so an
  * observation carrying a channel has no shape to arrive in. A typed ask
  * names a voice session only where it was typed into that call, with the
@@ -217,6 +233,27 @@ const COMMENT_LINE_METADATA = EffectSchema.Struct({
 
 export type CommentLineMetadata = EffectSchema.Schema.Type<typeof COMMENT_LINE_METADATA>;
 
+/**
+ * A start line is the first line a Start wrote a new agent: what it was
+ * handed, and, for a continue or a fork, the agent it takes over from, which
+ * no other brief names. Who started it is the row's sender.
+ */
+const START_LINE_STRUCT = EffectSchema.Struct({
+  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
+  channel: EffectSchema.Literal(MESSAGE_CHANNEL.START),
+  brief: EffectSchema.Literals(Object.values(START_LINE_BRIEF)),
+  source_agent_id: EffectSchema.optional(identifier),
+});
+
+export type StartLineMetadata = EffectSchema.Schema.Type<typeof START_LINE_STRUCT>;
+
+const START_LINE_METADATA = START_LINE_STRUCT.check(
+  EffectSchema.makeFilter(
+    (metadata: StartLineMetadata) =>
+      FROM_AGENT_BRIEFS.has(metadata.brief) === (metadata.source_agent_id !== undefined),
+  ),
+);
+
 /** A name or an address GitHub minted, within the bound given. */
 const githubName = (chars: number) => trimmedText.check(EffectSchema.isMaxLength(chars));
 
@@ -291,6 +328,7 @@ export type UserMessageMetadata =
   | AgentMessageMetadata
   | ThreadLineMetadata
   | CommentLineMetadata
+  | StartLineMetadata
   | GitHubLineMetadata
   | LukeLineMetadata
   | AutomationLineMetadata
@@ -303,6 +341,7 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
   AGENT_MESSAGE_METADATA,
   THREAD_LINE_METADATA,
   COMMENT_LINE_METADATA,
+  START_LINE_METADATA,
   GITHUB_LINE_METADATA,
   LUKE_LINE_METADATA,
   AUTOMATION_LINE_METADATA,

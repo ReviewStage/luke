@@ -73,6 +73,8 @@ export {
   OBSERVATION_SOURCE,
   type ObservationSource,
   type SpokenAskMetadata,
+  START_LINE_BRIEF,
+  type StartLineMetadata,
   type StoredMessageMetadata,
   THREAD_LINE_EVENT,
   type ThreadLineMetadata,

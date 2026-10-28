@@ -27,6 +27,7 @@ import {
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
+import { agentName } from "@luke/features/model-label";
 import { causeKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
@@ -138,6 +139,16 @@ export interface SteerLine {
   readonly metadata?: AwaitingLineMetadata | undefined;
   /** The words the servers handed to the next turn are read from where they are not all of `text`: an automation's own prompt, never a webhook body or a GitHub event's words beside it; `text` otherwise. */
   readonly serverWords?: string | undefined;
+}
+
+/** Another coding agent as the row of a line it sends keeps it: by its name, id, and model. */
+export function agentLineSender(agent: CodingAgent): LineSender {
+  return {
+    kind: MESSAGE_SENDER.AGENT,
+    agentId: agent.id,
+    name: agentName(agent),
+    model: agent.model,
+  };
 }
 
 /** What a steer came to: the line sent and written, or found already sent under its key. */
