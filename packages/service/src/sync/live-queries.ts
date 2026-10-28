@@ -58,6 +58,11 @@ import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js
 import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
+  automationRunsLiveStatements,
+  automationsLiveStatements,
+  automationWorkspaceRunsLiveStatements,
+} from "../automations/automation-live.js";
+import {
   accountInboxLiveStatements,
   channelsLiveStatements,
   memberAgentInboxLiveStatements,
@@ -326,6 +331,68 @@ export const workspaceInvitationsLive = defineLiveQuery({
 });
 
 /**
+ * What an automation's reads read (`automation-live.ts`): the automations
+ * and their runs, the agent each run started and what its status is read
+ * from (`agent-standing.ts`), its newest turn and the newest line awaiting
+ * one, and the membership that admits the reader to the workspace.
+ */
+const AUTOMATION_READS = [
+  automationSync,
+  automationRunSync,
+  codingAgentSync,
+  turnsSync,
+  messagesSync,
+  conversationsSync,
+  memberSync,
+] as const;
+
+/**
+ * A workspace's automations, each with its newest run and that run's
+ * agent, woken on the workspace's topic by an automation made, changed, or
+ * deleted, a run fired, started, or settled, the run's agent renamed or its
+ * turn queued, started, or settled, and a membership of the workspace
+ * moved, all of which name it. Note that a line awaiting the agent's next
+ * turn is written on its conversation's topic alone (`messagesSync`),
+ * because every streamed step rewrites a journal and waking the workspace
+ * on each would re-run every workspace-keyed read for nothing: the mark
+ * that line moves shows with the next turn, or at the hold's end.
+ */
+export const automationsLive = defineLiveQuery({
+  name: "automations",
+  params: ["userId", "workspaceId"],
+  reads: AUTOMATION_READS,
+  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
+  statements: ({ userId, workspaceId }) => automationsLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** The newest runs of a workspace's automations, each with its automation and its agent, woken as the automations are. */
+export const automationWorkspaceRunsLive = defineLiveQuery({
+  name: "automationWorkspaceRuns",
+  params: ["userId", "workspaceId"],
+  reads: AUTOMATION_READS,
+  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
+  statements: ({ userId, workspaceId }) =>
+    automationWorkspaceRunsLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One automation's newest runs, each with its agent, woken as the
+ * automations are, on the topic of the workspace the automation stands in,
+ * which its procedure reads it by before it binds the read
+ * (`automationId`, `workspaceId`): a run names no topic of its automation.
+ */
+export const automationRunsLive = defineLiveQuery({
+  name: "automationRuns",
+  params: ["userId", "automationId", "workspaceId"],
+  reads: AUTOMATION_READS,
+  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
+  statements: ({ userId, automationId }) => automationRunsLiveStatements(userId, automationId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
  * An open task's record: when its plan was last saved and each page's
  * newest version, woken by a save of the task and a page shown on it, both
  * of which name the task. Its calls and code answer no rows.
@@ -522,6 +589,9 @@ export const LIVE_QUERIES = liveQueryRegistry([
   channelsLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
+  automationsLive,
+  automationWorkspaceRunsLive,
+  automationRunsLive,
   taskRecordLive,
   taskPagesLive,
   agentPagesLive,
