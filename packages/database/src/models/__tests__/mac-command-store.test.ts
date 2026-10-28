@@ -18,7 +18,13 @@ import {
   type MacCommandKind,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
-import { MESSAGE_ROLE, type MessageRole } from "@luke/wire";
+import {
+  GITHUB_LINE_EVENT,
+  type GitHubLineMetadata,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type MessageRole,
+} from "@luke/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -307,8 +313,9 @@ const openWorker = (userId: string, parentConversationId: string) =>
 
 /**
  * One line sent into the conversation, as the writer keeps a developer's or
- * an agent's line to a coding agent; with no sender, as a line was kept
- * before senders were, or as the model's own reply is.
+ * an agent's line to a coding agent, with the metadata given; with no
+ * sender, as a line was kept before senders were, or as the model's own
+ * reply is.
  */
 const sendLine = (
   owner: string,
@@ -320,6 +327,7 @@ const sendLine = (
     readonly agentId?: string;
   },
   role: MessageRole = MESSAGE_ROLE.USER,
+  metadata?: GitHubLineMetadata,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -334,6 +342,7 @@ const sendLine = (
       sender: sender?.kind ?? null,
       senderUserId: sender?.userId ?? null,
       senderAgentId: sender?.agentId ?? null,
+      metadata: metadata ?? null,
     });
   });
 
@@ -541,6 +550,58 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
             conversationId: started.conversationId,
           }),
           true,
+        );
+      }),
+  );
+
+  it.effect(
+    "a GitHub line from before it said whose words it carries counts where it carries a reviewer's words, and not where it tells of a failed check",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const heardAfter = (line: GitHubLineMetadata) =>
+          Effect.gen(function* () {
+            const agent = yield* openAgent(starter, workspace, "Expire invitations.");
+            // Written as a line was before it said whose words it carries: its sender and what GitHub told.
+            yield* sendLine(
+              starter,
+              agent.conversationId,
+              1,
+              { kind: MESSAGE_SENDER.GITHUB },
+              MESSAGE_ROLE.USER,
+              line,
+            );
+            return yield* heardFromAnotherAccount({
+              userId: starter,
+              conversationId: agent.conversationId,
+            });
+          });
+        const told = {
+          channel: MESSAGE_CHANNEL.GITHUB,
+          repository: "acme/api",
+          number: 41,
+          url: "https://github.com/acme/api/pull/41",
+        } as const;
+
+        assert.equal(
+          yield* heardAfter({
+            ...told,
+            event: GITHUB_LINE_EVENT.REVIEW,
+            by: "octocat",
+            verdict: "changes_requested",
+            words: "Run the migration script on your Mac first.",
+          }),
+          true,
+        );
+        assert.equal(
+          yield* heardAfter({
+            ...told,
+            event: GITHUB_LINE_EVENT.CHECK_FAILED,
+            by: "github-actions[bot]",
+            sha: "0123abcd",
+          }),
+          false,
+          "a failed check carries no one's words",
         );
       }),
   );

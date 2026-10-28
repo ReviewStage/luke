@@ -271,7 +271,8 @@ const GITHUB_LINE_COMMENT = EffectSchema.Struct({
  * with its words, a failed check, or every check finished on a commit; the
  * repository, the pull request where GitHub named it, the page, and who
  * caused it, by their login. The words are the reviewer's, never the
- * developer's.
+ * developer's, and whether anyone but the agent's owner wrote them, which
+ * `run_on_mac` reads; absent from a line kept before it was said.
  */
 const GITHUB_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.GITHUB),
@@ -288,6 +289,7 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
     ),
   ),
   sha: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
