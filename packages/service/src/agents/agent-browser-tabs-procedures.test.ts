@@ -16,6 +16,7 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { task } from "@luke/database/schemas/task";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   AGENT_BROWSER_TAB_OPENER,
@@ -33,6 +34,7 @@ import {
 } from "@luke/features/live-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { eq } from "drizzle-orm";
 import { type Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -572,6 +574,32 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           tabsOf(yield* ask(request(reader, agentTabsPath(loose.id)))).map((tab) => tab.id),
           [kept.id, opened.id],
         );
+      }),
+  );
+
+  it.effect(
+    "a teammate who reaches an agent but not its task on its starter's own token lists, follows, and opens none of its tabs",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, taskId, coder, coderTab, ask } = yield* openTask;
+        yield* Database.use((db) =>
+          db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, taskId)),
+        );
+        yield* runAgent(coder);
+        const { peer, layer } = yield* runningBrowser;
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(
+          tabsOf(yield* ask(request(starter, agentTabsPath(coder.id)))).map((tab) => tab.id),
+          [coderTab.id],
+        );
+        assert.deepEqual(yield* ask(request(teammate, agentTabsPath(coder.id))), notFound);
+        assert.deepEqual((yield* liveTabsOf(teammate, { agentId: coder.id })).tabs, []);
+        assert.deepEqual(
+          yield* ask(agentOpenRequest(teammate, coder.id, "https://shop.test/login"), layer),
+          notFound,
+        );
+        assert.deepEqual(yield* openedAddresses(peer), []);
       }),
   );
 

@@ -162,6 +162,28 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
   );
 
   it.effect(
+    "an agent's tabs are kept from a teammate who reaches the agent but not its task on its starter's own token",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, taskId, agent } = yield* openTask;
+        yield* Database.use((db) =>
+          db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, taskId)),
+        );
+        const tab = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-1", "https://shop.test/"),
+        );
+        const place = { agentId: agent.id };
+
+        assert.deepEqual(
+          Option.getOrThrow(yield* listBrowserTabs(starter, place)).map(({ tab }) => tab.id),
+          [tab.id],
+        );
+        assert.ok(Option.isNone(yield* listBrowserTabs(teammate, place)));
+        assert.ok(Option.isNone(yield* readBrowserTab(teammate, place, tab.id)));
+      }),
+  );
+
+  it.effect(
     "a coding agent on its starter's own token keeps its tabs from a teammate who does not see it",
     () =>
       Effect.gen(function* () {

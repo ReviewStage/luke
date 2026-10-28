@@ -6,10 +6,10 @@
  * parent's. The agent's side, an
  * upsert as it acts on a tab, a close, and the list of its own tabs, is the
  * service's and reads no account, as the sandbox's terminal lease reads
- * none. A member's side reads through the rule every agent route keeps: a
- * coding agent's tabs are listed only to one who sees that agent
- * (`agentReachableBy`), whether it is on a task or on none, and any other
- * reads as none at all. A task's tabs are its agents' together, each read
+ * none. A member's side reads through the rule a whole agent is read by: a
+ * coding agent's tabs are listed only to one who sees that agent and, for
+ * one on a task, that task too (`agentVisibleTo`), so an agent on no task
+ * is reached by the agent alone, and any other reads as none at all. A task's tabs are its agents' together, each read
  * through the agent's own row (`coding_agent.task_id`), never the task the
  * tab's row was written under, so a tab follows its agent. Whether the member may drive the tab, which a coding
  * agent on its starter's own token keeps to the starter, is the service's to
@@ -43,12 +43,7 @@ import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
-import {
-  agentNoTeammatesOperator,
-  agentReachableBy,
-  agentSeenBy,
-  reachableTask,
-} from "./workspace-store.js";
+import { agentVisibleTo, reachableTask } from "./workspace-store.js";
 
 type BrowserTabEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
@@ -166,7 +161,8 @@ function agentOfPlace(place: BrowserTabsPlace): SQL {
 }
 
 /**
- * The tabs a member reaches in the place named: of an agent they see. A tab
+ * The tabs a member reaches in the place named: of an agent they see whole,
+ * its task included where it is on one (`agentVisibleTo`). A tab
  * no coding agent's conversation names, one a task's Luke opened while a
  * task had one, is listed to no one.
  */
@@ -185,7 +181,7 @@ function reachedTabs(userId: string, place: BrowserTabsPlace, tabId?: string) {
         and(
           agentOfPlace(place),
           tabId === undefined ? undefined : eq(agentBrowserTab.id, tabId),
-          agentReachableBy(userId),
+          agentVisibleTo(userId),
         ),
       )
       .orderBy(asc(agentBrowserTab.createdAt), asc(agentBrowserTab.id)),
@@ -224,7 +220,7 @@ const findReachableAgent = SqlSchema.findAll({
       db
         .select({ id: codingAgent.id })
         .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), agentReachableBy(userId))),
+        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId))),
     ),
 });
 
@@ -707,6 +703,6 @@ export function browserTabsLiveStatement(
         member,
         and(eq(member.organizationId, codingAgent.organizationId), eq(member.userId, userId)),
       )
-      .where(and(agentOfPlace(place), agentSeenBy(userId), agentNoTeammatesOperator(userId))),
+      .where(and(agentOfPlace(place), agentVisibleTo(userId))),
   );
 }

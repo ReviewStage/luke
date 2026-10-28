@@ -493,6 +493,7 @@ export const taskBrowserTabsLive = defineLiveQuery({
   reads: [
     agentBrowserTabSync,
     codingAgentSync,
+    taskSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -507,8 +508,8 @@ export const taskBrowserTabsLive = defineLiveQuery({
 });
 
 /**
- * One coding agent's Browser tabs, on a task or on none, woken by the
- * agent's own row. Note that a tab names no agent's topic, its own row
+ * One coding agent's Browser tabs, on a task or on none, its task read
+ * too where it is on one, woken by the agent's own row. Note that a tab names no agent's topic, its own row
  * holding only its agent's conversation, so a tab's move reaches a reader
  * on the watched look rather than by a wake.
  */
@@ -518,6 +519,7 @@ export const agentBrowserTabsLive = defineLiveQuery({
   reads: [
     agentBrowserTabSync,
     codingAgentSync,
+    taskSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,

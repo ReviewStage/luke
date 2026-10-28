@@ -24,10 +24,11 @@
  * and a browser that could not be reached as the upstream's refusal; the
  * address is never logged, a failure only by its kind.
  *
- * Who reaches a tab is the rule every agent route keeps: a member who sees
- * the coding agent whose browser holds it
- * (`@luke/database/models/agent-browser-tabs`), whether the path names the
- * agent or the task it is on; any other reads as not found. A desktop built
+ * Who reaches a tab is the rule a whole agent is read by: a member who sees
+ * the coding agent whose browser holds it and, for one on a task, that task
+ * too (`agentVisibleTo`, `@luke/database/models/agent-browser-tabs`),
+ * whether the path names the agent or the task; any other reads as not
+ * found. A desktop built
  * before the agent's paths still names the task, which answers as it did. Driving a tab acts in the agent's browser, so it is held to who
  * controls the agent (`controlsAgent`): its starter alone for one on the
  * starter's own GitHub token. The agents' own writes go through the store
@@ -43,6 +44,7 @@ import {
   recordMemberOpenedBrowserTab,
   takeOverBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
+import { readVisibleAgentWorkspace } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import {
@@ -150,8 +152,9 @@ const listedTabs = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The coding agent an open names, where the member reaches it and controls
- * it, and where a task is named, it is on that task, with the eve session
+ * The coding agent an open names, where the member sees it whole, its task
+ * included where it is on one (`agentVisibleTo`), and controls it, and
+ * where a task is named, it is on that task, with the eve session
  * its sandbox is tagged with; not found for an agent of another task, and
  * not ready for one that has run no sandbox yet.
  */
@@ -168,6 +171,9 @@ const openedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (taskId !== undefined && agent.taskId !== taskId) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
+  // Note that an agent on a task is opened in only by a member who reaches the task too, as its tabs are listed.
+  const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
+  if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   const [session] = yield* hostedStoreOrUnavailable(
