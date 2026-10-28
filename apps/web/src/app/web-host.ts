@@ -303,6 +303,7 @@ function portDependencies(
     // never opened and this table stays empty.
     pushes: new WindowPushes(),
     taskIssues: { host },
+    thisMacHost: { host },
     settings: {
       host,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),

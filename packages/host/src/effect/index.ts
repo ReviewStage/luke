@@ -34,6 +34,10 @@ export {
   AccountSource,
   AppIdentity,
   Environment,
+  HOST_LOGIN_ITEM_ACT,
+  HOST_LOGIN_ITEM_STATUS,
+  type HostLoginItemAct,
+  type HostLoginItemStatus,
   IdSource,
   type LocalAgentCommand,
   LocalAgentPlatform,
@@ -51,5 +55,7 @@ export {
   SignInConsent,
   StateRoot,
   TerminalSocket,
+  ThisMacHost,
+  type ThisMacHostSeam,
   VoiceSocket,
 } from "./seams.js";

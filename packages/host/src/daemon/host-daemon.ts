@@ -4,7 +4,7 @@ import { Effect, Layer } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { composeLocalAgents } from "../compose-local-agents.js";
 import { LocalAgentPlatform, type LocalAgentPlatformSeam, Reporter } from "../effect/seams.js";
-import type { HostDevice } from "./host-device.js";
+import { type HostDevice, markHostDeviceRefused } from "../host-device-record.js";
 import { hostServiceStanding } from "./host-standing.js";
 
 /**
@@ -17,7 +17,9 @@ import { hostServiceStanding } from "./host-standing.js";
  * Luke has refused the box (`host-standing.ts`), so a daemon below the
  * service's floor, or a removed box, rests rather than asks Luke every few
  * seconds. Once Luke refuses the box's secret, the host was removed, so the
- * daemon stops every runner it started and returns. Everything else is the
+ * daemon stops every runner it started, marks the box's record refused
+ * (`host-device-record.ts`), so neither it at its next start nor This Mac's
+ * app takes the box as never enrolled, and returns. Everything else is the
  * follower's own: its reads and claims retried in place when Luke is out of
  * reach, and the launches it kept settled as it next opens.
  */
@@ -30,7 +32,7 @@ export interface HostDaemonOptions {
   readonly platform: LocalAgentPlatformSeam;
 }
 
-/** The daemon run until Luke refuses the box's secret, every runner it started stopped before it returns. */
+/** The daemon run until Luke refuses the box's secret, every runner it started stopped and its record marked refused before it returns. */
 export const hostDaemon = Effect.fnUntraced(function* (options: HostDaemonOptions) {
   const { report } = yield* Reporter;
   const standing = yield* hostServiceStanding({
@@ -61,4 +63,5 @@ export const hostDaemon = Effect.fnUntraced(function* (options: HostDaemonOption
   );
   // Note that the follower lives in this scope alone, so closing it once the secret is refused stops every runner it started.
   yield* Effect.scoped(Effect.andThen(composer.lifetime, standing.secretRefused));
+  yield* Effect.ignore(markHostDeviceRefused(options.stateRoot, options.device.deviceSecret));
 });

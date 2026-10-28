@@ -23,6 +23,7 @@ import { settingsActsContract } from "./settings.js";
 import { taskIssueActsContract } from "./task-issues.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
+import { thisMacHostActsContract } from "./this-mac-host.js";
 import { updateActsContract } from "./updates.js";
 import { voiceRuntimeActsContract } from "./voice-runtime.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
@@ -65,6 +66,7 @@ export {
   TASK_ISSUE_ACT_KIND,
   TASKS_ACT_KIND,
   TERMINAL_ACT_KIND,
+  THIS_MAC_HOST_ACT_KIND,
   UPDATE_ACT_KIND,
   VOICE_RUNTIME_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
@@ -82,6 +84,11 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
+export {
+  THIS_MAC_HOST_STANDING,
+  type ThisMacHostStanding,
+  thisMacHostStandingSchema,
+} from "./this-mac-host.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
@@ -103,6 +110,7 @@ export const actContract = {
   ...tasksActsContract,
   ...taskIssueActsContract,
   ...terminalActsContract,
+  ...thisMacHostActsContract,
   ...updateActsContract,
   ...voiceRuntimeActsContract,
   ...windowSurfaceActsContract,

@@ -27,6 +27,7 @@ import { openTerminalSocketOverWs, openVoiceSocketOverWs } from "@luke/host/node
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
+import { thisMacHostLayer } from "../native/host-login-item";
 import type { DesktopConfig } from "./desktop-config";
 import { localAgentPlatform } from "./local-agent-platform";
 
@@ -59,6 +60,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
       LocalAgentPlatform,
       localAgentPlatform({ packaged: config.packaged, stateRoot: config.stateRoot }),
     ),
+    thisMacHostLayer({ packaged: config.packaged, stateRoot: config.stateRoot }),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Every sign-in's consent is a loopback on this Mac: the browser
     // hands the code back to a `node:http` listener on 127.0.0.1, the

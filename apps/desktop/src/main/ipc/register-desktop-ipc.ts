@@ -286,6 +286,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           },
         },
         taskIssues: { host: operator.host },
+        thisMacHost: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },
       platformProcedures,
