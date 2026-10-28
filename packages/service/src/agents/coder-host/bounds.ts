@@ -235,6 +235,28 @@ export const CODER = {
    * to write to the session the rewind cuts.
    */
   RUNNER_HALT: Duration.seconds(15),
+  /**
+   * How long a native agent's runner has to take a message written to its
+   * stdin (its ACCEPTED event) before it is read as deaf, ended, and
+   * launched again on the same session with the message
+   * (`runner-sessions.ts`'s `redelivered`). The runner takes a line as it
+   * reads it, whatever its turn is doing, and bounds the control requests a
+   * line waits behind (`@luke/agent-runner`'s `RUNNER_CONTROL`), so one
+   * still unaccepted this long reads nothing more of its stdin: thirty
+   * seconds, as a queue's visibility timeout gives a worker by default.
+   */
+  MESSAGE_ACCEPT: Duration.seconds(30),
+  /**
+   * How long a native agent's turn has to end on its Stop once the stop line
+   * is written (`runner-sessions.ts`'s `forcedStop`) before its runner is
+   * ended and the turn settled cancelled. A turn interrupted mid-step ends in
+   * a second or two, and the runner ends an interrupt its CLI never answers
+   * within `RUNNER_CONTROL.ANSWER_MS`, so one still running past this has a
+   * runner that will not end it: ask, wait briefly, then force, rather than
+   * leaving it running for the sweep's five minutes
+   * (`TURN_ABANDON.CANCEL_AFTER_MS`).
+   */
+  STOP_CONFIRM: Duration.seconds(10),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

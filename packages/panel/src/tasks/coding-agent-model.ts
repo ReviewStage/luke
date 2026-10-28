@@ -408,6 +408,15 @@ export function agentStillWriting(status: CodingAgentStatus): boolean {
 }
 
 /**
+ * Whether the agent's tab offers Stop: it runs, and its service has not said
+ * a Stop would stop nothing (`stoppable`), as after a Stop already taken, so
+ * a press is never dropped unheard. A starting agent has no turn yet to stop.
+ */
+export function offersStop(agent: Pick<CodingAgentSummary, "status" | "stoppable">): boolean {
+  return agent.status === CODING_AGENT_STATUS.RUNNING && agent.stoppable !== false;
+}
+
+/**
  * Where an agent stands as its tab's glyph wears it: working while it may
  * still write, failed once its turn failed, and at rest once it finished
  * or the developer stopped it, since a stop is the developer's own doing.

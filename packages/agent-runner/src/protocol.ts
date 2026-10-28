@@ -495,6 +495,20 @@ export const RUNNER_RELEASE = {
   IDLE_CAP_MS: 60 * 60 * 1_000,
 } as const;
 
+/**
+ * How long a launch waits on the CLI's answer to one control request (a
+ * model change, an interrupt). The input loop takes Luke's lines one at a
+ * time and every message goes behind a model line, so a request the CLI
+ * never answers would hold every later message and Stop; past this, a model
+ * change is let go and an interrupt ends the launch as `STOPPED`. The CLI
+ * answers one within a second, and five leaves a message's model line and
+ * its own hand-off well inside Luke's deadline for it
+ * (`CODER.MESSAGE_ACCEPT`, thirty seconds).
+ */
+export const RUNNER_CONTROL = {
+  ANSWER_MS: 5 * 1_000,
+} as const;
+
 /** The END event; `detail` is the CLI's failure, with the launch's secrets taken out, where it failed, and `wakeups` what a released wait left to deliver. */
 export interface RunnerEndEvent {
   readonly type: typeof RUNNER_EVENT.END;

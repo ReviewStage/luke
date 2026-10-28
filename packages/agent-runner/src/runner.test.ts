@@ -132,9 +132,10 @@ function launch(
   proc: string = UNREAD_PROC,
   chain: readonly string[] = [],
   uid?: number,
+  answering = true,
 ) {
   return Effect.gen(function* () {
-    const cli = yield* fakeClaudeCode(steps, chain);
+    const cli = yield* fakeClaudeCode(steps, chain, answering);
     const stdin = yield* Queue.unbounded<string, Cause.Done>();
     const writeText = (text: string) => Queue.offer(stdin, text);
     const write = (line: RunnerConfig | InputLine) => writeText(JSON.stringify(line));
@@ -259,6 +260,39 @@ it.effect(
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.STOPPED,
       });
+    }),
+);
+
+it.effect(
+  "takes Luke's later lines past a model change the CLI never answers, and ends on a Stop it never answers",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], STOPPED_COMMAND);
+      const { cli, prompted, write, run } = yield* launch(
+        STOPPED_TURN,
+        luke,
+        ENV,
+        UNREAD_PROC,
+        [],
+        undefined,
+        false,
+      );
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+      yield* Queue.take(prompted);
+      yield* write({ type: INPUT_LINE.MODEL, model: "claude-opus", effort: EFFORT.LOW });
+      yield* write({
+        type: INPUT_LINE.MESSAGE,
+        content: [{ type: "text", text: "And then stop." }],
+      });
+      yield* write({ type: INPUT_LINE.STOP });
+
+      assert.deepEqual(yield* settled(run), Exit.succeed(RUNNER_END.STOPPED));
+      assert.deepEqual(cli.models, ["claude-opus"]);
+      assert.equal(cli.prompts.length, 2);
+      assert.equal(cli.interrupts, 1);
+      assert.equal(cli.closed, true);
     }),
 );
 

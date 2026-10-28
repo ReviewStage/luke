@@ -835,6 +835,15 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
+   * False while the agent reads running but a Stop has nothing to stop
+   * (`turnStoppable`): its turn already stopped, with a line written since
+   * awaiting the turn it opens, or a line awaiting its turn beside none
+   * running. Its tab offers Stop only where this is not false, so a press is
+   * never taken and silently dropped. Absent otherwise, and from a service
+   * older than it.
+   */
+  stoppable: EffectSchema.optionalKey(EffectSchema.Literal(false)),
+  /**
    * What the agent was handed as its first message, so its tab draws a
    * plan as the plan's card, a task as the developer's own message, and,
    * for an agent started blank, its first line as any other line. Absent
