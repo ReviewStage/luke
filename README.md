@@ -16,7 +16,7 @@ Luke is a macOS app for planning a change with coding agents, handing it to
 them to build, and reviewing what they ship.
 
 **Status:** an early MVP. It runs on Apple silicon Macs with macOS 14 or newer,
-and nowhere else yet. It is free.
+and in a browser at [tryluke.dev/app](https://tryluke.dev/app). It is free.
 
 You describe the change to a coding agent, typed or dictated. It reads the
 repository, asks about what you left open, and writes the plan as a design doc
@@ -85,8 +85,8 @@ itself.
 
 ## Where your code and data go
 
-Luke is a desktop app backed by a hosted service, and both are in this
-repository.
+Luke is a desktop app and a web app backed by a hosted service, and all three
+are in this repository.
 
 - **Your code** is read in a [Vercel Sandbox](https://vercel.com/docs/sandbox),
   not on your Mac. The GitHub App mints a token for that one repository, and
