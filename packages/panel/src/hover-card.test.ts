@@ -12,8 +12,8 @@ import { TaskCard } from "./desktop/task-card.js";
 import { GLYPH_STATE } from "./state-glyph.js";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref.js";
 import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card.js";
-import { ChangesCard } from "./tasks/changes-card.js";
 import { subagentActor } from "./tasks/coding-agent-model.js";
+import { PullRequestCard } from "./tasks/pull-request-card.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -22,7 +22,7 @@ import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
  * hover-card.test.ts -- every hover card heads itself alike: a task's, a
- * skill's, an agent tab's, and a Changes tab's each name their subject in
+ * skill's, an agent tab's, and a pull request's each name their subject in
  * the one head, with the line under the name and the corner in the same
  * places.
  */
@@ -156,7 +156,7 @@ test("a working agent's card says only how long its run has gone at its corner, 
   );
 });
 
-test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {
+test("a plan's, a skill's, an agent tab's, and a pull request's cards each name their subject in the one head, its line and corner in the same places", async () => {
   const task = drawn(
     createElement(TaskCard, {
       task: { ...SUMMARY, number: 42 },
@@ -198,42 +198,46 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   );
   assert.match(agentHead.sub ?? "", /High/u, "the model and effort stand under the name");
 
-  const changes = drawn(
-    createElement(ChangesCard, {
-      subject: agentSubject(
-        {
-          agents: [
-            {
-              id: AGENT,
-              planId: TASK,
-              model: "anthropic/claude-opus-5.5",
-              effort: "high",
-              title: "Invite flow",
-              createdAt: 1,
-              status: AGENT_STATUS.COMPLETED,
-              turnId: null,
-            },
-          ],
-          archived: [],
-          models: [],
-          me: undefined,
-          pullRequests: new Map(),
-        },
-        AGENT,
-        NOTHING_HELD,
-        false,
-      ),
-      models: [],
+  // Note that the pull request's card wears its mark as its glyph and keys itself by its repository, the agent whose it is standing on a row under the head rather than in it.
+  const pullRequest = drawn(
+    createElement(PullRequestCard, {
       pullRequest: PULL_REQUEST,
-      people: undefined,
-      onOpenAgent: () => undefined,
+      lines: PULL_REQUEST,
+      files: PULL_REQUEST.changedFiles,
+      agent: {
+        subject: agentSubject(
+          {
+            agents: [
+              {
+                id: AGENT,
+                planId: TASK,
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                title: "Invite flow",
+                createdAt: 1,
+                status: AGENT_STATUS.COMPLETED,
+                turnId: null,
+              },
+            ],
+            archived: [],
+            models: [],
+            me: undefined,
+            pullRequests: new Map(),
+          },
+          AGENT,
+          NOTHING_HELD,
+          false,
+        ),
+        models: [],
+        onOpen: () => undefined,
+      },
     }),
   );
-  assert.deepEqual(headOf(changes), {
-    glyph: false,
+  assert.deepEqual(headOf(pullRequest), {
+    glyph: true,
     name: "Expire invitations",
-    sub: "Invite flow",
-    corner: "#42",
+    sub: "acme/relay#42 · Open",
+    corner: undefined,
   });
 
   const skills: SkillSource = () =>

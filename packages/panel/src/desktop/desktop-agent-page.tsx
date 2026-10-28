@@ -46,10 +46,10 @@ import { MemberDirectory } from "../member-directory.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { peopleOf } from "../tasks/changes-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
 import { UNREAD_FILE } from "../tasks/inbox-code-card.js";
 import { agentHolder, inboxAgentOf, taskHolder } from "../tasks/inbox-model.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
