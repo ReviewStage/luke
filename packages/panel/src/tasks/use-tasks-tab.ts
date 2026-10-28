@@ -1082,6 +1082,9 @@ function backNote(workspace: string): string {
 /** Why a delete the service did not carry was refused. */
 const DELETE_REFUSED_NOTE = "The task could not be deleted. Try again.";
 
+/** What leads why an agent's start was refused where its card cannot open again, the developer having gone on to New task or another start. */
+const START_REFUSED_LEAD = "That task did not start.";
+
 /** What a delete the service did not carry answers, so the task stays and says why. */
 const DELETE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
@@ -1224,6 +1227,10 @@ export function useTasksTab(input: {
   const [startingTask, setStartingTask] = useState<
     { readonly line: SentLine; readonly navigation: number } | undefined
   >(undefined);
+  // Whether New task stands now, and the key of the agent's start pressed last, which a refusal answered late is told against.
+  const newTaskStands = useRef(false);
+  newTaskStands.current = newTaskAsk !== undefined;
+  const lastStart = useRef<string | undefined>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<TaskAsk | undefined>(undefined);
   const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
@@ -2604,7 +2611,9 @@ export function useTasksTab(input: {
   ): Promise<Failure | undefined> => {
     // An agent's start opens on its task's page at once, its words drawn as
     // the agent's first line, rather than holding the card until the
-    // service answers; a refusal opens the card again where it was left.
+    // service answers; a refusal opens the card again where it was left,
+    // unless New task was opened again or another start pressed since, when
+    // a toast says why instead.
     const { handed, card } = from;
     const standingBefore = standIn;
     const historyBefore = historyFor;
@@ -2620,6 +2629,7 @@ export function useTasksTab(input: {
     // Note that a start's page is let go only while it is still this start's, because another start may have replaced it.
     const letGoOfPage = () => setStartingTask((now) => (now?.line === line ? undefined : now));
     if (line !== undefined) {
+      lastStart.current = handed?.idempotencyKey;
       setStartingTask({ line, navigation: pressedAt });
       setNewTaskAsk(undefined);
       setStandIn(undefined);
@@ -2628,6 +2638,16 @@ export function useTasksTab(input: {
     const refusedWith = (note: Failure): Failure => {
       if (handed !== undefined) {
         letGoOfPage();
+        // Note that a refusal answered after New task was opened again, or another start pressed,
+        // says why in a toast rather than taking the card or the page they stand on.
+        if (newTaskStands.current || lastStart.current !== handed.idempotencyKey) {
+          toast({
+            words: `${START_REFUSED_LEAD} ${note.text}`,
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+          });
+          return note;
+        }
         // Note that what stood before the press comes back only where the developer went nowhere since.
         if (navigations.current === pressedAt) {
           setStandIn((now) => now ?? standingBefore);
