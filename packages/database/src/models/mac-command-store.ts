@@ -244,7 +244,9 @@ const startedAgent = alias(codingAgent, "started_agent");
  * conversation is its owner's alone: anyone else's words reach it tagged,
  * and its untagged lines are the opening eve's relay wrote before the
  * service sent it as Luke's (`coder-host/operator.ts`) and its owner's own
- * from before senders were kept.
+ * from before senders were kept. A line its hand-over withdrew counts as
+ * well, unlike in every read that shows a line, because eve may still hand
+ * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
  */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),

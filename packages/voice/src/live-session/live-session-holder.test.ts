@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import {
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   VOICE_SERVICE_FRAME,
 } from "@luke/features";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
@@ -112,10 +111,6 @@ interface Fixture {
   activity: TaskActivityFrame[];
   /** The service's activity frame, as the source's door would deliver it. */
   tellActivity(activity: TaskActivityFrame): void;
-  /** Every code frame the holder told its caller, in order. */
-  code: TaskCodeFrame[];
-  /** The service's code frame, as the source's door would deliver it. */
-  tellCode(code: TaskCodeFrame): void;
   /** The service's word that Luke is ending the call, as the source's door would deliver it. */
   tellEnding(ending: TaskCallEndingFrame): void;
   /** Every call the holder told its caller ended, in order. */
@@ -137,8 +132,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const reports: boolean[] = [];
     const activity: TaskActivityFrame[] = [];
     let activityListener: ((activity: TaskActivityFrame) => void) | undefined;
-    const code: TaskCodeFrame[] = [];
-    let codeListener: ((code: TaskCodeFrame) => void) | undefined;
     let endingListener: ((ending: TaskCallEndingFrame) => void) | undefined;
     const callsEnded: VoiceCallAbout[] = [];
     const typed: string[] = [];
@@ -176,9 +169,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   onTaskActivity: (listener: (activity: TaskActivityFrame) => void) => {
                     activityListener = listener;
                   },
-                  onTaskCode: (listener: (code: TaskCodeFrame) => void) => {
-                    codeListener = listener;
-                  },
                   onTaskCallEnding: (listener: (ending: TaskCallEndingFrame) => void) => {
                     endingListener = listener;
                   },
@@ -197,9 +187,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       emit: (change) => changes.push(change),
       onTaskActivity: (word) => {
         activity.push(word);
-      },
-      onTaskCode: (frame) => {
-        code.push(frame);
       },
       onTaskCallEnded: (about) => {
         callsEnded.push(about);
@@ -230,10 +217,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       activity,
       tellActivity: (word) => {
         activityListener?.(word);
-      },
-      code,
-      tellCode: (frame) => {
-        codeListener?.(frame);
       },
       tellEnding: (frame) => {
         endingListener?.(frame);
@@ -331,14 +314,6 @@ it.effect(
       assert.deepEqual(f.tasks, [undefined]);
       f.sidebands[0]?.started(created.sessionId);
       yield* settle();
-      const shown = { callId: "call-1", turnId: "turn-1", shownAt: 1, agentId: TASKLESS_AGENT };
-      const code = {
-        ref: { path: "src/app.ts", startLine: 1, endLine: 2 },
-        repository: "acme/app",
-        firstLine: 1,
-        lineCount: 2,
-        lines: ["one", "two"],
-      };
       f.tellActivity({
         type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
         agentId: TASKLESS_AGENT,
@@ -354,21 +329,9 @@ it.effect(
         planId: INVITES_TASK,
         notes: true,
       });
-      f.tellCode({ type: VOICE_SERVICE_FRAME.TASK_CODE, ...shown, code });
-      f.tellCode({
-        type: VOICE_SERVICE_FRAME.TASK_CODE,
-        ...shown,
-        agentId: INVITES_AGENT,
-        callId: "call-2",
-        code,
-      });
       assert.deepEqual(
         f.activity.map((word) => word.agentId),
         [TASKLESS_AGENT],
-      );
-      assert.deepEqual(
-        f.code.map((frame) => frame.callId),
-        ["call-1"],
       );
       f.sidebands[0]?.closedBy("close_requested", 3);
       yield* settle();

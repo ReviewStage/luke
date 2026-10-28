@@ -1,7 +1,7 @@
 import type { ModelUsage } from "@luke/runtime/vocabulary";
 
 /**
- * A developer ask as the brain owns it from acceptance to its end. The record
+ * A developer ask as the turn run owns it from acceptance to its end. The record
  * outlives the call that asked, the renderer that showed it, and the launch
  * that ran it: a submission is acknowledged only once its record is on disk,
  * a wait answers with the record as it stands rather than abandoning the run,
@@ -9,7 +9,7 @@ import type { ModelUsage } from "@luke/runtime/vocabulary";
  * than resuming an action it cannot know the state of.
  */
 
-export const BRAIN_REQUEST_STATUS = {
+export const RUN_STATUS = {
   QUEUED: "queued",
   RUNNING: "running",
   SUCCEEDED: "succeeded",
@@ -19,14 +19,14 @@ export const BRAIN_REQUEST_STATUS = {
   INTERRUPTED: "interrupted",
 } as const;
 
-export type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUEST_STATUS];
+export type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS];
 
 /**
  * Why a run ended without a reply, as a fixed word rather than a provider's
  * sentence: the host words each one for the thread, so no raw model or
  * network output reaches the developer's record.
  */
-export const BRAIN_REQUEST_FAILURE = {
+export const TURN_FAILURE = {
   /** The model did not answer, or answered nothing readable. */
   MODEL: "model",
   /** A checkpoint could not be written, so the run stopped before or after an action. */
@@ -55,8 +55,7 @@ export const BRAIN_REQUEST_FAILURE = {
   SESSION_ENDED: "session_ended",
 } as const;
 
-export type BrainRequestFailure =
-  (typeof BRAIN_REQUEST_FAILURE)[keyof typeof BRAIN_REQUEST_FAILURE];
+export type TurnFailure = (typeof TURN_FAILURE)[keyof typeof TURN_FAILURE];
 
 /**
  * What a run's inferences cost, summed over every answer the run was given
@@ -67,7 +66,7 @@ export type BrainRequestFailure =
  * Beside them, how much of the input was written to the prefix cache, which
  * only some providers say, so it stands only once an answer has said it.
  */
-export interface BrainRunUsage {
+export interface RunUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
@@ -76,12 +75,12 @@ export interface BrainRunUsage {
 }
 
 /** One model's share of a run's usage: the counts of every step that ran on it, under the catalog id the step ran under. */
-export interface BrainModelUsage extends BrainRunUsage {
+export interface RunModelUsage extends RunUsage {
   readonly model: string;
 }
 
 /** One answer's counts added onto a run's so far (nothing, before its first answer), each missing count counting as nothing. */
-export function addModelUsage(total: BrainRunUsage | undefined, usage: ModelUsage): BrainRunUsage {
+export function addModelUsage(total: RunUsage | undefined, usage: ModelUsage): RunUsage {
   return {
     inputTokens: (total?.inputTokens ?? 0) + (usage.inputTokens ?? 0),
     outputTokens: (total?.outputTokens ?? 0) + (usage.outputTokens ?? 0),

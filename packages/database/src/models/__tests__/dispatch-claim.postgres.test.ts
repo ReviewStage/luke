@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@luke/features";
-import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -75,10 +75,10 @@ const startedTurn = (target: ConversationTarget) =>
     yield* writer.consumeAll(target, [
       {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       },
     ]);
@@ -161,7 +161,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const meanwhile = yield* heldMeanwhile;
         const journal = yield* onAnother(
           writer.consumeAll(target, [
-            { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
+            { ...turn, kind: RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
           ]),
         );
         const sendStillPending = sending.pollUnsafe() === undefined;
@@ -200,7 +200,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const meanwhile = yield* heldMeanwhile;
         const journal = yield* onAnother(
           writer.consumeAll(target, [
-            { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
+            { ...turn, kind: RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
           ]),
         );
         const askStillPending = dispatching.pollUnsafe() === undefined;

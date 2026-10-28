@@ -101,6 +101,7 @@ import {
 } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useInboxItemDraft } from "../composer-drafts.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
@@ -120,7 +121,7 @@ import {
   useMenuAsk,
 } from "../desktop/phone-head.js";
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
-import { useTabActions } from "../desktop/strip-tabs.js";
+import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
@@ -421,6 +422,7 @@ export function InboxItemRow({
   listed,
   chosen,
   open = chosen,
+  current = chosen,
   now,
   models,
   readerId,
@@ -440,6 +442,8 @@ export function InboxItemRow({
   chosen: boolean;
   /** Whether the item's box stands beside the list, so its draft is in sight and unmarked: the chosen item's unless said, and none while the list stands alone. */
   open?: boolean;
+  /** Whether the row is drawn as the open one: the chosen item's unless said, and none where no item stands open on a screen with no hover, whose open row shows its acts in its time's place. */
+  current?: boolean;
   now: number;
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
@@ -591,7 +595,7 @@ export function InboxItemRow({
                   onAct: () => onMark(listed, !unread),
                 }
           }
-          current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
+          current={current ? LIST_ROW_CURRENT.PAGE : undefined}
           unread={unread}
           muted={muted}
           hint={{ Hint: RowHint, label: title }}
@@ -1178,21 +1182,22 @@ function ListHead({
   // already names it; its search field stands over the list as on every page.
   const phone = usePhoneRoom();
   const handed = head.tab === true && phone;
-  useTabActions(
-    handed
-      ? [
-          [
-            {
-              label: VIEW_OPTIONS,
-              icon: <SlidersHorizontalIcon />,
-              opens: true,
-              detail: title,
-              onAsk: asked.onAsk,
-            },
-          ],
-        ]
-      : undefined,
-  );
+  const linkGroups = head.tab === true && head.link !== undefined ? [[head.link]] : [];
+  const viewGroups: TabActionGroups = handed
+    ? [
+        [
+          {
+            label: VIEW_OPTIONS,
+            icon: <SlidersHorizontalIcon />,
+            opens: true,
+            detail: title,
+            onAsk: asked.onAsk,
+          },
+        ],
+      ]
+    : [];
+  const tabGroups = [...linkGroups, ...viewGroups];
+  useTabActions(tabGroups.length === 0 ? undefined : tabGroups);
   if (handed) {
     return (
       <>
@@ -1422,6 +1427,8 @@ export interface InboxListHead {
    * search under where the head stood.
    */
   readonly tab?: boolean | undefined;
+  /** Copy link, the open item's, which a task's own Inbox tab hands its ⋯ first (`useTabActions`); none while no item is open, since a link names no task's Inbox whole. */
+  readonly link?: MenuAction | undefined;
   /** The channel the window's Inbox is narrowed to, which names its head; none where it lists every channel. */
   readonly channel?: InboxChannelHead | undefined;
 }
@@ -1594,6 +1601,8 @@ export function InboxList({
   const unpick = () => setPicked(new Set());
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
+  // Note that a finger's list standing alone marks no row open, since no item is, and the chosen row would show its acts in its time's place at rest (`list-row.css`).
+  const marked = !useCoarsePointer() || columns !== INBOX_COLUMNS.LIST;
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // Note that the rows of every group are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
@@ -1622,6 +1631,7 @@ export function InboxList({
       listed={listed}
       chosen={listed.item.id === chosen}
       open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
+      current={listed.item.id === chosen && marked}
       now={now}
       models={models}
       readerId={readerId}

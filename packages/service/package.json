@@ -203,7 +203,6 @@
     "./tasks/tasks-procedures": "./src/tasks/tasks-procedures.js",
     "./tasks/task-skills": "./src/tasks/task-skills.js",
     "./tasks/task-tree": "./src/tasks/task-tree.js",
-    "./tasks/task-work-store": "./src/tasks/task-work-store.js",
     "./tasks/tasks-app": "./src/tasks/tasks-app.js",
     "./tasks/shown-file": "./src/tasks/shown-file.js",
     "./providers/model-catalog": "./src/providers/model-catalog.js",

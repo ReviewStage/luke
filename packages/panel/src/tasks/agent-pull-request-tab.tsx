@@ -10,6 +10,7 @@ import {
   type CheckState,
   type CheckSummary,
   CODING_AGENT_STATUS,
+  CONVERSATION_ENTRY,
   type CodingAgentOverviewChecks,
   type CodingAgentOverviewConversation,
   type CodingAgentOverviewPullRequest,
@@ -26,7 +27,6 @@ import {
   type ReactionGroup,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINK_PLACE,
   type LinkPlace,
@@ -80,7 +80,6 @@ import {
   OneLine,
   PAGE_FRAME,
   PaneBar,
-  ProviderMark,
   SCROLL_FADE,
   SCROLL_FADE_INSET,
   SCROLL_GUTTER,
@@ -135,6 +134,8 @@ import {
 import { ACTOR_SIZE, ActorMark, ActorRef, BotBadge, commentAuthor } from "../actor-ref.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
+import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import {
@@ -512,11 +513,7 @@ function durationOf(check: PullRequestCheck): string | undefined {
 /** What the side panel's toolbar ⋯ offers on the pull request: it opened on GitHub, and the page read again, dimmed while a read is out, which a refresh would only repeat. */
 function pullRequestActions(url: string, reading: boolean, onRefresh: () => void): MenuAction[] {
   return [
-    {
-      label: "Open on GitHub",
-      icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-      onSelect: () => appPlatform().openGitHub(url),
-    },
+    commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), false),
     {
       label: "Refresh",
       icon: <RotateCwIcon aria-hidden="true" />,
@@ -995,9 +992,9 @@ function useThreadJump(
 }
 
 /**
- * A thread's ⋯ at the end of its head: View in the tab's other view, where
- * the thread is found by its id, and Copy link, the thread's Luke link in
- * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`); nothing where
+ * A thread's ⋯ at the end of its head: Copy link, the thread's Luke link in
+ * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`), then View in
+ * the tab's other view, where the thread is found by its id; nothing where
  * the thread offers neither.
  */
 function ThreadMenu({
@@ -1017,8 +1014,8 @@ function ThreadMenu({
   const jump = useThreadJump(thread, there);
   const place = jumps?.place(thread, here);
   const copy = place === undefined ? undefined : copyLink(place);
-  const actions: MenuAction[] = [
-    ...(jump === undefined
+  const views: MenuAction[] =
+    jump === undefined
       ? []
       : [
           there === PULL_REQUEST_THREAD_VIEW.FILES
@@ -1032,16 +1029,49 @@ function ThreadMenu({
                 icon: <MessagesSquareIcon aria-hidden="true" />,
                 onSelect: jump,
               },
-        ]),
-    ...(copy === undefined ? [] : [copy]),
-  ];
-  if (actions.length === 0) return null;
+        ];
+  const groups = [copy === undefined ? [] : [copy], views].filter((group) => group.length > 0);
+  if (groups.length === 0) return null;
   const label = moreLabel(THREAD_REVEAL_WORDS.THING);
   return (
     <span className="pull-request-thread-menu ml-auto flex">
       <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+        <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
+      )}
+    </span>
+  );
+}
+
+/** What the ⋯ of a comment, a review, and the description are called. */
+const ENTRY_THING = { COMMENT: "Comment", REVIEW: "Review", DESCRIPTION: "Description" } as const;
+
+type EntryThing = (typeof ENTRY_THING)[keyof typeof ENTRY_THING];
+
+/**
+ * The ⋯ of a comment, a review, or the description: Copy GitHub link, its
+ * page's address on GitHub, then Open on GitHub. Note that it offers no
+ * Copy link, because no Luke link names one of them (`link-grammar.ts`'s
+ * `PULL_REQUEST_THREAD` names a review thread alone), and a GitHub address
+ * is never called a link of Luke's.
+ */
+function GitHubEntryMenu({ thing, url }: { thing: EntryThing; url: string }): React.JSX.Element {
+  const menu = useMenu(true);
+  const copy = useCopyToast();
+  const groups = [
+    [commandAction(PANEL_COMMAND.COPY_GITHUB_LINK, () => copy(url, LINK_COPY.COPIED), false)],
+    [commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), false)],
+  ];
+  return (
+    <span className="pull-request-entry-menu flex">
+      <MoreButton thing={thing} {...menu.trigger()} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={moreLabel(thing)}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
       )}
     </span>
   );
@@ -1434,7 +1464,7 @@ function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** One comment or review: who, where a review left them, and when; then their words, and the review threads a review started. */
+/** One comment or review: who, where a review left them, when, and its ⋯; then their words, and the review threads a review started. */
 function EntryCard({
   entry,
   now,
@@ -1460,7 +1490,17 @@ function EntryCard({
         nameRef={<ActorRef actor={writer} nameOnly />}
         at={entry.at}
         now={now}
-        trailing={entry.state === undefined ? undefined : <ReviewStanding state={entry.state} />}
+        trailing={
+          <>
+            {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
+            <GitHubEntryMenu
+              thing={
+                entry.kind === CONVERSATION_ENTRY.REVIEW ? ENTRY_THING.REVIEW : ENTRY_THING.COMMENT
+              }
+              url={entry.url}
+            />
+          </>
+        }
       >
         <EntryWords entry={entry} picture={picture} />
         <Reactions reactions={entry.reactions} subject={entry.subject} />
@@ -1797,7 +1837,15 @@ function DescriptionPart({
       </div>
     );
   return (
-    <Section title="Description" fold={fold}>
+    <Section
+      title="Description"
+      fold={fold}
+      end={
+        part.kind === PART.LANDED ? (
+          <GitHubEntryMenu thing={ENTRY_THING.DESCRIPTION} url={part.value.url} />
+        ) : undefined
+      }
+    >
       {part.kind === PART.PENDING ? (
         <PartSkeleton
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}

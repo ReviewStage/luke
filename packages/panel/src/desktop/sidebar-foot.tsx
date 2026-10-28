@@ -23,6 +23,7 @@ import {
   ProviderMark,
   riseAbove,
   SidebarAccountRow,
+  SidebarFoot as SidebarFootBox,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -336,18 +337,25 @@ export function SidebarFoot({
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
   return (
-    <SidebarAccountRow>
-      <AccountMenu account={account} shown={shown} onSettings={onSettings} onSignOut={onSignOut} />
-      <OfflineMark />
-      <SidebarUpdate updates={updates} />
-      <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
-        <IconButton
-          icon={<GearIcon />}
-          label="Settings"
-          aria-current={settingsOpen ? "page" : undefined}
-          onClick={onSettings}
+    <SidebarFootBox>
+      <SidebarAccountRow>
+        <AccountMenu
+          account={account}
+          shown={shown}
+          onSettings={onSettings}
+          onSignOut={onSignOut}
         />
-      </Tooltip>
-    </SidebarAccountRow>
+        <OfflineMark />
+        <SidebarUpdate updates={updates} />
+        <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
+          <IconButton
+            icon={<GearIcon />}
+            label="Settings"
+            aria-current={settingsOpen ? "page" : undefined}
+            onClick={onSettings}
+          />
+        </Tooltip>
+      </SidebarAccountRow>
+    </SidebarFootBox>
   );
 }

@@ -1,15 +1,15 @@
 import { queryBuilder } from "@luke/database/core/query";
 import { newestAwaitingLineAt } from "@luke/database/models/message-reads";
 import { messages, turns } from "@luke/database/schemas/storage";
-import { UI_PART_TYPE } from "@luke/features/brain";
 import {
   CODING_AGENT_FAILURE,
   CODING_AGENT_KIND,
   OPERATOR_QUIET_REPLY,
 } from "@luke/features/coding-agent-wire";
+import { UI_PART_TYPE } from "@luke/features/turn-run";
 import { and, desc, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { FAILURE_WORDS } from "../agents/coder-host/status.js";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
+import { TURN_FAILURE, TURN_STATUS } from "../core.js";
 
 /**
  * agent-standing.ts -- what a coding agent's status is read from, written for Neon Realtime: its newest turn, when the newest line of the developer's awaiting its turn was written, and why its newest turn failed.
@@ -94,7 +94,7 @@ export function quietTurnOf(
 
 /** Whether the newest turn failed because its session ended for good, which leaves every line awaiting nothing; null where no turn stands. */
 export function sessionEndedOf(latest: LatestTurn): SQL<boolean | null> {
-  return sql<boolean | null>`${latest.failure} = ${BRAIN_REQUEST_FAILURE.SESSION_ENDED}`;
+  return sql<boolean | null>`${latest.failure} = ${TURN_FAILURE.SESSION_ENDED}`;
 }
 
 /**
@@ -117,9 +117,9 @@ export function failureWordOf(latest: LatestTurn): SQL<string | null> {
   return sql<string | null>`case
     when ${latest.id} is null then ${CODING_AGENT_FAILURE.NOT_STARTED}
     when ${latest.status} <> ${TURN_STATUS.FAILED} then null
-    when ${latest.failure} = ${BRAIN_REQUEST_FAILURE.ABANDONED} then ${CODING_AGENT_FAILURE.ABANDONED}
-    when ${latest.failure} = ${BRAIN_REQUEST_FAILURE.SESSION_ENDED} then ${CODING_AGENT_FAILURE.SESSION_ENDED}
-    when ${latest.failure} is distinct from ${BRAIN_REQUEST_FAILURE.MODEL} then ${CODING_AGENT_FAILURE.OTHER}
+    when ${latest.failure} = ${TURN_FAILURE.ABANDONED} then ${CODING_AGENT_FAILURE.ABANDONED}
+    when ${latest.failure} = ${TURN_FAILURE.SESSION_ENDED} then ${CODING_AGENT_FAILURE.SESSION_ENDED}
+    when ${latest.failure} is distinct from ${TURN_FAILURE.MODEL} then ${CODING_AGENT_FAILURE.OTHER}
     ${sql.join(named, sql` `)}
     else ${CODING_AGENT_FAILURE.MODEL}
   end`;

@@ -73,7 +73,6 @@ function draw(task: Task): void {
         registry,
         createElement(PlanBody, {
           task,
-          live: true,
           reader: { readerId: DEAN.userId },
           onEdit: (request) => NEVER_SAVED(request),
           onShowHistory: () => undefined,

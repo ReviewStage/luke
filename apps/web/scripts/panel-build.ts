@@ -25,10 +25,7 @@ import { PANEL_ASSET_BASE } from "../src/app/web-address";
 const LUCIDE_WHOLE_ID = "\0lucide-whole";
 
 // What each kind of static file is served as in development.
-const CONTENT_TYPES = new Map([
-  [".png", "image/png"],
-  [".m4a", "audio/mp4"],
-]);
+const CONTENT_TYPES = new Map([[".png", "image/png"]]);
 
 // A dynamic `import("lucide-react")`, as the icon picker spells it. Note that
 // Rollup's resolver is never told whether an import is dynamic, so the call

@@ -93,7 +93,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
     reveal: undefined,
     ...links,
   };
-  act(() => root.render(createElement(PlanBody, { task: TASK, live: false, sectionLinks })));
+  act(() => root.render(createElement(PlanBody, { task: TASK, sectionLinks })));
   return { container, opened };
 }
 
@@ -151,7 +151,7 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   const root = roots[0];
   assert.ok(root);
   const render = (sectionLinks: SectionLinks) =>
-    act(() => root.render(createElement(PlanBody, { task: TASK, live: false, sectionLinks })));
+    act(() => root.render(createElement(PlanBody, { task: TASK, sectionLinks })));
   const onOpen = () => undefined;
 
   const revealed: number[] = [];
@@ -186,7 +186,7 @@ test("off a plan's own page a mention stays its words", () => {
   const root = createRoot(container);
   roots.push(root);
 
-  act(() => root.render(createElement(PlanBody, { task: TASK, live: false })));
+  act(() => root.render(createElement(PlanBody, { task: TASK })));
 
   assert.equal(container.querySelector("[data-mention-ref]"), null);
   assert.equal(container.querySelector(".plan-unit-more"), null);
@@ -212,7 +212,6 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
     root.render(
       createElement(PlanBody, {
         task,
-        live: false,
         sectionLinks: {
           workspace: WORKSPACE,
           onOpen: (mention) => opened.push(mention),
@@ -242,7 +241,6 @@ function drawnEditable(): HTMLElement {
         unlandedBundles(),
         createElement(PlanBody, {
           task: TASK,
-          live: false,
           onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
           sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
         }),
@@ -312,7 +310,6 @@ function drawnFiles(
     root.render(
       createElement(PlanBody, {
         task,
-        live: false,
         sectionLinks: {
           workspace: WORKSPACE,
           onOpen: () => undefined,
@@ -382,7 +379,6 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
     root.render(
       createElement(PlanBody, {
         task,
-        live: false,
         sectionLinks: {
           workspace: WORKSPACE,
           onOpen: (mention) => opened.push(mention),
@@ -427,7 +423,6 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
     root.render(
       createElement(PlanBody, {
         task: FILES_TASK,
-        live: false,
         onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
         sectionLinks: {
           workspace: WORKSPACE,
@@ -458,7 +453,6 @@ function drawnTitled() {
     const [asks, setAsks] = useState(0);
     return createElement(PlanBody, {
       task: TASK,
-      live: false,
       onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
       onRename: () => Promise.resolve(true),
       rename: { asks, asked: undefined, onBegin: () => setAsks((count) => count + 1) },

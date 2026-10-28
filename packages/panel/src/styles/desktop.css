@@ -1,6 +1,5 @@
 /* Luke's app window: a sidebar of places on the left, the chosen work on the
-   right, a call bar under an open plan, and the confirm and feedback dialogs
-   over it. Last in index.css, so a rule here wins over a panel rule of equal
+   right, and the confirm and feedback dialogs over it. Last in index.css, so a rule here wins over a panel rule of equal
    weight. */
 
 :root {
@@ -785,8 +784,6 @@ body,
   margin-top: 1.6em;
 }
 
-/* The call's room --------------------------------------------------------- */
-
 /* The repository chip ------------------------------------------------------ */
 
 /* An integration whose brand publishes its one-colour mark in named inks
@@ -1118,7 +1115,7 @@ body,
   transform: translateX(-100%);
 }
 
-/* No call bar stands below a version, so it needs no room under its last line. */
+/* Nothing stands below a version, so it needs no room under its last line. */
 .version-page .desktop-document .plan-document-body {
   padding-bottom: var(--luke-page-inset);
 }
@@ -1169,10 +1166,8 @@ body,
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
 
-/* What the column shows, beside the plan's summary: under the toolbar and
-   over the call bar, which both span the column. The room the summary takes
-   is said once here, so the call bar's row below centres on the room the
-   document above it is centred in. */
+/* What the column shows, beside the plan's summary: under the toolbar, which
+   spans the column. The room the summary takes is said once here. */
 .desktop-task-main {
   --summary-width: 240px;
   /* The rail stands its controls a column's inset in from its edges, so at

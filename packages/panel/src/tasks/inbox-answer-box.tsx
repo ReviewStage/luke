@@ -85,7 +85,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * why under it. Files stand for the developer's own words where they
  * wrote none, and while they are read the reply waits for them.
  *
- * Words selected in the agent's part of the thread and answered with Reply
+ * Words selected in the thread over the box and answered with Reply
  * are laid into the box as a quote block where the caret stands, the box
  * then taking the caret, as the agent's own box takes them
  * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,

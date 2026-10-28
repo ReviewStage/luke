@@ -36,18 +36,18 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * pressed, because a press that took either would end what it answers.
  * While it stands, R does what the press does (`APP_COMMAND.REPLY_TO_SELECTION`),
  * as GitHub's R quotes words selected into a reply, its hover saying so.
- * An Inbox item's thread offers the same Reply over the agent's part of it,
- * its question's Markdown, its messages, why it took the item back, and
- * what its ask offers, an option's words, a step, a field's name, and
- * lays the quote into the item's box (`inbox-pane.tsx`,
- * `inbox-answer-box.tsx`), so the press hands on the words it was over
- * beside the reply. Note that
+ * An Inbox item's thread offers the same Reply over every word it draws
+ * but the reader's draft: its title, the agent's messages and its
+ * members', what an ask offers, an option's words, a step, a field's name,
+ * how an answer left it, and what became of it, and lays the quote into
+ * the item's box (`inbox-pane.tsx`, `inbox-answer-box.tsx`), so the press
+ * hands on the words it was over beside the reply. Note that
  * a selection reaching into a field, an input or an editor, is never
  * offered, because what it holds is the reader's own typing, not words to
  * answer.
  */
 
-/** The attribute that marks an agent's own words in a transcript, which a selection inside may be replied to. */
+/** The attribute that marks words a selection inside may be replied to: an agent's own in a transcript, and an Inbox thread's. */
 export const REPLY_SCOPE = "data-reply-scope";
 
 const SCOPE_SELECTOR = `[${REPLY_SCOPE}]`;
@@ -109,7 +109,7 @@ function reachesField(words: Element, range: Range): boolean {
   );
 }
 
-/** The selection inside one agent's words under `scope`, as Reply answers it; nothing for any other. */
+/** The selection inside one run of words a reply may quote under `scope`, as Reply answers it; nothing for any other. */
 function pickedIn(scope: HTMLElement): Picked | undefined {
   const selection = window.getSelection();
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return undefined;
@@ -141,7 +141,7 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
 }
 
 /**
- * Reply over words selected in an agent's message under `scope`, handing
+ * Reply over words selected under `scope` that a reply may quote, handing
  * them to `onReply` as pressed, with the words they were picked from;
  * nothing while no such selection stands.
  */
@@ -230,7 +230,7 @@ export function ReplyToSelection({
   );
 }
 
-/** A quote block in the message box: the agent's words, three lines at most, and the press that takes it out, off while the box is held. */
+/** A quote block in the message box: the words quoted, three lines at most, and the press that takes it out, off while the box is held. */
 export function ComposerQuoteView({
   quote,
   held,

@@ -1935,14 +1935,6 @@ installation, its status, and an account standing for another workspace is
 refused and stays there. `src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
-`GET /api/plans/{id}/code` reads back every code the task's agents showed
-(`src/tasks/task-work-store.ts`'s `readTaskCode`): each answered
-`show_code` call of each agent on the task, oldest first, read from that
-agent's own conversation, picked by its parts in the statement and read
-through `shownCodeOf`, so what the call refused and a secret file are never
-read back. `packages/features/src/tasks-view.ts` declares the answer
-(`taskCodeAnswerSchema`).
-
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
 the task's repository for the Mac's File tab (`src/tasks/task-file.ts`),
 at most 500 lines a window. It reads GitHub's contents API at the head of
@@ -1951,7 +1943,7 @@ lowercase SHA and nothing a branch or a path could spell, as an inbox item's
 code block pins its lines, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check an agent's
 checkout makes. The token is used for the one read and enters no answer, log line,
-or trace. What is shown is decided by the rule `show_code` is held to
+or trace. What is shown is decided by one rule
 (`src/tasks/shown-file.ts`): a secret file is refused before GitHub is
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
@@ -2147,7 +2139,7 @@ The store writer, `packages/database/src/models/writer.ts`, is the one path by w
 with an insert, an update, or a delete over `messages` or `turns`, whether as a
 Drizzle table imported from the schema or in the text of a statement, and the
 modules that name one at all are the writer and the two readers. It
-consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
+consumes the turn run event stream (`RunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
 turn's start where nothing queued it) through running to settled, cancelled,

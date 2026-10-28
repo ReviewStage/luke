@@ -181,19 +181,14 @@ const button = (within: Element, label: string) =>
 const dialog = () =>
   document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 
-/** Chooses Forget in a memory's ⋯, which puts its question up. */
+/** A memory's Forget button, which stands on the row itself rather than behind a ⋯. */
+const forgetButton = (page: HTMLElement, memory: MemorySummary) =>
+  rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-label="Forget"]') ??
+  assert.fail("no Forget button");
+
+/** Presses Forget on a memory's row, which puts its question up. */
 function askForget(page: HTMLElement, memory: MemorySummary): void {
-  const ellipsis =
-    rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
-    assert.fail("no ⋯");
-  act(() => ellipsis.click());
-  act(() =>
-    (
-      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-        (item) => item.textContent === "Forget",
-      ) ?? assert.fail("no Forget in the ⋯")
-    ).click(),
-  );
+  act(() => forgetButton(page, memory).click());
 }
 
 /** Asks Forget, then presses the dialog's own Forget; answers whether it asked before forgetting. */
@@ -280,17 +275,7 @@ test("a private memory is marked Only you, a shared one is not, and its Forget s
 
   assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Only you/u);
   assert.doesNotMatch(rowOf(page, TESTS).textContent ?? "", /Only you/u);
-  const ellipsis =
-    rowOf(page, DEPLOYS).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
-    assert.fail("no ⋯");
-  act(() => ellipsis.click());
-  act(() =>
-    (
-      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-        (item) => item.textContent === "Forget",
-      ) ?? assert.fail("no Forget in the ⋯")
-    ).click(),
-  );
+  act(() => forgetButton(page, DEPLOYS).click());
   assert.match(dialog().textContent ?? "", /Your Luke will not recall it again/u);
 });
 
@@ -301,11 +286,11 @@ test("a memory whose member's account is gone reads as kept by a former member",
   assert.match(rowOf(page, TESTS).textContent ?? "", /Kept by a former member · /u);
 });
 
-test("a memory the reader may not forget offers no ⋯ at all", async () => {
+test("a memory the reader may not forget offers no Forget at all", async () => {
   const { page } = await mount();
 
-  assert.equal(rowOf(page, TESTS).querySelector('button[aria-haspopup="menu"]'), null);
-  assert.ok(rowOf(page, DEPLOYS).querySelector('button[aria-haspopup="menu"]'));
+  assert.equal(rowOf(page, TESTS).querySelector('button[aria-label="Forget"]'), null);
+  assert.ok(forgetButton(page, DEPLOYS));
 });
 
 test("showing another workspace reads that workspace's memories in place of the first's", async () => {

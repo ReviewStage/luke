@@ -1,5 +1,5 @@
 import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
-import { isLiveVoice, LIVE_DEFAULTS } from "@luke/live";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -33,13 +33,6 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
-import {
-  OFFERED_VOICE_LIST,
-  voiceGroup,
-  voiceOptionLabel,
-  voiceSamplePath,
-  voiceTag,
-} from "./voice-choice.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
@@ -106,12 +99,12 @@ function macCommandModeGuard(value: UnparsedWireValue) {
   return optional(value, isMacCommandMode);
 }
 
-/** Voice available and the microphone granted: the whole of what a control needs. */
-const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
+/** A key the host still reads whose row is gone: it is stored and described, and drawn nowhere. */
+const neverDrawn = (): boolean => false;
 
-/** The voice controls drawn on a platform that routes the microphone itself. */
+/** A platform that asks for the microphone and routes it itself, as dictation listens on it. */
 const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
-  view.voiceControlsDrawn && view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
+  view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
 /** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
 const desktopAppDrawn = (view: SettingsVisibility): boolean =>
@@ -184,25 +177,22 @@ export const APP_SETTING_SCHEMA = {
     // Nothing to run per write: the host reads the setting before each read for commands and as each command is about to run.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
+  /*
+   * The voice a call spoke with. Its row is gone with calling, and the host
+   * still reads the key until the voice capability goes.
+   */
   voice: choiceSetting({
     field: "voice",
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
-    detail: "Choosing one ends the conversation in progress.",
-    values: OFFERED_VOICE_LIST,
+    values: LIVE_VOICE_LIST,
     token: (voice) => voice,
-    optionLabel: voiceOptionLabel,
-    optionSample: voiceSamplePath,
-    optionGroup: voiceGroup,
-    optionTag: voiceTag,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    page: SETTINGS_PAGE.THIS_MAC,
     order: 30,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.VOICE,
-    visible: voiceControlDrawn,
+    visible: neverDrawn,
   }),
   /*
    * Where a Luke link opened in a browser goes: it stays on the web, or the
@@ -250,17 +240,19 @@ export const APP_SETTING_SCHEMA = {
     visible: accountDrawn,
     sideEffect: SETTING_SIDE_EFFECT.USAGE_DATA,
   }),
+  /*
+   * Whether a call quieted other apps' media. Its row is gone with calling,
+   * and the desktop still reads the key until its media duck goes.
+   */
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",
     id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
     label: "Quiet Music and Spotify",
     default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    page: SETTINGS_PAGE.THIS_MAC,
     order: 90,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
-    visible: voiceControlDrawn,
+    visible: neverDrawn,
   }),
   preferBuiltInMicrophone: toggleSetting({
     field: "preferBuiltInMicrophone",
@@ -270,10 +262,11 @@ export const APP_SETTING_SCHEMA = {
       "When the input is a Bluetooth headset, so the headset keeps its full sound quality. " +
       "With the lid shut, Luke uses the headset's microphone anyway.",
     default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    // Note that it stands on This Mac, under no page's reset, as Open Luke at
+    // login does; the field and its id are unmoved, so a choice already made is kept.
+    page: SETTINGS_PAGE.THIS_MAC,
+    section: SETTING_SECTION.MICROPHONE,
     order: 110,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: microphoneRouteDrawn,
   }),

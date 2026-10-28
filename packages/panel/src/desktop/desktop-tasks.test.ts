@@ -121,9 +121,9 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
+test("a task with no agent tab draws a new agent's draft and no pane of start buttons", () => {
   const DRAFT_ID = "draft-1";
-  const drawn = (calls: TasksControl["calls"]) => {
+  const drawn = () => {
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
       createElement(DesktopTasks, {
@@ -138,7 +138,6 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
             tabs: [{ draft: DRAFT_ID }],
             tab: { draft: DRAFT_ID },
           },
-          calls,
           agents: codingAgentsControl({
             agentIds: [],
             draft: {
@@ -148,27 +147,15 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
               choice: undefined,
               disabledServers: [],
             },
-            startCall: () => Promise.resolve({ agentId: "agent-1" }),
           }),
         }),
       }),
     );
     return page;
   };
-  const voiced = drawn({ onPress: () => undefined });
-  assert.ok(
-    voiced.querySelector(".desktop-agent .agent-composer"),
-    "the draft's composer is drawn",
-  );
-  assert.equal(voiced.querySelector(".desktop-no-agent"), null);
-  assert.equal(
-    [...voiced.querySelectorAll("button")].some((each) =>
-      /voice chat/u.test(each.textContent ?? ""),
-    ),
-    false,
-  );
-  assert.ok(voiced.querySelector(".agent-call-button button"), "and Call in it");
-  assert.equal(drawn(undefined).querySelector(".agent-call-button"), null, "the web's offers none");
+  const page = drawn();
+  assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
+  assert.equal(page.querySelector(".desktop-no-agent"), null);
 });
 
 /** The task's page with the side panel open on `tab`, as markup. */

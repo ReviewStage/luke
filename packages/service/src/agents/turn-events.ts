@@ -16,7 +16,6 @@ import {
   type TurnStatus,
   UI_PART_TYPE,
 } from "../core.js";
-import { SHOW_CODE_TOOL_NAME, shownCodeOf } from "../tasks/show-code.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
@@ -89,20 +88,9 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 /** The calls that run a shell command in a checkout: an agent's own shell. */
 const SLOW_STEP_TOOLS: ReadonlySet<string> = new Set([AGENT_TOOL.BASH]);
 
-/**
- * What one call tells while the turn runs: code a brain call showed, once
- * its call has answered with the lines, so it is not told twice, or a shell
- * command in a checkout, the one slow step.
- */
+/** What one call tells while the turn runs: a shell command in a checkout, the one slow step. */
 function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
-  const name = storedToolName(part);
-  if (name === SHOW_CODE_TOOL_NAME) {
-    const shown = shownCodeOf(part);
-    return shown === undefined
-      ? undefined
-      : { kind: TURN_EVENT_KIND.CODE_SHOWN, callId: part.toolCallId, code: shown };
-  }
-  return SLOW_STEP_TOOLS.has(name)
+  return SLOW_STEP_TOOLS.has(storedToolName(part))
     ? { kind: TURN_EVENT_KIND.SLOW_STEP, step: SLOW_STEP_KIND.REPOSITORY_READ }
     : undefined;
 }

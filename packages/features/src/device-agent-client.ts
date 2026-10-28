@@ -3,7 +3,6 @@ import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";
 import {
-  DEVICE_AGENT_REQUEST_KIND,
   DEVICE_ISOLATION,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchSecrets,
@@ -404,10 +403,7 @@ export class HostedDeviceAgentClient {
     id: string,
     answer: DeviceAgentAnswer,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const wire =
-      answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-        ? { ...answer, bytes: answer.bytes === null ? null : encodeBytes(answer.bytes) }
-        : answer;
+    const wire = { ...answer, bytes: answer.bytes === null ? null : encodeBytes(answer.bytes) };
     return askHosted(this.#hosted.deviceAgents.answerRequest, { deviceId, id, answer: wire }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),

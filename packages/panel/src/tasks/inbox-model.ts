@@ -446,6 +446,9 @@ export function asksNod(item: InboxItem, readerId: string | undefined, channels:
   return readerId !== undefined && inboxWaitsOn(item)?.userId === readerId;
 }
 
+/** What an option the agent recommends is called: the badge it wears, as a choice's or a form's option or as one of two small buttons, and the word after it on its row. */
+export const RECOMMENDED = "Recommended";
+
 /** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
 
@@ -914,7 +917,7 @@ function picturesDrawn(
  * An item's row's second line, what it asks or how it ended rather than who
  * said it last, since the row's tile names the agent and its title asks the
  * question. While an ask waits, the ask itself (`askLine`): a choice's
- * options, the recommended one starred, "7 days ★ / 14 days"; a to-do's
+ * options, the recommended one said so, "7 days (recommended) / 14 days"; a to-do's
  * steps left and the next, as the reader's draft ticks them (`ticked`), "2
  * steps left · Open Vercel"; a form's fields, "Fill in Name, Domain"; or
  * "Write an answer". Else the thread's latest message: an answer by its
@@ -1065,7 +1068,9 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
     case INBOX_ASK.DECIDE:
       return ask.options
         .map((option) =>
-          recommendedLabels(ask).includes(option.label) ? `${option.label} ★` : option.label,
+          recommendedLabels(ask).includes(option.label)
+            ? `${option.label} (${RECOMMENDED.toLowerCase()})`
+            : option.label,
         )
         .join(" / ");
     case INBOX_ASK.DO: {

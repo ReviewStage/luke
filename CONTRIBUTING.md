@@ -102,7 +102,6 @@ tools/
   claude-code-probe/  proves Claude Code runs inside a Luke sandbox
   codex-probe/    proves Codex runs inside a Luke sandbox
   trace-export/   turns a recorded development trace into a document for a trace viewer
-  voice-samples/  records the clip Settings plays for each Live voice, by hand on a Mac
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
 docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
@@ -14,6 +13,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { LIVE_SERVER_EVENT } from "@luke/live";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
@@ -360,17 +360,17 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
         });
         yield* writer.consume(target, {
           ...turn,
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
         const opening = yield* taken("Fix the tile.");
         for (const step of [1, 2]) {
           yield* writer.consume(target, {
             ...turn,
-            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            kind: RUN_EVENT.STEP_STARTED,
             sequence: step + 1,
             step,
           });

@@ -65,7 +65,6 @@ import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentModelControl } from "./use-agent-model.js";
-import { DICTATION_PHASE } from "./use-dictation.js";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -82,8 +81,7 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * the menu that changes it for the next step (`agent-model-chip.tsx`),
  * the ring that shows, once a step has ended, how full the agent's model's
  * context is and opens what fills it (`agent-context.tsx`), the
- * microphone, a call's controls where a call is offered, and the round
- * button. The box takes a message to the agent:
+ * microphone, and the round button. The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line (on a coarse pointer Enter is,
  * and the round Send sends: `composer-editor.ts`), and Escape leaves the box; the
  * box is an editor (`composer-field.tsx`) that holds plain words and a
@@ -327,7 +325,7 @@ export function ComposerAttach({ children }: { children: ReactNode }): React.JSX
   return <span className="agent-composer-attach flex">{children}</span>;
 }
 
-/** The owner's presses at the foot's right, before a call and Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
+/** The owner's presses at the foot's right, before Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
 export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
   // It may narrow, so a long model name is cut short before the presses are.
   return (
@@ -419,8 +417,6 @@ export function AgentComposer({
   tools,
   actions,
   beforeSend,
-  call,
-  dictates = true,
   sendable = true,
   onKey,
   onLeave,
@@ -477,10 +473,6 @@ export function AgentComposer({
   actions?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is. */
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands beside Dictate: an agent's Call, or on a call its controls, where the platform takes calls (`agent-call.tsx`). */
-  call?: ReactNode;
-  /** Whether the box offers Dictate; not while a call holds the microphone, whose own mute stands in the row. */
-  dictates?: boolean;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -654,17 +646,6 @@ export function AgentComposer({
     side: listSide,
   });
   const { dictation, dictating } = pickers;
-  // Whether a dictation's strip stands in the bar's place: while the box dictates, or while a clip is read as a call takes the microphone.
-  const striped = dictating && (dictates || dictation.phase === DICTATION_PHASE.TRANSCRIBING);
-  // Note that a call taking the microphone ends a dictation under way, keeping
-  // the words already said, so the row it hands the call to is never hidden
-  // under the dictation's strip.
-  const { phase, startedAt, finish, cancel } = dictation;
-  useEffect(() => {
-    if (dictates || phase !== DICTATION_PHASE.RECORDING) return;
-    if (startedAt === undefined) cancel();
-    else finish();
-  }, [dictates, phase, startedAt, finish, cancel]);
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
 
@@ -838,18 +819,12 @@ export function AgentComposer({
                 open={contextOpen}
                 onOpenChange={handBack(setContextOpen)}
               />
-              {dictates ? (
-                <DictateButton dictation={dictation} disabled={held || module === undefined} />
-              ) : null}
+              <DictateButton dictation={dictation} disabled={held || module === undefined} />
               <ComposerMore card={card} offers={offers} />
               {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
             </ComposerActions>
           }
-          // Note that a clip already being read as a call begins keeps its strip
-          // and its Cancel until it lands, with the call's controls beside it,
-          // so neither the clip nor the call is left with no way to reach it.
-          call={striped && dictates ? undefined : call}
-          strip={striped ? <DictationStrip dictation={dictation} /> : undefined}
+          strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
           send={{
             label: sendLabel,
             chord: wording?.chord,

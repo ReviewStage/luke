@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { TaskShownCode } from "@luke/features/tasks-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DELEGATION_TARGET,
@@ -362,8 +361,6 @@ interface Fixture {
   reports: string[];
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
-  /** Every code `onCode` put on screen, in order. */
-  codes: TaskShownCode[];
   /** How many times the peer was told the call is ending. */
   endings: { count: number };
   /** Every hand-off the service traced, in order. */
@@ -379,7 +376,6 @@ function fixture(agent: FakeAgent = new FakeAgent()): Effect.Effect<Fixture, nev
     const sidebands: FakeSideband[] = [];
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
-    const codes: TaskShownCode[] = [];
     const endings = { count: 0 };
     const traces: LiveSessionTrace[] = [];
     let ids = 0;
@@ -389,7 +385,6 @@ function fixture(agent: FakeAgent = new FakeAgent()): Effect.Effect<Fixture, nev
         hasTask: true,
         report: (message) => reports.push(message),
         onStatus: (status) => statuses.push(status),
-        onCode: (shown) => codes.push(shown),
         onCallEnding: () => {
           endings.count += 1;
         },
@@ -403,7 +398,6 @@ function fixture(agent: FakeAgent = new FakeAgent()): Effect.Effect<Fixture, nev
       sidebands,
       reports,
       statuses,
-      codes,
       endings,
       traces,
       service,

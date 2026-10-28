@@ -477,9 +477,6 @@ const UNIT_CLASS = "plan-unit";
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
 const WRITING_CLASS = "plan-writing";
 
-/** The class of the unit the caret waits at the end of, where it blinks. */
-const RESTING_CLASS = "plan-caret-resting";
-
 /** The class of a section changed since the developer last looked, tinted until they dismiss it. */
 const CHANGED_CLASS =
   "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-luke-6 after:-inset-y-luke-2 after:-z-1 after:rounded-luke-6 after:bg-plan-changed";
@@ -526,7 +523,7 @@ function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function useTaskChase(task: Task, live: boolean, reader: TaskReader): TaskChase {
+function useTaskChase(task: Task, reader: TaskReader): TaskChase {
   const [chase, setChase] = useState(() => opened(task));
   let current = chase;
   if (chase.taskId !== task.id || chase.body !== task.document.body) {
@@ -548,7 +545,7 @@ function useTaskChase(task: Task, live: boolean, reader: TaskReader): TaskChase 
   }, [behind]);
 
   return {
-    views: chaseView(current.state, live),
+    views: chaseView(current.state),
     behind,
     jumps: current.state.jumps,
   };
@@ -557,9 +554,6 @@ function useTaskChase(task: Task, live: boolean, reader: TaskReader): TaskChase 
 function unitClass(view: UnitView, changed: boolean): string {
   const lit = changed ? ` ${CHANGED_CLASS}` : "";
   if (view.writing) return `${UNIT_CLASS} ${WRITING_CLASS}${lit}`;
-  if (view.resting) {
-    return `${UNIT_CLASS} ${RESTING_CLASS}${lit}`;
-  }
   return `${UNIT_CLASS}${lit}`;
 }
 
@@ -835,7 +829,6 @@ function sameView(left: UnitView, right: UnitView): boolean {
     left.heading === right.heading &&
     left.words === right.words &&
     left.writing === right.writing &&
-    left.resting === right.resting &&
     left.fresh === right.fresh &&
     sameEdit(left.edit, right.edit)
   );
@@ -1012,9 +1005,7 @@ export interface TitleRename {
 }
 
 /**
- * The task's document: its name as the title over its text. `live` is the
- * task's call in progress, which keeps the caret waiting where the typing
- * last stopped; `onShowHistory` opens the plan's version history from the
+ * The task's document: its name as the title over its text. `onShowHistory` opens the plan's version history from the
  * byline's "Last edited by", on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
@@ -1036,7 +1027,6 @@ export interface TitleRename {
  */
 export const PlanBody = memo(function PlanBody({
   task,
-  live,
   onShowHistory,
   onEdit,
   onRename,
@@ -1051,7 +1041,6 @@ export const PlanBody = memo(function PlanBody({
   titleActions = true,
 }: {
   task: Task;
-  live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
@@ -1074,7 +1063,7 @@ export const PlanBody = memo(function PlanBody({
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
 }): React.JSX.Element {
-  const { views, behind, jumps } = useTaskChase(task, live, reader);
+  const { views, behind, jumps } = useTaskChase(task, reader);
   const editable = onEdit !== undefined;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);

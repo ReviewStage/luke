@@ -261,7 +261,7 @@ function mount(
       ),
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    draw(createElement(PlanBody, { task, live: false, onEdit: door, onRename }));
+    draw(createElement(PlanBody, { task, onEdit: door, onRename }));
   /** The plan as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
@@ -287,7 +287,7 @@ function TaskPage({
   onRename: (name: string) => Promise<boolean>;
 }): ReactElement {
   const onEdit = usePlanEditDoor(task.id, edit);
-  return createElement(PlanBody, { task, live: false, onEdit, onRename });
+  return createElement(PlanBody, { task, onEdit, onRename });
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {

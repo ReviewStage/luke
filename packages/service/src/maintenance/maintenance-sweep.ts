@@ -37,8 +37,9 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * no turn and no terminal to hold it is stopped where its turn's end did
  * not stop it, the wakeups a native agent's released wait left are
  * delivered once due, an operator whose member's agent failed is woken, at
- * most once an hour for each agent, the
- * automations whose schedule is due are fired, a picture pasted into a
+ * most once an hour for each agent, a developer's line whose hand-over
+ * answered nothing and that no turn took within a coding agent's turn
+ * bound is deleted, the automations whose schedule is due are fired, a picture pasted into a
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
  * for what their agents are told of, and the native agents' image template
@@ -50,7 +51,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The seventeen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The eighteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -76,6 +77,8 @@ interface MaintenanceSweeps {
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Wakes the operators whose member's agents failed with no wake in the hour before, a sweep's worth. */
   sweepOperatorWakes: (now: number) => SweepRead<OperatorWakeSweepOutcome>;
+  /** Deletes the withdrawn lines no turn took within a coding agent's turn bound, a sweep's worth, answering how many went. */
+  purgeWithdrawnLines: (now: number) => SweepRead<number>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
   /** Deletes the plans' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
@@ -89,7 +92,7 @@ interface MaintenanceSweeps {
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the seventeen sweeps once
+ * How a run is told to the sweep's cron monitor: around the eighteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -130,6 +133,8 @@ interface MaintenanceSweepAnswer {
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
   /** What the wake of the operators whose member's agents failed did. */
   operatorWakes: Swept<OperatorWakeSweepOutcome>;
+  /** Withdrawn lines no turn took in time, deleted. */
+  withdrawnLines: Swept<number>;
   /** What the sweep over the automations due did. */
   automations: Swept<AutomationSweepOutcome>;
   /** Pictures pasted into plans that no save named, deleted. */
@@ -168,7 +173,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The seventeen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The eighteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -186,6 +191,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     sandboxRetention: yield* isolated("sweepSandboxRetention", sweeps.sweepSandboxRetention(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
     operatorWakes: yield* isolated("sweepOperatorWakes", sweeps.sweepOperatorWakes(now)),
+    withdrawnLines: yield* isolated("purgeWithdrawnLines", sweeps.purgeWithdrawnLines(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
     purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
     tokenPullRequests: yield* isolated(

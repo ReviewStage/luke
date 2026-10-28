@@ -78,7 +78,6 @@ import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-pane
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
-import { useAgentCallDoors } from "./agent-actions.js";
 import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
 import {
@@ -790,8 +789,7 @@ function InboxSidePanel({
     if (target.kind !== TOOL_TARGET.INBOX && taskId !== undefined) tasks.onShowTask(taskId);
   };
   // An agent's transcript beside the item reads and writes as its tab in the task's column does,
-  // through the agents the Inbox read of the item's task; its call starts on that task.
-  const calls = useAgentCallDoors(tasks.calls, { taskId, archived: false });
+  // through the agents the Inbox read of the item's task.
   const cards = taskCards({
     agents,
     held: views.held,
@@ -806,7 +804,6 @@ function InboxSidePanel({
     return (
       <TaskMentions value={mentions}>
         <AgentPane
-          call={calls}
           label={agent === undefined ? undefined : agentName(agent, agents.models)}
           tabbed={false}
           tab={{ agent: agentId }}

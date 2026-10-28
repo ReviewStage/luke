@@ -27,11 +27,10 @@ test("nothing a setting says about itself names a credential or its shape", () =
   }
 });
 
-/** A signed-in desktop window over voice that can run, as `view` changes it. */
+/** A signed-in desktop window, as `view` changes it. */
 function signedInDesktop(view: Partial<SettingsRowsInput> = {}): SettingsRowsInput {
   return {
-    settings: settingsView({ voiceAvailable: true }),
-    voiceControlsDrawn: true,
+    settings: settingsView(),
     accountDrawn: true,
     capabilities: Object.values(HOST_CAPABILITY),
     ...view,
@@ -56,13 +55,6 @@ test("every row a page draws is kept where its page's line says, or says where i
 
 test("a page's line follows the account only where most of what it keeps does, and stands over nothing signed out", () => {
   const view = signedInDesktop();
-  // Voice: the voice follows the account, the media and microphone switches stay on the Mac.
-  assert.equal(settingsPageKeep(SETTINGS_PAGE.VOICE, view), SETTING_KEEP.DEVICE);
-  const voice = settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, view);
-  assert.deepEqual(
-    voice.flatMap((row) => (row.keptElsewhere === undefined ? [] : [row.field])),
-    ["voice"],
-  );
   // Account: the account itself and its links follow it, its usage counts stay on the Mac.
   assert.equal(settingsPageKeep(SETTINGS_PAGE.ACCOUNT, view), SETTING_KEEP.ACCOUNT);
   const privacy = settingRowsForPage(SETTINGS_PAGE.ACCOUNT, SETTING_SECTION.PRIVACY, view);

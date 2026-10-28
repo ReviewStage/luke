@@ -72,7 +72,6 @@ const SETTINGS: SettingsPanelProps = {
   onViewChange: ignore,
   microphone: {
     status: MICROPHONE_STATUS.GRANTED,
-    voiceAvailable: true,
     onRequest: ignore,
     onOpenSettings: ignore,
   },

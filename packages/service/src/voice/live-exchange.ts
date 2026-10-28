@@ -7,7 +7,7 @@ import {
   voiceWriter,
 } from "@luke/database/models/voice-writer";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import type { TaskActivity, TaskShownCode } from "@luke/features/tasks-view";
+import type { TaskActivity } from "@luke/features/tasks-view";
 import { serialQueue } from "@luke/runtime/effect";
 import { liveAgentLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
@@ -76,8 +76,6 @@ export interface HostedLiveExchangeOptions {
   readonly report: (message: string) => void;
   /** What the voice and the agent are doing, told whole on each change; the device is shown it. */
   readonly onActivity?: (activity: TaskActivity) => void;
-  /** Code Luke is about to talk about, with its lines, told as he starts to speak; a task call's device is shown it. */
-  readonly onCode?: (shown: TaskShownCode) => void;
   /** The developer said they are done and Luke is saying goodbye; a task call's device hangs up once it has played. */
   readonly onCallEnding?: () => void;
   /** Each hand-off the session traces, ids and words left out; the service writes it to its log. */
@@ -100,8 +98,6 @@ export interface AttachedSession {
   readonly started: boolean;
   /** The device's door for what each part of Luke is doing on the call; absent where the service sends it nothing of its own. */
   readonly onActivity?: ((activity: TaskActivity) => void) | undefined;
-  /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
-  readonly onCode?: ((shown: TaskShownCode) => void) | undefined;
   /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
   readonly onCallEnding?: (() => void) | undefined;
   /** The service's door for each hand-off the session traces; absent where the route logs none. */
@@ -250,7 +246,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         status = told;
         tellActivity();
       },
-      ...(options.onCode ? { onCode: options.onCode } : undefined),
       ...(options.onCallEnding ? { onCallEnding: options.onCallEnding } : undefined),
       ...(options.onTrace ? { onTrace: options.onTrace } : undefined),
     }),

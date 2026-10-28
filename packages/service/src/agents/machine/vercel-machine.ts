@@ -114,7 +114,6 @@ import {
   type MachinePlace,
   type MachineRunning,
   PLACE_RESUME,
-  type RepositoryCommand,
   RUNNER_RECORD,
   type RunnerHandle,
   type RunnerMark,
@@ -503,18 +502,6 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
           ran.exitCode === 0 ? new Uint8Array(Buffer.from(ran.stdout, "base64")) : undefined,
         ),
       ),
-
-    runRepositoryCommand: (session, command: RepositoryCommand) =>
-      Effect.flatMap(runningSession(session), (running) => {
-        const environment = Object.entries(command.env ?? {}).map(
-          ([name, value]) => `${name}=${value}`,
-        );
-        return api.run(running, {
-          command: "env",
-          args: [...environment, "bash", "-c", command.command],
-          ...(command.workingDirectory === undefined ? {} : { cwd: command.workingDirectory }),
-        });
-      }),
   };
 }
 
