@@ -36,17 +36,14 @@ function lineOf(standing: ThisMacHostStanding): {
     case THIS_MAC_HOST_STANDING.OFF:
       return null;
     case THIS_MAC_HOST_STANDING.TURNING_ON:
-      return { words: "Turning on agents on this Mac…", state: SETTINGS_ROW_STATE.PLAIN };
+      return { words: "Turning on…", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.RUNNING:
       return {
         words: "Running. Agents keep running when you quit Luke.",
         state: SETTINGS_ROW_STATE.CONNECTED,
       };
     case THIS_MAC_HOST_STANDING.NOT_RUNNING:
-      return {
-        words: "Not running yet. It starts in a moment, and again each time you log in.",
-        state: SETTINGS_ROW_STATE.PLAIN,
-      };
+      return { words: "Not running yet.", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.REQUIRES_APPROVAL:
       return {
         words: "Waiting for you to allow Luke in System Settings › General › Login Items.",
