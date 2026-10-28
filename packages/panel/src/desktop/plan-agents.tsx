@@ -90,7 +90,7 @@ function PlanAgentRow({
 }): React.JSX.Element {
   const { row, endMark, card } = entry;
   return (
-    <RowHintOptions card={card} cardBeside>
+    <RowHintOptions card={card}>
       <ListRow
         motionKey={row.id}
         leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}

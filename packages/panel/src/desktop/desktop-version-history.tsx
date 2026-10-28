@@ -268,7 +268,7 @@ function RevisionRow({
   // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
   const card = actorCard(author);
   return (
-    <RowHintOptions card={card} cardBeside>
+    <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
         leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}

@@ -1440,7 +1440,7 @@ export function ActivityList({
           <List label="Activity" density={LIST_DENSITY.DENSE}>
             {open.map((entry) => (
               // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
-              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card} cardBeside>
+              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
                 <ListRow
                   leading={entry.look.icon}
                   title={entry.look.label}

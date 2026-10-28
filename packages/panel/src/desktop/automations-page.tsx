@@ -62,7 +62,7 @@ import {
 import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -304,11 +304,6 @@ function AutomationRow({
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
   const nextWords = automationNextText(automation, now);
-  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
-  const item = useRef<HTMLElement | null>(null);
-  const hold = useCallback((node: HTMLElement | null) => {
-    item.current = node?.parentElement ?? null;
-  }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
@@ -317,11 +312,8 @@ function AutomationRow({
   return (
     <RowHintOptions
       card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
-      cardBeside
-      cardRegion={item}
     >
       <ListRow
-        ref={hold}
         leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
         title={
           <span
