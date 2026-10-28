@@ -772,7 +772,7 @@ test("a member's chip hangs their card", async () => {
 
   assert.equal(member.card, "data-actor-card");
   assert.equal(member.name, "Sam Okafor");
-  assert.equal(member.sub, "sam@example.com");
+  assert.equal(member.sub, "sam@example.com · Owner");
 });
 
 test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
@@ -786,6 +786,8 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
   assert.equal(before, 0, "nothing is read as the chip is drawn");
   assert.equal(card.card, "data-actor-card");
   assert.equal(card.name, "Nightly sweep");
+  assert.match(card.sub ?? "", / · Acme$/u, "whose it is joins what fires it");
+  assert.equal(card.corner, undefined);
   assert.deepEqual(card.detailWords, ["Created by Sam Okafor · Oct 25"]);
   assert.equal(reads(), 1);
 });
@@ -800,7 +802,7 @@ test("a member's and an automation's chips under another workspace's link are re
   const member = await cardOf(person);
   const audit = await cardOf(automation);
 
-  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
   assert.equal(audit.name, "Weekly audit");
   assert.deepEqual(audit.detailWords, ["Created by Priya Nair · Oct 25"], "its maker is Beta's");
 });
@@ -810,7 +812,7 @@ test("a member's chip under a link naming its workspace by id, as one with no sl
 
   const member = await cardOf(chipsOf(container)[0]);
 
-  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
 });
 
 /** The card a channel's chip hangs, its workspace's channels read as it is first hung, counted back from `CHANNELS_NOW`. */
