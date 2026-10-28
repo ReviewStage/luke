@@ -733,5 +733,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ...(restored.txid === undefined ? undefined : { txid: restored.txid }),
       };
     }),
+
+    /**
+     * The issues the plan links, which are none now that a plan links no
+     * issue. Note that it stands because a released desktop's task page
+     * reads it on opening and says the read failed where it is gone.
+     */
+    issues: plans.issues.effect(function* ({ input, context }) {
+      yield* reachedTask(context.userId, yield* pathUuid(input.id));
+      return { issues: [] as const };
+    }),
   };
 }

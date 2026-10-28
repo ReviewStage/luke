@@ -918,11 +918,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a start from a released desktop that still names a Linear issue or the issues to link starts its plan, and reads no issue from Linear or GitHub",
+    "a start from a released desktop that still names a Linear issue or the issues to link starts its plan, reads no issue from Linear or GitHub, and its task page's read of the plan's issues answers none",
     () =>
       Effect.gen(function* () {
         const network = fakeGitHub(() => Response.json({ message: "Not Found" }, { status: 404 }));
-        const { owner, ask } = yield* openAccounts(network);
+        const { owner, other, ask } = yield* openAccounts(network);
         const start = (body: WireBoundaryInput) =>
           ask(request(TASKS, owner, { method: "POST", body }));
 
@@ -945,6 +945,16 @@ it.layer(getTestDB())("the plan routes", (it) => {
           LEDGER.name,
         );
         assert.deepEqual(network.sent, []);
+        // Note that v0.22.0's task page reads this on opening and says the read failed where it is gone.
+        const issues = `${ONE_TASK(startedId(linking))}/issues`;
+        assert.deepEqual(yield* ask(request(issues, owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { issues: [] },
+        });
+        assert.deepEqual(
+          yield* ask(request(issues, other)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
       }),
   );
 

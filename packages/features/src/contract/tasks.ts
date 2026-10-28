@@ -70,6 +70,9 @@ export const TASK_START_STATUS = {
   CREATED: 201,
 } as const;
 
+/** The issues a plan links as a released desktop reads them: none, since a plan links none. */
+const linkedIssuesSchema = EffectSchema.Struct({ issues: EffectSchema.Tuple([]) });
+
 /** A start's answer with its status, since a retry under its agent's key answers 200 where a new plan answers 201. */
 const startedSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(TASK_START_STATUS)),
@@ -145,4 +148,9 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(taskRestoreAnswerSchema)),
+  /** The issues the plan links: none, for a released desktop whose task page reads them on opening. */
+  issues: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: `${PLAN}/issues` }))
+    .input(EffectSchema.Struct(taskParams))
+    .output(EffectSchema.flip(linkedIssuesSchema)),
 };
