@@ -55,7 +55,6 @@ import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 import {
   ThisMacAct,
-  ThisMacDetail,
   type ThisMacHost,
   ThisMacHostRow,
   ThisMacStateLine,
@@ -226,22 +225,16 @@ function HostRow({
             </>
           ),
           control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
-          below:
-            thisMac === undefined && !host.upgradeNeeded ? undefined : (
-              <>
-                {thisMac === undefined ? null : <ThisMacDetail />}
-                {!host.upgradeNeeded ? null : platform === DEVICE_PLATFORM.DARWIN ? (
-                  <Text>{WORDS.MAC_UPGRADE}</Text>
-                ) : (
-                  <CodeCard
-                    title={WORDS.UPGRADE_TITLE}
-                    titleIs={CODE_CARD_TITLE.WORDS}
-                    code={hostUpgradeCommand(installScriptUrl)}
-                    copy={copyThroughShell}
-                  />
-                )}
-              </>
-            ),
+          below: !host.upgradeNeeded ? undefined : platform === DEVICE_PLATFORM.DARWIN ? (
+            <Text>{WORDS.MAC_UPGRADE}</Text>
+          ) : (
+            <CodeCard
+              title={WORDS.UPGRADE_TITLE}
+              titleIs={CODE_CARD_TITLE.WORDS}
+              code={hostUpgradeCommand(installScriptUrl)}
+              copy={copyThroughShell}
+            />
+          ),
         }}
       />
       <ConfirmDialog
