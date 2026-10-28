@@ -41,6 +41,7 @@ import {
   Option,
   Path,
   Queue,
+  Random,
   Ref,
   Result,
   Schedule,
@@ -73,7 +74,7 @@ import {
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as the Local agents experiment and This Mac's Run agents on this Mac are both on (a host's are always).
+ * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: the Local agents experiment on a Mac; always on a host).
  *
  * The service writes a local agent's work as rows under this device's id
  * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
@@ -82,12 +83,12 @@ import type { RunMode } from "./run-mode.js";
  * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
  * app start among them, the device first has what its VMs run on
  * (`LocalAgentSandbox.ready`: a Mac's pinned smolvm, fetched and checked,
- * and the image pulled once), once per opening, so a device offline is not
- * asked again every turn. A first fetch or pull takes minutes, so while it
- * runs the device registers as preparing (`DEVICE_SETUP`) and beats, and the
- * menus list it as getting ready, which takes no agent; one that failed
- * registers why and beats until the gate shuts, so it is listed as not set
- * up rather than not at all. Once it has them it registers with its home folder, the VM's
+ * and the image pulled once). A first fetch or pull takes minutes, so while
+ * it runs the device registers as preparing (`DEVICE_SETUP`) and beats, and
+ * the menus list it as getting ready, which takes no agent; one that failed
+ * registers why and beats, so it is listed as not set up rather than not at
+ * all, and is tried again after `SETUP_RETRY`'s wait, doubling from try to
+ * try, for as long as the gate stands. Once it has them it registers with its home folder, the VM's
  * own Claude Code and Codex, and no harness signed in by itself, since no
  * login of the device's reaches a VM, so every launch carries the sign-in
  * saved in Luke; then it beats every `BEAT_EVERY` while it follows. It
@@ -165,13 +166,24 @@ import type { RunMode } from "./run-mode.js";
  * list names none, and the device only settles what it kept.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
- * folder alone (`local-agent-requests.ts`). Turning the switch or the
- * experiment off, signing out, or a run that sends nothing shuts the gate:
+ * folder alone (`local-agent-requests.ts`). Turning the experiment off,
+ * signing out, or a run that sends nothing shuts the gate:
  * the reads end, and every runner is stopped, as the quit stops them.
  */
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
 const IDLE = Duration.seconds(5);
+/**
+ * How long a device whose setup failed waits before it tries again: the
+ * first wait, doubled after each failed try up to the last, and each
+ * stretched or shrunk by up to `JITTER`, so devices that failed together
+ * do not all try again together.
+ */
+const SETUP_RETRY = {
+  FIRST: Duration.seconds(30),
+  LAST: Duration.minutes(15),
+  JITTER: 0.2,
+} as const;
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
 const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
@@ -432,21 +444,26 @@ export function composeLocalAgents(
 
     // -- what the VMs run on ------------------------------------------------------
 
-    /** Whether the device had what its VMs run on as it last asked, and whether it asked since the gate last opened. */
-    const readied = yield* Ref.make(false);
-    const readyTried = yield* Ref.make(false);
-    /** Whether the service took the register saying the device's setup failed, so it may go on beating. */
-    const failureListed = yield* Ref.make(false);
+    /** How long a device waits after its `failed`th failed setup in a row before it tries again (`SETUP_RETRY`). */
+    const setupRetryAfter = (failed: number) =>
+      Effect.map(Random.nextBetween(1 - SETUP_RETRY.JITTER, 1 + SETUP_RETRY.JITTER), (stretch) =>
+        Duration.millis(
+          Math.min(
+            Duration.toMillis(SETUP_RETRY.FIRST) * 2 ** (failed - 1),
+            Duration.toMillis(SETUP_RETRY.LAST),
+          ) * stretch,
+        ),
+      );
 
     /**
      * Whether the device has what its VMs run on (`LocalAgentSandbox.ready`),
-     * asked again each time the gate opens once it had it, and otherwise once
-     * per opening, and once per app start, since the app's first opening is
-     * one; one that failed waits for the next, so a device offline is not
-     * asked again every turn. As a fetch or pull begins (the sandbox's
-     * `preparing`) the device registers as preparing and beats, so the
-     * menus list it as getting ready rather than not at all; one that failed
-     * registers why and beats for as long as the opening stands, so it is
+     * asked each time the gate opens, and after a try that failed asked
+     * again once `setupRetryAfter` has passed, one try at a time, for as
+     * long as the gate stands and the account is the one `userId` names; it
+     * answers false only once either changes. As a fetch or pull begins (the
+     * sandbox's `preparing`) the device registers as preparing and beats, so
+     * the menus list it as getting ready rather than not at all; a try that
+     * failed registers why and beats while it waits for the next, so it is
      * listed as not set up rather than away. `registered` registers the
      * device with where its setup stands, a register the service may refuse
      * from a build before the field; then the device beats nothing until it
@@ -461,32 +478,31 @@ export function composeLocalAgents(
       ) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
     ) =>
       Effect.gen(function* () {
-        if (!(yield* Ref.get(readied)) && (yield* Ref.getAndSet(readyTried, true))) {
-          if (yield* Ref.get(failureListed)) yield* presence(userId, deviceId);
-          return false;
+        for (let failed = 1; ; failed += 1) {
+          const ready = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const scope = yield* Effect.scope;
+              // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
+              const preparing = Effect.gen(function* () {
+                if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
+                  yield* Effect.forkIn(presence(userId, deviceId), scope);
+                }
+              });
+              return yield* Effect.result(platform.sandbox.ready(preparing));
+            }),
+          );
+          if (Result.isSuccess(ready)) return true;
+          report("the local agents' smolvm or sandbox image could not be had");
+          const listed = yield* asked(
+            registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
+          );
+          // Note that the device stays listed with why while it waits, beating only where the service took that, and the wait ends early as the gate shuts.
+          const waited = yield* Effect.race(
+            Effect.as(presence(userId, deviceId, listed ? undefined : Effect.void), false),
+            Effect.as(Effect.sleep(yield* setupRetryAfter(failed)), true),
+          );
+          if (!waited) return false;
         }
-        const ready = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const scope = yield* Effect.scope;
-            // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
-            const preparing = Effect.gen(function* () {
-              if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
-                yield* Effect.forkIn(presence(userId, deviceId), scope);
-              }
-            });
-            return yield* Effect.result(platform.sandbox.ready(preparing));
-          }),
-        );
-        yield* Ref.set(readied, Result.isSuccess(ready));
-        if (Result.isSuccess(ready)) return true;
-        report("the local agents' smolvm or sandbox image could not be had");
-        // Note that the device stays listed with why, beating until the gate shuts, which lets the next opening try again.
-        const listed = yield* asked(
-          registered({ setup: DEVICE_SETUP.FAILED, setupFailure: ready.failure.detail }),
-        );
-        yield* Ref.set(failureListed, listed);
-        if (listed) yield* presence(userId, deviceId);
-        return false;
       });
 
     // -- the developer's own environment ---------------------------------------------
@@ -1351,8 +1367,6 @@ export function composeLocalAgents(
     const turn = Effect.gen(function* () {
       const userId = dependencies.accountId();
       if (!(yield* gateOpen) || userId === undefined || Option.isNone(home)) {
-        // A gate shut lets the next opening ask again for what the VMs run on, where it was not had.
-        yield* Ref.set(readyTried, false);
         return yield* Effect.sleep(IDLE);
       }
       yield* Effect.scoped(openTurn(userId, home.value));

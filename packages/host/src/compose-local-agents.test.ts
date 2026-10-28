@@ -429,28 +429,52 @@ it.effect(
 );
 
 it.effect(
-  "a device whose sandbox could not be had registers why and goes on beating, taking no agent, and says what it could not have",
+  "a device whose sandbox could not be had registers why and beats, taking no agent, and tries again on its own after a wait that doubles, until it registers ready",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
+        let tries = 0;
         const { registered, beats, spawned, reported } = yield* followingDevice(() =>
-          Effect.fail(
-            new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
-          ),
+          Effect.suspend(() => {
+            tries += 1;
+            return tries <= 2
+              ? Effect.fail(
+                  new LocalAgentSandboxUnavailable({ detail: "smolvm couldn't be downloaded" }),
+                )
+              : Effect.void;
+          }),
         );
         yield* until(() => reported.length > 0);
-        yield* TestClock.adjust(Duration.minutes(1));
+        // Note that the first wait is thirty seconds, give or take a fifth, so a twenty-second one has not ended it.
+        yield* TestClock.adjust(Duration.seconds(20));
 
-        assert.deepEqual(
-          registered.map((each) => [each.setup, each.setupFailure]),
-          [[DEVICE_SETUP.FAILED, "smolvm couldn't be downloaded"]],
-        );
-        assert.ok(beats.length >= 4, `beats ${beats.join(",")}`);
+        assert.equal(tries, 1);
+        assert.ok(beats.length >= 2, `beats ${beats.join(",")}`);
         assert.equal(
           spawned.some((each) => each.program === VM_RUNNER),
           false,
         );
-        assert.deepEqual(reported, ["the local agents' smolvm or sandbox image could not be had"]);
+        yield* TestClock.adjust(Duration.seconds(20));
+        yield* until(() => tries === 2);
+        // Note that the second wait is doubled, so forty seconds more have not ended it either.
+        yield* TestClock.adjust(Duration.seconds(40));
+        assert.equal(tries, 2);
+        yield* TestClock.adjust(Duration.seconds(40));
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+
+        assert.deepEqual(
+          registered.map((each) => [each.setup, each.setupFailure]),
+          [
+            [DEVICE_SETUP.FAILED, "smolvm couldn't be downloaded"],
+            [DEVICE_SETUP.FAILED, "smolvm couldn't be downloaded"],
+            [undefined, undefined],
+          ],
+        );
+        assert.deepEqual(reported, [
+          "the local agents' smolvm or sandbox image could not be had",
+          "the local agents' smolvm or sandbox image could not be had",
+        ]);
+        yield* TestClock.adjust(Duration.seconds(1));
       }),
     ),
 );
