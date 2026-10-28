@@ -330,6 +330,8 @@ interface Answers {
   readonly generateChapters?: CodingAgentsControl["generateChapters"];
   /** The files marked viewed on GitHub; the marks are unread where none are named. */
   readonly viewed?: readonly string[];
+  /** The head the overview's merge box reads; none where it says none. */
+  readonly overviewHead?: string;
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
@@ -353,7 +355,25 @@ function controlAnswering(answers: Answers): CodingAgentsControl {
         },
       ],
     ]),
-    readOverviewPullRequest: () => Promise.resolve({ pullRequest: PULL_REQUEST }),
+    readOverviewPullRequest: () =>
+      Promise.resolve({
+        pullRequest:
+          answers.overviewHead === undefined
+            ? PULL_REQUEST
+            : {
+                ...PULL_REQUEST,
+                merging: {
+                  methods: [],
+                  autoMergeAllowed: false,
+                  queue: false,
+                  queued: null,
+                  autoMerge: null,
+                  headSha: answers.overviewHead,
+                  review: null,
+                  checks: CHECK_SUMMARY.PASSING,
+                },
+              },
+      }),
     readOverviewConversation: () => Promise.resolve({ pullRequest: CONVERSATION }),
     readOverviewChecks: () => Promise.resolve({ pullRequest: { checks: [] } }),
     readChanges: () =>
@@ -688,6 +708,37 @@ test("chapters made for an older head stand under a line saying new commits came
   act(() => button(tab, "Regenerate").click());
   await settle();
   assert.equal(generates, 1);
+});
+
+test("chapters a Generate made for a head pushed since the tab read the pull request are not stale, though the read after it still names the tab's older head", async () => {
+  let generated = false;
+  const tab = await draw(
+    controlAnswering({
+      overviewHead: OLDER,
+      // The read answers the head it was named, as the service does where the tab names one.
+      readChapters: (_agentId, _number, head) =>
+        Promise.resolve({
+          pullRequest: {
+            number: 42,
+            headSha: head ?? HEAD,
+            generatable: true,
+            chapters: generated ? ready() : { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+          },
+        }),
+      generateChapters: () => {
+        generated = true;
+        return Promise.resolve(answering(ready()));
+      },
+    }),
+  );
+
+  act(() => button(tab, "Generate chapters").click());
+  await settle();
+  assert.equal(heading(tab), "1. Read the expiry");
+  assert.doesNotMatch(
+    tab.querySelector(".luke-tab-notice")?.textContent ?? "",
+    /New commits since/u,
+  );
 });
 
 test("a generation that failed says why with Retry, chapters someone else is making offer Refresh, and a deployment that cannot make them says so", async () => {

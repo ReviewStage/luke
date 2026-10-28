@@ -32,7 +32,7 @@ export interface ChaptersHeld {
 /** A pull request's chapters as the Pull request tab holds them: the read, its door, and this window's own Generate. */
 export interface ChaptersRead {
   readonly answer: PullRequestChaptersAnswerView | undefined;
-  /** The head the chapters are stale against: the tab's own, where it holds one, else the answer's. */
+  /** The head the chapters are stale against: the one this window's Generate last answered until the tab's own read moves on, else the tab's own, where it holds one, else the answer's. */
   readonly head: string | undefined;
   readonly out: boolean;
   readonly ask: () => void;
@@ -75,8 +75,12 @@ export function useChaptersRead(
     { readonly of: unknown; readonly answer: PullRequestChaptersAnswerView } | undefined
   >(undefined);
   const [generating, setGenerating] = useState<number | undefined>(undefined);
-  const latest = useRef({ control, number, read });
-  latest.current = { control, number, read };
+  // The head a Generate told the chapters for, and the tab's head it was pressed over, which it stands in for until the tab's own read moves on.
+  const [generatedHead, setGeneratedHead] = useState<
+    { readonly over: string | undefined; readonly head: string } | undefined
+  >(undefined);
+  const latest = useRef({ control, number, read, held });
+  latest.current = { control, number, read, held };
   // Note that whether a Generate is out is a ref too, because two presses in one frame would both read the state as none.
   const out = useRef(false);
   const generate = useCallback(() => {
@@ -91,12 +95,20 @@ export function useChaptersRead(
         out.current = false;
         setGenerating(undefined);
         setGenerated({ of: latest.current.read.answer, answer });
+        // Note that GitHub was asked for the head just now, so it is newer than a tab's read from before a push.
+        if ("pullRequest" in answer && answer.pullRequest !== null) {
+          setGeneratedHead({ over: latest.current.held?.head, head: answer.pullRequest.headSha });
+        }
         latest.current.read.ask();
       });
   }, [agentId]);
   const answer =
     generated !== undefined && generated.of === read.answer ? generated.answer : read.answer;
-  return { answer, head: held?.head, out: read.out, ask: read.ask, generate, generating };
+  const head =
+    generatedHead !== undefined && generatedHead.over === held?.head
+      ? generatedHead.head
+      : held?.head;
+  return { answer, head, out: read.out, ask: read.ask, generate, generating };
 }
 
 /** How many chapters the Chapters tab counts: those ready, stale or not; none before then. */
