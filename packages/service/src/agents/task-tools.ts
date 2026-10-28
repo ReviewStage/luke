@@ -27,7 +27,6 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import {
-  AGENT_CALLER,
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
   type CodingAgentCall,
@@ -48,7 +47,7 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 /**
  * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's plan and where it stands, and make one.
  *
- * Luke on a call and every coding agent are offered the same `read_task`,
+ * Every coding agent is offered the same `read_task`,
  * one implementation, beside `list_tasks` (`coding-agent-tools.ts`), which
  * names the tasks it reads by id. It reads any task of the caller's
  * workspace, a teammate's included, as the member the
@@ -227,18 +226,14 @@ function planTextOf(plan: string): string {
   return plan.replace(TITLE_HEADING, "").trim();
 }
 
-/** Who a task's first plan is written by, as its history names them: Luke on a call, or the calling coding agent. */
+/** Who a task's first plan is written by, as its history names them: the calling coding agent. */
 function revisionWriterOf(call: CodingAgentCall): RevisionWriter {
-  return call.caller.kind === AGENT_CALLER.AGENT
-    ? { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id }
-    : { actor: PLAN_ACTOR.NOTETAKER };
+  return { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id };
 }
 
-/** Who made a task for the caller's member: the coding agent by its id, or Luke on their call. */
+/** Who made a task for the caller's member: the coding agent by its id. */
 function originOf(call: CodingAgentCall): TaskOrigin {
-  return call.caller.kind === AGENT_CALLER.AGENT
-    ? { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id }
-    : { actor: PLAN_ACTOR.NOTETAKER };
+  return { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id };
 }
 
 /** Who a revision is written by, as the history keeps it. */

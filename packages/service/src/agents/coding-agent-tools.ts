@@ -31,7 +31,6 @@ import { listTaskSections, writeTaskSections } from "@luke/database/models/task-
 import {
   listTasks,
   readTask,
-  readTaskHeader,
   type StoredTask,
   type TaskChanges,
   updateTask,
@@ -113,7 +112,6 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import { archiveAskedStatus } from "../tasks/archive-settle.js";
-import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { AgentSessions } from "./brain-host/eve-sessions.js";
@@ -176,12 +174,11 @@ import {
 /**
  * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, start one.
  *
- * Luke on a call and every coding agent are offered the same `list_agents`,
+ * Every coding agent is offered the same `list_agents`,
  * `read_agent`, and `start_agent`, one implementation each;
  * the caller is what differs (`AgentCaller`):
- * Luke acting for the member on the call, on the call's task, or a coding
- * agent acting for its starter, on its own task, which the host read from
- * the session it admitted and never from the call. A list and a read
+ * a coding agent acting for its starter, on its own task, which the host
+ * read from the session it admitted and never from the call. A list and a read
  * reach any agent of the caller's workspace, on any task or none
  * and by any member, read on the caller's standing on every call
  * (`workspace-agents.ts`); an agent of another workspace is none of them,
@@ -212,7 +209,7 @@ import {
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
  * owned by that member, with an empty plan, on the repository the caller
- * works in (Luke's task's, or the calling agent's own), confirmed through the
+ * works in (the calling agent's own), confirmed through the
  * workspace's installation first; a start that then fails takes the task it
  * made away again, and a call run again answers the agent and task it made.
  * A start may instead go on from another agent of the workspace, on that
@@ -275,8 +272,6 @@ const CODING_AGENT_TOOL_BOUNDS = {
   TAIL_ENTRIES: 20,
   /** The most entries a progress read may ask for: with a coding agent's entries, about ten thousand tokens. */
   MAX_TAIL_ENTRIES: 50,
-  /** The most characters one entry of Luke's tail carries, which he summarises aloud. */
-  ENTRY_CHARS: 300,
   /** The most characters one entry of a coding agent's tail carries, which it reads as text. */
   AGENT_ENTRY_CHARS: 800,
   /** The most characters an agent's latest activity carries in the list. */
@@ -477,20 +472,16 @@ function notOwnerWords(device: RefusedDevice | undefined): string {
   return `Not started: this task runs on ${where}. Only ${who} can start agents on it, so ask them to, or start the work on a task that runs elsewhere.`;
 }
 
-/** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
+/** Who calls an agent tool: a coding agent from its own session. */
 export const AGENT_CALLER = {
-  LUKE: "luke",
   AGENT: "agent",
 } as const;
 
 /**
  * Who a call is made by, as the host established it and never as the call
- * said: Luke on the call's task, acting for the member on the call; or a
- * coding agent, acting for the member who started it, on its own task.
+ * said: a coding agent, acting for the member who started it, on its own task.
  */
-type AgentCaller =
-  | { readonly kind: typeof AGENT_CALLER.LUKE; readonly plan: PlanDocumentBinding }
-  | { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: CodingAgent };
+type AgentCaller = { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: CodingAgent };
 
 /** What a call of the agent tools runs under: who calls, eve as the deployment acting for the caller's member, the writer, and the key the one message or start is made under. */
 export interface CodingAgentCall {
@@ -1213,21 +1204,19 @@ const publishedOf = (
     Result.isSuccess(read) ? read.success : undefined,
   );
 
-/** The member a call acts for: the one on Luke's call, or the starter of the coding agent calling. */
+/** The member a call acts for: the starter of the coding agent calling. */
 export function callerUserId(caller: AgentCaller): string {
-  return caller.kind === AGENT_CALLER.LUKE ? caller.plan.userId : caller.agent.userId;
+  return caller.agent.userId;
 }
 
-/** The task the caller works on: the call's, or the coding agent's own, which may be none. */
+/** The task the caller works on: the coding agent's own, which may be none. */
 export function callerTask(caller: AgentCaller): string | null {
-  return caller.kind === AGENT_CALLER.LUKE ? caller.plan.taskId : caller.agent.taskId;
+  return caller.agent.taskId;
 }
 
 /** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
 export const callerWorkspace = (caller: AgentCaller) =>
-  caller.kind === AGENT_CALLER.LUKE
-    ? taskWorkspace(caller.plan.userId, caller.plan.taskId)
-    : agentWorkspace(caller.agent.userId, caller.agent);
+  agentWorkspace(caller.agent.userId, caller.agent);
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
 /** The provider's own harness the agent runs on; none on eve. */
@@ -1272,7 +1261,7 @@ function stewardRefused(
   agent: CodingAgent,
   act: StewardAct,
 ): string | undefined {
-  return stewardRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, agent, act);
+  return stewardRefusal(caller.agent, agent, act);
 }
 
 /** Why the caller may not change the task under Steward (`steward.ts`): an operator changes only its member's own tasks. */
@@ -1280,7 +1269,7 @@ function stewardTaskRefused(
   caller: AgentCaller,
   task: { readonly ownerId: string },
 ): string | undefined {
-  return stewardTaskRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, task);
+  return stewardTaskRefusal(caller.agent, task);
 }
 
 /** Why the caller may not continue the agent again under Steward (`steward.ts`): an operator continues an agent once. */
@@ -1288,10 +1277,7 @@ function stewardContinuedRefused(
   caller: AgentCaller,
   continuedBefore: boolean,
 ): string | undefined {
-  return stewardContinuedRefusal(
-    caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined,
-    continuedBefore,
-  );
+  return stewardContinuedRefusal(caller.agent, continuedBefore);
 }
 
 /** A refusal's words, with when a plan's reached limit resets where the provider said, and which harness to connect where a credential is missing. */
@@ -1401,13 +1387,9 @@ export const orStoreRefusal = <R>(
     Effect.as(logStoreFailure(failure), agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE)),
   );
 
-/** The repository the caller works in: the calling agent's own, or that of Luke's task; none where that task names none or is gone. */
+/** The repository the caller works in: the calling agent's own; none where it names none. */
 export const workedRepository = (caller: AgentCaller) =>
-  caller.kind === AGENT_CALLER.AGENT
-    ? Effect.succeed<string | null>(caller.agent.repository)
-    : Effect.map(readTaskHeader(caller.plan.userId, caller.plan.taskId), (read) =>
-        Option.isSome(read) ? read.value.repository : null,
-      );
+  Effect.succeed<string | null>(caller.agent.repository);
 
 /**
  * What a call made before, run again after its start landed: the agent made
@@ -1470,7 +1452,7 @@ export function runListAgents(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const { agents, taskOf } = yield* workspaceAgentsOf(callerUserId(caller), workspace.value, {
         taskId: narrowed.success,
-        except: caller.kind === AGENT_CALLER.AGENT ? caller.agent.id : undefined,
+        except: caller.agent.id,
       });
       const standing = yield* standingsOf(agents);
       const offered = yield* offeredModels;
@@ -1517,10 +1499,7 @@ export function runReadAgent(
     return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
   }
   const entries = asked.success.entries ?? CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES;
-  const entryChars =
-    call.caller.kind === AGENT_CALLER.AGENT
-      ? CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS
-      : CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS;
+  const entryChars = CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS;
   return orStoreRefusal(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(call.caller, asked.success.agentId);
@@ -1655,15 +1634,11 @@ function startFromRefusalWords(
   return startRefusalWords(refusal);
 }
 
-/**
- * Who hands pictures on in the caller's name: a coding agent its own
- * conversation's; Luke on a call, which keeps no conversation of its own
- * here, none.
- */
+/** Who hands pictures on in the caller's name: the coding agent its own conversation's. */
 function forwarderOf(caller: AgentCaller): ImageForwarder {
   return {
     userId: callerUserId(caller),
-    conversationId: caller.kind === AGENT_CALLER.AGENT ? caller.agent.conversationId : undefined,
+    conversationId: caller.agent.conversationId,
   };
 }
 
@@ -1678,7 +1653,7 @@ function startInputRefusal(
   if (prompt !== undefined || start.branch !== undefined) {
     return START_CODING_AGENT_REFUSAL.FROM_WITH_PROMPT;
   }
-  const self = caller.kind === AGENT_CALLER.AGENT && from.agentId === caller.agent.id;
+  const self = from.agentId === caller.agent.id;
   return self && from.messageId === undefined
     ? START_CODING_AGENT_REFUSAL.SELF_CONTINUE
     : undefined;
@@ -1754,10 +1729,7 @@ export function runStartAgent(
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
       // An agent a coding agent starts hears who started it, and that it reports back to it by message.
-      const note =
-        caller.kind === AGENT_CALLER.AGENT
-          ? startedByNote(caller.agent, asked.success.note)
-          : asked.success.note;
+      const note = startedByNote(caller.agent, asked.success.note);
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         ...place,
         idempotencyKey: call.clientKey,
@@ -1769,9 +1741,8 @@ export function runStartAgent(
         branch: asked.success.branch,
         from,
         summaryModel: call.summaryModel,
-        ...(caller.kind === AGENT_CALLER.AGENT
-          ? { noteHeading: START_NOTE_HEADING.AGENT, startedBy: caller.agent }
-          : undefined),
+        noteHeading: START_NOTE_HEADING.AGENT,
+        startedBy: caller.agent,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;
@@ -1790,12 +1761,9 @@ export function runStartAgent(
   );
 }
 
-/** Who an archive is by: Luke, or the calling coding agent by its id and name, for the member the caller acts for, with the reason given. */
+/** Who an archive is by: the calling coding agent by its id and name, for the member the caller acts for, with the reason given. */
 function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArchive {
   const why = reason === undefined ? undefined : { reason };
-  if (caller.kind === AGENT_CALLER.LUKE) {
-    return { by: CODING_AGENT_ARCHIVER.LUKE, userId: caller.plan.userId, ...why };
-  }
   return {
     by: CODING_AGENT_ARCHIVER.AGENT,
     userId: caller.agent.userId,
@@ -2195,7 +2163,7 @@ export function runStopAgent(
   }
   const { agentId } = asked.success;
   const { caller, eve } = call;
-  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+  if (agentId === caller.agent.id) {
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.SELF));
   }
   return orStoreRefusal(
@@ -2304,7 +2272,7 @@ export function runUpdateAgent(
   const { agentId, title, model, effort, contextWindow, pinned, disabledServers } = asked.success;
   const { archived, reason } = asked.success;
   const { caller } = call;
-  if (archived === true && caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+  if (archived === true && agentId === caller.agent.id) {
     return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.SELF));
   }
   const userId = callerUserId(caller);
@@ -2564,7 +2532,7 @@ const pageStandingOf = (caller: AgentCaller, owner: PageOwner) =>
     if (Option.isNone(found)) return Option.none<PageStanding>();
     return Option.some<PageStanding>({
       agent: { id: owner.agentId, name: agentName(found.value.agent) },
-      isYours: caller.kind === AGENT_CALLER.AGENT && caller.agent.id === owner.agentId,
+      isYours: caller.agent.id === owner.agentId,
     });
   });
 

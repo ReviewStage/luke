@@ -127,6 +127,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And the member's operator, one standing per workspace, and archived for a fresh one.
  * And that operator private to its member: no teammate reaches it.
  * And the plan notes a native agent's running turn holds reserved, its account's alone.
+ * And the account's own agent that started an agent, which no other account's agent stands for.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -1500,6 +1501,45 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           Option.getOrThrow(yield* readCodingAgent(starter, forked.id)).startedFrom,
           startedFrom,
         );
+      }),
+  );
+
+  it.effect(
+    "an agent another of its account's agents started keeps that agent as its starter, read by a teammate as by its account and by no outsider, and a Start naming another account's agent keeps none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Rollout" });
+        const start = (startedByAgentId?: string): NewCodingAgent => ({
+          taskId: task.id,
+          planSnapshot: "# Rollout",
+          prompt: null,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+          ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
+        });
+        const orchestrator = Option.getOrThrow(yield* createCodingAgent(owner, start())).agent;
+        const worker = Option.getOrThrow(
+          yield* createCodingAgent(owner, start(orchestrator.id)),
+        ).agent;
+        const teammates = Option.getOrThrow(
+          yield* createCodingAgent(teammate, start(orchestrator.id)),
+        ).agent;
+
+        assert.equal(orchestrator.startedByAgentId, null);
+        assert.equal(worker.startedByAgentId, orchestrator.id);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(teammate, worker.id)).startedByAgentId,
+          orchestrator.id,
+        );
+        assert.ok(Option.isNone(yield* readCodingAgent(outsider, worker.id)));
+        assert.equal(teammates.startedByAgentId, null);
       }),
   );
 
