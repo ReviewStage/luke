@@ -4,6 +4,7 @@ import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
+import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
 /**
  * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
@@ -33,6 +34,12 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
  * What is drawn here is the card's words alone. The surface it stands on,
  * when it shows, how long it lingers for the pointer to cross onto it, and
  * what its subject is read from are the app's.
+ *
+ * While what a card says is read, it stands as its skeleton
+ * (`HoverCardSkeleton`): the head as the loaded card will draw it, its glyph
+ * or its mark in the same slot, its name, and a line held where the line
+ * under the name will stand, over a line for each note to come, so the card
+ * is placed once at its size and its head does not move as the read lands.
  *
  * A card says what its subject is and offers no way to it, no "Open agent"
  * under a rule, because the control it hangs from opens the subject on a
@@ -80,6 +87,15 @@ const ROW_END =
   "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
 const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
 const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
+
+/** What a card's skeleton says to a reader while what the card shows is read. */
+const CARD_READING = "Reading…";
+
+/** How wide the line held under a skeleton's name stands, as a model's or a place's words would. */
+const SUB_WIDTH = "50%";
+
+/** How wide a skeleton's last note line stands, short of the card's edge as a note's last line ends; every line before it fills the card. */
+const LAST_NOTE_WIDTH = "80%";
 
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
@@ -155,6 +171,50 @@ export function HoverCardHead({
       {mark}
       {head}
     </div>
+  );
+}
+
+/**
+ * A card while what it shows is read: its head as the loaded card will draw
+ * it, `mark` or `glyph` in the slot the loaded card wears it in, and its
+ * name, which the control it hangs from already knows; a line held under
+ * the name where the loaded card says one; and `notes` lines standing for
+ * what it says under its head. Its root is marked as a skeleton's for what
+ * finds it, beside the marks the loaded card's root carries.
+ */
+export function HoverCardSkeleton({
+  mark,
+  glyph,
+  name,
+  sub = false,
+  notes = 1,
+  ...marks
+}: {
+  /** What leads the loaded card's head at a card's size, a face or a tile. */
+  mark?: ReactNode;
+  /** The glyph on the loaded card's name's first line. */
+  glyph?: ReactNode;
+  name: ReactNode;
+  /** Whether the loaded card says a line under its name, which the skeleton holds. */
+  sub?: boolean;
+  /** How many lines the loaded card says under its head. */
+  notes?: number;
+} & HoverCardMarks): React.JSX.Element {
+  const lines = Array.from({ length: notes }, (_, at) => at);
+  return (
+    <HoverCard {...marks} data-hover-card-skeleton="">
+      <HoverCardHead
+        mark={mark}
+        glyph={glyph}
+        name={name}
+        sub={sub ? <Skeleton width={SUB_WIDTH} /> : undefined}
+      />
+      <SkeletonRegion label={CARD_READING}>
+        {lines.map((at) => (
+          <Skeleton key={at} width={at === notes - 1 ? LAST_NOTE_WIDTH : undefined} />
+        ))}
+      </SkeletonRegion>
+    </HoverCard>
   );
 }
 

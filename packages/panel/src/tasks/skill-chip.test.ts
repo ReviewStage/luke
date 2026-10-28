@@ -162,7 +162,7 @@ test("a skill still being read hangs a card of its name, with a placeholder for 
 
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
-  assert.equal(card?.querySelector('[role="status"]')?.textContent, "Reading skill…");
+  assert.equal(card?.querySelector('[role="status"]')?.textContent, "Reading…");
 });
 
 test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which says and opens nothing, since the chip opens it", async () => {

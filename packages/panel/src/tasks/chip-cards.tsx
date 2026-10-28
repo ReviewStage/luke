@@ -4,15 +4,7 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  DocumentIcon,
-  HoverCard,
-  HoverCardHead,
-  HoverCardNote,
-  Skeleton,
-  SkeletonRegion,
-  useMinute,
-} from "@luke/ui";
+import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@luke/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -84,39 +76,8 @@ function versionWords(revision: number): string {
 /** What an automation's card opens: nothing, since the chip it hangs from opens the automation. */
 const OPEN_NOTHING = (): void => undefined;
 
-/** What a card's placeholder says to a reader while what it shows is read. */
-const CARD_READING = "Reading…";
-
-/** How wide the line standing in for a card's note stands while it is read, as the skill card's does. */
-const CARD_NOTE_WIDTH = "80%";
-
 /** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
 const PAGE_UNREAD = "Luke cannot read this page.";
-
-/**
- * Every chip's card while what it shows is read, whatever its kind: the
- * chip's glyph and name, which it already knows, in a card's own head, and
- * one line standing in for what the card says under it, so a plan, an
- * agent, a page, a pull request, a person, and an automation all wait
- * alike rather than each showing the chip's words, a bare address, or
- * nothing.
- */
-export function ChipCardSkeleton({
-  glyph,
-  name,
-}: {
-  glyph: ReactNode;
-  name: string;
-}): React.JSX.Element {
-  return (
-    <HoverCard data-chip-card-reading="">
-      <HoverCardHead glyph={glyph} name={name} />
-      <SkeletonRegion label={CARD_READING}>
-        <Skeleton width={CARD_NOTE_WIDTH} />
-      </SkeletonRegion>
-    </HoverCard>
-  );
-}
 
 /** A page's card where its page cannot be read: the chip's glyph and name, and a note saying so. */
 export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string }): ReactNode {

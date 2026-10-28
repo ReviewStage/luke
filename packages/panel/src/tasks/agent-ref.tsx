@@ -9,7 +9,14 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, INLINE_REF_LOOK, InlineRef, Tooltip } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardSkeleton,
+  INLINE_REF_LOOK,
+  InlineRef,
+  Tooltip,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
@@ -22,7 +29,6 @@ import {
   heldLatest,
   lastFinished,
 } from "./agent-tab-card.js";
-import { ChipCardSkeleton } from "./chip-cards.js";
 import {
   agentActor,
   agentName,
@@ -388,7 +394,9 @@ export function AgentActorRef({
  * hangs it: its tab's card read as it is first hung, on the task it works
  * on or in the workspace the place's members are of
  * (`mentioned-agent-card.tsx`), its tile and name standing while it is
- * read, and where the read answers nothing.
+ * read, and where the read answers nothing. Note that the tile leads the
+ * head at a card's size in every state, as the loaded card wears it, so
+ * the head does not move as the read lands.
  */
 export function AgentHoverCard({
   actor,
@@ -398,10 +406,10 @@ export function AgentHoverCard({
   agentId: string;
 }): React.ReactNode {
   const { workspaceId } = useMemberDirectory();
-  const glyph = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
+  const mark = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
   const fallback = (
     <HoverCard>
-      <HoverCardHead glyph={glyph} name={actor.name} />
+      <HoverCardHead mark={mark} name={actor.name} />
     </HoverCard>
   );
   return (
@@ -410,7 +418,7 @@ export function AgentHoverCard({
       taskId={actor.taskId}
       name={actor.name}
       workspaceId={workspaceId}
-      reading={<ChipCardSkeleton glyph={glyph} name={actor.name} />}
+      reading={<HoverCardSkeleton mark={mark} name={actor.name} sub />}
       fallback={fallback}
     />
   );

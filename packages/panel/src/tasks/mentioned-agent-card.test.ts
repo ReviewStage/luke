@@ -316,7 +316,8 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(card, "the chip hangs a card");
   const look = {
     tab: card.matches("[data-tab-card]"),
-    reading: card.matches("[data-chip-card-reading]"),
+    reading: card.matches("[data-hover-card-skeleton]"),
+    led: card.querySelector(".luke-hover-card-lead") !== null,
     actor: card.getAttribute("data-actor-card") ?? undefined,
     name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
@@ -579,6 +580,24 @@ test("while what it shows is read, an agent's chip and a pull request's chip eac
   );
 });
 
+test("an agent named as an actor leads its card with its tile while its read is out, where its tab's card leads with it once read, so the head stands still", async () => {
+  const actor = createElement(ActorRef, {
+    actor: {
+      kind: ACTOR_KIND.AGENT,
+      agentId: PRORATE.id,
+      taskId: BILLING.id,
+      name: "Prorate",
+      provider: undefined,
+      state: ACTOR_STATE.REST,
+    },
+  });
+  pending = true;
+  const container = await drawnElement(actor);
+
+  const card = await cardOf(container.querySelector("[data-actor-ref]") ?? undefined);
+  assert.deepEqual([card.reading, card.led, card.name], [true, true, "Prorate"]);
+});
+
 test("a chip of Luke hangs Luke's own card", async () => {
   const container = await drawn(
     `Ask ${mentionMarkdown({ kind: MENTION_KIND.LUKE, taskId: BILLING.id }, "Luke", PLACE)}.`,
@@ -612,7 +631,7 @@ test("Luke and an agent named as actors hang Luke's card and the agent's tab's c
   const agentCard = await cardOf(agent);
   assert.equal(lukeCard.actor, ACTOR_KIND.LUKE);
   assert.deepEqual(
-    [agentCard.tab, agentCard.name, agentCard.foot],
-    [true, "Prorate seat changes", "On Billing by seat"],
+    [agentCard.tab, agentCard.led, agentCard.name, agentCard.foot],
+    [true, true, "Prorate seat changes", "On Billing by seat"],
   );
 });
