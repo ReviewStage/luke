@@ -19,11 +19,10 @@
  * account reaches and every agent of them and with no task, as two
  * statements built with the account's id (`task-list-live.ts`).
  *
- * `GET /api/live/task-board?id=` answers one task's whiteboard the same way,
- * as one statement that marks where it stands, after the task is read as
- * the account, so one it does not reach is not found, as its board read
- * answers; and `GET /api/live/task-record?id=` its pages and calls, one
- * statement a part (`task-record-live.ts`), on the same terms. `GET
+ * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
+ * the same way, one statement a part that marks where it stands
+ * (`task-record-live.ts`), after the task is read as the account, so one it
+ * does not reach is not found, as its own read answers. `GET
  * /api/live/task-browser-tabs?id=` answers its Browser tabs as one
  * statement, the agent's pointer on each among them, so a window draws the
  * pointer moving within a moment of the agent's action; a takeover is
@@ -76,7 +75,6 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { readAutomation } from "@luke/database/models/automation-store";
-import { boardLiveStatement } from "@luke/database/models/board-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTaskHeader } from "@luke/database/models/task-store";
@@ -86,6 +84,7 @@ import {
   workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -291,7 +290,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(inboxLive, { userId: context.userId }, input);
+      return yield* liveQueryParts(
+        inboxLive,
+        { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
+        input,
+      );
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -326,15 +329,6 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const statements = automationRunsLiveStatements(context.userId, automationId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
-    }),
-    taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statement = boardLiveStatement(context.userId, taskId);
-      if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts({ board: statement.value }, input);
     }),
     taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

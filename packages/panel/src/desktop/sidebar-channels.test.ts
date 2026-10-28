@@ -110,6 +110,7 @@ function mount(channels: readonly Channel[], opened: string[]): HTMLElement {
           createElement(SidebarChannels, {
             workspaceId: WORKSPACE_ID,
             channels: control,
+            waiting: new Map(),
             currentId: undefined,
             shown: true,
             onOpen: (channelId) => opened.push(channelId),

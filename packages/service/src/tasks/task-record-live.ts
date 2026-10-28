@@ -20,12 +20,10 @@ import { Option } from "effect";
  * showed (`pages`), one row a page at its newest version; the task's
  * calls (`calls`), which answers no rows now that Luke takes no calls; and
  * the code the task's agents showed (`code`), which answers no rows now that
- * no agent shows code. The board is followed on
- * its own (`boardLiveStatement`). Each statement reads what its held read
- * reads (`listPages`), the account joined through its membership of the
- * task's workspace and held to the task's GitHub access, as the board's
- * live read is, so a task the account does not reach is no rows. None reads
- * the clock, as Realtime requires.
+ * no agent shows code. Each statement reads what its held read reads
+ * (`listPages`), the account joined through its membership of the task's
+ * workspace and held to the task's GitHub access, so a task the account does
+ * not reach is no rows. None reads the clock, as Realtime requires.
  */
 
 /** The statements an open task's record is followed by, one a part. */

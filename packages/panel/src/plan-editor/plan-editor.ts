@@ -349,14 +349,23 @@ function caretWords(editor: Editor): PlacedWords | undefined {
   }
 }
 
-/** Where the caret goes as the editor opens on the words a click landed on, where it finds them; none where it does not. */
+/**
+ * Where the caret goes as the editor opens on the words a click landed on,
+ * where it finds them, the words its press selected selected again where it
+ * finds where they start too; none where it does not find the words.
+ */
 function placedOnWords(
   editor: Editor,
   placement: PlanEditorPlacement | undefined,
 ): Selection | undefined {
-  const words = placement !== undefined && "words" in placement ? placement.words : undefined;
-  const at = words === undefined ? undefined : wordsAt(editor, words);
-  return at === undefined ? undefined : TextSelection.near(editor.state.doc.resolve(at));
+  const click = placement !== undefined && "x" in placement ? placement : undefined;
+  const at = click?.words === undefined ? undefined : wordsAt(editor, click.words);
+  if (at === undefined) return undefined;
+  const from = click?.from === undefined ? undefined : wordsAt(editor, click.from);
+  const { doc } = editor.state;
+  return from === undefined || from === at
+    ? TextSelection.near(doc.resolve(at))
+    : TextSelection.between(doc.resolve(from), doc.resolve(at));
 }
 
 /** Where the caret goes as the editor opens, the words a click landed on aside. */

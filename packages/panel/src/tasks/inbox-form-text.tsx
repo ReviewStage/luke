@@ -120,6 +120,7 @@ export function InboxFormText({
           ...pickers.field.aria,
           "aria-labelledby": labelId,
           "aria-describedby": control["aria-describedby"],
+          "aria-required": control["aria-required"] === true ? "true" : undefined,
         }}
         onEnter={doors.onEnter}
         onPasteFiles={() => false}

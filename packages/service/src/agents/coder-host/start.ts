@@ -23,8 +23,8 @@ import {
 } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import {
-  AUTOMATION_LINE_METADATA,
   type AwaitingLineMetadata,
+  automationLineMetadata,
   type LineSender,
   storeWriter,
 } from "@luke/database/models/writer";
@@ -865,7 +865,7 @@ function openingOf(
   if (automationOrigin !== undefined) {
     return {
       sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automationOrigin.name },
-      metadata: AUTOMATION_LINE_METADATA,
+      metadata: automationLineMetadata(automationOrigin.firing),
     };
   }
   const sender: LineSender =

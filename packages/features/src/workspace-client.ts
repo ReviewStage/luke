@@ -18,7 +18,6 @@ import {
   hostedClient,
 } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
-import type { LinearIssueSummary } from "./linear-wire.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import {
   WORKSPACE_SENTRY_QUERY,
@@ -51,8 +50,6 @@ import type {
 } from "./workspace-live.js";
 import {
   type FormerMember,
-  type LinearIssuesRequest,
-  linearIssuesRequestSchema,
   WORKSPACE_MEMBERS_QUERY,
   type Workspace,
   type WorkspaceMember,
@@ -60,7 +57,6 @@ import {
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
-  workspaceLinearRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberRoleSchema,
   workspacePhotoSetRequestSchema,
@@ -106,7 +102,6 @@ const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
   [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
   [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE],
 ]);
 
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
@@ -327,34 +322,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Where the browser goes to connect Linear for the whole workspace: Vercel Connect's sign-in address. */
-  linearConnect(
-    workspaceId: string,
-  ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(workspaceLinearRequestSchema)({ workspaceId }),
-    );
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceLinear.connect, admitted),
-      (answer) => answer.url,
-    );
-  }
-
-  /** The workspace's Linear disconnected, answering the workspace as it then stands. */
-  linearDisconnect(
-    workspaceId: string,
-  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(workspaceLinearRequestSchema)({ workspaceId }),
-    );
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceLinear.disconnect, admitted),
-      (answer) => answer.workspace,
-    );
-  }
-
   /** Whether the deployment holds Luke's Sentry integration, and the workspace's active installations of it. */
   sentryInstallations(
     workspaceId: string,
@@ -397,26 +364,6 @@ export class HostedWorkspaceClient {
     return hostedResult(
       askHosted(this.#hosted.workspaceSentry.disconnect, admitted),
       (answer) => answer,
-    );
-  }
-
-  /**
-   * The Linear issues the workspace's connection reaches, newest changed
-   * first, or those the search matches; a request the service would refuse
-   * by shape never travels.
-   */
-  linearIssues(
-    request: LinearIssuesRequest,
-  ): Effect.Effect<
-    WorkspaceCallResult<readonly LinearIssueSummary[]>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const admitted = Result.getOrUndefined(readEither(linearIssuesRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedResult(
-      askHosted(this.#hosted.workspaceLinear.issues, admitted),
-      (answer) => answer.issues,
     );
   }
 

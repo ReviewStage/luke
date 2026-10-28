@@ -144,6 +144,7 @@ function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorSta
 export function accountInboxPast(
   userId: string,
   after: string,
+  repositoryless = false,
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
@@ -151,7 +152,7 @@ export function accountInboxPast(
     const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
     const tasks = yield* accountInboxTasks(userId);
-    const tasklessRows = yield* accountTasklessItems(userId);
+    const tasklessRows = yield* accountTasklessItems(userId, repositoryless);
     const automations = yield* accountInboxAutomations(userId);
     const failedRuns = yield* failedRunsOf(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);

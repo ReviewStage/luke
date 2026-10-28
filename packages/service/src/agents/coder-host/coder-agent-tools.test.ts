@@ -107,7 +107,6 @@ import {
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { postInboxThread } from "../../inbox/inbox-store.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
   ModelCatalogUnavailable,
@@ -120,7 +119,6 @@ import {
   githubReaching,
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
-import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
@@ -395,7 +393,6 @@ async function peerCaller(
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
-  linear: Layer.Layer<WorkspaceLinearConnect> = NO_WORKSPACE_LINEAR,
   sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
   const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
@@ -408,7 +405,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear, sentry))),
+        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry))),
     );
 }
 
@@ -443,13 +440,7 @@ async function directMessage(
       })
       .pipe(
         Effect.provide(
-          Layer.mergeAll(
-            services,
-            modelCatalogOf(CATALOG),
-            ANALYTICS.layer,
-            NO_WORKSPACE_LINEAR,
-            SENTRY_CONFIGURED,
-          ),
+          Layer.mergeAll(services, modelCatalogOf(CATALOG), ANALYTICS.layer, SENTRY_CONFIGURED),
         ),
       ),
   );
@@ -3996,7 +3987,6 @@ test("create_automation and update_automation take a Sentry trigger once the wor
     agents.caller,
     eve.services,
     modelCatalogOf(CATALOG),
-    NO_WORKSPACE_LINEAR,
     Layer.succeed(SentryApp, sentryAppService(undefined, ["SENTRY_APP_CLIENT_SECRET"])),
   );
   const alerts = {

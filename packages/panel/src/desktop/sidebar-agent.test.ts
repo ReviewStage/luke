@@ -19,9 +19,8 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
-import { type AgentActions, rowDoors, useAgentActions } from "./agent-actions.js";
+import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
-import { contentActionGroups } from "./strip-tabs.js";
 
 /**
  * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, offers every action its tab and its page offer but those `NOT_ON_A_ROW` names, and is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; deleted for good once asked, last and alone in its menu; and hanging its card while rested on.
@@ -381,11 +380,11 @@ function heard(row: HTMLElement): string {
   return row.textContent ?? "";
 }
 
-test("an agent's row offers Mark as unread after Copy link and before Rename, and the mark by hand reads it unread, as a task's row does", async () => {
+test("an agent's row offers Mark as unread beside Rename, after Copy link, and the mark by hand reads it unread, as a task's row does", async () => {
   const row = mount(RUN);
   const labels = rightClick(row).map((each) => wordsOf(each));
-  assert.ok(labels.indexOf("Mark as unread") > labels.indexOf("Copy link"));
-  assert.ok(labels.indexOf("Mark as unread") < labels.indexOf("Rename"));
+  assert.ok(labels.indexOf("Rename") > labels.indexOf("Copy link"));
+  assert.equal(labels.indexOf("Mark as unread"), labels.indexOf("Rename") + 1);
   assert.ok(!heard(row).includes("(unread)"));
 
   await choose(row, "Mark as unread");
@@ -518,8 +517,7 @@ function sharedOnRow(agent: TasklessAgent): string[] {
   );
   act(() => held.unmount());
   const doors = (offered ?? assert.fail("the actions were offered")).doors;
-  const tab = { chosen: false, onClose: undefined, onCloseOthers: undefined, pin: undefined };
-  return contentActionGroups({ ...tab, ...rowDoors(doors) })
+  return agentMenuGroups(rowDoors(doors))
     .flat()
     .map((each) => each.label);
 }
@@ -541,6 +539,19 @@ test("every action an agent's tab and page offer stands in its row's right-click
       "place each on the row (sidebar-agent.tsx) or name it in NOT_ON_A_ROW",
     );
   }
+});
+
+test("an agent's row draws the one agent menu in its order: Rename and the read mark, then Pin, then Archive, then Permanently delete alone, Show details where the row's menu puts it; Copy link stands nowhere under no workspace", () => {
+  const row = mount(RUN);
+  const labels = rightClick(row).map((each) => each.textContent);
+  assert.deepEqual(labels, [
+    "Rename",
+    "Mark as unreadU",
+    "PinP",
+    "Archive",
+    "Show details⌥↓",
+    "Permanently delete",
+  ]);
 });
 
 test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {

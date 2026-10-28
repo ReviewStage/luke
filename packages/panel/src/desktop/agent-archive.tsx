@@ -16,7 +16,8 @@ import {
   Stack,
   Tooltip,
   useConfirmDialog,
-  useMenu,
+  useRowMenu,
+  withContextMenu,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
@@ -33,7 +34,8 @@ import {
 } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type MenuAction, rowMenu } from "./action-menu.js";
+import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { type CountNoun, foldedCount } from "./sidebar-fold.js";
 
 /**
@@ -67,9 +69,11 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
  * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, as the sidebar task
- * rows' Pin and Archive do: at rest it takes no room, the name running the
+ * rows' Pin and Archive do, a ⋯ beside it: at rest they take no room, the name running the
  * row's full width, and shown, the name is cut where it begins and fades
- * out there. A screen with no hover shows it at rest. Its right-click offers the same. The
+ * out there. A screen with no hover shows them at rest. The ⋯, a right-click, and the menu key open
+ * the agent's one menu over the doors a row has (`agent-actions.tsx`): Copy link, Unarchive, and
+ * Permanently delete, asked first. The
  * row hangs the agent's card beside it as a standing row does, saying it
  * was archived and when (`agent-ref.tsx`), though no press opens it,
  * since its tab is gone. It draws nothing while no agent is archived, and
@@ -187,7 +191,10 @@ export function useAgentArchive(
   };
 }
 
-/** One archived agent: its glyph and name, muted, hanging its card, its Unarchive at its end, and its right-click offering the same. */
+/** What an archived agent's row is, naming its ⋯ and menu "Archived agent actions". */
+const ARCHIVED_THING = "Archived agent";
+
+/** One archived agent: its glyph and name, muted, hanging its card, its Unarchive and its ⋯ at its end, and its right-click and the menu key opening the ⋯'s menu. */
 function ArchivedAgentRow({
   agent,
   agents,
@@ -198,14 +205,25 @@ function ArchivedAgentRow({
   shown: boolean;
 }): React.JSX.Element {
   const press = useArchivePress(agents);
-  const menu = useMenu(shown);
   const item = useRef<HTMLLIElement>(null);
-  const unarchive = () => press(agent.id, false);
+  const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
+  // The agent's menu over the doors a row has: an archived agent's Copy link, Unarchive, and Permanently delete.
+  const actions = useAgentActions(agent, agents, {
+    label: subject.name,
+    shown,
+    terminals: { onOpenTerminal: undefined },
+  });
+  const menu = useRowMenu(rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown));
   // Note that the button's Unarchive is drawn on the answer, because drawn at once the row would leave and take its ring with it.
   const unarchiving = useBusyPress(() => press(agent.id, false, ARCHIVE_DRAWN.ON_ANSWER));
-  const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
-    <li ref={item} className="task-summary-archived-agent relative" {...menu.contextMenu()}>
+    <li
+      ref={item}
+      className="task-summary-archived-agent relative"
+      data-menu-open={menu.open ? "true" : undefined}
+      onKeyDown={menu.onKeyDown}
+      {...withContextMenu(menu.doors, {})}
+    >
       <Tooltip
         label={subject.name}
         card={<AgentCard subject={subject} models={agents.models} />}
@@ -231,15 +249,10 @@ function ArchivedAgentRow({
             onClick={unarchiving.onPress}
           />
         </Tooltip>
+        {menu.button({ size: BUTTON_SIZE.COMPACT })}
       </span>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label="Archived agent actions"
-          menu={menu.drawn}
-          groups={[[commandAction(PANEL_COMMAND.UNARCHIVE_AGENT, unarchive, false)]]}
-          onClose={menu.close}
-        />
-      )}
+      {menu.popup}
+      {actions.dialog}
     </li>
   );
 }

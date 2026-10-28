@@ -146,9 +146,8 @@ it moves every task standing into its starter's first workspace, and
 statement joins into its own where clause. A task is read and written by
 every member of its workspace, whichever of them started it:
 `taskReachableBy` and `reachableTask` gate every task statement in
-`task-store.ts`, `board-store.ts`, `plan-pages.ts`, and `plan-revisions.ts`,
-on the caller's membership of the task's workspace rather than on the task's
-starter.
+`task-store.ts`, `plan-pages.ts`, and `plan-revisions.ts`, on the caller's
+membership of the task's workspace rather than on the task's starter.
 
 A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
 `bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@luke/features/picture-wire`)
@@ -174,7 +173,7 @@ conversations with it. The eve door (`brain-host/door.ts`), the host's
 admission (`brain-host/conversation.ts`, which answers the caller beside the
 conversation's owner), and the ask door all read it, so a member speaks into
 the session a teammate opened. From there the caller and the owner are two
-ids: the task, the board, every tool binding, an integration's grant, and a
+ids: the task, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
 A coding agent still runs on its starter's provider keys and GitHub

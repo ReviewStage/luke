@@ -1,5 +1,5 @@
 /**
- * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, and its history.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its edit, and its history.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
@@ -12,12 +12,6 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import {
-  BOARD_BOUNDS,
-  boardAnswerSchema,
-  boardSaveAnswerSchema,
-  boardSaveRequestSchema,
-} from "../board-wire.js";
 import { MAXIMUM_START_BODY_BYTES } from "../coding-agent-wire.js";
 import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -48,9 +42,6 @@ const START_BODY_BYTES = NAME_BODY_BYTES + BRIEF_BYTES + MAXIMUM_START_BODY_BYTE
 
 /** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
 const EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
-
-/** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
-const BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 const PLAN = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
 const REVISIONS = `${PLAN}/revisions` as const;
@@ -113,16 +104,6 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: PLAN }))
     .input(EffectSchema.Struct(taskParams))
     .output(EffectSchema.flip(taskDeleteAnswerSchema)),
-  readBoard: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: `${PLAN}/board` }))
-    .input(EffectSchema.Struct(taskParams))
-    .output(EffectSchema.flip(boardAnswerSchema)),
-  /** The board's scene written whole. */
-  saveBoard: hostedProcedure
-    .meta(bodyCap(BOARD_BODY_BYTES))
-    .meta(openapi({ method: HTTP_METHOD.PUT, path: `${PLAN}/board`, inputStructure: "detailed" }))
-    .input(exactBodyInput(EffectSchema.Struct(taskParams), boardSaveRequestSchema))
-    .output(EffectSchema.flip(boardSaveAnswerSchema)),
   /** The developer's edit of the document. */
   edit: hostedProcedure
     .meta(bodyCap(EDIT_BODY_BYTES))

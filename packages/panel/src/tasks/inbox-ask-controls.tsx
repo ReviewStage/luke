@@ -41,6 +41,7 @@ import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
 import { MarkdownMessage } from "../markdown-message.js";
+import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -340,6 +341,7 @@ function InboxFormField({
               <ChoiceList
                 legend={field.label}
                 describedBy={control["aria-describedby"]}
+                required={control["aria-required"]}
                 options={(field.options ?? []).map((option) => ({
                   value: option,
                   label: option,
@@ -431,6 +433,41 @@ export function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boo
  */
 export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
+}
+
+/** What a field's own control matches, which takes the keyboard where the field is missing. */
+const FIELD_CONTROL = 'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)';
+
+/**
+ * Takes the keyboard, in the answer box `box`, to what its unfinished
+ * answer lacks: the option a reader's Tab lands on, or the first of an
+ * ask's two presses; the missing field's first control; or the note line
+ * the box's words are written on, which stands outside the question's own.
+ */
+export function focusMissing(box: HTMLElement | null, missing: InboxMissing): void {
+  if (box === null) return;
+  switch (missing.kind) {
+    case INBOX_MISSING.OPTION: {
+      const rows = optionRows(box);
+      const option =
+        rows.find((row) => row.tabIndex === 0) ??
+        rows[0] ??
+        box.querySelector<HTMLElement>(`[${OPTIONS_ATTRIBUTE}] button`);
+      option?.focus();
+      return;
+    }
+    case INBOX_MISSING.FIELD: {
+      const field = [...box.querySelectorAll<HTMLElement>("[data-inbox-field-label]")].find(
+        (each) => each.dataset.inboxFieldLabel === missing.label,
+      );
+      field?.querySelector<HTMLElement>(FIELD_CONTROL)?.focus();
+      return;
+    }
+    case INBOX_MISSING.WORDS:
+      [...box.querySelectorAll<HTMLElement>('form.inbox-answer [contenteditable="true"]')]
+        .find((editor) => editor.closest("[data-inbox-draft-ask]") === null)
+        ?.focus();
+  }
 }
 
 /** Whether a key goes to a link, a step's say, whose own Enter opens it. */
@@ -558,7 +595,7 @@ function OpenControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className={INBOX_ASK_PRESSES} data-inbox-options="">
+        <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
           {ask.options.map((option) => {
             const picked = draft.choices.includes(option.label);
             return (
@@ -606,7 +643,8 @@ function OpenControls({
               ))}
             </Stack>
           )}
-          <div className={INBOX_ASK_PRESSES}>
+          {/* Note that the two presses are the to-do's options, which Enter's way to what is missing finds. */}
+          <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
             <AskPress
               label={ASK_PRESS.DONE}
               pressed={decision === INBOX_REPLY.DONE}

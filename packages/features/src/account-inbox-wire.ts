@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { automationRunReasonSchema } from "./automation-wire.js";
+import { CODING_AGENT_KIND } from "./coding-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -49,6 +50,18 @@ export const ACCOUNT_INBOX_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
+/**
+ * The query a reader names to be carried the items of agents with no
+ * repository too, the member's operator above all, whose entry says
+ * `repository: null`. Note that a build from before it never asks and is
+ * carried none, because it reads `repository` as a string and would fail
+ * the whole answer on one null.
+ */
+export const ACCOUNT_INBOX_REPOSITORYLESS = {
+  QUERY: "repositoryless",
+  INCLUDE: "include",
+} as const;
+
 /** One open item as the account's read carries it: where it waits, who posted it, and what it is called. */
 export const accountInboxEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -81,6 +94,8 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** The channel the thread lives in, which its sidebar row counts it under; absent from a service before it. */
+  channelId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
@@ -105,7 +120,10 @@ export type AccountInboxTask = typeof accountInboxTaskSchema.Type;
  * One open item of an agent with no task, as the account's read carries it:
  * where a task's item names its task, this names the automation whose run
  * started the agent and the repository it works in, which together stand
- * in the task's place. The automation, and its name with it, is null for
+ * in the task's place, and the agent's kind, which sets the member's
+ * operator apart. The repository is null for an agent that works in none,
+ * carried only to a reader that asked (`ACCOUNT_INBOX_REPOSITORYLESS`).
+ * The automation, and its name with it, is null for
  * an agent no automation started, once that automation is deleted, and for
  * a reader the automation's own rule does not let read it, such as a
  * member beside another's personal automation, whose runs every member
@@ -114,6 +132,8 @@ export type AccountInboxTask = typeof accountInboxTaskSchema.Type;
 export const accountTasklessEntrySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   agentId: wireUuidSchema,
+  /** What kind of agent posted it: a coder, or the member's operator, Luke; absent from a service before it, which reads as a coder. */
+  agentKind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.String,
   /** The account that started the agent, as an item of a task's agent says it, and on the same terms. */
@@ -122,7 +142,7 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   waitsOn: EffectSchema.optionalKey(EffectSchema.String),
   automationId: EffectSchema.NullOr(wireUuidSchema),
   automationName: EffectSchema.NullOr(EffectSchema.String),
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
   /** The workspace the agent belongs to, whose list its items stand in; absent from a service before it. */
   workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   title: EffectSchema.String,
@@ -133,6 +153,8 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, as a task's item says it, and on the same terms. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** The channel the thread lives in, as a task's item says it, and on the same terms. */
+  channelId: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AccountTasklessEntry = typeof accountTasklessEntrySchema.Type;

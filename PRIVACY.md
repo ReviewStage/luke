@@ -150,8 +150,8 @@ readable by our own operators. Deleting your account removes it.
 workspace: the first workspace made for your account unless you start it in
 another workspace you are a member of, and the task records which, and who
 started it, named by their account's name to every member of the workspace. Every member of that
-workspace can read, change, and delete the task, its board, its pages, and
-its history, read what was said on its calls, yours included, and read,
+workspace can read, change, and delete the task, its pages, and its
+history, read what was said on its calls, yours included, and read,
 message, rename, and stop the coding agents any member started on it. Each
 message a member sends a coding agent keeps which member sent it, as their
 account, and the agent's tab names them over it to every other member; a
@@ -457,18 +457,6 @@ the sandbox, a command, or its output. After you save it, neither your Mac nor
 any answer from our service holds the token again, and we never log it or send
 it to our analytics, crash reports, or screen recordings. Removing it in
 Settings, or deleting your account, deletes it.
-
-**A task's whiteboard.** You can draw on a task's whiteboard. Our service
-stores it with the task, as drawn and readable by our own operators: every
-shape, arrow, line, stroke, and piece of text and where it stands, and, from
-before coding agents stopped drawing on and looking at the board, their latest
-drawing and the last picture of the board your Mac drew for them, at most
-1,200 pixels a side. Luke on your Mac sends the whole board each time it
-changes. No model reads the board or that picture now; a drawing call an agent
-made before then, with what it drew, stays in the agent's transcript, and the
-model's session history may keep a picture it looked at then (see "Who we send
-it to"). You cannot put an image or a file on the board. Deleting the task
-deletes its whiteboard.
 
 **How agents read your repository.** A task names a GitHub
 repository of the Luke GitHub App installation connected to the task's
@@ -885,32 +873,6 @@ Linear, and the record of it, stays. Deleting your account removes the record
 and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
 cannot be reached then, your account is deleted all the same and the grant
 stays until you revoke Luke in Linear's own settings.
-
-**Linear for a whole workspace, if an owner or admin connects it.** An owner
-or admin can also connect Linear once for everyone in a workspace, in Settings
-› Workspace › Integrations. That signs them in to Linear in their browser
-through Vercel Connect, which stores the Linear token under the workspace
-rather than under their account, and our service handles the token as it
-does an account's, sending it only to Linear. We keep the workspace
-connection's state, who last began its sign-in, when it last changed and last
-finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. While it is connected, Luke's agents
-working on that workspace's plans and coding agents use this connection for
-Linear in place of a member's own, so what they change in Linear shows as made
-by the person who connected it. A plan started from an issue by an earlier
-version of Luke keeps the issue's key, title, address, and description, which
-are deleted with the plan. Where a plan, a reply, or an Inbox item shows a link
-to a Linear issue, the app asks our service for that issue's key, title,
-state, and assignee's name, which it reads through this connection as you
-look and keeps nowhere; the app shows them on the link, and they go no
-further. The connection read through is that of the workspace the words belong
-to: a
-plan's, or an Inbox item's own, its plan's or its agent's, never the
-workspace the Inbox happens to list; an item whose workspace is not known
-reads nothing.
-Disconnecting stops every read through it at once,
-removes the connection's record, and asks Vercel Connect to revoke the grant;
-what plans already copied of an issue stays with them.
 
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores
@@ -1541,8 +1503,8 @@ and error, performance, and agent reports by Sentry.
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts and preferences, your pinned
-  repositories, your tasks with their history, whiteboards, pages, coding
-  agents, inbox items and pictures, the conversation with
+  repositories, your tasks with their history, pages, coding agents,
+  inbox items and pictures, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, your name on the memories
   Luke's agents kept in your words (the memories themselves stay with their

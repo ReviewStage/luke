@@ -201,11 +201,12 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
       ? [
           {
             agentId: pageAgent.id,
+            ...(pageAgent.kind === undefined ? undefined : { agentKind: pageAgent.kind }),
             agentTitle: pageAgent.title,
             agentModel: pageAgent.model,
             automationId: pageAgent.automationId ?? null,
             automationName: null,
-            repository: "",
+            repository: agents.agentRepository ?? null,
             ...(agents.workspaceId === undefined ? undefined : { workspaceId: agents.workspaceId }),
           },
         ]

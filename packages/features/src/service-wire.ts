@@ -149,13 +149,6 @@ export const HOSTED_API_ERROR = {
   ALREADY_INVITED: "already-invited",
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: "sandbox-stopped",
-  /**
-   * The workspace's Linear could not be read: none is connected, Linear no
-   * longer honours its grant, or the issue is none it reaches. An owner or
-   * admin mends the first two in Settings › Workspace › Workspace connections.
-   * Nothing was written.
-   */
-  LINEAR_UNAVAILABLE: "linear-unavailable",
   /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
   SKILL_NAME_TAKEN: "skill-name-taken",
   /** A skill's files were refused: past a skill's bounds, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */

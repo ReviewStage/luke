@@ -19,7 +19,6 @@ import {
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
   pagePlaceSchema,
@@ -73,7 +72,6 @@ import {
 } from "./workspace-invitation-wire.js";
 import {
   formerMemberSchema,
-  linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -862,19 +860,6 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
-
-/** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
-export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;
-
-export type TasksLinearIssuesParams = typeof tasksLinearIssuesParamsSchema.Type;
-
-/** The Linear issues as the window hears them: the issues the workspace's connection reaches, or why there are none. */
-export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ issues: EffectSchema.Array(linearIssueSummarySchema) }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

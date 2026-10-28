@@ -71,7 +71,7 @@ function revisionsStatement(userId: string, taskId: string) {
       )
       .from(planRevision)
       .innerJoin(task, eq(task.id, planRevision.taskId))
-      // Note that membership is a join, as the board's live read reads it, rather than the held read's subquery.
+      // Note that membership is a join, as the record's live read reads it, rather than the held read's subquery.
       .innerJoin(
         member,
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),

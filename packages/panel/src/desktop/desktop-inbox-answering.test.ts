@@ -85,6 +85,7 @@ import {
   rowNamed,
   SHOW_KEY,
   SORT_KEY,
+  sendHeld,
   sendWords,
   settle,
   standKeymap,
@@ -371,14 +372,14 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   act(() => keys.unmount());
 });
 
-test("Enter on a focused option sends the reply carrying the pick and never presses the option; with nothing picked, Send stands held and Enter sends nothing", async () => {
+test("Enter on a focused option sends the reply carrying the pick and never presses the option; with nothing picked, Send stands held, and Enter sends nothing and says an option is missing", async () => {
   const { page } = mount();
   await settle();
   const sent = heldMessages(repliedOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000090"));
   const pane = itemPane(page);
 
-  assert.equal(footWords(pane), "", "the box says nothing of what is missing");
-  assert.equal(answerSend(pane).disabled, true, "Send stands held");
+  assert.equal(footWords(pane), "", "the box says nothing of what is missing before a send");
+  assert.equal(sendHeld(pane), true, "Send stands held");
   assert.deepEqual(
     boxParts(pane),
     ["controls", "line: Add a note", "row: Attach files, Dictate, Send"],
@@ -388,6 +389,7 @@ test("Enter on a focused option sends the reply carrying the pick and never pres
   await settle();
   assert.deepEqual(sent, [], "a reply holding nothing goes nowhere");
   assert.deepEqual(checkedOptions(pane), [], "and Enter picked nothing");
+  assert.equal(footWords(pane), "Pick an option.");
 
   const once = openOptions(pane)[1] ?? assert.fail("no second option");
   act(() => once.click());
@@ -447,7 +449,7 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form of several fields, in its number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled sends nothing, the box naming nothing; Shift+Enter in a text field is a new line, an @ there picks a mention written in as its link, and an input method's Enter sends nothing", async () => {
+test("Enter anywhere in a form of several fields, in its number field or its text field's composer, sends what is filled, a required field left empty absent from it; with nothing filled it sends nothing, takes the keyboard to the first required field, and names it until something is filled; Shift+Enter in a text field is a new line, an @ there picks a mention written in as its link, and an input method's Enter sends nothing", async () => {
   const form = asking(EXPIRY, {
     type: INBOX_ASK.ANSWER,
     fields: [
@@ -474,11 +476,17 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
   keyOn(retries, "Enter");
   await settle();
   assert.deepEqual(sent, []);
-  assert.equal(footWords(pane), "");
+  assert.equal(footWords(pane), "Fill in Severity.");
+  assert.equal(
+    field("Severity").contains(document.activeElement),
+    true,
+    "the keyboard is taken to the field missing",
+  );
 
   // Note that the composer types each newline as Shift+Enter, so the line in the value sent is Shift+Enter's.
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
+  assert.equal(footWords(pane), "", "a field filled lets the line go");
   pressInComposer(field("Reason"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");
@@ -989,7 +997,7 @@ test("picking an option in the draft reply stands it picked and lights Send, the
 
   act(() => openOptions(pane)[1]?.click());
   assert.deepEqual(checkedOptions(pane), [], "pressed again, the pick is let go");
-  assert.equal(answerSend(pane).disabled, true, "and Send stands held again");
+  assert.equal(sendHeld(pane), true, "and Send stands held again");
   assert.equal(footWords(pane), "", "nothing says the ask stays open");
 
   // The number keys still pick, from wherever in the Inbox the reader stands.
@@ -1090,7 +1098,7 @@ test("an ask of words alone is a plain box with no controls, its line asking for
   assert.deepEqual(draftReply(pane), ["You"], "no controls stand in the box");
   assert.equal(pane.querySelector("[data-inbox-draft-ask]"), null, "and no Answer press");
   assert.deepEqual(boxParts(pane), ["line: Reply", "row: Attach files, Dictate, Send"]);
-  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(sendHeld(pane), true, "an empty box sends nothing");
   assert.equal(footWords(pane), "");
 
   typeInComposer(pane, "Nothing needs you right now.");
@@ -1207,7 +1215,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
   assert.equal(askMarker(pane), null);
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
-  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
+  assert.equal(sendHeld(pane), true, "nothing ticked, nothing to send");
 
   act(() => steps()[0]?.click());
   assert.deepEqual(draftReply(pane), ["You", "controls"]);
@@ -1306,7 +1314,7 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   assert.equal(markDone(), "false", "letting a step go takes Mark done back off");
   assert.equal(answerSend(pane).disabled, false, "the step still ticked goes with the reply");
   act(() => steps()[0]?.click());
-  assert.equal(answerSend(pane).disabled, true, "nothing ticked, nothing to send");
+  assert.equal(sendHeld(pane), true, "nothing ticked, nothing to send");
   assert.equal(footWords(pane), "");
   act(() => steps()[0]?.click());
   act(() => steps()[1]?.click());

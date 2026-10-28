@@ -60,7 +60,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -160,8 +159,6 @@ export const HOSTED_REFUSAL = {
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
-  /** The workspace's Linear could not be read: none connected, its grant refused, or no such issue; nothing was written. */
-  LINEAR_UNAVAILABLE: { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE },
   /** A skill of that name is already installed in the scope asked; nothing was installed. */
   SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
   /** A skill's files were refused; nothing was installed. */

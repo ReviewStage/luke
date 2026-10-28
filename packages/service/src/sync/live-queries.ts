@@ -33,6 +33,7 @@ import {
   taskSync,
   userSync,
 } from "@luke/database/sync/tables";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
@@ -114,7 +115,7 @@ const ITEM_GATES = [memberSync, githubPersonalTokenSync, githubRepositoryReadSyn
  */
 export const inboxLive = defineLiveQuery({
   name: "inbox",
-  params: ["userId"],
+  params: ["userId", "repositoryless"],
   reads: [
     inboxItemSync,
     inboxItemReadSync,
@@ -125,9 +126,10 @@ export const inboxLive = defineLiveQuery({
     ...ITEM_GATES,
   ],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) =>
+  // Note that an agent with no repository is carried only to a reader that asks (`ACCOUNT_INBOX_REPOSITORYLESS`), since a build before it fails its whole read on one null.
+  statements: ({ userId, repositoryless }) =>
     Option.zipWith(
-      accountInboxLiveStatements(userId),
+      accountInboxLiveStatements(userId, repositoryless === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
       ownFailedRunsLiveStatement(userId),
       (parts, failedRuns) => ({ ...parts, failedRuns }),
     ),

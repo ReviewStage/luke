@@ -3,7 +3,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentAttachment,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -44,6 +48,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
@@ -53,6 +58,12 @@ import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
+import {
+  fillInWords,
+  INBOX_MISSING,
+  type InboxMissing,
+  WRITE_AN_ANSWER,
+} from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
 /**
@@ -324,47 +335,37 @@ export function inboxReply(
   return inboxReplyRefusal(response, answer, draft.attachments) === undefined ? answer : undefined;
 }
 
-/** What an open ask's answer still lacks: an option picked, a required field filled, or the developer's own words. */
-export const INBOX_MISSING = {
-  OPTION: "option",
-  FIELD: "field",
-  WORDS: "words",
-} as const;
-
-/** What the answer lacks; a field's by its label. */
-export type InboxMissing =
-  | { readonly kind: typeof INBOX_MISSING.OPTION }
-  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string }
-  | { readonly kind: typeof INBOX_MISSING.WORDS };
-
 /**
- * What the card's answer still lacks, the first thing in the response's order,
- * or nothing where it lacks nothing it can be told to fill: a choice with
- * no pick and no words of the developer's own lacks an option, a form with
- * nothing to send its first required field left empty, an approval or a
- * to-do its decision, and words their words. A note lacks nothing, its nod
- * being its answer.
+ * What the open ask's answer still lacks where the box holds nothing it can
+ * send (`inboxThreadSend`), or nothing where it sends, no ask it knows
+ * waits, or the developer wrote or attached something of their own, which
+ * a box refuses only past its bound, as its counter says: a `decide` with
+ * no pick lacks an option, and a `do` with nothing ticked or pressed its
+ * decision, an option of its two; an `answer`'s fields their first required
+ * field left empty, or their first empty where none is, since a form filled
+ * in part sends what was filled; and an `answer` of words alone its words.
  */
-export function inboxMissing(response: InboxResponse, draft: InboxDraft): InboxMissing | undefined {
-  const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
-  switch (response.type) {
-    case INBOX_RESPONSE.CHOICE:
-      return draft.choices.length > 0 || ownWords ? undefined : { kind: INBOX_MISSING.OPTION };
-    case INBOX_RESPONSE.FORM: {
-      if (formSendable(response, draft)) return undefined;
-      const sent = new Set(sentValues(response, draft).map((value) => value.label));
-      const empty = response.fields.find(
-        (field) => field.required === true && !sent.has(field.label),
-      );
-      return empty === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: empty.label };
+export function inboxMissing(
+  thread: readonly InboxMessage[],
+  draft: InboxDraft,
+): InboxMissing | undefined {
+  if (inboxThreadSend(thread, draft) !== undefined) return undefined;
+  if (draft.note.trim() !== "" || draft.attachments.length > 0) return undefined;
+  const asking = openAskOf(thread);
+  if (asking === undefined || !knownAsk(asking.ask)) return undefined;
+  const { ask } = asking;
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+    case INBOX_ASK.DO:
+      return { kind: INBOX_MISSING.OPTION };
+    case INBOX_ASK.ANSWER: {
+      if (ask.fields === undefined) return { kind: INBOX_MISSING.WORDS };
+      // Note that a yes-or-no left alone sends no, so it is never what a form lacks.
+      const sent = new Set(sentValues({ fields: ask.fields }, draft).map((value) => value.label));
+      const empty = ask.fields.filter((field) => !sent.has(field.label));
+      const first = empty.find((field) => field.required === true) ?? empty[0];
+      return first === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: first.label };
     }
-    case INBOX_RESPONSE.TEXT:
-      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS };
-    case INBOX_RESPONSE.APPROVAL:
-    case INBOX_RESPONSE.TODO:
-      return decidedOf(response, draft) === undefined ? { kind: INBOX_MISSING.OPTION } : undefined;
-    default:
-      return undefined;
   }
 }
 
@@ -1084,8 +1085,8 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
     }
     case INBOX_ASK.ANSWER:
       return ask.fields === undefined
-        ? "Write an answer"
-        : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`;
+        ? WRITE_AN_ANSWER
+        : fillInWords(ask.fields.map((field) => field.label));
   }
 }
 
@@ -1137,7 +1138,7 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
+/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it, or Luke for the member's operator. */
 export const INBOX_HOLDER = {
   TASK: "plan",
   AUTOMATION: "automation",
@@ -1153,7 +1154,8 @@ type InboxAgentLine = Pick<
  * The task holding an item, or the automation holding an item of an agent
  * with no task, named as its group's header names it, and its agents as
  * main's read names them, by id; none for the agents no automation the
- * reader may read started.
+ * reader may read started. The member's operator stands under no
+ * automation but a group of its own, Luke (`operator`), which wears his mark.
  */
 export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
@@ -1161,7 +1163,9 @@ export type InboxHolder =
       readonly kind: typeof INBOX_HOLDER.AUTOMATION;
       readonly automationId: string | null;
       readonly name: string;
-      readonly repository: string;
+      readonly repository: string | null;
+      /** Whether this is the member's operator's group, Luke's, which no automation names. */
+      readonly operator: boolean;
       readonly agents: ReadonlyMap<string, InboxAgentLine>;
     };
 
@@ -1169,6 +1173,7 @@ export type InboxHolder =
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
+  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"
@@ -1177,9 +1182,10 @@ export type TasklessInboxAgent = Pick<
   | "workspaceId"
 >;
 
-/** The key a holder's group is folded and drawn by: the task's id, the automation's, or one key for the agents no automation names. */
+/** The key a holder's group is folded and drawn by: the task's id, the automation's, Luke's, or one key for the agents no automation names. */
 export function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
+  if (holder.operator) return OPERATOR_KEY;
   return holder.automationId ?? NO_AUTOMATION_KEY;
 }
 
@@ -1266,6 +1272,9 @@ const NO_AUTOMATION_KEY = "no-automation";
 /** What the group of agents no automation the reader may read started is called. */
 const NO_AUTOMATION_NAME = "Other agents";
 
+/** What the member's operator's group, Luke's, is keyed by. */
+const OPERATOR_KEY = "operator";
+
 /**
  * Whether a waiting item of an agent with no task is listed in the workspace
  * given: one of that workspace's agents', or one whose workspace the service
@@ -1285,8 +1294,8 @@ export function listedIn(
 
 /**
  * The groups the items of agents with no task stand in: one per automation
- * that started them, by its name, and one for the agents no automation the
- * reader may read names, each holding every item its agents' reads hold,
+ * that started them, by its name, one for the member's operator, Luke, and
+ * one for the agents no automation the reader may read names, each holding every item its agents' reads hold,
  * settled ones too; only the listed workspace's agents, where the service
  * names an agent's workspace, so another workspace's list holds none of
  * them.
@@ -1299,7 +1308,8 @@ export function tasklessGroups(
   const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
   for (const entry of waiting) {
     if (!listedIn(entry, workspaceId)) continue;
-    const key = entry.automationId ?? NO_AUTOMATION_KEY;
+    const operator = entry.agentKind === CODING_AGENT_KIND.OPERATOR;
+    const key = operator ? OPERATOR_KEY : (entry.automationId ?? NO_AUTOMATION_KEY);
     const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
     agents.set(entry.agentId, {
       agentTitle: entry.agentTitle,
@@ -1309,9 +1319,10 @@ export function tasklessGroups(
     });
     const holder: InboxHolder = groups.get(key)?.holder ?? {
       kind: INBOX_HOLDER.AUTOMATION,
-      automationId: entry.automationId,
-      name: entry.automationName ?? NO_AUTOMATION_NAME,
+      automationId: operator ? null : entry.automationId,
+      name: operator ? OPERATOR_NAME : (entry.automationName ?? NO_AUTOMATION_NAME),
       repository: entry.repository,
+      operator,
       agents,
     };
     groups.set(key, { holder, agents });
