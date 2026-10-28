@@ -70,12 +70,7 @@ import {
   Schema,
 } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import {
-  Database,
-  type DatabaseServices,
-  queryBuilder,
-  type StoreFailure,
-} from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import {
   CONVERSATION_KIND,

@@ -93,11 +93,7 @@ import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js
 import { added } from "../../testing/task-contents.js";
 import { eveContent, keptHandedImages } from "../attached-files.js";
 import { BROWSER_TOOL_STATUS } from "../browser/browser-tool.js";
-import {
-  EVE_HOST_ATTRIBUTE,
-  EVE_HOST_REFUSAL,
-  EVE_HOST_TURN,
-} from "../eve-host/bounds.js";
+import { EVE_HOST_ATTRIBUTE, EVE_HOST_REFUSAL, EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { memoryRelayState } from "../eve-host/relay.js";
 import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
