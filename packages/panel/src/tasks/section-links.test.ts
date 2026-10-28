@@ -52,8 +52,18 @@ const TASK: Task = {
   },
 };
 
-/** A section's ⋯, as against the title's beside it. */
-const SECTION_MORE = '.plan-unit-more button[aria-label="Section actions"]';
+/** A Copy link button of a unit, a section's or the title's. */
+const UNIT_LINK = '.plan-unit-more button[aria-label="Copy link"]';
+
+/** The sections' Copy link buttons, the title's left out. */
+function sectionLinks(container: HTMLElement): HTMLButtonElement[] {
+  return [...container.querySelectorAll<HTMLButtonElement>(UNIT_LINK)].filter(
+    (button) => button.closest(".luke-page-header-actions") === null,
+  );
+}
+
+/** The title's Copy link button, which ends its line in the header's acts. */
+const TITLE_LINK = '.luke-page-header-actions button[aria-label="Copy link"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
@@ -115,20 +125,15 @@ test("a mention of a heading the plan no longer holds is struck through, and a p
   assert.deepEqual(opened, [{ kind: MENTION_KIND.TASK, taskId: TASK_ID }]);
 });
 
-test("a section's ⋯ copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
+test("a section's Copy link button copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
   const { container } = drawn();
 
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
-  assert.ok(more, "the Rollout section has a ⋯");
-  act(() => more.click());
-  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === "Copy link",
-  );
-  assert.ok(item, "the ⋯ offers to copy the section's link");
-  await act(async () => item.click());
+  const more = rollout?.querySelector<HTMLButtonElement>(UNIT_LINK);
+  assert.ok(more, "the Rollout section has a Copy link button");
+  await act(async () => more.click());
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${TASK_ID}#rollout`]);
 });
@@ -245,20 +250,15 @@ function drawnEditable(): HTMLElement {
   return container;
 }
 
-test("copying a section's link from its ⋯ opens no editor, as a click into its words does", async () => {
+test("copying a section's link from its button opens no editor, as a click into its words does", async () => {
   const container = drawnEditable();
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
+  const more = rollout?.querySelector<HTMLButtonElement>(UNIT_LINK);
   assert.ok(more);
 
-  act(() => more.click());
-  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === "Copy link",
-  );
-  assert.ok(item);
-  await act(async () => item.click());
+  await act(async () => more.click());
   const afterCopy = container.querySelector(".plan-document-editor");
   act(() =>
     rollout
@@ -270,20 +270,20 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
   assert.notEqual(container.querySelector(".plan-document-editor"), null);
 });
 
-test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
+test("only the Copy link button beside the document's one Tab stop is a Tab stop", () => {
   const container = drawnEditable();
 
   const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more button")].filter(
     (more) => more.tabIndex === 0,
   );
 
-  assert.ok(stops.length <= 1, `${stops.length} of the ⋯ are Tab stops`);
+  assert.ok(stops.length <= 1, `${stops.length} of the buttons are Tab stops`);
 });
 
-test("on a plan that cannot be edited, where no block is a Tab stop, every section's ⋯ is one", () => {
+test("on a plan that cannot be edited, where no block is a Tab stop, every section's Copy link button is one", () => {
   const { container } = drawn();
 
-  const mores = [...container.querySelectorAll<HTMLElement>(SECTION_MORE)];
+  const mores = sectionLinks(container);
 
   assert.equal(mores.length, 3);
   assert.ok(mores.every((more) => more.tabIndex === 0));
@@ -389,13 +389,8 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   );
 
   act(() => chipNamed(container, "Notes").click());
-  for (const more of container.querySelectorAll<HTMLButtonElement>(SECTION_MORE)) {
-    act(() => more.click());
-    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Copy link",
-    );
-    assert.ok(item);
-    await act(async () => item.click());
+  for (const more of sectionLinks(container)) {
+    await act(async () => more.click());
   }
 
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "notes-1" }]);
@@ -448,10 +443,8 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** The task's page drawn as a task's own page is, its title renamed through a door each Rename asks once, and its versions opened, each kept. */
+/** The task's page drawn as a task's own page is, its title editable. */
 function drawnTitled() {
-  const renamed: string[] = [];
-  const histories: (number | undefined)[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -461,89 +454,48 @@ function drawnTitled() {
     return createElement(PlanBody, {
       task: TASK,
       onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-      onRename: (name) => {
-        renamed.push(name);
-        return Promise.resolve(true);
-      },
+      onRename: () => Promise.resolve(true),
       rename: { asks, asked: undefined, onBegin: () => setAsks((count) => count + 1) },
-      onShowHistory: (save) => histories.push(save),
       sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
     });
   }
   act(() => root.render(createElement(TitledPlan)));
   const block = container.querySelector<HTMLElement>('[role="group"][aria-label="Title"]');
-  const more = container.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
+  const more = container.querySelector<HTMLButtonElement>(TITLE_LINK);
   assert.ok(block, "the title is a block");
-  assert.ok(more, "the title has a ⋯");
-  return { container, block, more, renamed, histories };
+  assert.ok(more, "the title has a Copy link button");
+  return { container, block, more };
 }
 
-/** The open menu's items, by what each says. */
-function menuLabels(): string[] {
-  return [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].map(
-    (item) => item.textContent ?? "",
-  );
-}
-
-function chooseItem(label: string): Promise<void> {
-  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === label,
-  );
-  assert.ok(item, `the menu offers ${label}`);
-  return act(async () => item.click());
-}
-
-test("the title's ⋯ is a section's: at the end of the title's line, shown while the keyboard is on the title, the Tab stop after it, and its menu takes focus and hands it back on Escape", () => {
+test("the title's Copy link button ends the title's line, shown while the keyboard is on the title, the Tab stop after it, and copies the plan's link", async () => {
   const { block, more } = drawnTitled();
-  // The unit whose hover or focus shows its ⋯, as a section's does.
+  // The unit whose hover or focus shows the button, as a section's does.
   const unit = more.closest(".plan-unit-attributed");
-  assert.ok(unit, "the ⋯ stands in a unit");
-  assert.ok(unit.contains(block), "the ⋯ stands in the title's unit");
+  assert.ok(unit, "the button stands in a unit");
+  assert.ok(unit.contains(block), "the button stands in the title's unit");
   // Note that focus is read once, because jsdom's selector engine holds a `:focus-within` answer.
   const before = unit.contains(document.activeElement);
   act(() => block.focus());
 
   assert.equal(before, false);
-  assert.equal(unit.matches(":focus-within"), true, "the ⋯ stands while the title is selected");
-  assert.ok(more.closest(".luke-page-header-actions"), "the ⋯ ends the title's line");
+  assert.equal(
+    unit.matches(":focus-within"),
+    true,
+    "the button stands while the title is selected",
+  );
   assert.equal(block.tabIndex, 0);
   assert.equal(more.tabIndex, 0);
   assert.ok(block.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-  act(() => more.click());
-  const first = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
-  assert.deepEqual(menuLabels(), ["Copy link", "Rename", "Version history"]);
-  assert.equal(document.activeElement, first, "the menu opens on its first item");
-  act(() => {
-    first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
-
-  assert.equal(document.activeElement, more, "Escape hands focus back to the ⋯");
-});
-
-test("the title's ⋯ copies the plan's link, its Rename puts the caret in the title, and its Version history opens the plan as it stands", async () => {
-  const { container, more, histories } = drawnTitled();
-
-  act(() => more.click());
-  await chooseItem("Copy link");
-  act(() => more.click());
-  await chooseItem("Rename");
-  const typing = document.activeElement;
-  act(() => more.click());
-  await chooseItem("Version history");
+  await act(async () => more.click());
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${TASK_ID}`]);
-  assert.equal(typing, container.querySelector('[role="textbox"][aria-label="Task name"]'));
-  assert.deepEqual(histories, [undefined]);
 });
 
-test("on a plan that cannot be edited, the title's ⋯ is a Tab stop offering its link alone", () => {
+test("on a plan that cannot be edited, the title's Copy link button is a Tab stop", () => {
   const { container } = drawn();
-  const more = container.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
+  const more = container.querySelector<HTMLButtonElement>(TITLE_LINK);
   assert.ok(more);
 
-  act(() => more.click());
-
   assert.equal(more.tabIndex, 0);
-  assert.deepEqual(menuLabels(), ["Copy link"]);
 });
