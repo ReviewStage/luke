@@ -266,7 +266,7 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const host = yield* enrolledHost(owner);
         const otherHost = yield* enrolledHost(other);
 
-        const ownBeat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const ownBeat = yield* answerOf(hostBeat(host.secret, host.deviceId));
         const otherDeviceBeat = yield* statusOf(hostBeat(host.secret, otherHost.deviceId));
         const followedByOther = yield* statusOf(
           request(otherHost.secret, PATH.LINES, {
@@ -280,7 +280,11 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
-        assert.equal(ownBeat, HOSTED_HTTP_STATUS.OK);
+        // Note that a beat answers the launches the service holds the device to, none for a host with no agent.
+        assert.deepEqual(ownBeat, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { done: true, openLaunches: [] },
+        });
         assert.deepEqual(
           [otherDeviceBeat, followedByOther],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.NOT_FOUND],

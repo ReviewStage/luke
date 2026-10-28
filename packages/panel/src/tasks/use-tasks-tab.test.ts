@@ -2,8 +2,6 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
-import type { Board } from "@luke/features/board-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -18,15 +16,12 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
   TASKS_READ,
-  type TaskCode,
-  type TaskCodeShowing,
   type TasksView,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -42,14 +37,13 @@ import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { PENDING_LIMIT } from "@luke/ui/pending-values";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF } from "@luke/voice/avatar";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
@@ -642,34 +636,8 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
-/** A board holding Luke's drawing of one box, numbered as his `number`th. */
-function _drawnBoard(number: number): Board {
-  return {
-    elements: [],
-    appliedDrawing: number - 1,
-    drawing: {
-      number,
-      elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
-    },
-  };
-}
-
-const CODE: TaskCode = {
-  ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
-  repository: "acme/relay",
-  firstLine: 1,
-  lineCount: 1,
-  lines: ["export function accept() {}"],
-};
-
-/** The code shown on the open task: one snippet, then a second of the same file. */
-const SHOWN: readonly TaskCodeShowing[] = [
-  { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
-];
-const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
-  ...SHOWN,
-  { callId: "show-2", turnId: "turn-1", shownAt: 1, code: CODE },
-];
+/** A line of a file of the task's repository, as a place names it to open. */
+const FILE_REF = { path: "src/invite.ts", startLine: 1, endLine: 1 };
 
 /** The panel as the developer sees it: shown or not, and on which tab. */
 function panelOf(tab: ReturnType<typeof mount>) {
@@ -698,52 +666,35 @@ async function settle(): Promise<void> {
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
   const tab = mount(
-    { shown: true, tasks: { ...OPEN, shownCode: SHOWN } },
+    { shown: true, tasks: OPEN },
     { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
   );
   await settle();
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
-  const file = { file: CODE.ref.path };
-  // The plan stands first, and the code shown on the task stands its Code tab after it.
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  const file = { file: FILE_REF.path };
+  // The plan stands first.
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onOpenFile(CODE.ref));
-  const strip = [
-    SIDE_PANEL_TAB.PLAN,
-    SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.COMMENTS,
-    file,
-  ];
+  act(() => panel().onOpenFile(FILE_REF));
+  const strip = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS, file];
   assert.deepEqual(panel().strip, strip);
   assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
 
-  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  assert.deepEqual(panel().strip, [
-    SIDE_PANEL_TAB.PLAN,
-    SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.COMMENTS,
-  ]);
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN]);
   // The column with no tab left opens a new agent's draft in their place.
   const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
   assert.deepEqual(column().tabs, [draft]);
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panel().strip, [
-    SIDE_PANEL_TAB.PLAN,
-    SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.COMMENTS,
-    file,
-  ]);
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.PLAN, file]);
   assert.deepEqual(panel().tab, file);
   assert.deepEqual(
     panel().files.map((each) => [each.path, each.range]),
-    [[CODE.ref.path, { startLine: 1, endLine: 1 }]],
+    [[FILE_REF.path, { startLine: 1, endLine: 1 }]],
     "the file's tab lights the lines it lit",
   );
 
@@ -753,7 +704,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panel().strip, strip);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
@@ -916,8 +867,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.COMMENTS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -925,8 +876,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.equal(tab.control().boundFor, TASK.id);
 
   tab.stand({ tasks: OPEN });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS]);
 });
 
 test("in a narrow room a task opened from a list lands on its plan, the side panel standing on the plan's tab whichever tab it last showed or shut, and on the desktop's width it opens as it was left", () => {
@@ -936,7 +887,7 @@ test("in a narrow room a task opened from a list lands on its plan, the side pan
       { shown: true, tasks: OPEN, room },
       { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
     );
-    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
     tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
     act(() => tab.control().sidePanel.onSetOpen(false));
 
@@ -956,9 +907,9 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS]);
 
   act(() => tab.control().onSelect(OTHER_TASK_ID));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
@@ -969,8 +920,8 @@ test("in a narrow room Back to a task opens it as it stood, its plan's tab close
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
   await settle();
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD], "the plan's tab stays closed");
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.COMMENTS], "the plan's tab stays closed");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
 test("in a narrow room a Luke link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
@@ -995,24 +946,22 @@ test("in a narrow room a Luke link to another task's panel item opens that item,
 test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, and a plan's own tab stands from a first launch, the panel shown on it", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 
   act(() => panel().onToggle());
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE }, "as ⇧⌘T opens it");
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.CODE]);
-  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS }, "as ⇧⌘T opens it");
+  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.COMMENTS]);
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
 
   // A launch keeps no tab closed to open again, but keeps the kinds closed on the plan.
   const launched = mount({ shown: true, tasks: OPEN });
   assert.equal(launched.control().onReopenClosedTab, undefined);
   assert.equal(launched.control().sidePanel.open, false);
   act(() => launched.control().sidePanel.onToggle());
-  assert.deepEqual(panelOf(launched), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(panelOf(launched), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 
   window.localStorage.clear();
   const fresh = mount({ shown: true, tasks: OPEN });
@@ -1499,46 +1448,45 @@ test("a section shown is let go, so the plan opened again later opens where it w
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
   for (let close = 0; close < 20; close += 1) {
-    act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
-    act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+    act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+    act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   }
 
   let reopened = 0;
   for (let reopen = tab.control().onReopenClosedTab; reopen !== undefined; ) {
     act(() => reopen?.());
-    assert.equal(panel().tab, SIDE_PANEL_TAB.CODE);
+    assert.equal(panel().tab, SIDE_PANEL_TAB.COMMENTS);
     reopened += 1;
     reopen = tab.control().onReopenClosedTab;
   }
   assert.equal(reopened, 20);
   assert.deepEqual(
     panel().tabs,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE],
-    "the Board, closed first, is not kept",
+    [SIDE_PANEL_TAB.COMMENTS],
+    "the plan's tab, closed first, is not kept",
   );
 });
 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {
   const tab = mount(
-    { shown: true, tasks: { ...OPEN, shownCode: SHOWN } },
+    { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onOpenFile(CODE.ref));
-  act(() => panel().onClose({ file: CODE.ref.path }));
+  act(() => panel().onOpenFile(FILE_REF));
+  act(() => panel().onClose({ file: FILE_REF.path }));
 
-  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID, shownCode: SHOWN } });
-  act(() => panel().onOpenFile({ ...CODE.ref, startLine: 5, endLine: 9 }, "b2c3d4e"));
-  tab.stand({ tasks: { ...OPEN, shownCode: SHOWN } });
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  act(() => panel().onOpenFile({ ...FILE_REF, startLine: 5, endLine: 9 }, "b2c3d4e"));
+  tab.stand({ tasks: OPEN });
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panel().tab, { file: CODE.ref.path });
+  assert.deepEqual(panel().tab, { file: FILE_REF.path });
   assert.deepEqual(
     panel().files.map((each) => [each.path, each.range, each.commit]),
-    [[CODE.ref.path, { startLine: 1, endLine: 1 }, undefined]],
+    [[FILE_REF.path, { startLine: 1, endLine: 1 }, undefined]],
   );
 });
 
@@ -1548,23 +1496,23 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
-  act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
-  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   tab.stand({ tasks: { ...OPEN, activeTaskId: THIRD_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
   act(() => tab.control().onReopenClosedTab?.());
   assert.equal(tab.control().boundFor, OTHER_TASK_ID);
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.equal(tab.control().boundFor, TASK.id);
   tab.stand({ tasks: OPEN });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
@@ -1580,14 +1528,14 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   };
   const tab = mount({ shown: true, tasks: { ...OPEN, pages: [page] } });
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onChoose({ page: page.id }));
   act(() => panel().onClose({ page: page.id }));
   tab.stand({ tasks: { ...OPEN, pages: [] } });
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
   assert.equal(tab.control().onReopenClosedTab, undefined, "the page's tab is not kept to reopen");
 });
 
@@ -2127,29 +2075,6 @@ test("before the workspaces are read every plan is listed and New plan names no 
     ["notes", "alerts", "billing"],
   );
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
-});
-
-test("a task started hands on its issue and starts with no planning", async () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
-
-  await tab.control().newTask.start("", null, "workspace-acme", {
-    issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
-  });
-  await tab.control().newTask.start("", null, "workspace-acme");
-
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
-      .map((asked) => asked.payload),
-    [
-      {
-        workspaceId: "workspace-acme",
-        issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
-        planning: false,
-      },
-      { workspaceId: "workspace-acme", planning: false },
-    ],
-  );
 });
 
 test("Settings' GitHub row is the connection main's view holds, its Connect and Disconnect ask main, and a refused Disconnect says why", async () => {
@@ -3169,7 +3094,7 @@ test("New task's agent start opens no draft beside its agent while the task stan
   assert.deepEqual(tab.control().mainTabs.tabs, [{ agent: AGENT_ID }], "the agent's tab alone");
 });
 
-test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why, over the version history it was asked from", async () => {
+test("New task's agent start refused after its page opened opens the card again on the repository, model, and press it held, saying why, over the version history it was asked from", async () => {
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -3193,11 +3118,10 @@ test("New task's agent start refused after its page opened opens the card again 
   };
   const card = {
     repository: "acme/web",
-    links: [],
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
     press: {
       key: AGENT_KEY,
-      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
   };
   act(() => tab.control().onNewTask());
@@ -3240,11 +3164,10 @@ test("Create with an agent opens New task's card for an automation's agent over 
   const card = {
     purpose: NEW_TASK_PURPOSE.AUTOMATION,
     repository: "acme/web",
-    links: [],
     choice: undefined,
     press: {
       key: AGENT_KEY,
-      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+      ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
   };
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
@@ -3516,7 +3439,7 @@ function voiceDelivered(): { stand: (view: VoiceView) => Promise<void> } {
     stand: async (view) => {
       act(() => {
         for (const listener of listeners) {
-          listener(stateWith({}, { version: 2, voice: { avatar: AVATAR_OFF, view } }));
+          listener(stateWith({}, { version: 2, voice: { view } }));
         }
       });
       await settle();
@@ -3595,7 +3518,7 @@ test("a Call press and each Retry main refuses say why in a toast", async () => 
   await settle();
   const called = newestToastSays();
   const retried: (string | undefined)[] = [];
-  for (const retry of ["onRetryList", "onRetryWorkspaces", "onRetryCode"] as const) {
+  for (const retry of ["onRetryList", "onRetryWorkspaces"] as const) {
     await act(async () => tab.control()[retry]());
     retried.push(newestToastSays());
   }
@@ -3604,7 +3527,6 @@ test("a Call press and each Retry main refuses say why in a toast", async () => 
   assert.deepEqual(retried, [
     "Refresh 1 could not read the tasks.",
     "Refresh 2 could not read the tasks.",
-    "Refresh 3 could not read the tasks.",
   ]);
 });
 
@@ -3768,27 +3690,21 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: { ...OPEN, shownCode: SHOWN } },
+        { shown: true, tasks: OPEN },
         { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const panel = () => tab.control().sidePanel;
-      const file = { file: CODE.ref.path };
+      const file = { file: FILE_REF.path };
       const pulls = { changes: AGENT_ID };
-      act(() => panel().onOpenFile(CODE.ref));
+      act(() => panel().onOpenFile(FILE_REF));
       act(() => panel().onChoose(pulls));
       act(() => panel().onPin(pulls, "Pull request"));
-      act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+      act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;
-      assert.deepEqual(strip, [
-        SIDE_PANEL_TAB.PLAN,
-        SIDE_PANEL_TAB.CODE,
-        file,
-        pulls,
-        SIDE_PANEL_TAB.BOARD,
-      ]);
+      assert.deepEqual(strip, [SIDE_PANEL_TAB.PLAN, file, pulls, SIDE_PANEL_TAB.COMMENTS]);
 
       yield* passing(Duration.hours(23));
       assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
@@ -3796,10 +3712,10 @@ it.effect(
       yield* passing(Duration.hours(1));
       assert.deepEqual(
         panel().strip,
-        [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE, pulls, SIDE_PANEL_TAB.BOARD],
+        [SIDE_PANEL_TAB.PLAN, pulls, SIDE_PANEL_TAB.COMMENTS],
         "the file's tab closed; the fixed tabs, the pinned Pull request, and the tab shown stay",
       );
-      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 
       act(() => tab.control().onReopenClosedTab?.());
       assert.deepEqual(panel().strip, strip, "⇧⌘T stands it back where it stood");

@@ -136,7 +136,7 @@ export const EDIT_PLAN_TOOL = {
 
 /** Why a call saved nothing, in the words the model reads. */
 export const PLAN_EDIT_REFUSAL = {
-  UNREADABLE: "Not saved: the notes do not read under the plan's template.",
+  UNREADABLE: "Not saved: the notes do not read under the notes' schema.",
   TOO_MANY: `Not saved: a turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
   NO_TASK: "Not saved: you work on no task, so there is no plan of yours to update.",

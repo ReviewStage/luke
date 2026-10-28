@@ -41,7 +41,7 @@ interface InProcessBridge {
 
 /** An unsubscribe with nothing to end. */
 const unsubscribe = (): void => {};
-/** What has no listener in a page that runs no voice, avatar, call window, Browser tab, menu bar, or global key. */
+/** What has no listener in a page that runs no voice, call window, Browser tab, menu bar, or global key. */
 const neverDelivered = (): (() => void) => unsubscribe;
 const dropped = (): void => {};
 
@@ -100,7 +100,7 @@ function listeners<Payload>(report: (message: string) => void): Listeners<Payloa
  * always a panel, and no voice or call window stands beside it. The document
  * is the store's, read whole on request and pushed as what moved on every
  * change; the one-shot events are what the shell says through `events`; every
- * subscription ends with the scope; and everything the voice, the avatar, the call window, a
+ * subscription ends with the scope; and everything the voice, the call window, a
  * Browser tab, the menu bar, or a global key would say is never said, its
  * subscription ending cleanly.
  */
@@ -146,16 +146,11 @@ export function createInProcessBridge(
       onShowLink: said.onShowLink.subscribe,
       reportVoiceView: dropped,
       recordAgentTrace: dropped,
-      feedAvatar: dropped,
-      signalAvatarView: dropped,
       onMenuCommand: neverDelivered,
       onVoiceLiveSessionChanged: neverDelivered,
       onTasksTalk: neverDelivered,
       onVoiceCommand: neverDelivered,
       onCallWindowMoved: neverDelivered,
-      onAvatarSession: neverDelivered,
-      onAvatarFeed: neverDelivered,
-      onAvatarViewSignal: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,

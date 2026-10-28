@@ -4,8 +4,8 @@
  * The tree beside a File tab is drawn by Pierre's tree (`@pierre/trees`),
  * which is too large for the bundle every window parses, so it ships as a
  * bundle of its own (`file-tree.js`, built from `./index.ts`) that the tab
- * loads the first time its tree is shown, as the Tasks tab loads the
- * whiteboard. That bundle exports one module, `fileTree`, and this
+ * loads the first time its tree is shown. That bundle exports one module,
+ * `fileTree`, and this
  * file is the whole of what the two share: no Pierre type crosses, only the
  * repository's own paths and names, and nothing here imports anything, so
  * the bundle carries none of the panel's libraries, its wire schemas

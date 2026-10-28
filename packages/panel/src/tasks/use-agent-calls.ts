@@ -3,7 +3,6 @@ import { TASKS_READ } from "@luke/features/tasks-view";
 import type { TaskTranscript } from "@luke/features/transcript-wire";
 import {
   type CallsRead,
-  callOfLine,
   type HeardCall,
   heardCalls,
   TRANSCRIPT_REGION,
@@ -11,6 +10,7 @@ import {
   transcriptRegion,
 } from "@luke/voice/transcript-model";
 import { callInProgress } from "@luke/voice/voice-view";
+import { callOfLine } from "@luke/wire";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCallTranscript, useStandingVoiceView } from "../use-voice-view.js";
 

@@ -178,6 +178,8 @@ export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
   readonly planResetsAt?: number | undefined;
   /** Whether the agent's device is a host its account removed, which no message brings back. */
   readonly deviceRemoved?: true | undefined;
+  /** Whether the agent's device has not beaten lately, so nothing it is sent would be taken until it is back. */
+  readonly deviceAway?: true | undefined;
 }> {}
 
 /** What an open asks: the session the place is opened under, the agent whose repository it checks out, and the reads run beside it. */
@@ -282,11 +284,11 @@ export interface AgentMachineService {
   readonly stop: (place: MachinePlace) => Effect.Effect<void, SandboxUnavailable>;
   /** The found place thrown away, with whatever runs in it. */
   readonly discard: (found: FoundPlace) => Effect.Effect<void, SandboxUnavailable>;
-  /** Files written into the running place, as the machine's default user, before a later line names them. */
+  /** Files written into the running place, as the machine's default user, before a later line names them; refused (`LaunchRefused`'s `deviceAway`) where they would go to a device that is away, as the line naming them would be. */
   readonly writeFiles: (
     place: MachinePlace,
     files: readonly SandboxFile[],
-  ) => Effect.Effect<void, SandboxUnavailable>;
+  ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /** The runner launched in the place once `ready` is done, recorded, and handed its first lines; ended again where they were not taken. */
   readonly launchRunner: <A, E, R, EL, RL>(
     place: MachinePlace,
@@ -298,7 +300,9 @@ export interface AgentMachineService {
   >;
   /**
    * Text appended to the runner's stdin after whatever it already took;
-   * `NOT_FOUND_STATUS` where the runner has ended. Note that a line written
+   * `NOT_FOUND_STATUS` where the runner has ended, and refused
+   * (`LaunchRefused`'s `deviceAway`) where a line that carries more than a
+   * stop goes to a device that is away. Note that a line written
    * here is not sealed, and a Mac keeps its lines in the store until it
    * takes them, so no line may carry a secret: Codex asks Luke for each
    * access token over HTTPS through the runner's token command
@@ -307,7 +311,7 @@ export interface AgentMachineService {
   readonly writeLine: (
     handle: RunnerHandle,
     text: string,
-  ) => Effect.Effect<void, SandboxUnavailable>;
+  ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
   /** The runner's exit code, null while it runs, or gone where the machine no longer knows it; waiting at most `within` for the exit. */
   readonly runnerExit: (
     handle: RunnerHandle,

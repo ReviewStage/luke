@@ -166,6 +166,7 @@ function agentsStatement(userId: string) {
           archivedAt: codingAgent.archivedAt,
           pinnedAt: agentPin.pinnedAt,
           createdAt: codingAgent.createdAt,
+          cancelRequestedAt: latest.cancelRequestedAt,
           queuedAt: latest.queuedAt,
           startedAt: latest.startedAt,
           settledAt: latest.settledAt,

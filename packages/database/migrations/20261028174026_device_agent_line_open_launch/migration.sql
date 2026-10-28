@@ -1,0 +1,1 @@
+CREATE INDEX "device_agent_line_open_launch" ON "device_agent_line" ("device_id","seq") WHERE "kind" = 'launch' and "settled_at" is null;

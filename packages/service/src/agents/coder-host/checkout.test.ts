@@ -14,6 +14,7 @@ import { getTestDB, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
@@ -205,6 +206,17 @@ const openAgent = (
       prompt: null,
       repository: RELAY_FULL_NAME,
       automationId: automation?.id,
+      automationOrigin:
+        automation === undefined
+          ? undefined
+          : {
+              name: automation.name,
+              firing: {
+                kind: AUTOMATION_FIRING.SCHEDULE,
+                dueAt: Date.parse("2026-10-15T09:00:00Z"),
+              },
+              prompt: automation.action.prompt,
+            },
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;

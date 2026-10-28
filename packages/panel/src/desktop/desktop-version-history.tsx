@@ -51,8 +51,8 @@ import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
+import { centreWithin } from "../scroll-within.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { centreWithin } from "../tasks/code-pane.js";
 import {
   type ChangedSection,
   changedSections,
@@ -129,8 +129,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
  * What the history is of is handed in as its subject: the open task's
- * (`taskVersionSubject`), or the account's plan template's, whose versions
- * are the developer's alone (`../settings/plan-template-history.tsx`).
+ * (`taskVersionSubject`).
  */
 
 /** Who wrote a version, in the label's type, on its row and over its sections alike. */
@@ -146,13 +145,11 @@ const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-rea
 
 /**
  * What a version history is of, as the view draws it: the history as read
- * and its presses, the words it names what the versions are of in, the title
- * every version is drawn under, and what applies to its versions.
+ * and its presses, the title every version is drawn under, and what applies
+ * to its versions.
  */
 export interface VersionSubject {
   readonly versions: PlanHistoryControl;
-  /** What the versions are of, in the view's own words: "plan", or "template". */
-  readonly noun: string;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
@@ -160,11 +157,9 @@ export interface VersionSubject {
   readonly summary: (line: PlanRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
-  /** Whether every person's revision is the reader's own, as the account's template's are; a task's are its members'. */
-  readonly own: boolean;
-  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
+  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none where the task's is not listed. */
   readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
-  /** The task the versions are of, which their mentions are read against; none for the account's own template. */
+  /** The task the versions are of, which their mentions are read against; none while it is read. */
   readonly task?: MentionedTask | undefined;
 }
 
@@ -674,13 +669,11 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
             ),
           },
     versions: tasks.history,
-    noun: "plan",
     title: task?.name,
     agents: tasks.agents.agents ?? [],
     summary: revisionSummary,
     onShowSource:
       boundFor === undefined ? undefined : (source) => tasks.onShowSource(boundFor, source),
-    own: false,
   };
 }
 
@@ -749,9 +742,7 @@ export function DesktopVersionHistory({
     sections?.find((section) => section.heading === opened?.heading) ?? sections?.[0];
   const unit = chosenSection?.unit;
   const openedAuthor =
-    openedLine === undefined
-      ? undefined
-      : revisionAuthorOf(openedLine, reader, agents, subject.own);
+    openedLine === undefined ? undefined : revisionAuthorOf(openedLine, reader, agents);
   const openedSource =
     openedLine === undefined || openedAuthor === undefined
       ? undefined
@@ -786,7 +777,7 @@ export function DesktopVersionHistory({
   const hidden = hiddenColumns(split.columns, versions.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, versions.listed), split.ref);
   const narrow = room === SHELL_ROOM.NARROW;
-  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun);
+  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? "plan");
 
   return (
     <div
@@ -862,7 +853,7 @@ export function DesktopVersionHistory({
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
                   <List label={LIST_LABEL.VERSIONS}>
                     {revisions.map((line) => {
-                      const author = revisionAuthorOf(line, reader, agents, subject.own);
+                      const author = revisionAuthorOf(line, reader, agents);
                       return (
                         <RevisionRow
                           key={line.seq}
@@ -924,9 +915,7 @@ export function DesktopVersionHistory({
                 {openedLine === undefined ? null : (
                   <>
                     <SectionsHead
-                      author={
-                        openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)
-                      }
+                      author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents)}
                       source={openedSource}
                       onBack={narrow ? undefined : closeSections}
                     />

@@ -35,7 +35,6 @@ import {
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
-import type { CodeRef } from "@luke/features/task-wire";
 import {
   browserCallWords,
   CALL_KIND,
@@ -44,7 +43,6 @@ import {
   pageName,
 } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
-import { fileRefText } from "@luke/voice/code-pane-model";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -55,6 +53,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
+import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
 
@@ -74,7 +73,7 @@ import { askHeadWords } from "./inbox-ask-words.js";
  * is read through the wire's own schema, since its input is the list the
  * row draws item by item, and an item posted to the developer's inbox
  * through it too, its row naming the item the Inbox tab draws. A call
- * about something the window opens elsewhere, a page, the board, an agent,
+ * about something the window opens elsewhere, a page, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
  * A call of an integration's own MCP tool, stored under its provider's
  * remote name, is drawn as the tool it ran: the provider's mark, the
@@ -1191,12 +1190,8 @@ export const TOOL_TARGET = {
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
-  /** The side panel's Board tab. */
-  BOARD: "board",
   /** The task's own tab, its document. */
   PLAN: "plan",
-  /** The File tab of a file Luke showed, its lines lit as the call showed them. */
-  SHOWN_CODE: "shown-code",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
   /** Another task of the workspace, opened on its plan as the sidebar opens it. */
@@ -1208,9 +1203,7 @@ export const TOOL_TARGET = {
 export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
-  | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
-  | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
@@ -1223,9 +1216,7 @@ export type ToolTarget =
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
-  [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",

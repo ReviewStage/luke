@@ -22,7 +22,6 @@ import {
   TextButton,
   Tooltip,
 } from "@luke/ui";
-import { fileName } from "@luke/voice/code-pane-model";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -47,6 +46,7 @@ import {
 } from "./changes-model.js";
 import type { DiffListDoor } from "./diff-list.js";
 import { PATH_COPY_WORDS } from "./file-menu.js";
+import { fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
 /**

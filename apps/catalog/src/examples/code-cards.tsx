@@ -1,4 +1,4 @@
-import { CODE_CARD_TITLE, CODE_ROW, CodeCard, TextButton } from "@luke/ui";
+import { CODE_CARD_TITLE, CODE_ROW, CodeCard, FileCodeCard, TextButton } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -6,9 +6,10 @@ import { CatalogSection } from "../section";
  * code-cards.tsx -- the one card for a block of code: a short block headed
  * by its language, one headed by its file with the host's colours on its
  * runs, a block of 60 lines cut at 40 behind Show all, a suggestion drawn
- * as rows on the added and removed grounds, and a body the caller draws under
- * a header with an action of its own. The catalog's copy act is the
- * browser's own clipboard; an app hands in its shell's.
+ * as rows on the added and removed grounds, a body the caller draws under
+ * a header with an action of its own, and a file's lines with the file's
+ * opening beside the Copy, as an Inbox item's code stands. The catalog's
+ * copy act is the browser's own clipboard; an app hands in its shell's.
  */
 
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
@@ -83,6 +84,16 @@ function CodeCards(): React.JSX.Element {
           copied={COLOURED}
           actions={<TextButton onClick={() => {}}>Open file</TextButton>}
           copy={copyToClipboard}
+        />
+      </CatalogSection>
+      <CatalogSection id="code-card-file-open" title="A file's lines, with the file's opening">
+        <FileCodeCard
+          title="packages/ui/src/cut.ts"
+          label="packages/ui/src/cut.ts, Line 3"
+          body="The lines, as the caller draws them."
+          copied="export const cut = 40;"
+          copy={copyToClipboard}
+          onOpen={() => {}}
         />
       </CatalogSection>
     </>

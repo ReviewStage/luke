@@ -161,7 +161,7 @@ const following = (input: {
     const client = {
       register: (_deviceId: string, registration: DeviceAgentDevice) =>
         Effect.sync(() => registered.push(registration)).pipe(Effect.as(true)),
-      beat: () => Effect.succeed(true),
+      beat: () => Effect.succeed({}),
       lines: () =>
         linesRead++ === 0 ? Effect.succeed(claimed.map((each) => each.line)) : Effect.never,
       claimLine: (_deviceId: string, id: string) =>

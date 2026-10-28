@@ -933,7 +933,7 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     "Never change Settings, keys, or integrations.",
     "Never act on a teammate's agent beyond reading and messaging it:",
     "Never change a teammate's task, which you read and nothing more.",
-    "Never put what is the developer's own, such as what you keep as a private memory, into a thread",
+    "Never address a thread to anyone but the developer: your threads are theirs alone",
     "Report each action you took unasked as a line of its own in your reply",
     "ask the developer in a thread",
     `reports back to you with \`${CODER_TOOL.MESSAGE_AGENT}\``,

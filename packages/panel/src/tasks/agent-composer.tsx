@@ -31,7 +31,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
@@ -178,8 +178,7 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  *
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
- * calls its round button (`wording`), lays its issue over the words
- * (`above`), stands its repository and Issue chips after the "+" (`tools`),
+ * calls its round button (`wording`), stands its repository chip after the "+" (`tools`),
  * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
@@ -395,6 +394,7 @@ function ComposerMore({
 export function AgentComposer({
   agentId,
   status,
+  stoppable = status === CODING_AGENT_STATUS.RUNNING,
   composer,
   model,
   models,
@@ -416,7 +416,6 @@ export function AgentComposer({
   closedRemedy,
   wording,
   maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
-  above,
   tools,
   actions,
   beforeSend,
@@ -431,6 +430,8 @@ export function AgentComposer({
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
   status: CodingAgentStatus;
+  /** Whether Stop stands in Send's place while the box is empty: while the agent runs where unsaid, and only while a Stop has something to stop where the tab knows (`offersStop`). */
+  stoppable?: boolean;
   composer: AgentComposerControl;
   /** What the agent runs on and its chip's change; nothing while it is not yet known, which draws no chip. */
   model: AgentModelControl | undefined;
@@ -470,9 +471,7 @@ export function AgentComposer({
   wording?: ComposerWords | undefined;
   /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
   maxLength?: number;
-  /** What stands over the words inside the card, before the files attached: New task's Linear issue. */
-  above?: ReactNode;
-  /** What stands after the "+" at the foot's left: New task's repository and Issue chips. */
+  /** What stands after the "+" at the foot's left: New task's repository chip. */
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
@@ -510,9 +509,6 @@ export function AgentComposer({
   // after its press and the box it retries is whichever render is current by then.
   const latest = useRef(composer);
   latest.current = composer;
-  // Note that Stop stands only once a turn runs, because the service cancels
-  // the turn under way and a starting agent has none yet to cancel.
-  const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
   // Note that Send waits while files are read, so no message goes without a file the developer already handed the box.
@@ -751,7 +747,6 @@ export function AgentComposer({
           setSends((count) => count + 1);
         }}
       >
-        {above}
         <ComposerBody
           files={
             <AttachedFileChips

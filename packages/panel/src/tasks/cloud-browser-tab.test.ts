@@ -248,7 +248,7 @@ test("a follow the host refused is read and followed again on the beat, so the t
 test("a listed cloud Browser tab stands in the strip, stays chosen while the list is on its way, and closes in this window alone", () => {
   let control: SidePanelControl | undefined;
   function Probe({ listed }: { listed: readonly string[] | undefined }) {
-    control = useSidePanel(undefined, USED, [], [], [], [], [], undefined, listed);
+    control = useSidePanel(undefined, USED, [], [], [], [], undefined, listed);
     return null;
   }
   const current = () => {

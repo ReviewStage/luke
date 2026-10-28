@@ -30,7 +30,6 @@ export const SETTINGS_SEARCH_ROW = {
   GITHUB_ACCESS: "github-access",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",
-  PLAN_TEMPLATE: "plan-template",
   MEMORY: "memory",
   CODING_AGENT_MODEL: "coding-agent-model",
   CODING_AGENT_EFFORT: "coding-agent-effort",
@@ -53,7 +52,6 @@ export const SETTINGS_SEARCH_ROW = {
  */
 export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.BROWSER]: "experiment-browser",
-  [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
   [EXPERIMENT.LOCAL_AGENTS]: "experiment-local-agents",

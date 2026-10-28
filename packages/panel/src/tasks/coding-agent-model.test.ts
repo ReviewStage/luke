@@ -740,6 +740,25 @@ test("a Start refused for a missing credential says in one sentence which harnes
   );
 });
 
+test("a message to an agent whose device is away says it is offline, in the words a Start on it gets, under the composer and in the Inbox alike", () => {
+  const away =
+    "Your device is offline, so this agent can't start there. Open Luke on it, or set this task to run in the cloud.";
+
+  assert.deepEqual(
+    [
+      messageFailureNote(
+        {
+          failure: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+          localAgentRefusal: LOCAL_AGENT_REFUSAL.MAC_AWAY,
+        },
+        null,
+      ).text,
+      messageFailureWords(CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED),
+    ],
+    [away, away],
+  );
+});
+
 test("a Start another member's device refused names the device and its owner and offers no way out the reader cannot take, and says the same, unnamed, where the service named neither", () => {
   const refused = (refusedDevice?: { name: string; owner?: string }) =>
     startFailureNote(

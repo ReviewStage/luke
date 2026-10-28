@@ -863,7 +863,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
               db.insert(messages).values({
                 userId: owner,
                 conversationId: each.conversationId,
-                seq: 1,
+                // After the run's own prompt, which its Start wrote first.
+                seq: 2,
                 clientId: randomUUID(),
                 role: MESSAGE_ROLE.USER,
                 parts: [{ type: "text", text: "Are you there?" }],
@@ -916,7 +917,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
           runs.map((each) => `${each.agent?.status}:${each.agent?.failureReason ?? ""}`).toSorted(),
           [
             `${CODING_AGENT_STATUS.FAILED}:${CODING_AGENT_FAILURE.GITHUB}`,
-            `${CODING_AGENT_STATUS.STARTING}:`,
+            // A run with no turn yet reads running, its prompt awaiting the turn eve opens on it.
+            `${CODING_AGENT_STATUS.RUNNING}:`,
           ],
         );
         // A line after a session that ended for good awaits nothing; one after a settled turn awaits it.
@@ -1032,7 +1034,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         assert.equal(first.run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
-        assert.equal(first.run.agent?.status, CODING_AGENT_STATUS.STARTING);
+        // The run's prompt, which its Start wrote, awaits the first turn eve opens on it.
+        assert.equal(first.run.agent?.status, CODING_AGENT_STATUS.RUNNING);
         assert.deepEqual(again.run, first.run, "the same key answers the run it made");
         assert.equal(opened.length, 1, "and starts nothing again");
         assert.deepEqual(

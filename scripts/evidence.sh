@@ -12,7 +12,6 @@ LUKE_SPEAKING_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-speaking.png"
 LUKE_MUTED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-muted.png"
 LUKE_DUPLEX_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-duplex.png"
 LUKE_TASKS_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks.png"
-LUKE_TASKS_BOARD_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-board.png"
 LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-transcript.png"
 LUKE_TASKS_WORK_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-work.png"
 
@@ -80,10 +79,6 @@ capture_evidence duplex --profile duplex --capture-evidence "$LUKE_DUPLEX_EVIDEN
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
 capture_evidence tasks --profile tasks --capture-evidence "$LUKE_TASKS_EVIDENCE_PATH"
-# The same plan on its whiteboard: Excalidraw's own bundle loaded over the
-# fixture's board, drawn in the bundled hand-drawn font with nothing fetched
-# from the network.
-capture_evidence tasks-board --profile tasks-board --capture-evidence "$LUKE_TASKS_BOARD_EVIDENCE_PATH"
 # The same plan mid-call on its transcript: the earlier call from the record,
 # and the call standing now growing under it.
 capture_evidence tasks-transcript --profile tasks-transcript --capture-evidence "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
@@ -134,7 +129,6 @@ for evidence_path in \
     "$LUKE_MUTED_EVIDENCE_PATH" \
     "$LUKE_DUPLEX_EVIDENCE_PATH" \
     "$LUKE_TASKS_EVIDENCE_PATH" \
-    "$LUKE_TASKS_BOARD_EVIDENCE_PATH" \
     "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH" \
     "$LUKE_TASKS_WORK_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
@@ -145,6 +139,5 @@ printf 'Speaking visual evidence: %s\n' "$LUKE_SPEAKING_EVIDENCE_PATH"
 printf 'Muted visual evidence: %s\n' "$LUKE_MUTED_EVIDENCE_PATH"
 printf 'Duplex visual evidence: %s\n' "$LUKE_DUPLEX_EVIDENCE_PATH"
 printf 'Tasks visual evidence: %s\n' "$LUKE_TASKS_EVIDENCE_PATH"
-printf 'Tasks board visual evidence: %s\n' "$LUKE_TASKS_BOARD_EVIDENCE_PATH"
 printf 'Tasks transcript visual evidence: %s\n' "$LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH"
 printf 'Tasks work visual evidence: %s\n' "$LUKE_TASKS_WORK_EVIDENCE_PATH"

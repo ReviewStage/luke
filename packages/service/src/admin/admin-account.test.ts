@@ -227,7 +227,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       userId,
       codingAgentModel: "anthropic/claude-opus-5.5",
       codingAgentEffort: "high",
-      experiments: { [EXPERIMENT.VIDEO_CALLS]: true, [EXPERIMENT.BROWSER]: false },
+      experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.BROWSER]: false },
     });
     const [made] = yield* db
       .insert(automation)
@@ -424,7 +424,7 @@ it.layer(getTestDB())("one account's support sections", (it) => {
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         contextWindow: null,
-        experiments: [{ key: EXPERIMENT.VIDEO_CALLS, name: "Video calls" }],
+        experiments: [{ key: EXPERIMENT.MEMORY, name: "Memory" }],
       });
     }),
   );

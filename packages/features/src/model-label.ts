@@ -2,7 +2,7 @@ import { CODING_AGENT_KIND, type CodingAgentKind } from "./coding-agent-wire.js"
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
- * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; and an agent by its title, its automation, or its model.
+ * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; an agent by its title, its automation, or its model; and whether an automation's run started it.
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
@@ -109,4 +109,31 @@ export function agentName(agent: NamedAgent, models?: readonly CatalogModel[]): 
     agent.automationOrigin?.name ??
     modelLabel(agent.model, models)
   );
+}
+
+/** What says an automation's run started an agent: the run's origin, by its name, and the automation's id. */
+interface AutomationStarted extends Pick<NamedAgent, "automationName" | "automationOrigin"> {
+  /** The automation whose run started the agent; none for one started by hand or once that automation is deleted. */
+  readonly automationId?: string | null | undefined;
+}
+
+/** The run of an automation that started an agent, by the name its automation had then. */
+export interface AutomationRun {
+  /** None for an agent from before the run's origin was kept, which only its automation's id names. */
+  readonly name?: string;
+}
+
+/**
+ * The automation's run that started the agent, or none for one started by
+ * hand: the one answer to whether an automation started it, the window's
+ * and the service's alike, as a query reads it through
+ * `agentAutomationRunSql`. Note that it reads the run's origin first,
+ * because the automation's id goes null once the automation is deleted
+ * while its run's origin stays; the id answers which automation to open.
+ */
+export function automationRun(agent: AutomationStarted): AutomationRun | undefined {
+  const name = agent.automationName ?? agent.automationOrigin?.name;
+  if (name !== undefined) return { name };
+  // The id covers agents from before the origin column, which name no run.
+  return (agent.automationId ?? null) === null ? undefined : {};
 }

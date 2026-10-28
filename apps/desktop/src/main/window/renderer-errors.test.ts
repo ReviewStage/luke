@@ -65,7 +65,7 @@ test("an error naming an access token says only that one happened, and none of i
 
   open("index.html").log(
     "error",
-    "GET https://avatar.livekit.cloud/rtc/v1/validate?access_token=eyJhbGciOi.secret 401",
+    "GET https://service.example.test/v1/validate?access_token=eyJhbGciOi.secret 401",
   );
 
   assert.deepEqual(lines, [
@@ -80,7 +80,7 @@ test("once the reporting stops, no window says anything, open before or opened a
   stop();
 
   panel.log("error", "Uncaught Error: the sidebar never loaded");
-  open("call.html").log("error", "Uncaught Error: the avatar never drew");
+  open("call.html").log("error", "Uncaught Error: the call card never drew");
 
   assert.deepEqual(lines, []);
 });

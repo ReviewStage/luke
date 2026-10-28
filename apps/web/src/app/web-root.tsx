@@ -29,7 +29,6 @@ import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { installShellBundles } from "@luke/panel/shell-bundles";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { ErrorBoundary, ReloadState } from "@luke/ui/error-boundary";
 import type { HistoryAdapter } from "@luke/ui/history-adapter";
@@ -44,7 +43,6 @@ import { withLoadLink } from "./load-link";
 import { browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
 import { composeWeb, WebHostTag } from "./web-host";
-import { WEB_BUNDLES } from "./web-platform";
 import { startWebSentry, type WebSentryBuild, webSentryBuild } from "./web-sentry";
 
 /** What a caller other than the page's entry hands the tab: a test's client in place of the network. */
@@ -132,7 +130,6 @@ export async function mountWebApp(
     installed.push(installAppBridge(withLoadLink(web.bridge)));
     installed.push(installActPort(web.actPort, web.actPortClient));
     installed.push(installAppPlatform(web.platform));
-    installed.push(installShellBundles(WEB_BUNDLES));
     // The panel's back and forward are the browser's own, each step in the tab's address.
     installed.push(installTabHistory(installWindowHistory, browserHistory()));
     await runtime.runPromise(appStateFirstRead);

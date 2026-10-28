@@ -73,7 +73,7 @@ describe("the stops", () => {
     assert.equal(
       sameStop(
         screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN),
-        screen("a", { agent: "x" }, SIDE_PANEL_TAB.CODE),
+        screen("a", { agent: "x" }, SIDE_PANEL_TAB.COMMENTS),
       ),
       false,
     );
@@ -117,11 +117,16 @@ describe("a move of the window", () => {
     const coded = moved(
       [work, inbox],
       work,
-      screen("a", { agent: "x" }, SIDE_PANEL_TAB.CODE),
+      screen("a", { agent: "x" }, SIDE_PANEL_TAB.COMMENTS),
       true,
     );
-    assert.deepEqual(coded, [screen("a", { agent: "x" }, SIDE_PANEL_TAB.CODE), work, inbox]);
-    const other = moved(coded, coded[0], screen("a", { agent: "z" }, SIDE_PANEL_TAB.CODE), true);
+    assert.deepEqual(coded, [screen("a", { agent: "x" }, SIDE_PANEL_TAB.COMMENTS), work, inbox]);
+    const other = moved(
+      coded,
+      coded[0],
+      screen("a", { agent: "z" }, SIDE_PANEL_TAB.COMMENTS),
+      true,
+    );
     assert.equal(other.length, 4);
   });
 

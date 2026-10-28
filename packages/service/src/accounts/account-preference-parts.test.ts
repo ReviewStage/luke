@@ -6,15 +6,8 @@ import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
-  readPlanTemplate,
-  restorePlanTemplate,
   writeAccountPreferences,
-  writePlanTemplate,
 } from "@luke/database/models/account-store";
-import {
-  listTemplateRevisions,
-  readTemplateRevision,
-} from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
@@ -99,11 +92,6 @@ const openAccounts = Effect.gen(function* () {
     readRole: readAccountRole,
     accountFastOffer,
     writePreferences: writeAccountPreferences,
-    readPlanTemplate,
-    writePlanTemplate,
-    listPlanTemplateRevisions: listTemplateRevisions,
-    readPlanTemplateRevision: readTemplateRevision,
-    restorePlanTemplate,
   });
   return { owner, other, ask: (request: Request) => answer(procedures, request) };
 });

@@ -4,9 +4,277 @@
  * A table is synced by declaring it here (`defineSyncTable`) and writing
  * its capture into a migration (`pnpm --filter @luke/database sync:render`);
  * the drift check (`__tests__/capture.test.ts`) then fails until the migrated
- * database carries exactly what these declarations render. None is synced
- * yet: each view's own change declares the tables it reads.
+ * database carries exactly what these declarations render. Each table is
+ * declared once, for every view that reads it: a view's live read names
+ * these declarations in its `reads`, so a table one view synced first is
+ * the same capture the next view reads.
+ *
+ * Beside the tables a view draws from stand the ones every read of a task
+ * or an agent is gated on (`workspace-store.ts`): the account's membership
+ * of the workspace, and, for one reached on a member's own GitHub token,
+ * that member's token and what GitHub last answered it of a repository. A
+ * write to them notifies the account it moves, so a read the account loses
+ * is woken and answers without it.
  */
-import type { SyncTable } from "./sync-table.js";
+import { attachment } from "../schemas/attachment.js";
+import { member, user } from "../schemas/auth.js";
+import { automation, automationRun } from "../schemas/automation.js";
+import { channel } from "../schemas/channel.js";
+import { codingAgent } from "../schemas/coding-agent.js";
+import { githubPersonalToken } from "../schemas/github-personal-token.js";
+import { githubRepositoryRead } from "../schemas/github-repository-read.js";
+import { inboxItem } from "../schemas/inbox.js";
+import { inboxItemRead } from "../schemas/inbox-item-read.js";
+import { inboxMessage } from "../schemas/inbox-message.js";
+import { macCommand } from "../schemas/mac-command.js";
+import { planComment, planCommentThread } from "../schemas/plan-comment.js";
+import { repositoryPin } from "../schemas/repository-pin.js";
+import { task } from "../schemas/task.js";
+import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
+import { TOPIC } from "./notification.js";
+import { defineSyncTable, type SyncTable } from "./sync-table.js";
 
-export const SYNC_TABLES: readonly SyncTable[] = [];
+/**
+ * A task, on its own topic and its workspace's. Note that the plan's text
+ * and the agents' journal of saves are ignored, because every save rewrites
+ * both and no view reads them live: a save moves `updated_at` beside them,
+ * which the task list and the task's record read, so a save still notifies.
+ */
+export const taskSync = defineSyncTable(task, {
+  topics: [
+    { kind: TOPIC.TASK, column: task.id },
+    { kind: TOPIC.WORKSPACE, column: task.organizationId },
+  ],
+  ignore: [task.document, task.agentEdits],
+});
+
+/**
+ * A coding agent, on its own topic, its task's, and its workspace's. Note
+ * that its last step is ignored, because every model step rewrites it, and
+ * so is when its pull request was last read, because every read of the pull
+ * request rewrites that; no view reads either live.
+ */
+export const codingAgentSync = defineSyncTable(codingAgent, {
+  topics: [
+    { kind: TOPIC.AGENT, column: codingAgent.id },
+    { kind: TOPIC.TASK, column: codingAgent.taskId },
+    { kind: TOPIC.WORKSPACE, column: codingAgent.organizationId },
+  ],
+  ignore: [codingAgent.lastStep, codingAgent.publishedRead],
+});
+
+/** An account's membership of a workspace, on the workspace's topic and the account's. */
+export const memberSync = defineSyncTable(member, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: member.organizationId },
+    { kind: TOPIC.ACCOUNT, column: member.userId },
+  ],
+});
+
+/**
+ * An account, on its own topic and, through its memberships, every
+ * workspace it is in, so a teammate's new name or picture reaches the
+ * workspace's reads. Note that when it last moved and how it last signed in
+ * are ignored, because every sign-in rewrites both and no view reads them.
+ */
+export const userSync = defineSyncTable(user, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: user.id },
+    {
+      through: member,
+      key: member.userId,
+      by: user.id,
+      topics: [{ kind: TOPIC.WORKSPACE, column: member.organizationId }],
+    },
+  ],
+  ignore: [user.updatedAt, user.lastLoginMethod],
+});
+
+/** A member's own GitHub token, on the member's topic. */
+export const githubPersonalTokenSync = defineSyncTable(githubPersonalToken, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: githubPersonalToken.userId }],
+});
+
+/**
+ * What GitHub last answered a member's token of a repository, on the
+ * member's topic. Note that when it was asked is ignored, because the
+ * hourly ask rewrites it (`github/repository-reads.ts`) while the answer
+ * mostly stands, and no read gates on it.
+ */
+export const githubRepositoryReadSync = defineSyncTable(githubRepositoryRead, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: githubRepositoryRead.userId }],
+  ignore: [githubRepositoryRead.checkedAt],
+});
+
+/** One of an account's sidebar sections, on the account's topic. */
+export const taskSectionSync = defineSyncTable(taskSection, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: taskSection.userId }],
+});
+
+/** A task an account keeps in one of its sections, on the account's topic. */
+export const taskSectionEntrySync = defineSyncTable(taskSectionEntry, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: taskSectionEntry.userId }],
+});
+
+/** An agent with no task an account keeps in one of its sections, on the account's topic. */
+export const agentSectionEntrySync = defineSyncTable(agentSectionEntry, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: agentSectionEntry.userId }],
+});
+
+/** A repository an account pinned to its sidebar, on the account's topic. */
+export const repositoryPinSync = defineSyncTable(repositoryPin, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: repositoryPin.userId }],
+});
+
+/**
+ * A command an agent queued for the account's Mac, on the account's topic,
+ * which the Mac's read of the commands it may claim is woken on. Note that
+ * the account's listener row (`mac_command_listener`), which every such read
+ * rewrites, is not captured: no read waits on it.
+ */
+export const macCommandSync = defineSyncTable(macCommand, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: macCommand.userId }],
+});
+
+/** A comment thread on a task's plan, on the task's topic. */
+export const planCommentThreadSync = defineSyncTable(planCommentThread, {
+  topics: [{ kind: TOPIC.TASK, column: planCommentThread.taskId }],
+});
+
+/**
+ * An entry of a plan's comment thread, on the task's topic. Note that an
+ * entry's write moves its thread's revision in the same transaction, so the
+ * two notify one topic under one txid, which Postgres sends once.
+ */
+export const planCommentSync = defineSyncTable(planComment, {
+  topics: [{ kind: TOPIC.TASK, column: planComment.taskId }],
+});
+
+/**
+ * An inbox item, on its task's topic, its agent's, and its workspace's, and,
+ * through the workspace's memberships, on the account of every member of
+ * it. Note that the accounts are named here, because the account's inbox and
+ * a workspace's channels are read per account, and a read's topics come
+ * from its params alone: waking them on the workspace's topic instead would
+ * re-run them on every plan save in it.
+ */
+export const inboxItemSync = defineSyncTable(inboxItem, {
+  topics: [
+    { kind: TOPIC.TASK, column: inboxItem.taskId },
+    { kind: TOPIC.AGENT, column: inboxItem.agentId },
+    { kind: TOPIC.WORKSPACE, column: inboxItem.organizationId },
+    {
+      through: member,
+      key: member.organizationId,
+      by: inboxItem.organizationId,
+      topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
+    },
+  ],
+});
+
+/** A message on an inbox item's thread, on its item's task and agent, which it names only by the item. */
+export const inboxMessageSync = defineSyncTable(inboxMessage, {
+  topics: [
+    {
+      through: inboxItem,
+      key: inboxItem.id,
+      by: inboxMessage.itemId,
+      topics: [
+        { kind: TOPIC.TASK, column: inboxItem.taskId },
+        { kind: TOPIC.AGENT, column: inboxItem.agentId },
+      ],
+    },
+  ],
+});
+
+/** Where a member read an inbox item through, or marked it unread, on the member's topic and on the item's task and agent. */
+export const inboxItemReadSync = defineSyncTable(inboxItemRead, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: inboxItemRead.userId },
+    {
+      through: inboxItem,
+      key: inboxItem.id,
+      by: inboxItemRead.itemId,
+      topics: [
+        { kind: TOPIC.TASK, column: inboxItem.taskId },
+        { kind: TOPIC.AGENT, column: inboxItem.agentId },
+      ],
+    },
+  ],
+});
+
+/**
+ * A file or a picture, on its task's topic and, for an inbox item's, the
+ * item's agent's. Note that its bytes are ignored, because only what the
+ * row says of them is read live, and an update comparing them would weigh
+ * every row's bytes.
+ */
+export const attachmentSync = defineSyncTable(attachment, {
+  topics: [
+    { kind: TOPIC.TASK, column: attachment.taskId },
+    {
+      through: inboxItem,
+      key: inboxItem.id,
+      by: attachment.inboxItemId,
+      topics: [{ kind: TOPIC.AGENT, column: inboxItem.agentId }],
+    },
+  ],
+  ignore: [attachment.bytes],
+});
+
+/** A workspace's channel, on the workspace's topic and, as an inbox item names them, the account of every member of it. */
+export const channelSync = defineSyncTable(channel, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: channel.organizationId },
+    {
+      through: member,
+      key: member.organizationId,
+      by: channel.organizationId,
+      topics: [{ kind: TOPIC.ACCOUNT, column: member.userId }],
+    },
+  ],
+});
+
+/** An automation, on its workspace's topic and its creator's. */
+export const automationSync = defineSyncTable(automation, {
+  topics: [
+    { kind: TOPIC.WORKSPACE, column: automation.organizationId },
+    { kind: TOPIC.ACCOUNT, column: automation.userId },
+  ],
+});
+
+/** One run of an automation, on its account's topic and, through the automation, its workspace's. */
+export const automationRunSync = defineSyncTable(automationRun, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: automationRun.userId },
+    {
+      through: automation,
+      key: automation.id,
+      by: automationRun.automationId,
+      topics: [{ kind: TOPIC.WORKSPACE, column: automation.organizationId }],
+    },
+  ],
+});
+
+export const SYNC_TABLES: readonly SyncTable[] = [
+  taskSync,
+  codingAgentSync,
+  memberSync,
+  userSync,
+  githubPersonalTokenSync,
+  githubRepositoryReadSync,
+  taskSectionSync,
+  taskSectionEntrySync,
+  agentSectionEntrySync,
+  repositoryPinSync,
+  macCommandSync,
+  planCommentThreadSync,
+  planCommentSync,
+  inboxItemSync,
+  inboxMessageSync,
+  inboxItemReadSync,
+  attachmentSync,
+  channelSync,
+  automationSync,
+  automationRunSync,
+];

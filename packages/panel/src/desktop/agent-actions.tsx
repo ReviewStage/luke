@@ -191,7 +191,12 @@ export function useAgentCallDoors(
   return useMemo(() => (onPress === undefined ? undefined : { onPress }), [onPress]);
 }
 
-/** One agent's actions, as every surface that draws it offers them. */
+/**
+ * One agent's actions, as every surface that draws it offers them. Luke, the
+ * member's operator, is known by his kind and offers neither Rename, Archive,
+ * nor Delete wherever he is drawn, a Luke a Reset retired included: his
+ * name is his kind's, his Reset archives him, and there is one of him.
+ */
 export function useAgentActions(
   agent: Pick<
     CodingAgentSummary,
@@ -225,9 +230,10 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
+  const luke = agent.kind === CODING_AGENT_KIND.OPERATOR;
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
-  const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
+  const renamable = !luke && agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
@@ -241,21 +247,15 @@ export function useAgentActions(
     : onOpenTerminal === undefined
       ? undefined
       : () => onOpenTerminal(agent.id);
-  const read = agentTranscriptRead(
-    agents.readTranscript,
-    agent.id,
-    label,
-    agent.brief,
-    agent.kind === CODING_AGENT_KIND.OPERATOR,
-  );
+  const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief, luke);
   return {
     doors: {
       onCopy: copied(read),
       onRename: renamable ? rename.begin : undefined,
       // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
       onOpenTerminal: agent.archivedAt !== undefined ? undefined : terminal,
-      archive: agent.archivedAt === undefined ? archive.action : unarchive,
-      deletion: deletion.action,
+      archive: luke ? undefined : agent.archivedAt === undefined ? archive.action : unarchive,
+      deletion: luke ? undefined : deletion.action,
       copyLink,
     },
     rename: renamable ? rename : undefined,

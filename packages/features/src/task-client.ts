@@ -1060,7 +1060,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Starts a task from the account's template, on the repository the
+   * Starts a task with an empty plan, on the repository the
    * request names where it names one, and the agent it names on it where it
    * names one; a request the service would refuse by shape is refused here
    * without traveling at all, and a repository the service refused is

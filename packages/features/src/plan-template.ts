@@ -9,24 +9,15 @@ import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
 import { taskPicturesIn } from "./plan-attachment-link.js";
-import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
-import { PLAN_SECTION_BOUNDS, type PlanField, TASK_BOUNDS } from "./task-wire.js";
+import { openFenceAt, planSections } from "./plan-document.js";
+import { PLAN_SECTION_BOUNDS, TASK_BOUNDS } from "./task-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
- * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
+ * plan-template.ts -- the notes Luke takes into a plan's text, and the agents' journal of them.
  *
- * A plan is one Markdown text started from its account's own template
- * (`plan-document.ts`, `docs/TASKS.md`). The default template is the
- * design doc two engineering teammates would write after talking a task
- * through: why it matters, what done looks like, how they will build it and
- * what they weighed against it, the hard parts, what they leave out, how the
- * work lands, and how they will know it works. Each section is a question a
- * good teammate asks, so the sections are what the brain asks
- * about, and each is described once here: its heading, what it holds
- * (`PLAN_FIELD_PURPOSE`), and when it is good enough for a coding agent to
- * build from (`PLAN_FIELD_BAR`). The sections keep the keys the fixed
- * template once named its fields by (`PLAN_FIELD`).
+ * A plan is one Markdown text that starts empty (`plan-document.ts`,
+ * `docs/TASKS.md`), its headings its sections.
  *
  * Luke changes the text only by taking notes, of two kinds: a point added
  * under a heading, and text replaced, the one generic edit, which names any
@@ -42,27 +33,9 @@ import { trimmedText } from "./text-schema.js";
  * contained where they land only so far as keeps the rest of the text as it
  * was: a line that would open an HTML block or underline the line above into
  * a heading is escaped, and a code fence left open is closed, so no note
- * swallows the text after it. A point added to a section that still holds
- * exactly what the plan's template put there, one paragraph of guidance,
- * takes the place of that guidance, so a filled section never keeps its
- * prompt above its answer. The schema guarantees shape only; whether a note
+ * swallows the text after it. The schema guarantees shape only; whether a note
  * is understood or agreed is the model's judgment.
  */
-
-/** The default template's headings, in the words the developer reads. */
-export const PLAN_HEADING = {
-  CONTEXT: "Context",
-  GOAL: "Goal",
-  APPROACH: "Approach",
-  INTERFACES: "Interfaces",
-  ALTERNATIVES: "Alternatives",
-  HARD_PARTS: "Hard parts",
-  NOT_DOING: "Not doing",
-  PLAN_OF_ATTACK: "Plan of attack",
-  TESTING: "Testing",
-  OPEN_QUESTIONS: "Open questions",
-  ASSUMPTIONS: "Assumptions",
-} as const;
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
@@ -134,95 +107,6 @@ function contained(text: string): string {
   if (fence !== undefined) lines.push(fence.marker);
   return lines.join("\n");
 }
-
-/** The heading each section stands under in the default template, so a prompt names a section as the developer reads it. */
-export const PLAN_FIELD_HEADING = {
-  context: PLAN_HEADING.CONTEXT,
-  goal: PLAN_HEADING.GOAL,
-  approach: PLAN_HEADING.APPROACH,
-  interfaces: PLAN_HEADING.INTERFACES,
-  alternatives: PLAN_HEADING.ALTERNATIVES,
-  hardParts: PLAN_HEADING.HARD_PARTS,
-  notDoing: PLAN_HEADING.NOT_DOING,
-  planOfAttack: PLAN_HEADING.PLAN_OF_ATTACK,
-  testing: PLAN_HEADING.TESTING,
-  openQuestions: PLAN_HEADING.OPEN_QUESTIONS,
-  assumptions: PLAN_HEADING.ASSUMPTIONS,
-} as const satisfies Record<PlanField, string>;
-
-/**
- * What each field holds and the form it is written in. Note that this is the
- * one statement of a section's meaning, because the brain asks from
- * it and the notetaker writes to it, and two copies would drift into Luke
- * asking for one thing and the notes filing another.
- */
-export const PLAN_FIELD_PURPOSE = {
-  context:
-    "Why this work exists: what happens today, who it affects and how often, and what " +
-    "prompted it now. Current behavior is stated as the code or the developer says it is, " +
-    "never guessed.",
-  goal:
-    "What is true once the work ships, one outcome per bullet, each something a user or a " +
-    "test could observe. No implementation detail.",
-  approach:
-    "The design in plain words: the main pieces and how they fit together, where each lives " +
-    "by repository-relative path, the existing code or pattern each follows, and each " +
-    "design decision with its reason.",
-  interfaces:
-    "Every type, schema, table, route, event, tool, or function signature the change adds " +
-    "or changes, written as code in fenced blocks under the path of the file it lives in. " +
-    'Shapes and signatures only, never function bodies. "None" with the reason when ' +
-    "nothing at a module boundary changes.",
-  alternatives:
-    "Each other approach that was weighed: what it was, and the concrete reason it lost.",
-  hardParts:
-    "Each tricky case as one bullet: the situation, then exactly what the change does in it. " +
-    "Edge cases, failure, cancellation, retry, concurrency, permissions, privacy, and " +
-    "performance where they apply, and each risk with how it is handled.",
-  notDoing:
-    "What is out of scope, one bullet each with why, including anything a capable agent " +
-    "might otherwise build unasked.",
-  planOfAttack:
-    "The steps the work lands in, in order, each one testable on its own, and why the order " +
-    "matters. Data migration, backfill, and rollout where they apply.",
-  testing:
-    'The cases that prove the change, one bullet each written as "When <situation>, then ' +
-    '<exact observable result>", then the end-to-end check a person or a script runs to ' +
-    "prove it works, with its command where there is one.",
-  openQuestions:
-    "Each unresolved question, contradiction, or fact no source could settle, worded as a " +
-    "question, one per note.",
-  assumptions:
-    "What the plan assumes without the developer having said it, Luke's suggestions not yet " +
-    "agreed among them, one per note.",
-} as const satisfies Record<PlanField, string>;
-
-/**
- * When each section is good enough for a coding agent to build from without
- * coming back with a question. The brain holds the plan to these
- * before it calls the plan complete; the notetaker is never told them,
- * because it records what was said rather than judging it.
- */
-export const PLAN_FIELD_BAR = {
-  context: "Someone new to the code could explain why the work matters.",
-  goal: "Every outcome can be checked true or false.",
-  approach:
-    "Every piece names the path it lives in and the code it follows, and no step says only " +
-    '"update" or "handle".',
-  interfaces:
-    "Every new or changed boundary is written as code under its file, or the section says " +
-    '"None" and why.',
-  alternatives:
-    "Optional. Every alternative the developer raised or Luke suggested has the reason it lost.",
-  hardParts: "Every case says exactly what the change does, not only that it is hard.",
-  notDoing: "Anything a capable agent might add unasked is listed.",
-  planOfAttack: "Optional. Needed when the order of the steps matters or stored data moves.",
-  testing:
-    "Every goal and every hard part has at least one When/then case with an exact result, " +
-    "and there is an end-to-end check.",
-  openQuestions: "Nothing left in it would change what gets built.",
-  assumptions: "Every choice Luke made for the developer is listed.",
-} as const satisfies Record<PlanField, string>;
 
 /**
  * The kinds of note the notetaker takes: a point added under a heading, and
@@ -343,9 +227,6 @@ export function withAgentEdit(
 /** A line that opens a Markdown list item. */
 const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
 
-/** A line of a template's section that opens anything but prose: a list item, a fence, a quote, a table row, or a heading. */
-const STARTER_CONTENT_LINE = /^\s*(?:(?:[-*+]|\d{1,9}[.)])(?:\s|$)|`{3,}|~{3,}|>|\||#)/u;
-
 /** A trailing line still being written that holds nothing but Markdown markers, whose escaping would change as it grows. */
 const MARKER_ONLY_LINE = /^[\s#>*+=`~<\-\d.)]+$/u;
 
@@ -408,36 +289,16 @@ function fenceClosed(words: string): string {
 }
 
 /**
- * Whether a section still holds exactly what the plan's template put under
- * its heading, and that is guidance: one paragraph of prose. Note that a
- * template's list, code, quote, table, or deeper heading is never taken for
- * guidance, because a template may start a section with content of its own,
- * and that is kept with the point added after it. Never where the template
- * the plan started from is not known.
- */
-function guidanceOnly(section: PlanSection, started: string | undefined): boolean {
-  if (started === undefined) return false;
-  const was = planSections(started).find((each) => each.heading === section.heading);
-  if (was?.text !== section.text) return false;
-  const lines = section.text.split("\n").slice(1).join("\n").trim().split("\n");
-  return lines.every((line) => line.trim().length > 0 && !STARTER_CONTENT_LINE.test(line));
-}
-
-/**
  * The text with a point added at the end of the one section under the
  * note's heading, or, where the text has no such section, a new one at the
  * end of the text holding it; a fence the section or the text leaves open is
  * closed before it. Note that a heading standing over two sections is no
  * place to add to, because a point landing in the wrong one is the edit a
- * note must never make, and that a section still holding only its
- * template's guidance takes the point in place of the guidance, because the
- * guidance is the developer's prompt for the section and filled, it is no
- * longer wanted.
+ * note must never make.
  */
 function addedToText(
   text: string,
   note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>,
-  started: string | undefined,
 ): string | undefined {
   const heading = note.section;
   const added = contained(note.text);
@@ -447,10 +308,6 @@ function addedToText(
   if (section === undefined) {
     const head = fenceClosed(text.trimEnd());
     return `${head.length === 0 ? "" : `${head}\n\n`}## ${heading}\n\n${added}\n`;
-  }
-  if (guidanceOnly(section, started)) {
-    const headingLine = section.text.split("\n", 1)[0] ?? "";
-    return `${text.slice(0, section.from)}${headingLine}\n\n${added}${text.slice(section.to)}`;
   }
   const words = fenceClosed(section.text);
   const lines = words.split("\n");
@@ -515,21 +372,14 @@ function replacedInText(
 
 /**
  * A document's text with one note taken, or nothing where the note cannot
- * be: an addition at the end of the one section under its heading, in place
- * of the template's guidance where the section holds only that, or as a new
- * section at the end of the text where it has none; a replacement names text
+ * be: an addition at the end of the one section under its heading, or as a
+ * new section at the end of the text where it has none; a replacement names text
  * that must stand exactly once in the whole text, headings among it, so a
  * heading is renamed, a section moved or struck, and a point moved between
  * sections by replacements alone.
  */
-function applyNoteToText(
-  text: string,
-  note: PlanNote,
-  started: string | undefined,
-): string | undefined {
-  return note.kind === NOTE_KIND.ADD
-    ? addedToText(text, note, started)
-    : replacedInText(text, note);
+function applyNoteToText(text: string, note: PlanNote): string | undefined {
+  return note.kind === NOTE_KIND.ADD ? addedToText(text, note) : replacedInText(text, note);
 }
 
 /** Whether a text after a change holds every address `addressesIn` finds in it before, each copy counted. */
@@ -586,14 +436,10 @@ export interface TextNotesTaken {
 }
 
 /** Notes taken in order until one cannot be: the text so far, and the note that stopped them. */
-function takenInOrder(
-  text: string,
-  notes: readonly PlanNote[],
-  started: string | undefined,
-): TextNotesTaken {
+function takenInOrder(text: string, notes: readonly PlanNote[]): TextNotesTaken {
   let taken = text;
   for (const note of notes) {
-    const next = applyNoteToText(taken, note, started);
+    const next = applyNoteToText(taken, note);
     if (next === undefined) return { text: taken, missed: note };
     taken = next;
   }
@@ -605,16 +451,9 @@ function takenInOrder(
  * ones before it left, or none of them. Note that one note that cannot be
  * taken refuses the batch whole, because the notes of one answer are one
  * edit, and a move written as a strike and an addition must not land half.
- * `started` is the template text the plan started as, where it is known, so
- * a section still holding only its guidance takes its first point in place
- * of it; without it every point is added after what stands.
  */
-export function applyNotesToText(
-  text: string,
-  notes: readonly PlanNote[],
-  started?: string,
-): TextNotesTaken {
-  const taken = takenInOrder(text, notes, started);
+export function applyNotesToText(text: string, notes: readonly PlanNote[]): TextNotesTaken {
+  const taken = takenInOrder(text, notes);
   return taken.missed === undefined ? taken : { text, missed: taken.missed };
 }
 
@@ -669,12 +508,8 @@ export function readNotes(answer: UnparsedWireValue): NotesRead {
  * Markdown markers. Each draft therefore differs from the one before only
  * where the newest note lands.
  */
-export function textNotesInProgress(
-  text: string,
-  partial: UnparsedWireValue,
-  started?: string,
-): string {
-  return takenInOrder(text, notesSoFar(partial), started).text;
+export function textNotesInProgress(text: string, partial: UnparsedWireValue): string {
+  return takenInOrder(text, notesSoFar(partial)).text;
 }
 
 /** The notes an answer so far holds: every whole note up to the first that does not read, then the last, while it adds a point, as written so far. */

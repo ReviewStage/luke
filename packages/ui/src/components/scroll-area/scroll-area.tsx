@@ -24,7 +24,7 @@ import { ScrollArea as ShadcnScrollArea } from "../../shadcn/scroll-area.js";
  *   rather than being sliced there, the start edge alone or both. The fade
  *   eases in over the first stretch of scrolling, so an area at rest at its
  *   start, or one with nothing to scroll, is left whole. Where a band stands
- *   stuck at the area's start (`fadeInset`), a checkpoint's, the start fade
+ *   stuck at the area's start (`fadeInset`), a section's heading, the start fade
  *   begins beneath it, so the band stands whole; and
  * - its gutter (`gutter`): where the system draws a scroll bar that takes
  *   room, a stable gutter keeps that room while nothing scrolls yet, so what

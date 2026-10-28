@@ -199,17 +199,13 @@ export type ViewSettingsScope =
       /** Whether the diff is wide enough to split, which the layout row says where it is not. */
       readonly roomy: boolean;
     }
-  | {
-      readonly kind: typeof VIEW_SETTINGS_SCOPE.LINES;
-      /** Whether the lines carry notes, as a File tab's carry Luke's, which Minimize inline comments puts away; a page's source carries none. */
-      readonly notes: boolean;
-    };
+  | { readonly kind: typeof VIEW_SETTINGS_SCOPE.LINES };
 
 /**
  * The settings every run of lines follows, a File tab's and a diff's alike:
- * wrap and numbers, and, where the lines carry notes, whether those notes
- * stand put away behind a chip at the end of their line, a review thread in
- * Files changed and Luke's note in a File tab alike.
+ * wrap and numbers, and, where the lines carry notes, as a diff's review
+ * threads in Files changed do, whether those notes stand put away behind a
+ * chip at the end of their line.
  */
 function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
@@ -387,7 +383,7 @@ function GroupRows({
     case SETTING_SECTION.DIFF:
       return <DiffRows roomy={diff && scope.roomy} />;
     case SETTING_SECTION.LINES:
-      return <LinesRows notes={diff || scope.notes} />;
+      return <LinesRows notes={diff} />;
     case SETTING_SECTION.TEXT:
       return (
         <>

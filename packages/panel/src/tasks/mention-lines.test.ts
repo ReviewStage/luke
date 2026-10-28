@@ -146,8 +146,6 @@ async function page({ box = true }: { box?: boolean } = {}) {
           createElement(FileTab, {
             key: "file",
             file: { path: "src/invite.ts", range: undefined, opened: 1 },
-            snippet: undefined,
-            notes: { notes: [], folded: [], onFold: ignore, taskId: undefined },
             readFile,
             onRead: ignore,
           }),

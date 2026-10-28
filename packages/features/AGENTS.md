@@ -54,8 +54,7 @@ code, so **no internal route and no shared secret exist between two deployments.
 
 **The four run seams and nothing wider — a slow step began, every action
 settled, one sentence of the reply, the turn ended. No tool part, no
-reasoning, no message.** The one call whose words are told is `show_code`, whose
-lines travel on the `plan.code` frame rather than as an event. The kinds are the brain's own run-stream words (`brain/run-events.ts`),
+reasoning, no message.** The kinds are the brain's own run-stream words (`brain/run-events.ts`),
 spelled apart from them because the two were separate packages until the brain
 joined this one; a test in the service holds every event kind a member of the
 run stream's set. The slow step's set is one value, `TURN_SLOW_STEP`, which the

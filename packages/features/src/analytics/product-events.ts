@@ -157,6 +157,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   INTEGRATIONS: "integrations",
   SKILLS: "skills",
   API_KEYS: "api_keys",
+  /** No page since Settings › Plan template was removed; an older build still counts a visit to it. */
   PLAN_TEMPLATE: "plan_template",
   WORKSPACE: "workspace",
   ACCOUNT: "account",
@@ -246,6 +247,7 @@ export const PRODUCT_EXPERIMENT = {
   AUTOMATIONS: "automations",
   /** Removed with the Code review automation, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CODE_REVIEW: "code-review",
+  /** Removed with video calls, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   VIDEO_CALLS: "video-calls",
   MEMORY: "memory",
   /** Removed with Luke's own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */

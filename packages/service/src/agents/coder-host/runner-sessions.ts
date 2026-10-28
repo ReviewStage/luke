@@ -42,7 +42,9 @@
  * launches the runner anew with the harness's session to resume and the
  * next event number, whose session files the machine's disk kept.
  * `cancel` writes `stop` to a runner that runs, scoped to the launch running
- * the turn the Stop names, and nothing once that turn is no longer under way. `reset` retires the runner's
+ * the turn the Stop names, and nothing once that turn is no longer under way;
+ * past the answer, a turn still running `CODER.STOP_CONFIRM` on has its
+ * runner ended and is settled cancelled. `reset` retires the runner's
  * bearer and throws the place away. Nothing here streams: the runner posts its
  * events to Luke itself.
  *
@@ -715,6 +717,9 @@ export const runnerSessions = <
           ...(failure instanceof LaunchRefused && failure.deviceRemoved === true
             ? { runtimeRefusal: RUNTIME_REFUSAL.DEVICE_REMOVED }
             : undefined),
+          ...(failure instanceof LaunchRefused && failure.deviceAway === true
+            ? { runtimeRefusal: RUNTIME_REFUSAL.DEVICE_AWAY }
+            : undefined),
         } as const,
       );
 
@@ -899,7 +904,8 @@ export const runnerSessions = <
             .pipe(
               Effect.as(true),
               Effect.catchIf(
-                (failure) => failure.status === NOT_FOUND_STATUS,
+                (failure) =>
+                  failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
                 () => Effect.succeed(false),
               ),
             );
@@ -961,26 +967,89 @@ export const runnerSessions = <
         return accepted;
       });
 
-    /** A Stop of the turn named, under the agent's runner lease, to the runner as it stands once the lease is held. */
+    /**
+     * A Stop of the turn named, under the agent's runner lease, to the runner
+     * as it stands once the lease is held; answers the launch the stop line
+     * was written to, which its force ends (`forcedStop`). A turn still
+     * running whose runner is no longer up, as after a released wait, or
+     * exited before the line reached it (Vercel's 404), is a Stop taken all
+     * the same, with no line to write, which the force settles.
+     */
     const cancelHolding = (sessionId: string, turnId: string, agent: CodingAgent) =>
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, sessionId);
-        const live =
-          Option.isSome(found) && found.value.agentId === agent.id
-            ? yield* liveRunner(machine, found.value)
-            : undefined;
-        if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+        if (Option.isNone(found) || found.value.agentId !== agent.id) {
+          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+        }
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
           return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
-        yield* machine.writeLine(
-          live.handle,
-          line({ type: INPUT_LINE.STOP, launch: live.mark.firstSequence }),
-        );
-        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+        const live = yield* liveRunner(machine, found.value);
+        if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+        yield* machine
+          .writeLine(live.handle, line({ type: INPUT_LINE.STOP, launch: live.mark.firstSequence }))
+          .pipe(
+            Effect.catchIf(
+              (failure) =>
+                failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
+              () => Effect.void,
+            ),
+          );
+        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED, launch: live.mark.firstSequence } as const;
       });
+
+    /**
+     * A Stop's force, `CODER.STOP_CONFIRM` after its line was written: the
+     * turn the Stop named, where it still runs with its Stop stamped, has the
+     * launch the line went to ended, and is settled cancelled as a turn whose
+     * runner was lost is (`settleRunnerLostTurns`), which drops the turn the
+     * native projection holds too, so nothing the runner posted late lands
+     * on it. Note that a newer launch, which a message after the Stop
+     * started, runs on. The ended runner's bearer is let go and the place's
+     * record cleared, as `haltHolding` leaves them, so nothing it posts on its
+     * way down is taken and the next message relaunches; its sandbox stops
+     * at the sweep (`native-sandbox-sweep.ts`), since a killed runner posts
+     * no END. A turn ended meanwhile, as a runner that heard the Stop ends
+     * it within seconds, is left as it ended.
+     */
+    const forcedStop = (
+      sessionId: string,
+      turnId: string,
+      agent: CodingAgent,
+      launch: number | undefined,
+    ) =>
+      Effect.andThen(
+        Effect.sleep(CODER.STOP_CONFIRM),
+        holdingRunner(
+          agent.id,
+          Effect.gen(function* () {
+            const { conversationId } = agent;
+            const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
+            if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) return;
+            if (turn.cancelRequestedAt === null) return;
+            const found = yield* firstPlace(machine, sessionId);
+            const live =
+              Option.isSome(found) && found.value.agentId === agent.id
+                ? yield* liveRunner(machine, found.value)
+                : undefined;
+            if (Option.isSome(found) && live !== undefined && live.mark.firstSequence === launch) {
+              yield* Effect.logWarning(
+                `A ${harness.name} runner did not end its turn on a Stop, and was ended`,
+              );
+              yield* machine.kill(live.handle);
+              yield* recordCodingAgentRunnerToken(userId, agent.id, null);
+              yield* machine.recordRunner(recordOf(found.value, agent.id), {
+                kind: RUNNER_RECORD.NONE,
+              });
+            }
+            const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+            const now = yield* Clock.currentTimeMillis;
+            yield* settleRunnerLostTurns(writer, conversationId, now, undefined, new Set([turnId]));
+          }),
+        ),
+      );
 
     /**
      * The session's runner ended, under the agent's runner lease, so the
@@ -1162,19 +1231,41 @@ export const runnerSessions = <
 
       // The Stop is scoped to the turn it names: written only while that turn is the
       // conversation's turn under way, to the command of the launch running it, and naming that
-      // launch, so a Stop delayed past its turn never interrupts the next launch's.
+      // launch, so a Stop delayed past its turn never interrupts the next launch's. A Stop taken
+      // is forced past the answer (`forcedStop`), its wait run there rather than holding the
+      // request; a caller with no after-response door leaves an unconfirmed Stop to the sweep, as
+      // before.
       cancel: (sessionId, turnId) =>
         Effect.gen(function* () {
-          const found = yield* firstPlace(machine, sessionId);
-          const agentId = Option.isSome(found) ? found.value.agentId : undefined;
-          const agent =
-            agentId === undefined ? Option.none() : yield* readCodingAgent(userId, agentId);
-          if (Option.isNone(agent)) return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
-          return yield* holdingRunner(
-            agent.value.id,
-            cancelHolding(sessionId, turnId, agent.value),
+          const after = yield* Effect.serviceOption(AfterResponse);
+          return yield* Effect.gen(function* () {
+            const found = yield* firstPlace(machine, sessionId);
+            const agentId = Option.isSome(found) ? found.value.agentId : undefined;
+            const agent =
+              agentId === undefined ? Option.none() : yield* readCodingAgent(userId, agentId);
+            if (Option.isNone(agent)) {
+              return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+            }
+            const cancelled = yield* holdingRunner(
+              agent.value.id,
+              cancelHolding(sessionId, turnId, agent.value),
+            );
+            if (cancelled.outcome !== EVE_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
+              return { outcome: cancelled.outcome } as const;
+            }
+            const launch = "launch" in cancelled ? cancelled.launch : undefined;
+            yield* afterResponse(
+              `A ${harness.name} Stop's force`,
+              forcedStop(sessionId, turnId, agent.value, launch),
+            );
+            return { outcome: cancelled.outcome } as const;
+          }).pipe(
+            Effect.catch(unavailable("cancel")),
+            Effect.provideContext(
+              Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
+            ),
           );
-        }).pipe(Effect.catch(unavailable("cancel")), Effect.provideContext(context)),
+        }),
 
       reset: (sessionId) =>
         Effect.gen(function* () {

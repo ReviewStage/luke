@@ -621,7 +621,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
   );
 
   it.effect(
-    "a Reset re-aims the heartbeat at the fresh operator rather than making a second, and one the member deleted is not made again by a repeat ensure",
+    "a Reset, or an archive by hand and the next ensure, re-aims the heartbeat at the fresh operator rather than making a second, and one the member deleted is not made again by a repeat ensure",
     () =>
       Effect.gen(function* () {
         const member = yield* openMember;
@@ -637,6 +637,16 @@ it.layer(getTestDB())("the member's operator", (it) => {
         assert.deepEqual(
           reaimed.map((each) => [each.id, each.targetAgentId]),
           [[made.id, reset.agent.id]],
+        );
+
+        // Archived by hand, as the archive or update_agent does it, the next ensure makes a fresh one with no Reset to name the old.
+        yield* archiveCodingAgent(member, reset.agent.id, true);
+        const after = yield* ensure(member, workspaceId);
+        assert.notEqual(after.agent.id, reset.agent.id);
+        assert.deepEqual(
+          (yield* automationsOf(member, workspaceId)).map((each) => [each.id, each.targetAgentId]),
+          [[made.id, after.agent.id]],
+          "an operator archived by hand leaves its heartbeat to the next one, not a second beside it",
         );
 
         assert.ok(yield* deleteAutomation(member, made.id));

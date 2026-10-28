@@ -31,7 +31,6 @@ import {
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { windowPushes } from "../window/window-pushes";
-import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
@@ -105,7 +104,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     operator,
     windows,
     notices,
-    avatar,
     colourCode,
     run,
     services: effectServices,
@@ -135,7 +133,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   // The acts main answers itself on the act port: its windows', ports', and
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
-    ...avatarProcedures({ avatar }),
     ...browserLiveProcedures<WebContents>({
       host: operator.host,
       ports: {
@@ -205,12 +202,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
-    ...avatarReports({
-      state,
-      panel: panels,
-      callWindow,
-      voiceOwns: (sender) => voiceWindow.owns(sender),
-    }),
     // The development trace is the host's: a tapped wire event crosses to its
     // writer, which alone knows whether this run records anything.
     recordAgentTrace: (_context, trace) => {
@@ -285,7 +276,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
             if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, about);
           },
         },
-        taskIssues: { host: operator.host },
         thisMacHost: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },

@@ -40,7 +40,6 @@ import React from "react";
 import {
   ArchiveIcon,
   BackIcon,
-  BoardIcon,
   CloseIcon,
   CopyIcon,
   DocumentIcon,
@@ -133,7 +132,6 @@ export const GLYPH = {
   // A thread in a channel, the Inbox's item, where no ask of its own says more.
   THREAD: lucideGlyph(MessagesSquare),
   TERMINAL: TerminalIcon,
-  WHITEBOARD: BoardIcon,
   MEMORY: MemoryIcon,
   MCP_SERVER: McpIcon,
   CALL: WaveformIcon,

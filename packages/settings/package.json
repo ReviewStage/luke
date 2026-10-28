@@ -13,7 +13,9 @@
     "./update": "./src/update.js",
     "./update-row": "./src/update-row.js",
     "./diff-view": "./src/diff-view.js",
-    "./shortcuts": "./src/shortcuts.js"
+    "./shortcuts": "./src/shortcuts.js",
+    "./microphone": "./src/microphone.js",
+    "./settings-controls": "./src/settings-controls.js"
   },
   "types": "./src/index.ts",
   "scripts": {

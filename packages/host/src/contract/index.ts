@@ -9,7 +9,6 @@ import { accountAskActsContract } from "./account-asks.js";
 import { agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
-import { avatarActsContract } from "./avatar.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { channelActsContract } from "./channels.js";
 import { chaptersActsContract } from "./chapters.js";
@@ -20,7 +19,6 @@ import { macCommandActsContract } from "./mac-commands.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
-import { taskIssueActsContract } from "./task-issues.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { thisMacHostActsContract } from "./this-mac-host.js";
@@ -51,7 +49,6 @@ export {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
-  AVATAR_ACT_KIND,
   BROWSER_LIVE_ACT_KIND,
   CHANNEL_ACT_KIND,
   CHAPTERS_ACT_KIND,
@@ -63,7 +60,6 @@ export {
   type PlatformPortActKind,
   type PortActKind,
   SETTINGS_ACT_KIND,
-  TASK_ISSUE_ACT_KIND,
   TASKS_ACT_KIND,
   TERMINAL_ACT_KIND,
   THIS_MAC_HOST_ACT_KIND,
@@ -98,7 +94,6 @@ export const actContract = {
   ...agentActsContract,
   ...agentInboxActsContract,
   ...automationActsContract,
-  ...avatarActsContract,
   ...browserLiveActsContract,
   ...channelActsContract,
   ...chaptersActsContract,
@@ -108,7 +103,6 @@ export const actContract = {
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
-  ...taskIssueActsContract,
   ...terminalActsContract,
   ...thisMacHostActsContract,
   ...updateActsContract,

@@ -28,7 +28,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/features/task-wire";
-import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
+import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
@@ -37,7 +37,6 @@ import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views"
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { shownFiles } from "@luke/voice/code-pane-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -56,6 +55,7 @@ import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-s
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
+import { fileLook } from "../tasks/file-ref.js";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -83,7 +83,6 @@ import { CommandPalette } from "./command-palette.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { ListedAutomations } from "./listed-automations.js";
-import { panelEntries } from "./side-panel.js";
 
 /** Where the palette sent the window: each tab and each Settings page it asked for, in order. */
 interface Sent {
@@ -311,7 +310,6 @@ const SETTINGS_PAGES = [
   "Agents",
   "Integrations",
   "Skills",
-  "Plan template",
   "Voice",
   "Appearance",
   "This Mac",
@@ -1072,13 +1070,13 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 
   type("#42");
   const changes = rows().filter((row) => row.startsWith("Pull request"));
-  type("Show board");
-  const board = rows().filter((row) => row.startsWith("Show board"));
+  type("Show comments");
+  const comments = rows().filter((row) => row.startsWith("Show comments"));
   chooseFilter("Files");
   type("index");
   const notice = document.querySelector(".luke-note-line")?.textContent;
 
-  assert.deepEqual([changes, board], [[], []]);
+  assert.deepEqual([changes, comments], [[], []]);
   assert.deepEqual(read, [], "the hidden task's files are not read");
   assert.equal(notice, "Open a task with a repository to search its files.");
 });
@@ -1086,7 +1084,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 /** The palette over the plan with a repository, or over the Inbox in front of it with `chosen` chosen there, each file it opens recorded. */
 async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | undefined): Promise<{
   opened: string[];
-  boards: string[];
+  comments: string[];
   pulls: string[];
 }> {
   const agent = {
@@ -1149,13 +1147,13 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
   );
   type("#42");
   const pulls = rows().filter((row) => row.startsWith("#42"));
-  type("Show board");
-  const boards = rows().filter((row) => row.startsWith("Show board"));
+  type("Show comments");
+  const comments = rows().filter((row) => row.startsWith("Show comments"));
   chooseFilter("Files");
   type("accept");
   await act(async () => undefined);
   if (rows().includes("accept.ts")) press("accept.ts");
-  return { opened, boards, pulls };
+  return { opened, comments, pulls };
 }
 
 /** The Pull request row of the plan's agent, as `paletteOverPanel` finds it by its number. */
@@ -1164,7 +1162,7 @@ const PULL = `#42 Export invoices as CSV · Invoice export · ${DOCUMENT_TASK.na
 test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file or a pull request found opens, and its panel tabs are offered on the plan alone, since the Inbox's panel draws none", async () => {
   assert.deepEqual(await paletteOverPanel(undefined), {
     opened: ["accept.ts"],
-    boards: ["Show board"],
+    comments: ["Show comments"],
     pulls: [PULL],
   });
   act(() => {
@@ -1172,39 +1170,24 @@ test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K off
   });
   assert.deepEqual(
     await paletteOverPanel({ chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" } }),
-    { opened: ["accept.ts"], boards: [], pulls: [PULL] },
+    { opened: ["accept.ts"], comments: [], pulls: [PULL] },
   );
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   assert.deepEqual(await paletteOverPanel({ chosen: undefined }), {
     opened: [],
-    boards: [],
+    comments: [],
     pulls: [],
   });
 });
 
-test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
+test("a file found wears its type's look, hangs the file's card, and opens through the panel's one door for a file, naming the file alone", async () => {
   const path = "src/invites/accept.ts";
-  const note = "A used invite is refused here.";
-  const showing: TaskCodeShowing = {
-    callId: "c",
-    turnId: "t",
-    shownAt: 1_000,
-    code: {
-      ref: { path, startLine: 3, endLine: 5 },
-      repository: "acme/relay",
-      firstLine: 1,
-      lineCount: 9,
-      lines: [],
-      note,
-    },
-  };
   const opened: unknown[][] = [];
   const base = tasksControl();
   const sidePanel: SidePanelControl = {
     ...base.sidePanel,
-    files: [{ path, range: { startLine: 3, endLine: 5 }, opened: 1 }],
     onOpenFile: (...asked) => opened.push(asked),
   };
   const tasks = tasksControl({
@@ -1220,7 +1203,6 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
       },
     ],
     sidePanel,
-    shownCode: [showing],
   });
   openPalette(tasks, () =>
     Promise.resolve({
@@ -1237,32 +1219,18 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   await act(async () => undefined);
   assert.deepEqual(rows(), ["accept.ts · src/invites"]);
 
-  const [plus] = panelEntries({
-    panel: sidePanel,
-    kinds: [],
-    files: shownFiles([showing]),
-  });
-  assert.ok(plus, 'the "+" offers the file');
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
     row?.querySelector(".luke-combobox-option-glyph")?.innerHTML,
-    renderToStaticMarkup(plus.row.icon),
-    'the row wears the icon the "+" row does',
+    renderToStaticMarkup(fileLook(path).icon),
+    "the row wears the file's type icon",
   );
   restOn(row ?? assert.fail("the row is drawn"));
   const card = document.querySelector(".luke-tooltip-card [data-file-card]");
-  assert.deepEqual(
-    [
-      card?.querySelector(".luke-hover-card-name")?.textContent,
-      card?.querySelector(".luke-hover-card-note")?.textContent,
-    ],
-    [path, note],
-  );
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, path);
 
   press("accept.ts · src/invites");
-  act(() => plus.onPick());
-  // Both name the file alone, so the tab it has is shown as it stands.
-  assert.deepEqual(opened, [[{ path }], [{ path }]]);
+  assert.deepEqual(opened, [[{ path }]]);
 });
 
 test("a task's row hangs the task's card beside it while the pointer rests on it, as its sidebar row does", () => {
@@ -2544,20 +2512,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
   assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
 });
 
-test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them, and no file shown on the task, which that panel draws none of', async () => {
-  const showing: TaskCodeShowing = {
-    callId: "c",
-    turnId: "t",
-    shownAt: 1_000,
-    code: {
-      ref: { path: "src/invites/accept.ts", startLine: 3, endLine: 5 },
-      repository: "acme/relay",
-      firstLine: 1,
-      lineCount: 9,
-      lines: [],
-      note: "A used invite is refused here.",
-    },
-  };
+test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them', async () => {
   const base = tasksControl();
   const tasks = tasksControl({
     activeTaskId: DOCUMENT_TASK.id,
@@ -2572,7 +2527,6 @@ test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages t
       },
     ],
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    shownCode: [showing],
     pages: [],
     inboxView: {
       ...base.inboxView,
@@ -2585,7 +2539,6 @@ test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages t
   chooseFilter("This task");
   const listed = rows();
   assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
-  assert.ok(!listed.some((row) => row.startsWith("accept.ts")), "no shown file is listed");
 });
 
 test("with a task on screen, ⌘K offers its Version history, Cancel task, Change repository, and Open on GitHub, each running on it what its ⋯ item runs", () => {
@@ -2825,6 +2778,7 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           title: "Orla",
+          kind: CODING_AGENT_KIND.OPERATOR,
           createdAt: 1,
           status: CODING_AGENT_STATUS.COMPLETED,
           turnId: null,
@@ -3241,9 +3195,12 @@ test("with a task open and nothing typed, ⌘K lists the task's commands first, 
   ];
   assert.deepEqual(listed.slice(0, task.length), task);
   const goTo = listed.findIndex((row) => row.startsWith("Go to "));
-  const showBoard = listed.indexOf("Show board");
+  const showComments = listed.indexOf("Show comments");
   const window = listed.indexOf("Show my tasks");
-  assert.ok(showBoard >= task.length && showBoard < goTo, "the task's Show rows come before Go to");
+  assert.ok(
+    showComments >= task.length && showComments < goTo,
+    "the task's Show rows come before Go to",
+  );
   assert.ok(goTo < window, "Go to comes before the window's own commands");
   assert.ok(
     listed.slice(goTo, window).every((row) => row.startsWith("Go to ")),
@@ -3251,22 +3208,10 @@ test("with a task open and nothing typed, ⌘K lists the task's commands first, 
   );
 });
 
-test("with files open or shown and nothing typed, Files lists them first, the open ones in the strip's order, a tab moved there included, the rest of the repository after", async () => {
-  const shown = "src/invites/accept.ts";
+test("with files open and nothing typed, Files lists them first, in the strip's order, a tab moved there included, the rest of the repository after", async () => {
+  const other = "src/invites/accept.ts";
   const opened = "src/members/invite.ts";
   const moved = "src/members/remove.ts";
-  const showing: TaskCodeShowing = {
-    callId: "c",
-    turnId: "t",
-    shownAt: 1_000,
-    code: {
-      ref: { path: shown, startLine: 3, endLine: 5 },
-      repository: "acme/relay",
-      firstLine: 1,
-      lineCount: 9,
-      lines: [],
-    },
-  };
   const base = tasksControl();
   const tasks = tasksControl({
     activeTaskId: "plan-1",
@@ -3289,9 +3234,8 @@ test("with files open or shown and nothing typed, Files lists them first, the op
       // The later tab was moved before the earlier one in the strip, which leaves the files held as they were.
       order: [{ file: moved }, { file: opened }],
     },
-    shownCode: [showing],
   });
-  const tree = ["README.md", "package.json", "src/index.ts", shown, opened, moved];
+  const tree = ["README.md", "package.json", "src/index.ts", other, opened, moved];
   openPalette(tasks, () =>
     Promise.resolve({
       folder: {
@@ -3309,9 +3253,9 @@ test("with files open or shown and nothing typed, Files lists them first, the op
   assert.deepEqual(rows(), [
     "remove.ts · src/members",
     "invite.ts · src/members",
-    "accept.ts · src/invites",
     "README.md",
     "package.json",
     "index.ts · src",
+    "accept.ts · src/invites",
   ]);
 });

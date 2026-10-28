@@ -3,6 +3,7 @@ import {
   PULL_REQUEST_STATE,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
+import { automationRun } from "@luke/features/model-label";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { waitsOnReader } from "../tasks/inbox-model.js";
 
@@ -34,11 +35,6 @@ const OPEN_PULL_REQUEST: ReadonlySet<string> = new Set([
   PULL_REQUEST_STATE.DRAFT,
 ]);
 
-/** Whether an automation's run started the agent: one standing names it, and a deleted one's run still keeps its name. */
-function automationRun(agent: TasklessAgent): boolean {
-  return agent.automationId !== null || agent.automationName !== undefined;
-}
-
 /** The agents of the list that stand under Tasks, in the list's order: all but an automation's finished runs that hold nothing of the reader's. */
 export function withoutFinishedRuns(
   agents: readonly TasklessAgent[],
@@ -49,7 +45,7 @@ export function withoutFinishedRuns(
   );
   return agents.filter(
     (agent) =>
-      !automationRun(agent) ||
+      automationRun(agent) === undefined ||
       agent.status !== CODING_AGENT_STATUS.COMPLETED ||
       agent.id === held.shown ||
       held.unseen(agent.id) ||

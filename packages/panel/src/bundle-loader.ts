@@ -3,34 +3,29 @@ import type { DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type * as Atom from "effect/reactivity/Atom";
-import { createContext, useCallback, useContext, useEffect } from "react";
+import { createContext, useCallback, useContext } from "react";
 import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
 import type { PlanEditorModule } from "./plan-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
-import { shellBundles } from "./shell-bundles.js";
 import type { TerminalModule } from "./terminal/contract.js";
-import type { WhiteboardModule } from "./whiteboard/contract.js";
 
 /**
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
  *
- * The panel's editors (`plan-editor/`), the whiteboard (`whiteboard/`), a File
- * tab's tree (`file-tree/`), a Terminal tab's screen (`terminal/`), a plan's
- * diagrams (`diagram/`), and a Files changed diff (`diff-view/`) are each
+ * The panel's editors (`plan-editor/`), a File tab's tree (`file-tree/`), a
+ * Terminal tab's screen (`terminal/`), a plan's diagrams (`diagram/`), and a
+ * Files changed diff (`diff-view/`) are each
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. A bundle that landed is
  * kept, so leaving the surface and coming back loads nothing; one that
  * failed is not, so the next surface to read it imports it again, as a
- * connection that dropped for a moment has come back. A call's avatar is
- * the shell's to reach, imported through what it installed
- * (`shell-bundles.ts`).
+ * connection that dropped for a moment has come back.
  *
  * A surface reads its bundle through `useSideBundles`, whose atoms are built
  * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
- * others, as a test does to stand a bundle in or to have one fail. A call's
- * avatar, read outside any surface, is `avatarSessionAtom` alone.
+ * others, as a test does to stand a bundle in or to have one fail.
  */
 
 /** How a bundle is reached: its entry imported, answering the module it exports. */
@@ -39,7 +34,6 @@ export type BundleImporter<A> = () => Promise<A>;
 /** How each bundle of the panel's own is reached. */
 export interface SideBundleImporters {
   readonly planEditor: BundleImporter<PlanEditorModule>;
-  readonly whiteboard: BundleImporter<WhiteboardModule>;
   readonly fileTree: BundleImporter<FileTreeModule>;
   readonly terminal: BundleImporter<TerminalModule>;
   readonly diagram: BundleImporter<DiagramModule>;
@@ -52,9 +46,6 @@ export type SideBundles = {
     AsyncResult.AsyncResult<Awaited<ReturnType<SideBundleImporters[Bundle]>>, Error>
   >;
 };
-
-/** What the whiteboard says where its bundle failed to load. */
-export const BOARD_LOAD_FAILED = "The board could not be opened.";
 
 /** What a File tab's tree and breadcrumbs say where their bundle failed to load; a type icon keeps its placeholder. */
 export const TREE_LOAD_FAILED = "The files could not be shown.";
@@ -71,7 +62,6 @@ export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 /** Why each bundle could not be had, where its import failed. */
 const LOAD_FAILED = {
   planEditor: "The editor could not be loaded.",
-  whiteboard: BOARD_LOAD_FAILED,
   fileTree: TREE_LOAD_FAILED,
   terminal: TERMINAL_LOAD_FAILED,
   diagram: DIAGRAM_REFUSED_LINE,
@@ -81,11 +71,6 @@ const LOAD_FAILED = {
 /** Each bundle's entry, imported where the bundler put it. */
 const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   planEditor: () => import("./plan-editor/index.js").then((entry) => entry.planEditor),
-  // Note that Excalidraw is told where its fonts are before any of it runs.
-  whiteboard: () =>
-    import("./whiteboard/asset-path.js")
-      .then(() => import("./whiteboard/index.js"))
-      .then((entry) => entry.whiteboard),
   fileTree: () => import("./file-tree/index.js").then((entry) => entry.fileTree),
   terminal: () => import("./terminal/index.js").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index.js").then((entry) => entry.diagram),
@@ -121,7 +106,6 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
   const reach: SideBundleImporters = { ...SIDE_BUNDLE_IMPORTERS, ...importers };
   return {
     planEditor: bundleAtom(reach.planEditor, LOAD_FAILED.planEditor),
-    whiteboard: bundleAtom(reach.whiteboard, LOAD_FAILED.whiteboard),
     fileTree: bundleAtom(reach.fileTree, LOAD_FAILED.fileTree),
     terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
     diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),
@@ -131,16 +115,6 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
 
 /** The window's bundles, each through its own entry: what every surface reads unless a context hands others. */
 export const SIDE_BUNDLES = sideBundles();
-
-/**
- * A call's avatar, reached by the panel's call outside any surface
- * (`call/call-avatar.ts`), whose doors are what a test hands its own; so it
- * is read here rather than through the context.
- */
-export const avatarSessionAtom = bundleAtom(
-  () => shellBundles().avatarSession(),
-  "The video could not be started.",
-);
 
 /** The bundles the surfaces under it read. */
 export const SideBundlesContext = createContext<SideBundles>(SIDE_BUNDLES);
@@ -161,18 +135,4 @@ export function usePrefetchEditorBundle(): () => void {
   return useCallback(() => {
     registry.get(planEditor);
   }, [registry, planEditor]);
-}
-
-/**
- * Starts the diff bundle loading once `due`, where it has not started
- * already: a call standing on the open task, where each snippet Luke shows
- * lands as a Code tab card the bundle draws (`tasks/code-snippet.tsx`), so
- * the first card draws its lines without waiting on the bundle's import.
- */
-export function usePrefetchDiffBundle(due: boolean): void {
-  const registry = useContext(RegistryContext);
-  const { diffView } = useSideBundles();
-  useEffect(() => {
-    if (due) registry.get(diffView);
-  }, [due, registry, diffView]);
 }

@@ -18,11 +18,15 @@ import { useExperiment } from "../use-app-state.js";
  *
  * The operator is one agent per member per workspace (`PUT
  * /api/workspaces/{id}/operator`), made blank the first time it is ensured,
- * so nobody presses Start. Its row at the sidebar's head draws it, ⌘K's Ask
- * Luke and its chord open it, its page names it Luke, and every other list
- * of agents leaves it out, each through this hook. While the account has the
- * experiment off the hook answers nothing and asks nothing, so nothing
- * stands anywhere.
+ * so nobody presses Start. Its row at the sidebar's head draws it, and ⌘K's
+ * Ask Luke and its chord open it, each through this hook. While the account
+ * has the experiment off the hook answers nothing and asks nothing, so none
+ * of those stands. Note that every other place knows Luke by his kind alone,
+ * whatever the experiment says: his page names him Luke and offers no
+ * Rename, Archive, or Delete (`agent-actions.tsx`), every place drawing an
+ * agent draws him with his face, and every other list of agents leaves him
+ * out (`withoutLuke`), so an operator that stands while the experiment is off
+ * is never drawn as an ordinary agent.
  *
  * Each workspace's ensure is asked once for the window, whichever surface
  * draws first, and kept here, so switching back to a workspace shows its
@@ -33,9 +37,6 @@ import { useExperiment } from "../use-app-state.js";
  * ensures with `restore`, which archives the fresh one and brings back the
  * one the Reset retired.
  */
-
-/** The name the operator is drawn by, wherever it stands. */
-export const LUKE_NAME = "Luke";
 
 /** Where one workspace's ensure stands. */
 const OPERATOR_READ = {
@@ -193,22 +194,17 @@ export function useLukeOperator(asking: {
   }, [accountId, workspaceId, read, write]);
 }
 
-/** Whether an agent is the account's operator: by its kind, or, from a service before the summary said it, by the id its ensure answered. */
-export function isLuke(
-  agent: Pick<CodingAgentSummary, "id" | "kind">,
-  operator: LukeOperator,
-): boolean {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR || agent.id === operator.agentId;
+/** Whether an agent is the account's operator, by its kind alone. */
+export function isLuke(agent: Pick<CodingAgentSummary, "kind">): boolean {
+  return agent.kind === CODING_AGENT_KIND.OPERATOR;
 }
 
 /**
  * The agents a list draws with Luke left out, since he stands in his own
- * row; every one while the account has him off. Note that he is known by his
- * kind, so a list read before his ensure answered never draws him twice.
+ * row. Note that he is known by his kind, whatever the experiment says, so a
+ * list read before his ensure answered never draws him twice, and one read
+ * while the account has him off never draws him as an ordinary agent.
  */
-export function withoutLuke(
-  agents: readonly TasklessAgent[],
-  operator: LukeOperator | undefined,
-): readonly TasklessAgent[] {
-  return operator === undefined ? agents : agents.filter((agent) => !isLuke(agent, operator));
+export function withoutLuke(agents: readonly TasklessAgent[]): readonly TasklessAgent[] {
+  return agents.filter((agent) => !isLuke(agent));
 }

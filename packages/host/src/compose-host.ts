@@ -12,7 +12,6 @@ import {
   HostedTerminalClient,
   HostedWorkspaceClient,
   type TaskActivityFrame,
-  type TaskCodeFrame,
 } from "@luke/features";
 import { HostedInstalledSkillClient } from "@luke/features/installed-skill-client";
 import {
@@ -143,19 +142,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // speaks only on a call the developer opened into an agent.
     // The tasks composer is built after the live one and ends its calls, so
     // the live composer reads the agent a call goes into, and hands the
-    // call's activity, code, and work on, through these late bindings.
+    // call's activity and work on, through these late bindings.
     let callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
       Effect.succeed(undefined);
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
     let taskCallEnded: (about: VoiceCallAbout) => void = () => undefined;
-    let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
       callTaskOf: (agentId) => callTaskOf(agentId),
       showTaskActivity: (activity) => showTaskActivity(activity),
       taskCallEnded: (about) => taskCallEnded(about),
-      showTaskCode: (code) => showTaskCode(code),
     });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -305,11 +302,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     callTaskOf = codingAgents.callTaskOf;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
-    // Note that code a call into an agent with no task shows names no task, so it is held for that agent's page by its agent.
-    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => {
-      if (taskId !== undefined) tasks.showCode(taskId, shown);
-      else if (shown.agentId !== undefined) tasks.showAgentCode(shown.agentId, shown);
-    };
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
@@ -459,11 +451,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
       drain,
-      avatar: {
-        states: live.service.avatarStates,
-        grants: live.service.avatarGrants,
-        closed: (reason) => live.service.closed(reason),
-      },
     };
     return assembly;
   });

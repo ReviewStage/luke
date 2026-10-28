@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -76,8 +76,8 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The task open in the window, holding a board, so its panel has a tab to show. */
-const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: { [SIDE_PANEL_TAB.BOARD]: true } };
+/** The task open in the window, holding a comment, so its panel has a tab to show. */
+const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: { [SIDE_PANEL_TAB.COMMENTS]: true } };
 
 /** The desktop's window at its usual width. */
 const WIDE = 1280;
@@ -122,7 +122,7 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const sidebar = useSidebarCollapse(false, stage.compact);
-  const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], [], undefined, room);
+  const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], undefined, room);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
   const shell = createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, onCancelSignIn: ignore },

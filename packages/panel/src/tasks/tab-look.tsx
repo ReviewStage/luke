@@ -1,7 +1,12 @@
-import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentKind,
+  type CodingAgentPullRequest,
+  type CodingAgentStatus,
+} from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
-import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
+import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark, WingFace } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
@@ -27,8 +32,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * Every place that offers a tab draws it through `tabLook`, from what that
  * place knows of the thing the tab shows, so a kind wears one glyph and one
  * name wherever it is offered. A coding agent and a subagent wear their
- * harness's mark wearing where they stand (`AgentGlyph`, `SubagentGlyph`)
- * in every one of those places, the "+" menus' rows included: a row is
+ * harness's mark, and a member's operator Luke's face, wearing where they
+ * stand (`AgentGlyph`, `SubagentGlyph`) in every one of those places, the
+ * "+" menus' rows included: a row is
  * offered beside a strip that may not hold its tab. A task wears its
  * status's mark (`PlanGlyph`), and so does its Plan tab, which is named
  * for the task wherever the place knows it. Each place adds what
@@ -62,6 +68,8 @@ export const TAB_KIND = {
 interface AgentStanding {
   readonly model: string;
   readonly status?: CodingAgentStatus | undefined;
+  /** What kind of agent it is, an operator wearing Luke's face; absent for a coder. */
+  readonly kind?: CodingAgentKind | undefined;
 }
 
 /** A task as its tab or its row names it: its name, and its status where the place knows it. */
@@ -149,12 +157,21 @@ export function openPlanStanding(
 }
 
 /**
- * A coding agent's mark at rest: the mark of the harness its model runs in,
- * or its empty box (`AgentPlaceholderIcon`) until Luke knows the harness. A place
+ * A coding agent's mark at rest: Luke's face for a member's operator, as his
+ * sidebar row wears it, and otherwise the mark of the harness its model runs
+ * in, or its empty box (`AgentPlaceholderIcon`) until Luke knows the harness. A place
  * offering the agent wears it inside `AgentGlyph`; one that knows nothing
  * of where it stands, as a revision's author, wears it bare.
  */
-export function AgentMark({ provider }: { provider: ModelProvider | undefined }) {
+export function AgentMark({
+  provider,
+  operator = false,
+}: {
+  provider: ModelProvider | undefined;
+  /** Whether the agent is a member's operator, who wears Luke's face whatever his model. */
+  operator?: boolean | undefined;
+}) {
+  if (operator) return <WingFace />;
   return provider === undefined ? <AgentPlaceholderIcon /> : <HarnessMark provider={provider} />;
 }
 
@@ -182,7 +199,8 @@ export function SubagentMark({ model }: { model: string | undefined }) {
 export function AgentGlyph({ agent }: { agent: AgentStanding | undefined }) {
   const provider = agent === undefined ? undefined : providerOf(agent.model);
   const state = agent?.status === undefined ? GLYPH_STATE.REST : agentGlyphState(agent.status);
-  return <StateGlyph glyph={<AgentMark provider={provider} />} state={state} />;
+  const operator = agent?.kind === CODING_AGENT_KIND.OPERATOR;
+  return <StateGlyph glyph={<AgentMark provider={provider} operator={operator} />} state={state} />;
 }
 
 /** What a reader is told of an agent's glyph while a call into it is in progress. */

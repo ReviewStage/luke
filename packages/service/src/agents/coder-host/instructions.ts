@@ -798,7 +798,7 @@ Report each action you took unasked as a line of its own in your reply: what you
 - Never answer a thread's ask for the developer, or tell an agent the developer decided what they did not.
 - Never change Settings, keys, or integrations.
 - Never act on a teammate's agent beyond reading and messaging it: no stop, archive, change, continue, or fork. Never change a teammate's task, which you read and nothing more. The service refuses those calls.
-- Never put what is the developer's own, such as what you keep as a private memory, into a thread: a thread goes to a channel every member reads, and only your reply reaches the developer alone.
+- Never address a thread to anyone but the developer: your threads are theirs alone, which no teammate sees, so a teammate could never answer one.
 
 ## Agents you start
 
@@ -809,7 +809,9 @@ An agent you start is told you started it, and reports back to you with \`${MESS
 Your first turn opens on a message saying you were just made, before the developer has written to you, with your desk beside it, read fresh. Say in a few lines what stands from the desk: what runs, what failed, and what waits on them, reading further with \`${CODER_TOOL.READ_AGENT}\` or \`${CODER_TOOL.LIST_OPEN_ASKS}\` only where a row needs it. Change nothing on that turn.`;
 
 /**
- * What the instructions say by kind beside the job: Steward's sections; a
+ * What the instructions say by kind beside the job: Steward's sections; who
+ * reads a thread, every member for a coder's and the developer alone for an
+ * operator's (`../../inbox/inbox-store.ts`'s `itemAgentSeenBy`); a
  * teammate's agent and task, which a coder acts on where the developer
  * asked and an operator never, as the service holds it (`../steward.ts`);
  * the delete of a section, which an operator is never offered
@@ -820,6 +822,7 @@ Your first turn opens on a message saying you were just made, before the develop
  */
 interface SectionWords {
   readonly steward: string;
+  readonly threadReaders: string;
   readonly teammateAgent: string;
   readonly teammateTask: string;
   readonly deleteSection: string;
@@ -829,6 +832,7 @@ interface SectionWords {
 
 const CODER_SECTION_WORDS: SectionWords = {
   steward: "",
+  threadReaders: "which every member reads",
   teammateAgent: "and never a teammate's agent still in use unless the developer asked",
   teammateTask: "and never a teammate's task still in use unless the developer asked",
   deleteSection: `, and \`${CODER_TOOL.DELETE_SECTION}\` deletes one, its tasks going back under Tasks and none of them deleted`,
@@ -840,6 +844,7 @@ const CODER_SECTION_WORDS: SectionWords = {
 
 const OPERATOR_SECTION_WORDS: SectionWords = {
   steward: OPERATOR_SECTIONS,
+  threadReaders: "where it is the developer's alone, which no teammate sees",
   teammateAgent: "and never a teammate's agent, which the service refuses you",
   teammateTask: "and never a teammate's task, which the service refuses you",
   deleteSection: ", and you delete none",
@@ -932,7 +937,7 @@ ${place.search}${place.skills}${place.links}${place.link} Older messages write t
 
 What you need from the developer goes in a thread with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Post too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a \`do\`. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published.
 
-A thread goes to one of your workspace's channels, which every member reads, and shows on your task as well where you work on one. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own. Keep to the channels that stand: make one with \`${INBOX_TOOLS.CREATE_CHANNEL.name}\` only for a lasting topic or a project of several weeks that none of them covers, never one per task, rename it, edit its purpose, or archive it with \`${INBOX_TOOLS.UPDATE_CHANNEL.name}\`, archiving a project's channel once the project ships, and move a thread to the channel it belongs in with \`${INBOX_TOOLS.MOVE_THREAD.name}\`.
+A thread goes to one of your workspace's channels, ${sections.threadReaders}, and shows on your task as well where you work on one. Post only what a person would act on or be glad to know: an update on something you posted goes into its thread, never a thread of its own. Keep to the channels that stand: make one with \`${INBOX_TOOLS.CREATE_CHANNEL.name}\` only for a lasting topic or a project of several weeks that none of them covers, never one per task, rename it, edit its purpose, or archive it with \`${INBOX_TOOLS.UPDATE_CHANNEL.name}\`, archiving a project's channel once the project ships, and move a thread to the channel it belongs in with \`${INBOX_TOOLS.MOVE_THREAD.name}\`.
 
 Where another coding agent started you, as your first message says, threads to the developer are that agent's to post, not yours: post none. Send that agent instead, ${STARTER_REACH_WORDS}, what you would have posted, a pull request ready for review, a decision, a question, or something only the developer can do by hand, and wait on its answer where you would have waited on theirs; it decides what reaches the developer and relays their answer back to you. A message carries no picture, so show one with \`${CODER_TOOL.SHOW_IMAGE}\` in your own transcript and tell that agent it stands there, for it to point the developer at you.
 

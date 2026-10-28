@@ -1,15 +1,12 @@
 /**
- * avatar-grant.ts -- Keyframe's session grant for a call's avatar, as the service answers it and the call window joins with it.
+ * avatar-grant.ts -- Keyframe's session grant for a call's avatar, as the service answers a released Mac's `avatar.start`.
  *
- * A door of its own, apart from `live-contract.ts`, because the desktop's
- * renderer reads a grant crossing to the call window, and the barrel would
- * carry every frame of the voice socket into that bundle behind it. The
- * `avatar.started` frame is this grant with its type and request id.
+ * The `avatar.started` frame is this grant with its type and request id.
  */
 
-import { SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
-import { readEither, wireRefusal } from "@luke/wire/effect";
-import { Result, Schema } from "effect";
+import { SCHEMA_REFUSAL } from "@luke/wire";
+import { wireRefusal } from "@luke/wire/effect";
+import { Schema } from "effect";
 
 /** The longest each of the grant's strings may be: the server address, the participant token, and the avatar's identity. */
 export const AVATAR_GRANT_BOUNDS = {
@@ -47,10 +44,3 @@ export const avatarGrantSchema = Schema.Struct({
   participantToken: verbatimText(AVATAR_GRANT_BOUNDS.TOKEN_CHARS),
   agentIdentity: verbatimText(AVATAR_GRANT_BOUNDS.IDENTITY_CHARS),
 });
-
-export type AvatarGrant = typeof avatarGrantSchema.Type;
-
-/** A grant as it crossed to the call window, or nothing where it is not one. */
-export function avatarGrantFromWire(value: UnparsedWireValue): AvatarGrant | undefined {
-  return Result.getOrUndefined(readEither(avatarGrantSchema)(value));
-}

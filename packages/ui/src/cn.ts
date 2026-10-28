@@ -40,21 +40,13 @@ const PANEL_PLACES = {
 
 /**
  * The names the panel work column's block of the theme adds (its layout's
- * spacing roles, a transcript's opening line, the call's video room, a
- * tool's page, the find bar, the version history), by the group
- * tailwind-merge reads each in.
+ * spacing roles, a transcript's opening line, a tool's page, the find bar,
+ * the version history), by the group tailwind-merge reads each in.
  */
 const PANEL_WORK_COLUMN = {
   "font-weight": ["luke-medium", "luke-regular", "luke-semibold"],
   leading: ["tool-description"],
-  spacing: [
-    "attention-mark",
-    "agent-video-frame",
-    "column-inset",
-    "find-field",
-    "origin-glyph",
-    "ring-reach",
-  ],
+  spacing: ["attention-mark", "column-inset", "find-field", "origin-glyph", "ring-reach"],
   radius: ["disc"],
   shadow: ["tool-default"],
   animate: ["edit-composer-in", "edit-composer-out"],
@@ -114,8 +106,6 @@ const FEEDBACK_DISPLAY = {
     "chip-inset",
     "chip-inset-wide",
     "chip-min-field",
-    "chip-reach",
-    "chip-reach-most",
     "chip-remove",
     "chip-remove-glyph",
     "chip-tight",
@@ -308,8 +298,7 @@ const PANEL_INBOX = {
 /**
  * The names the chips, media, and call block of the theme adds (attachment
  * chip, picture set and tile, page thumb, video player, provider button,
- * composer frame, call bar and video tile), by the group tailwind-merge reads
- * each in.
+ * composer frame, call bar), by the group tailwind-merge reads each in.
  */
 const CHIPS_MEDIA_CALL = {
   text: ["label-inline"],
@@ -324,9 +313,6 @@ const CHIPS_MEDIA_CALL = {
     "attachment-chip-thumb",
     "call-row",
     "call-row-max",
-    "call-tile",
-    "call-tile-face-max",
-    "call-tile-face-share",
     "icon-12",
     "icon-16",
     "page-thumb-row",
@@ -337,7 +323,7 @@ const CHIPS_MEDIA_CALL = {
     "stage",
     "video-player",
   ],
-  radius: ["attachment-chip-face", "call-tile"],
+  radius: ["attachment-chip-face"],
   shadow: ["attachment-chip-disc", "composer", "provider-gate"],
   aspect: ["picture"],
 } as const;
@@ -389,7 +375,6 @@ const TASK_SURFACES = {
     "viewer-text",
     "shells-pane",
     "servers-list",
-    "issue-chip",
     "picture-most",
     "picture-stand-in",
     "picture-describe",

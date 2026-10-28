@@ -13,7 +13,6 @@ import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
-import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { COMMAND_KEY, type CommandKey } from "@luke/settings/shortcuts";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
@@ -167,8 +166,3 @@ export function webPlatform(
   if (shell.unsavedPlanWords !== undefined) platform.unsavedPlanWords = shell.unsavedPlanWords;
   return platform;
 }
-
-/** A call's avatar is the desktop's bundle, which the web does not ship. */
-export const WEB_BUNDLES: ShellBundles = {
-  avatarSession: () => Promise.reject(new Error("The web runs no avatar.")),
-};

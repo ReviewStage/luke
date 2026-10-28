@@ -52,12 +52,6 @@ import {
   type MemoriesAnswerView,
   type MemoriesReadParams,
   type MemoryForgetParams,
-  type PlanTemplateAnswerView,
-  type PlanTemplateRevisionAnswerView,
-  type PlanTemplateRevisionParams,
-  type PlanTemplateRevisionsAnswerView,
-  type PlanTemplateRevisionsParams,
-  type PlanTemplateWriteParams,
   type ProviderKeyForAgentsParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
@@ -130,7 +124,6 @@ import {
   type ModelProvider,
   modelChoiceSchema,
 } from "./models-wire.js";
-import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
 import {
   type ChatGptCredentialsSaveRequest,
   type ChatGptHostAnswer,
@@ -171,9 +164,7 @@ import type { TaskAgentRefusal } from "./task-wire.js";
  * travel under a deadline of
  * their own that outlasts that hold; a Start travels under a longer one
  * still, since one from another agent copies its work first; every other
- * call keeps the account call's usual one. The account's task
- * template is read and written here too, as Settings asks for it beside
- * the default and the keys.
+ * call keeps the account call's usual one.
  */
 
 export interface HostedCodingAgentClientOptions {
@@ -235,7 +226,7 @@ const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, and an agent on its starter's own GitHub token the caller did not start. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, an agent on its starter's own GitHub token the caller did not start, and a device away, refused as a Start on it is. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -253,6 +244,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
@@ -575,53 +567,6 @@ export class HostedCodingAgentClient {
         query: { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId, [MEMORY_QUERY.ID]: params.id },
       }),
       MEMORY_REFUSALS,
-    );
-  }
-
-  /** The account's plan template: its own, or the default while it keeps none. */
-  readPlanTemplate(): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.account.planTemplate, undefined), {});
-  }
-
-  /**
-   * The template kept verbatim, or the default again for null, answering it
-   * as then kept; a template past the bound is refused here without
-   * traveling at all.
-   */
-  writePlanTemplate(
-    params: PlanTemplateWriteParams,
-  ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(planTemplateWriteRequestSchema)(params));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.writePlanTemplate, admitted), {});
-  }
-
-  /** A page of the account's plan template history, the newest or the one before a revision. */
-  readPlanTemplateRevisions(
-    params: PlanTemplateRevisionsParams,
-  ): Effect.Effect<PlanTemplateRevisionsAnswerView, never, HttpClient.HttpClient> {
-    // The revision a page is read before travels as the text a query carries.
-    const query = params.before === undefined ? {} : { before: String(params.before) };
-    return hostedAnswer(askHosted(this.#hosted.account.planTemplateRevisions, query), {});
-  }
-
-  /** One revision of the account's plan template beside the one before it. */
-  readPlanTemplateRevision(
-    params: PlanTemplateRevisionParams,
-  ): Effect.Effect<PlanTemplateRevisionAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.account.planTemplateRevision, { seq: String(params.seq) }),
-      {},
-    );
-  }
-
-  /** One revision of the account's plan template put back as the template, answering it as then kept. */
-  restorePlanTemplate(
-    params: PlanTemplateRevisionParams,
-  ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.account.restorePlanTemplate, { seq: String(params.seq) }),
-      {},
     );
   }
 

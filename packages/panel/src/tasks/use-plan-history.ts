@@ -12,8 +12,8 @@ import { revisionOfSave } from "./plan-history-model.js";
  * the newest page is followed while it stands: main streams it each time a
  * save lands (over Neon Realtime), so a save Luke makes on a call lands at
  * the head of the list as it lands in the document, and nothing is read
- * again here. A history its source does not follow, the plan template's,
- * reads its newest page once. The newest revision, the plan as it stands, is chosen until the
+ * again here. A history its source does not follow reads its newest page
+ * once. The newest revision, the plan as it stands, is chosen until the
  * developer chooses another, and a save landing meanwhile moves the view on
  * to the new newest; choosing one reads its content and the content before
  * it, and the version history draws what that revision changed until it is
