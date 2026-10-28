@@ -32,13 +32,13 @@ import {
   viewedLast,
   withoutViewedAt,
 } from "@luke/ui/tab-strip-model";
-import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { fileName } from "./file-ref-model.js";
 import {
   type ByPullRequestTab,
   ofPullRequestTab,

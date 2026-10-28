@@ -7,7 +7,7 @@ import {
   INLINE_REF_NAME,
   InlineRef,
 } from "@luke/ui";
-import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
+import { fileFolder, fileName, fileRefText, lineRangeText } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { useTaskMentions } from "./task-mentions.js";
 

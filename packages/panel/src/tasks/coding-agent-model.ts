@@ -85,10 +85,10 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
   type AgentMessageMetadata,
+  callOfLine,
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,
   isRecord,

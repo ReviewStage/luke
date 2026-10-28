@@ -5,7 +5,7 @@ import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptCall,
 } from "@luke/features/transcript-wire";
-import { MESSAGE_CHANNEL } from "@luke/wire";
+import { callOfLine } from "@luke/wire";
 import type { UIMessage } from "ai";
 import type { VoiceCallTranscript, VoiceView } from "./voice-view.js";
 
@@ -240,22 +240,6 @@ export function transcriptRegion(input: {
   if (stored !== undefined) return { kind: TRANSCRIPT_REGION.EMPTY };
   if (input.transcript?.status === TASKS_READ.FAILED) return { kind: TRANSCRIPT_REGION.FAILED };
   return { kind: TRANSCRIPT_REGION.READING };
-}
-
-/** The channels a line of a call arrives on: said, either speaker's, or typed into the composer while the call stood. */
-const CALL_CHANNELS: ReadonlySet<unknown> = new Set([MESSAGE_CHANNEL.VOICE, MESSAGE_CHANNEL.TYPED]);
-
-/**
- * The store's id for the call a line of an agent's transcript was said on,
- * read off the line's own metadata; none for a line said on no call. A line
- * typed while the call stood names its call too, so it stands inside it.
- */
-export function callOfLine(message: { readonly metadata?: unknown }): string | undefined {
-  const { metadata } = message;
-  if (typeof metadata !== "object" || metadata === null) return undefined;
-  const channel: unknown = Reflect.get(metadata, "channel");
-  const session: unknown = Reflect.get(metadata, "voice_session_id");
-  return CALL_CHANNELS.has(channel) && typeof session === "string" ? session : undefined;
 }
 
 /** A line of an agent's transcript as the tab holds it: its id, its metadata, and its parts. */

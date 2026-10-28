@@ -11,9 +11,9 @@ import {
   Fill,
   SpinnerRegion,
 } from "@luke/ui";
-import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { fileName } from "./file-ref-model.js";
 import {
   FILE_READ,
   type FileRead,
