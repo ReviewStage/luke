@@ -50,7 +50,7 @@ import {
  * workspace-procedures.ts -- the panel's asks of the host about the account's workspaces.
  *
  * The one check these procedures make is who asked: only a panel draws a
- * workspace, so every one refuses the takeover and the hidden voice window,
+ * workspace, so every one refuses the takeover and any other window,
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
  * allow in words that say so, and anything else in the kind's own words.

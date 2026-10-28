@@ -15,7 +15,7 @@ import { type ActSender, actPort } from "./base.js";
  * integration-procedures.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations.
  *
  * The one check these procedures make is who asked: only a panel draws
- * Settings, so every one refuses the takeover and the hidden voice window,
+ * Settings, so every one refuses the takeover and any other window,
  * in its own sentence. What the service answers comes back as the panel's
  * own answer; a Connect answers whether the host sent the browser to sign
  * in, and the address it sent it to never crosses into a window. Nothing is

@@ -55,8 +55,6 @@ let windows = 0;
 const panelOf = (): ActSender<Window> => ({
   sender: { window: ++windows },
   panel: true,
-  voice: false,
-  call: false,
 });
 
 type Listener<Event> = (event: Event) => void;
@@ -218,15 +216,15 @@ it.effect(
 it.effect("only a panel is answered", () =>
   Effect.gen(function* () {
     const { actPort, asked, opened } = fixture();
-    const voice: ActSender<Window> = { ...panelOf(), panel: false, voice: true };
+    const other: ActSender<Window> = { ...panelOf(), panel: false };
 
     const listed = yield* actPort.perform(
       { kind: ACT_KIND.TERMINAL_LIST, payload: { agentId: AGENT_ID } },
-      voice,
+      other,
     );
     const attached = yield* actPort.perform(
       { kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH },
-      voice,
+      other,
     );
 
     assert.deepEqual(listed, refusedAs(ACT_KIND.TERMINAL_LIST));

@@ -173,12 +173,10 @@ await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
 await fs.mkdir(path.join(outputRoot, "icon"), { recursive: true });
 
-// One entry per window role, by the bundle it is built into: its source, and
-// the document that loads it, copied beside it below.
+// The window's entry, by the bundle it is built into: its source, and the
+// document that loads it, copied beside it below.
 const WINDOW_ENTRIES = {
   panel: { source: "src/renderer/index.tsx", document: "index.html" },
-  voice: { source: "src/renderer/voice/index.tsx", document: "voice.html" },
-  call: { source: "src/renderer/call/index.tsx", document: "call.html" },
 };
 
 // The bundles too large for any window's entry, each reached through a
@@ -205,10 +203,9 @@ const SIDE_BUNDLE_ENTRIES = {
 const highlightWorker = await build(HIGHLIGHT_WORKER_BUILD);
 const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
 
-// The renderer, as ES modules: one entry per window role, so a window parses
-// only the surface it mounts, the side bundles above, and the chunks the
-// entries share, with no wrapper around the whole, which is about 6 KB
-// gzipped smaller than the same code as one script. The chunks are named by
+// The renderer, as ES modules: the window's entry, the side bundles above,
+// and the chunks they share, with no wrapper around the whole, which is about
+// 6 KB gzipped smaller than the same code as one script. The chunks are named by
 // their content, because esbuild names every shared one `chunk`.
 const rendererBuild = build({
   entryPoints: Object.fromEntries([
@@ -323,9 +320,6 @@ await Promise.all([
   }),
 ]);
 
-// The hidden voice window's policy allows no network, the call window's may
-// reach no host, and neither records; the recording carries no words in any
-// case (`src/renderer/session-replay.ts`).
 await Promise.all(
   Object.values(WINDOW_ENTRIES).map(({ document }) =>
     fs.copyFile(

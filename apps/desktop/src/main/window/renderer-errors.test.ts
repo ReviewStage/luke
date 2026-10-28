@@ -50,12 +50,12 @@ test("each error a window logs is one line naming its document, and a warning is
   const lines: string[] = [];
   reportRendererErrors((line) => lines.push(line));
 
-  const voice = open("voice.html");
-  voice.log("warning", "the microphone is slow to answer");
-  voice.log("error", "Uncaught TypeError: session is undefined");
+  const panel = open("index.html");
+  panel.log("warning", "the microphone is slow to answer");
+  panel.log("error", "Uncaught TypeError: session is undefined");
 
   assert.deepEqual(lines, [
-    "renderer error in voice.html: Uncaught TypeError: session is undefined (index.js:12)",
+    "renderer error in index.html: Uncaught TypeError: session is undefined (index.js:12)",
   ]);
 });
 
@@ -80,7 +80,7 @@ test("once the reporting stops, no window says anything, open before or opened a
   stop();
 
   panel.log("error", "Uncaught Error: the sidebar never loaded");
-  open("call.html").log("error", "Uncaught Error: the call card never drew");
+  open("index.html").log("error", "Uncaught Error: the task list never drew");
 
   assert.deepEqual(lines, []);
 });

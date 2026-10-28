@@ -113,6 +113,14 @@ export function windowSurfaceProcedures(
       dependencies.microphoneRouteWatcher()?.probe();
       return dependencies.microphoneRoute();
     }),
+    // Privacy & Security's Microphone pane, where a refused microphone is let back in.
+    [WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS
+    ].handler(() =>
+      dependencies.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+      ),
+    ),
     // The pane that lists every app's notifications, Luke's among them.
     [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS

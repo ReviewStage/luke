@@ -723,9 +723,7 @@ credentials (decrypted where it runs, under the same Keychain entry), and your
 account's session, while the part that draws listens, speaks, holds the keys,
 and asks the runtime for everything else. Nothing about you crosses that
 boundary that the panel did not already draw; no stored key, token, or account
-secret travels in any answer or event, and the voice window is handed no
-credential — the runtime opens each voice session and hands the window only
-the connection answer it needs to hear and be heard. Quitting Luke cancels
+secret travels in any answer or event. Quitting Luke cancels
 what was running, commands agents run on your Mac included, and writes down
 what did not finish rather than finishing it. Beside those commands and the
 files you attach, the one thing the app does on this machine at the runtime's
@@ -1114,8 +1112,8 @@ build or a development one; only a released build records at all.
 small, downscaled still of a screen you visited, taken by the app as you
 settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
 while it is open, a few at a time: they are never written to disk and never
-reach our service, a trace, a counted event, or the voice window, and the
-screen recording leaves them out.
+reach our service, a trace, or a counted event, and the screen recording
+leaves them out.
 
 **Browser tabs.** With the Browser tab experiment on, a Browser tab shows an
 agent's cloud browser, which the agent drives and you can watch and take over.
@@ -1154,7 +1152,7 @@ are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can
 watch the tab and take it over by clicking and typing in it, and the agent's
 actions on it wait while you do. Nothing of it reaches a trace, a counted event,
-a fixture, or the voice window, and the screen recording masks the live view
+or a fixture, and the screen recording masks the live view
 and the transcript's screenshots.
 The browser's profile, with the cookies and logins you type into it, lives on
 the sandbox's disk, so it stays in that sandbox while it runs and in the

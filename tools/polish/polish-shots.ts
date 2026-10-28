@@ -66,7 +66,6 @@ import {
   type Scene,
   STEP,
   type Step,
-  WINDOW,
 } from "./scenes.ts";
 import { PIN_SCROLL_FADES_SCRIPT, scrollScript } from "./scroll.ts";
 import { type Frame, sizedScript } from "./viewport.ts";
@@ -121,7 +120,7 @@ const RECORDED_SCRIPT = `!document.querySelector(".catalog-example").textContent
 // How long a scene waits for its skeletons and spinners to give way before it is shot anyway, with a note.
 const READING_TIMEOUT_MS = 10_000;
 // The desktop's renderer pages, by what their address's path ends with.
-const WINDOW_PAGE = { [WINDOW.PANEL]: "/index.html", [WINDOW.CALL]: "/call.html" } as const;
+const PANEL_PAGE = "/index.html";
 // How long a sized window's page has to lay out at its new size before it is sized once more, and how many times it is.
 const RESIZE_TIMEOUT_MS = 5_000;
 const RESIZE_TRIES = 2;
@@ -432,15 +431,14 @@ async function stageScene(
   }
 }
 
-/** The desktop page that draws `scene`'s window, waiting for it to open. */
-async function desktopPage(app: ElectronApplication, scene: Scene): Promise<PlaywrightPage> {
-  const suffix = WINDOW_PAGE[scene.window ?? WINDOW.PANEL];
+/** The desktop page that draws the panel's window, waiting for it to open. */
+async function desktopPage(app: ElectronApplication): Promise<PlaywrightPage> {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (;;) {
-    const open = app.windows().find((page) => URL.parse(page.url())?.pathname.endsWith(suffix));
+    const open = app.windows().find((page) => URL.parse(page.url())?.pathname.endsWith(PANEL_PAGE));
     if (open !== undefined) return open;
     const left = deadline - Date.now();
-    if (left <= 0) throw new Error(`No ${suffix} window opened`);
+    if (left <= 0) throw new Error(`No ${PANEL_PAGE} window opened`);
     await app.waitForEvent("window", { timeout: left }).catch(() => undefined);
   }
 }
@@ -496,8 +494,8 @@ async function exitsInTime(child: ChildProcess): Promise<boolean> {
 }
 
 /**
- * Ends the app at once, past its quit guard: a staged call asks "Quit Luke?"
- * before a quit, which no one is there to answer, so Playwright's own close,
+ * Ends the app at once, past its quit guard: one that asks "Quit Luke?"
+ * before a quit has no one there to answer it, so Playwright's own close,
  * a quit, would wait on it for ever. One that does not exit in time is
  * killed. Answers whether the process is gone.
  */
@@ -570,7 +568,6 @@ async function shootDesktop(
   problems: string[],
 ): Promise<void> {
   const frame = FRAMES[shot.target][shot.size];
-  const callWindow = shot.scene.window === WINDOW.CALL;
   const linux = process.platform === "linux";
   // A fresh instance each launch, since the last one's state folder was left as an exit leaves it.
   const instance = `polish-${launch.worker}-${randomUUID().slice(0, 8)}`;
@@ -598,7 +595,7 @@ async function shootDesktop(
     });
   try {
     await watchDeaths(app);
-    const page = await desktopPage(app, shot.scene);
+    const page = await desktopPage(app);
     page.on("pageerror", (error) => problems.push(error.message));
     page.on("crash", () => problems.push("the page crashed"));
     // The window itself, as the page is drawn in it, rather than one looked up by its address.
@@ -608,18 +605,15 @@ async function shootDesktop(
     }, shot.theme);
     await page.emulateMedia({ colorScheme: shot.theme, reducedMotion: "reduce" });
     await page.evaluate(stillPageScript(shot.theme));
-    // The panel's window takes the frame once its stage has drawn, since the app applies its stored zoom
-    // as it first pushes its state (`zoom.ts`), and so would undo one laid sooner; the call window keeps
-    // the size it is fitted to its card at.
-    if (!callWindow) await page.waitForSelector(STAGE_SELECTOR, { timeout: READY_TIMEOUT_MS });
-    const unsized = callWindow ? undefined : await sizeWindow(window, page, frame);
+    // The window takes the frame once its stage has drawn, since the app applies its stored zoom as it
+    // first pushes its state (`zoom.ts`), and so would undo one laid sooner.
+    await page.waitForSelector(STAGE_SELECTOR, { timeout: READY_TIMEOUT_MS });
+    const unsized = await sizeWindow(window, page, frame);
     if (unsized !== undefined) problems.push(unsized);
-    if (callWindow) await page.waitForTimeout(LOAD_SETTLE_MS);
     // Note that the zoomed size's 608 CSS px is under the panel's narrow line (`shell-room.ts`), so it draws the phone's layout.
-    else await stageScene(page, CLIENT.DESKTOP, shot.scene, shot.size === SIZE.NARROW, problems);
+    await stageScene(page, CLIENT.DESKTOP, shot.scene, shot.size === SIZE.NARROW, problems);
     // A scene's steps can stand long enough for something to size the window again, so it is looked at once more.
-    const resized =
-      callWindow || unsized !== undefined ? undefined : await unsizedNote(page, frame);
+    const resized = unsized !== undefined ? undefined : await unsizedNote(page, frame);
     if (resized !== undefined) problems.push(`when shot, ${resized}`);
     await page.evaluate(HIDE_CARET_SCRIPT);
     const ground = await page.evaluate<Rgb>(GROUND_SCRIPT);
@@ -821,9 +815,7 @@ function contactSheet(results: readonly ShotResult[], skipped: readonly Scene[])
             );
             if (pair.every((result) => result === undefined)) return "";
             const frame = FRAMES[target][size];
-            const label = fittedToCard(scene, target)
-              ? `${target} · the call window, at the size it fits its card to`
-              : `${target} · ${size} · ${frame.width}×${frame.height}${frame.zoom === 1 ? "" : ` at ${frame.zoom * 100}%`}`;
+            const label = `${target} · ${size} · ${frame.width}×${frame.height}${frame.zoom === 1 ? "" : ` at ${frame.zoom * 100}%`}`;
             const cells = pair
               .map((result, index) => figure(result, THEMES[index] ?? THEME.LIGHT))
               .join("");
@@ -871,11 +863,6 @@ function wantedTargets(named: readonly string[] | undefined): readonly Target[] 
   return TARGETS.filter((target) => named.includes(target));
 }
 
-/** Whether `scene` on `target` is the call window, which is fitted to its card rather than sized, so it is shot once, in the wide row. */
-function fittedToCard(scene: Scene, target: Target): boolean {
-  return target === TARGET.DESKTOP && scene.window === WINDOW.CALL;
-}
-
 /** A scene's shots on each of `targets`, in sheet order. */
 function shotsOf(
   scene: Scene,
@@ -884,9 +871,7 @@ function shotsOf(
   sizes: readonly Size[],
 ): Shot[] {
   return targets.flatMap((target) =>
-    sizes
-      .filter((size) => !fittedToCard(scene, target) || size === SIZE.WIDE)
-      .flatMap((size) => themes.map((theme) => ({ target, scene, theme, size }))),
+    sizes.flatMap((size) => themes.map((theme) => ({ target, scene, theme, size }))),
   );
 }
 
@@ -928,7 +913,7 @@ async function main(): Promise<void> {
   const sizes = SIZES.filter((size) => values.size === undefined || values.size === size);
   const wanted = values.scene;
   const named = SCENES.filter((scene) => wanted === undefined || wanted.includes(scene.id));
-  // The call window, the video tile and a Page tab draw only on the Mac.
+  // The video tile and a Page tab draw only on the Mac.
   const onMac = process.platform === "darwin";
   const skipped = onMac ? [] : named.filter((scene) => scene.macOnly === true);
   for (const scene of skipped) say(`skipped ${scene.id} (${scene.title}): drawn only on the Mac`);

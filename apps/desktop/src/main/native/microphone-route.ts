@@ -46,9 +46,8 @@ export function microphoneRouteWatcher(options: MicrophoneRouteEdges): Microphon
     input: "pipe",
     parse: parseMicrophoneRouteLine,
     onState: options.onRoute,
-    onUnavailable: options.onUnavailable,
     // The helper writes no refusal of its own; only its death withdraws a route.
-    unavailableLineEnds: true,
+    onUnavailable: options.onUnavailable,
   });
 
   // The watcher's own `send` stays off the caller-facing shape: the one word

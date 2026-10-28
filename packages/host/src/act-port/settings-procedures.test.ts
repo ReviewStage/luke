@@ -20,7 +20,7 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  */
 
 const WINDOW = Symbol("window");
-const PANEL: ActSender = { sender: WINDOW, panel: true, voice: false, call: false };
+const PANEL: ActSender = { sender: WINDOW, panel: true };
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {

@@ -241,8 +241,9 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.USAGE_DATA,
   }),
   /*
-   * Whether a call quieted other apps' media. Its row is gone with calling,
-   * and the desktop still reads the key until its media duck goes.
+   * Whether a call quieted other apps' media. Its row and the desktop's media
+   * duck are gone with calling; the key stays until the stored settings stop
+   * carrying it.
    */
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",
