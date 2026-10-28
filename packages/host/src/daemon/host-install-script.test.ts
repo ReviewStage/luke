@@ -1,20 +1,23 @@
 /**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release and sandbox image it carries are the ones the daemon pins, a computer it does not run on (a Mac, an Intel Mac, WSL1, another kernel) is refused by name while WSL2 is let through, a box without a usable `/dev/kvm` or systemd is refused with how to fix it, said for WSL under WSL alone, a download whose SHA-256 is not the one carried is refused, and the boot check makes, starts, runs and always removes one throwaway VM, failing with smolvm's own words.
+ * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release, sandbox image and Mac paths it carries are the ones the daemon and the desktop app name, a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without a usable `/dev/kvm` or systemd is refused with how to fix it, said for WSL under WSL alone, a download whose SHA-256 is not the one carried is refused, the boot check makes, starts, runs and always removes one throwaway VM, failing with smolvm's own words, and a Mac's install refuses a missing sudo user and a Mac the Luke app already runs agents on, writes its LaunchAgent, and starts it only where its user is logged in.
  *
  * The script is run by `sh` in a temporary folder; `LUKE_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
  * tests call, `LUKE_HOST_KVM_DEVICE` points its KVM check at a path the
- * test made, and `LUKE_HOST_SYSTEMD_RUN_DIR` its systemd check. The boot check
- * runs a fake `smolvm` that writes down what it was asked, through a fake
- * `runuser`. It never gets as far as touching the box or the network.
+ * test made, and `LUKE_HOST_SYSTEMD_RUN_DIR` its systemd check. A fake `uname`,
+ * `sysctl`, `sw_vers` or `launchctl` put first on its PATH answers as the
+ * computer a test means. The boot check runs a fake `smolvm` that writes down
+ * what it was asked, through a fake `runuser`. It never gets as far as
+ * touching the box or the network.
  */
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN } from "@luke/agent-runner/pins";
+import { DARWIN_HOST, DARWIN_STANDALONE_LAUNCH_AGENT } from "./host-os.js";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
 
@@ -68,6 +71,25 @@ const linuxUname = () => {
     '#!/bin/sh\ncase "$1" in\n  -m) echo x86_64 ;;\n  *) echo Linux ;;\nesac\n',
     { mode: 0o755 },
   );
+  return bin;
+};
+
+/**
+ * A folder holding a `uname`, `sysctl` and `sw_vers` that answer as a Mac of
+ * the machine given (`arm64` for Apple silicon) running the macOS given, put
+ * first on the script's PATH.
+ */
+const macBin = (machine: string, macos: string) => {
+  const bin = folder();
+  writeFileSync(
+    join(bin, "uname"),
+    `#!/bin/sh\ncase "$1" in\n  -m) echo ${machine} ;;\n  *) echo Darwin ;;\nesac\n`,
+    { mode: 0o755 },
+  );
+  writeFileSync(join(bin, "sysctl"), `#!/bin/sh\necho ${machine === "arm64" ? 1 : 0}\n`, {
+    mode: 0o755,
+  });
+  writeFileSync(join(bin, "sw_vers"), `#!/bin/sh\necho ${macos}\n`, { mode: 0o755 });
   return bin;
 };
 
@@ -170,6 +192,14 @@ describe("the host's install script", () => {
     expect(carried("SANDBOX_IMAGE")).toBe(SANDBOX_IMAGE);
   });
 
+  it("names the LaunchAgent the desktop app refuses beside, and the app's own state folder", () => {
+    const home = "/Users/ada";
+    expect(carried("MAC_LABEL")).toBe(DARWIN_STANDALONE_LAUNCH_AGENT);
+    expect(carried("MAC_APP_STATE_FOLDER")).toBe(
+      relative(home, DARWIN_HOST.stateRoot(home, { developerIdSigned: true })),
+    );
+  });
+
   for (const [found, make] of [
     ["is missing", (root: string) => join(root, "kvm")],
     [
@@ -199,14 +229,6 @@ describe("the host's install script", () => {
   }
 
   for (const [computer, kernel, machine, procVersion, words] of [
-    [
-      "an Apple silicon Mac",
-      "Darwin",
-      "arm64",
-      "",
-      "On a Mac, install the Luke app and sign in instead.",
-    ],
-    ["an Intel Mac", "Darwin", "x86_64", "", "Luke does not run agents on Intel Macs."],
     [
       "WSL1, saying how to upgrade it",
       "Linux",
@@ -246,6 +268,113 @@ describe("the host's install script", () => {
       });
       expect(answer.status).toBe(0);
       expect(answer.stdout.trim()).toBe(expected);
+    });
+  }
+
+  for (const [computer, machine, macos, refusal] of [
+    ["an Apple silicon Mac on macOS 14.5", "arm64", "14.5", undefined],
+    [
+      "an Apple silicon Mac on macOS 12.2",
+      "arm64",
+      "12.2",
+      "Luke host needs macOS 12.3 or later, and this Mac runs macOS 12.2.",
+    ],
+    ["an Intel Mac", "x86_64", "14.5", "Luke does not run agents on Intel Macs."],
+  ] as const) {
+    it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
+      const answer = sh([SCRIPT, "--token", "lkh_fixture"], {
+        PATH: `${macBin(machine, macos)}:${process.env.PATH}`,
+      });
+      expect(answer.status).toBe(1);
+      expect(answer.stdout).toBe("");
+      if (refusal === undefined) {
+        // Note that the next word is about who runs it: root, or with sudo from a Mac account.
+        expect(answer.stderr).toContain("sudo sh -s -- --token <token>");
+        expect(answer.stderr).not.toMatch(/Intel|macOS|kvm/u);
+      } else {
+        expect(answer.stderr).toContain(refusal);
+      }
+    });
+  }
+
+  it("refuses a Mac's install with no sudo user to install for", () => {
+    const answer = sh(["-c", `. "${SCRIPT}"; require_mac_user`], {
+      LUKE_HOST_INSTALL_LIBRARY: "1",
+    });
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain("Run it with sudo from the Mac account");
+  });
+
+  it("refuses a Mac the Luke app already runs agents on for that user, and lets one it does not through", () => {
+    const home = folder();
+    const check = () =>
+      sh(["-c", `. "${SCRIPT}"; require_no_app_host "${home}"`], {
+        LUKE_HOST_INSTALL_LIBRARY: "1",
+      });
+    expect(check().status).toBe(0);
+
+    const appState = join(home, "Library", "Application Support", "Luke");
+    mkdirSync(appState, { recursive: true });
+    writeFileSync(join(appState, "device.json"), "{}\n");
+    const refused = check();
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toContain("The Luke app already runs agents on this Mac");
+  });
+
+  it("writes a LaunchAgent that runs the release at login on its own state, again after a crash only, logging under the user's Logs", () => {
+    const plist = join(folder(), "agent.plist");
+    const app = "/Users/ada/Library/Application Support/Luke Host";
+    const log = "/Users/ada/Library/Logs/Luke Host/luke-host.log";
+    const answer = sh(
+      [
+        "-c",
+        `. "${SCRIPT}"; write_launch_agent "$1" "$2/luke-host" "$2/state" "$3"`,
+        "sh",
+        plist,
+        app,
+        log,
+      ],
+      { LUKE_HOST_INSTALL_LIBRARY: "1" },
+    );
+    expect(answer.status).toBe(0);
+
+    const written = readFileSync(plist, "utf8").replace(/>\s+</gu, "><");
+    for (const entry of [
+      `<key>Label</key><string>${DARWIN_STANDALONE_LAUNCH_AGENT}</string>`,
+      `<key>ProgramArguments</key><array><string>${app}/luke-host/bin/luke-host</string><string>run</string></array>`,
+      `<key>EnvironmentVariables</key><dict><key>LUKE_HOST_STATE_ROOT</key><string>${app}/state</string></dict>`,
+      "<key>RunAtLoad</key><true/>",
+      "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>",
+      `<key>StandardOutPath</key><string>${log}</string>`,
+      `<key>StandardErrorPath</key><string>${log}</string>`,
+    ]) {
+      expect(written).toContain(entry);
+    }
+  });
+
+  for (const [user, session, started] of [
+    ["logged in", 0, true],
+    ["logged out", 113, false],
+  ] as const) {
+    it(`starts the LaunchAgent in the session of a user who is ${user}${started ? "" : ", and says it starts at their next login"}`, () => {
+      const bin = folder();
+      const asked = join(bin, "asked");
+      writeFileSync(
+        join(bin, "launchctl"),
+        `#!/bin/sh\nprintf '%s\\n' "$*" >>"${asked}"\n[ "$1" != print ] || exit ${session}\n`,
+        { mode: 0o755 },
+      );
+      const answer = sh(["-c", `. "${SCRIPT}"; start_launch_agent 501 /fixture/agent.plist`], {
+        LUKE_HOST_INSTALL_LIBRARY: "1",
+        PATH: `${bin}:${process.env.PATH}`,
+      });
+
+      expect(answer.status).toBe(started ? 0 : 1);
+      const bootstrapped = readFileSync(asked, "utf8").includes(
+        "bootstrap gui/501 /fixture/agent.plist",
+      );
+      expect(bootstrapped).toBe(started);
+      expect(answer.stdout).toContain(started ? "Started" : "starts at this account's next login");
     });
   }
 

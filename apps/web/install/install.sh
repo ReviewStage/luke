@@ -1,5 +1,5 @@
 #!/bin/sh
-# install.sh -- installs Luke's host daemon on a Linux box (x64 or arm64), enrolls it with an install token, and upgrades it in place when run again without one.
+# install.sh -- installs Luke's host daemon on a Linux box (x64 or arm64) or an Apple silicon Mac, enrolls it with an install token, and upgrades it in place when run again without one.
 #
 # Served by the web app at /install.sh with the release written in
 # (apps/web/scripts/install-script.ts), and run as root:
@@ -25,6 +25,20 @@
 # again without --token, it upgrades in place and keeps the box's enrollment.
 # `sudo luke-host uninstall` removes it.
 #
+# On an Apple silicon Mac it installs for the user who ran the command under
+# sudo, as GitHub's runner does on macOS, and refuses where there is none, as
+# when root itself is logged in, or where the Luke app already runs agents for
+# that user. It refuses a macOS older than MAC_MIN_VERSION, and checks no
+# /dev/kvm, since smolvm runs on Hypervisor.framework there. It unpacks the
+# release under that user's Application Support, owned by them, enrolls the
+# Mac as that user, and installs a LaunchAgent in their ~/Library/LaunchAgents
+# that runs the daemon at login, on a state folder of its own, and again after
+# a crash but not after a clean exit, logging under their ~/Library/Logs. It
+# starts the agent at once where that user is logged in, and otherwise at their
+# next login: it runs only while they are. The daemon fetches its own smolvm
+# (SMOLVM_MAC_PIN) and the sandbox image as it starts. The desktop app refuses
+# to turn This Mac on beside this agent.
+#
 # smolvm's own install script is never run: its release is fetched and checked
 # here, as the daemon's is.
 set -eu
@@ -34,6 +48,8 @@ SHA256_X64="@@SHA256_X64@@"
 SHA256_ARM64="@@SHA256_ARM64@@"
 URL_X64="@@URL_X64@@"
 URL_ARM64="@@URL_ARM64@@"
+SHA256_DARWIN_ARM64="@@SHA256_DARWIN_ARM64@@"
+URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 
 # The smolvm release Luke runs agents in, and Luke's sandbox image its VMs boot,
 # held to the daemon's pins (SMOLVM_LINUX_PIN, SANDBOX_IMAGE in
@@ -72,6 +88,20 @@ EXIT_REFUSED=78
 CONNECT_WAIT_SECONDS=300
 # How long fetching the sandbox image may take.
 IMAGE_WAIT_SECONDS=1800
+# A Mac's install, under the home of the user it is for: its LaunchAgent, by the
+# label the desktop app refuses to turn This Mac on beside
+# (DARWIN_STANDALONE_LAUNCH_AGENT in packages/host/src/daemon/host-os.ts), the
+# folder holding the release and its state, and its logs. The desktop app's own
+# state folder holds its luke-host's device record once that is enrolled, which
+# means the app runs agents for that user already. `luke-host uninstall` names
+# the first three too.
+MAC_LABEL="dev.reviewstage.luke.host.standalone"
+MAC_APP_FOLDER="Library/Application Support/Luke Host"
+MAC_LOG_FOLDER="Library/Logs/Luke Host"
+MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
+# The oldest macOS it installs on: the release's launcher reads its own path
+# with readlink -f, which macOS has had since 12.3, and smolvm needs macOS 11.
+MAC_MIN_VERSION="12.3"
 # The throwaway machine the boot check makes; every agent's is named luke-<id>,
 # so this one never collides with one.
 BOOT_MACHINE="install-boot-check"
@@ -117,7 +147,7 @@ require_supported_os() {
     Linux) ;;
     Darwin)
       case "$2" in
-        arm64) fail "Luke host runs on Linux. On a Mac, install the Luke app and sign in instead." ;;
+        arm64) ;;
         *) fail "Luke does not run agents on Intel Macs." ;;
       esac
       ;;
@@ -167,8 +197,13 @@ require_systemd() {
 }
 
 # Fails unless the file's SHA-256 is the one given: $1 the file, $2 its digest.
+# Note that a Mac has shasum where Linux has sha256sum.
 check_sha256() {
-  actual="$(sha256sum "$1" | cut -d ' ' -f 1)"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$1" | cut -d ' ' -f 1)"
+  else
+    actual="$(shasum -a 256 "$1" | cut -d ' ' -f 1)"
+  fi
   [ "$actual" = "$2" ] || fail "The download's checksum is $actual, not $2. Nothing was installed."
 }
 
@@ -322,6 +357,187 @@ require_vm_boots() {
   ok "Booted a VM from the sandbox image"
 }
 
+# Refuses a macOS older than MAC_MIN_VERSION, $1 as `sw_vers -productVersion`
+# prints it, naming the version it needs.
+require_macos_version() {
+  major="${1%%.*}"
+  minor="${1#"$major"}"
+  minor="${minor#.}"
+  minor="${minor%%.*}"
+  case "$major" in '' | *[!0-9]*) major=0 ;; esac
+  case "$minor" in '' | *[!0-9]*) minor=0 ;; esac
+  need_major="${MAC_MIN_VERSION%%.*}"
+  need_minor="${MAC_MIN_VERSION#*.}"
+  if [ "$major" -gt "$need_major" ] || { [ "$major" -eq "$need_major" ] && [ "$minor" -ge "$need_minor" ]; }; then
+    return 0
+  fi
+  fail "Luke host needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
+}
+
+# Sets mac_user to the user a Mac's install is for, the one who ran the command
+# under sudo, and refuses where there is none, as when root itself is logged in.
+require_mac_user() {
+  mac_user="${SUDO_USER:-}"
+  if [ -z "$mac_user" ] || [ "$mac_user" = "root" ]; then
+    fail "Run it with sudo from the Mac account its agents should run as, not as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
+  fi
+}
+
+# Refuses where the Luke app already runs agents for the user whose home is $1:
+# its luke-host enrolled, so its device record stands in the app's state folder.
+require_no_app_host() {
+  [ ! -e "$1/$MAC_APP_STATE_FOLDER/device.json" ] ||
+    fail "The Luke app already runs agents on this Mac for this account, so nothing was installed."
+}
+
+# Writes the LaunchAgent to $1: the release in $2 run as the user it is
+# installed for, on the state folder $3, which a release build would otherwise
+# take to be the desktop app's, logging to $4. It runs at login, and again after
+# a crash but not after a clean exit, the daemon's answer to its host being
+# removed in Luke. Note that there is no ProcessType, since a Background job's
+# CPU and disk are throttled and its agents' VMs are work the member asked for.
+write_launch_agent() {
+cat >"$1" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$MAC_LABEL</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>$2/bin/luke-host</string>
+		<string>run</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>LUKE_HOST_STATE_ROOT</key>
+		<string>$3</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>$4</string>
+	<key>StandardErrorPath</key>
+	<string>$4</string>
+</dict>
+</plist>
+PLIST_EOF
+}
+
+# Starts the LaunchAgent written to $2 in the login session of the user whose
+# uid is $1, where they are logged in; where they are not, says it starts at
+# their next login. Answers whether it started.
+start_launch_agent() {
+  if launchctl print "gui/$1" >/dev/null 2>&1; then
+    launchctl bootstrap "gui/$1" "$2" || fail "launchctl could not start $MAC_LABEL for this account."
+    ok "Started $MAC_LABEL (starts at login)"
+    return 0
+  fi
+  ok "Installed $MAC_LABEL, which starts at this account's next login"
+  return 1
+}
+
+# Installs, enrolls and starts Luke host on an Apple silicon Mac, for the user
+# who ran the command under sudo, with the token parsed below where there is one.
+install_darwin() {
+  require_mac_user
+  home="$(dscl . -read "/Users/$mac_user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')"
+  [ -n "$home" ] && [ -d "$home" ] || fail "Could not find $mac_user's home folder."
+  require_no_app_host "$home"
+  uid="$(id -u "$mac_user")"
+  group="$(id -gn "$mac_user")"
+  app="$home/$MAC_APP_FOLDER"
+  install="$app/luke-host"
+  state="$app/state"
+  logs="$home/$MAC_LOG_FOLDER"
+  log="$logs/luke-host.log"
+  agents="$home/Library/LaunchAgents"
+  plist="$agents/$MAC_LABEL.plist"
+  [ -n "$SHA256_DARWIN_ARM64" ] || fail "Luke host $VERSION has no release for macOS yet."
+  if [ -z "$token" ] && [ ! -f "$state/device.json" ]; then
+    fail "This Mac is not enrolled yet. Run the command from Settings › Hosts › Add hosts, with its --token."
+  fi
+
+  printf 'Luke host %s for darwin-arm64, for %s\n' "$VERSION" "$mac_user"
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' EXIT
+  tarball="luke-host-$VERSION-darwin-arm64.tar.gz"
+  download "$URL_DARWIN_ARM64" "$work/$tarball"
+  check_sha256 "$work/$tarball" "$SHA256_DARWIN_ARM64"
+  ok "Downloaded and checked $tarball (sha256 matches)"
+  mkdir "$work/unpacked"
+  tar -xzf "$work/$tarball" -C "$work/unpacked" || fail "Could not unpack $tarball"
+  [ -x "$work/unpacked/luke-host/bin/luke-host" ] || fail "$tarball holds no luke-host."
+
+  # Note that a running daemon is stopped before its files are swapped, which stops every agent it runs, as on Linux.
+  launchctl bootout "gui/$uid/$MAC_LABEL" >/dev/null 2>&1 || true
+  mkdir -p "$app" "$logs" "$agents"
+  chown "$mac_user:$group" "$agents"
+  rm -rf "$install.new" "$install.old"
+  mv "$work/unpacked/luke-host" "$install.new"
+  if [ -d "$install" ]; then
+    mv "$install" "$install.old"
+  fi
+  mv "$install.new" "$install"
+  rm -rf "$install.old"
+  chown -R "$mac_user:$group" "$app" "$logs"
+  chmod 700 "$app"
+  mkdir -p "$(dirname "$LINK")"
+  ln -sf "$install/bin/luke-host" "$LINK"
+  ok "Installed to $install"
+
+  name="$(scutil --get ComputerName 2>/dev/null || hostname -s)"
+  if [ -n "$token" ]; then
+    # Note that the token goes in on stdin, never an argument another user could read.
+    if ! enrolled="$(cd "$app" && printf '%s\n' "$token" | sudo -u "$mac_user" -H env LUKE_HOST_STATE_ROOT="$state" \
+      "$install/bin/luke-host" enroll --name "$name" --origin "$ORIGIN")"; then
+      if [ -f "$state/device.json" ] && [ -f "$plist" ]; then
+        start_launch_agent "$uid" "$plist" >/dev/null || true
+        fail "Not enrolled again: $install was upgraded and started again on this Mac's existing enrollment."
+      fi
+      exit 1
+    fi
+    ok "$enrolled"
+  else
+    ok "Kept this Mac's enrollment"
+  fi
+
+  write_launch_agent "$plist" "$install" "$state" "$log"
+  chown "$mac_user:$group" "$plist"
+  chmod 644 "$plist"
+  before="$( (wc -l <"$log") 2>/dev/null | tr -d ' ')"
+  [ -n "$before" ] || before=0
+  if ! start_launch_agent "$uid" "$plist"; then
+    printf '\n%s is enrolled, and Luke host starts on it when %s logs in.\n' "$name" "$mac_user"
+  else
+    waited=0
+    connected=false
+    while [ "$waited" -lt "$CONNECT_WAIT_SECONDS" ]; do
+      if tail -n "+$((before + 1))" "$log" 2>/dev/null | grep -q "Connected to Luke"; then
+        connected=true
+        break
+      fi
+      sleep 2
+      waited=$((waited + 2))
+    done
+    if [ "$connected" = true ]; then
+      ok "Connected to Luke"
+    else
+      printf '! Not connected to Luke yet. Follow it with: tail -f "%s"\n' "$log"
+    fi
+    printf '\n%s is ready. Pick it under a task'"'"'s Runs on.\n' "$name"
+  fi
+  printf 'It runs while %s is logged in, so on a Mac nobody sits at, turn on automatic login for %s.\n' "$mac_user" "$mac_user"
+  printf 'To upgrade later, run the same command without --token.\n'
+  printf 'To remove it: sudo luke-host uninstall\n'
+}
+
 # A test sources the script up to here, to call its functions and read what it carries.
 [ -z "${LUKE_HOST_INSTALL_LIBRARY:-}" ] || return 0
 
@@ -356,8 +572,16 @@ case "$ORIGIN" in
   *) fail "--origin must be an https:// address, not $ORIGIN" ;;
 esac
 require_supported_os "$(uname -s)" "$(hardware_machine)" "$(cat /proc/version 2>/dev/null || true)"
-require_kvm
+if [ "$(uname -s)" = "Darwin" ]; then
+  require_macos_version "$(sw_vers -productVersion 2>/dev/null || true)"
+else
+  require_kvm
+fi
 [ "$(id -u)" -eq 0 ] || fail "Run it as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
+if [ "$(uname -s)" = "Darwin" ]; then
+  install_darwin
+  exit 0
+fi
 require_systemd
 command -v sha256sum >/dev/null 2>&1 || fail "Luke host needs sha256sum (coreutils)."
 command -v git >/dev/null 2>&1 || fail "Luke host needs git, which its agents make their worktrees with."

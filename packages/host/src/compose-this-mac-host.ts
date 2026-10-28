@@ -66,6 +66,11 @@ import type { RunMode } from "./run-mode.js";
  * setup is ready may be mid-turn, and a setup the service could not say is
  * taken as not failed.
  *
+ * A Mac user runs one `luke-host`: where the install command's standalone
+ * one is installed for this user (`ThisMacHost.standaloneInstalled`), the
+ * turn-on fails before anything is enrolled, saying how to remove it, and
+ * waits for Retry, as every failed turn-on does.
+ *
  * Where it stands is read again every `IDLE` while the account is signed
  * in: running while a follower holds the machine's lease, which only
  * `luke-host` can on a Mac, and otherwise as its login
@@ -93,6 +98,8 @@ const FAILED_WORDS = {
   NO_LOGIN_ITEM: "This build of Luke carries no login item to run agents with.",
   NOT_STOPPED: "macOS didn't turn off Luke's login item, so agents may still be running here",
   SETUP: "Luke couldn't download what agents run on here",
+  STANDALONE:
+    "The luke-host the install command put on this Mac already runs agents for this Mac user. Remove it with sudo luke-host uninstall, then Retry.",
 } as const;
 
 /** Where this Mac's setup stands as the service lists it: none for one that is ready. */
@@ -234,6 +241,8 @@ export function composeThisMacHost(
     const turnOn = (userId: string) =>
       Effect.gen(function* () {
         yield* set(standingOf(THIS_MAC_HOST_STANDING.TURNING_ON));
+        // Note that one user runs one luke-host, so the install command's standalone one keeps this Mac from turning on beside it.
+        if (yield* host.standaloneInstalled) return failed(FAILED_WORDS.STANDALONE);
         const deviceId = yield* localAgentDeviceOf(kernel.stateRoot, userId, kernel.createId);
         const version = yield* host.version;
         if (Result.isFailure(version)) return failed(`${FAILED_WORDS.VERSION}: ${version.failure}`);
