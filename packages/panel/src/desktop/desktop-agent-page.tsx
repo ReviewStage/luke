@@ -558,12 +558,19 @@ export function DesktopAgentPage({
   const inbox = useTaskInbox({
     taskId: agentId,
     kind: INBOX_SCOPE_KIND.AGENT,
+    draftTask: agent?.planId ?? null,
     shown: tasks.shown,
     onScreen: tasks.inboxShown === agentId,
     waiting: false,
     readerId: tasks.me,
     agents: control,
   });
+  // The panel is told what waits once each read lands, so an item the reader has not seen opens the Inbox tab, as on a task.
+  const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
+  const { onInboxRead } = sidePanel;
+  useEffect(() => {
+    if (inbox.read) onInboxRead(agentId, waiting);
+  }, [agentId, inbox.read, waiting, onInboxRead]);
   const now = useMinute();
   // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
   const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
