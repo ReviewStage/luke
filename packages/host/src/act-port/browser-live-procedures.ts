@@ -145,7 +145,7 @@ export function browserLiveProcedures<Sender>(
       port.onMessage((message) => void run(heard(connectionId, message)));
       const taken = yield* host.browserLiveConnect({
         connectionId,
-        taskId: input.taskId,
+        agentId: input.agentId,
         tabId: input.tabId,
       });
       if (taken) return;

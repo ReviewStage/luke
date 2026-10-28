@@ -1076,9 +1076,10 @@ is each member who can open the task. Kept screenshots are readable by our
 own operators, like the transcript, and are deleted with it: deleting the
 agent or its task marks the transcript deleted and removes it, with its
 screenshots, seven days later, and deleting your account removes them at
-once. Our service keeps the task's list of cloud
-tabs, each one's address and title, with the agent whose browser holds it,
-until that agent's conversation is removed. The agent can also record the
+once. Our service keeps each agent's list of cloud
+tabs, each one's address and title, until that agent's conversation is
+removed; a task's panel lists every one of its agents' tabs together, and an
+agent's own page lists its agent's, whether or not it is on a task. The agent can also record the
 browser as a video, for up to two minutes at a time, to show you a flow it
 built or tested: a recorder in its sandbox writes what the browser draws to the
 sandbox's disk, where it stays until the next recording replaces it or the
@@ -1092,8 +1093,8 @@ task's plan, where it is kept and shown as any video an agent posts or adds
 there is (see "A task's inbox" and "A plan's pictures"). Apart from such a
 recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
-to the panel of each member who opens the task, and every such member can
-watch the tab and take it over by clicking and typing in it, and the agent's
+to the panel of each member who can read the agent and opens its task or its
+page, and every such member can watch the tab and take it over by clicking and typing in it, and the agent's
 actions on it wait while you do. Nothing of it reaches a trace, a counted event,
 or a fixture, and the screen recording masks the live view
 and the transcript's screenshots.

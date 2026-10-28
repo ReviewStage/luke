@@ -21,10 +21,10 @@ import {
   closeBrowserTab,
   handBackBrowserTab,
   listAgentBrowserTabs,
-  listTaskBrowserTabs,
+  listBrowserTabs,
   noteBrowserTabPage,
   pointBrowserTab,
-  readTaskBrowserTab,
+  readBrowserTab,
   recordMemberOpenedBrowserTab,
   renewBrowserTabTakeover,
   retargetBrowserTab,
@@ -140,7 +140,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         );
 
         for (const member of [starter, teammate]) {
-          const listed = Option.getOrThrow(yield* listTaskBrowserTabs(member, taskId));
+          const listed = Option.getOrThrow(yield* listBrowserTabs(member, { taskId }));
           assert.deepEqual(
             listed.map(({ tab, agent: holder }) => [tab.id, holder.id]),
             [
@@ -149,15 +149,37 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
             ],
           );
         }
-        assert.ok(Option.isNone(yield* listTaskBrowserTabs(outsider, taskId)));
-        assert.ok(Option.isNone(yield* readTaskBrowserTab(outsider, taskId, coders.id)));
-        assert.ok(Option.isNone(yield* listTaskBrowserTabs(starter, randomUUID())));
-        const read = Option.getOrThrow(yield* readTaskBrowserTab(teammate, taskId, coders.id));
+        assert.ok(Option.isNone(yield* listBrowserTabs(outsider, { taskId })));
+        assert.ok(Option.isNone(yield* readBrowserTab(outsider, { taskId }, coders.id)));
+        assert.ok(Option.isNone(yield* listBrowserTabs(starter, { taskId: randomUUID() })));
+        const read = Option.getOrThrow(yield* readBrowserTab(teammate, { taskId }, coders.id));
         assert.deepEqual(read.agent, {
           id: agent.id,
           userId: starter,
           githubAccess: GITHUB_ACCESS.APP,
         });
+      }),
+  );
+
+  it.effect(
+    "an agent's tabs are kept from a teammate who reaches the agent but not its task on its starter's own token",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, taskId, agent } = yield* openTask;
+        yield* Database.use((db) =>
+          db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, taskId)),
+        );
+        const tab = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-1", "https://shop.test/"),
+        );
+        const place = { agentId: agent.id };
+
+        assert.deepEqual(
+          Option.getOrThrow(yield* listBrowserTabs(starter, place)).map(({ tab }) => tab.id),
+          [tab.id],
+        );
+        assert.ok(Option.isNone(yield* listBrowserTabs(teammate, place)));
+        assert.ok(Option.isNone(yield* readBrowserTab(teammate, place, tab.id)));
       }),
   );
 
@@ -180,12 +202,12 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         );
 
         const seen = (member: string) =>
-          Effect.map(listTaskBrowserTabs(member, taskId), (listed) =>
+          Effect.map(listBrowserTabs(member, { taskId }), (listed) =>
             Option.getOrThrow(listed).map(({ tab }) => tab.id),
           );
         assert.deepEqual(new Set(yield* seen(starter)), new Set([coders.id, others.id]));
         assert.deepEqual(yield* seen(teammate), [others.id]);
-        assert.ok(Option.isNone(yield* readTaskBrowserTab(teammate, taskId, coders.id)));
+        assert.ok(Option.isNone(yield* readBrowserTab(teammate, { taskId }, coders.id)));
       }),
   );
 
@@ -201,7 +223,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
           Effect.map(DateTime.nowAsDate, (now) => new Date(now.getTime() + minutes * MINUTE_MS));
         const driverNow = Effect.gen(function* () {
           const now = yield* DateTime.nowAsDate;
-          const read = Option.getOrThrow(yield* readTaskBrowserTab(starter, taskId, tab.id));
+          const read = Option.getOrThrow(yield* readBrowserTab(starter, { taskId }, tab.id));
           return browserTabDriver(read.tab, now)?.userId ?? null;
         });
 
@@ -325,9 +347,75 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         yield* takeOverBrowserTab(tab.id, teammate, at(3), yield* DateTime.nowAsDate),
         false,
       );
-      const read = Option.getOrThrow(yield* readTaskBrowserTab(starter, taskId, tab.id));
+      const read = Option.getOrThrow(yield* readBrowserTab(starter, { taskId }, tab.id));
       assert.equal(browserTabDriver(read.tab, yield* DateTime.nowAsDate)?.userId, starter);
     }),
+  );
+
+  it.effect(
+    "an agent on no task lists its tabs to the members who see it, to no one else, and on the task it moves to",
+    () =>
+      Effect.gen(function* () {
+        const [starter, teammate, outsider] = [
+          yield* openAccount,
+          yield* openAccount,
+          yield* openAccount,
+        ];
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const loose = Option.getOrThrow(
+          yield* createAgent(starter, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: "Sign in to the shop.",
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/shop",
+          }),
+        ).agent;
+        const tab = yield* upsertBrowserTab(
+          action(loose.conversationId, "target-1", "https://shop.test/"),
+        );
+        const place = { agentId: loose.id };
+
+        for (const member of [starter, teammate]) {
+          assert.deepEqual(
+            Option.getOrThrow(yield* listBrowserTabs(member, place)).map(({ tab }) => tab.id),
+            [tab.id],
+          );
+          assert.equal(
+            Option.getOrThrow(yield* readBrowserTab(member, place, tab.id)).tab.id,
+            tab.id,
+          );
+        }
+        assert.ok(Option.isNone(yield* listBrowserTabs(outsider, place)));
+        assert.ok(Option.isNone(yield* readBrowserTab(outsider, place, tab.id)));
+
+        // On its starter's own token, a teammate who does not read its repository no longer sees it.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ githubAccess: GITHUB_ACCESS.TOKEN })
+            .where(eq(agentTable.id, loose.id)),
+        );
+        assert.ok(Option.isNone(yield* listBrowserTabs(teammate, place)));
+        assert.ok(Option.isNone(yield* readBrowserTab(teammate, place, tab.id)));
+
+        // Moved onto a task, its tab is the task's though the tab was written under none.
+        const moved = yield* createTask(starter, { organizationId: workspace, name: "Checkout" });
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ taskId: moved.id }).where(eq(agentTable.id, loose.id)),
+        );
+        assert.deepEqual(
+          Option.getOrThrow(yield* listBrowserTabs(starter, { taskId: moved.id })).map(
+            ({ tab }) => tab.id,
+          ),
+          [tab.id],
+        );
+      }),
   );
 
   it.effect("a tab stands on the task its agent is on, and on none for an agent on none", () =>
@@ -351,7 +439,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
 
       assert.deepEqual([own.taskId, theirs.taskId, none.taskId], [taskId, elsewhere.taskId, null]);
       assert.deepEqual(
-        Option.getOrThrow(yield* listTaskBrowserTabs(starter, taskId)).map(({ tab }) => tab.id),
+        Option.getOrThrow(yield* listBrowserTabs(starter, { taskId })).map(({ tab }) => tab.id),
         [own.id],
       );
     }),
@@ -461,7 +549,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
       assert.equal(yield* closeBrowserTab(other.conversationId, tab.id), false);
       assert.equal(yield* closeBrowserTab(agent.conversationId, tab.id), true);
       assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
-      assert.deepEqual(Option.getOrThrow(yield* listTaskBrowserTabs(starter, taskId)), []);
+      assert.deepEqual(Option.getOrThrow(yield* listBrowserTabs(starter, { taskId })), []);
     }),
   );
 
@@ -523,7 +611,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
 
         assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
         assert.deepEqual(
-          Option.getOrThrow(yield* listTaskBrowserTabs(starter, taskId)).map(
+          Option.getOrThrow(yield* listBrowserTabs(starter, { taskId })).map(
             ({ tab }) => tab.address,
           ),
           ["https://docs.test/"],

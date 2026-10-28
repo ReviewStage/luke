@@ -14,6 +14,7 @@ import {
   type AdminReadAnswer,
   type AdminReadParams,
 } from "@luke/features/admin-wire";
+import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
 import { pagePlaceId } from "@luke/features/page-wire";
 import {
   type CodeLines,
@@ -174,7 +175,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
-  /** How many streams stand open of each task's Browser tabs. */
+  /** How many streams stand open of each agent's or task's Browser tabs, by its id. */
   const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
   /** How many streams stand open of each plan's history. */
   const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
@@ -412,7 +413,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       if ("issue" in answer) return answer.issue;
       return yield* Effect.fail(errors.REFUSED());
     }),
-    // Likewise a task's Browser tabs: a service that did not answer is refused, never read as no tab.
+    // Likewise an agent's or a task's Browser tabs: a service that did not answer is refused, never read as no tab.
     [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TABS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -428,19 +429,21 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksBrowserTabOpen(input);
       },
     ),
-    // A task's Browser tabs followed for its side panel: two panels on one task share one follow at the host.
+    // An agent's or a task's Browser tabs followed for its side panel: two panels on one share one follow at the host.
     [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actPort[
       TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const tabs = followedStream(
         {
-          keyOf: (scope: TaskBrowserTabsFollow) => scope.taskId,
+          keyOf: (scope: TaskBrowserTabsFollow) => browserTabsPlaceId(scope),
           follow: host.tasksBrowserTabsFollow,
           unfollow: host.tasksBrowserTabsUnfollow,
           onChanged: host.onTaskBrowserTabsChanged,
           valueOf: (changed: TaskBrowserTabsFollowed, scope: TaskBrowserTabsFollow) =>
-            changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+            browserTabsPlaceId(changed) === browserTabsPlaceId(scope)
+              ? Option.some(changed.view)
+              : Option.none(),
         },
         openBrowserTabs,
         input,

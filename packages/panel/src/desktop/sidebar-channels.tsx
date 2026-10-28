@@ -5,12 +5,12 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   MoreButton,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   NavItemSkeleton,
   SidebarFilters,
   SkeletonRegion,
-  STATUS_TONE,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -23,7 +23,7 @@ import type { ChannelsControl } from "../tasks/use-channels.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useArchivedChannelsDialog } from "./archived-channels-dialog.js";
 import { useChannelDialog } from "./channel-dialog.js";
-import { needsYouNoun } from "./places-waiting.js";
+import { FOR_YOU_NOUN } from "./places-waiting.js";
 
 /**
  * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one (STAG-547).
@@ -31,8 +31,8 @@ import { needsYouNoun } from "./places-waiting.js";
  * The rows stand in under the Inbox's name (`SidebarFilters`), the
  * workspace's standing channels first and its project channels after them,
  * as `channelSections` orders them. A row is the channel's glyph and name,
- * and at its end how many open asks in it wait on the reader, in the
- * attention's tone; its name stands in the unread weight while something
+ * and at its end how many of its threads For you lists, in the unread dot's
+ * blue; its name stands in the unread weight while something
  * was posted in it since the reader last looked (`channelUnread`). Resting
  * on a row hangs the channel's card beside it after the hint's wait, as
  * every other sidebar row's card hangs (`channel-card.tsx`). A press
@@ -100,8 +100,8 @@ function ChannelRow({
           unread={channelUnread(channel)}
           count={{
             value: waiting,
-            noun: needsYouNoun(waiting),
-            tone: STATUS_TONE.ATTENTION,
+            noun: FOR_YOU_NOUN,
+            tone: NAV_COUNT_TONE.UNREAD,
           }}
           contextMenu={menu.contextMenu(ellipsis)}
           actions={

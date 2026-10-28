@@ -134,6 +134,7 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
+  agentBrowserTabsLive,
   agentInboxLive,
   agentPagesLive,
   agentTranscriptLive,
@@ -583,6 +584,18 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       return yield* liveQueryParts(
         taskBrowserTabsLive,
         { userId: context.userId, taskId },
+        input,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
+      );
+    }),
+    agentBrowserTabs: signedIn.agentBrowserTabs.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* pathUuid(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(
+        agentBrowserTabsLive,
+        { userId: context.userId, agentId },
         input,
         LIVE_POLL_HOLD.WATCHED_LOOK,
       );

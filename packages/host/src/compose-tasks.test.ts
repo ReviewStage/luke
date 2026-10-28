@@ -10,6 +10,7 @@ import {
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
+import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
   AGENT_BRIEF,
@@ -869,9 +870,9 @@ function fakeService(tasks: Task[]): FakeService {
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : called(asked(read, poll, after));
       }),
-    browserTabsLive: (taskId, _userId, poll, after) =>
+    browserTabsLive: (place, _userId, poll, after) =>
       Effect.suspend((): ReturnType<TasksClient["browserTabsLive"]> => {
-        const read = service.browserTabLives[taskId];
+        const read = service.browserTabLives[browserTabsPlaceId(place)];
         return read === undefined
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : called(asked(read, poll, after));

@@ -146,6 +146,7 @@ describe("the host's platform concerns", () => {
                 platform: DEVICE_PLATFORM.DARWIN,
                 arch: DEVICE_ARCH.ARM64,
               }),
+              standaloneInstalled: Effect.succeed(false),
             }),
           ),
         ),
