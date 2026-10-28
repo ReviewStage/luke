@@ -613,7 +613,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
   );
   assert.deepEqual(
     [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
-    ["acme-corp/relay", "Repository belongs to Stage"],
+    ["Repository belongs to Stage"],
   );
 });
 

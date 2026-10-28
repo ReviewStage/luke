@@ -15,9 +15,9 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { PullRequestLine, taskCardOf } from "./task-card.js";
 
 /**
- * task-card.test.ts -- a task's hover card leads with where the task stands,
- * its key, its status, its priority, and who is on it, and keeps where it
- * lives, its repository, at its foot under what is moving on it.
+ * task-card.test.ts -- a task's hover card says where the task stands by
+ * its board card's marks, its status, its priority, and who is on it, each
+ * heard by a screen reader, and a pull request's line counts its size.
  */
 
 const ACME = {
@@ -67,58 +67,19 @@ function drawn(task: TaskSummary): HTMLElement {
   return card;
 }
 
-test("a task's card leads with its key, its status, its priority, and who is on it, then its name, and keeps its repository at its foot", () => {
-  const card = drawn(TASK);
-  const parts = [...card.children];
-  assert.deepEqual(
-    [...(parts[0]?.children ?? [])].map((each) => [
-      each.hasAttribute("data-task-key")
-        ? "key"
-        : each.classList.contains("luke-badge")
-          ? "badge"
-          : each.className,
-      each.textContent,
-    ]),
-    [
-      ["key", "ACME-42"],
-      ["badge", "In progress"],
-      ["badge", "High"],
-      ["badge", "No assignee"],
-    ],
-    "the key as plain words, as every place draws a key, then the status, priority, and assignee chips",
-  );
-  assert.equal(
-    parts[1]?.querySelector(".luke-hover-card-name")?.textContent,
-    "Teammate invitations",
-  );
-  assert.match(parts.at(-1)?.textContent ?? "", /acme\/app/u, "the repository stands last");
-});
+test("a task's card says where it stands by marks a reader hears, as the board's card draws them, and none is a picker", () => {
+  const heard = (task: TaskSummary) =>
+    [...drawn(task).querySelectorAll(".luke-hover-card-head .task-card-mark")].map((each) =>
+      each.getAttribute("aria-label"),
+    );
 
-test("a task's card says who is on it by face and name, or the dashed mark where no one is, as a fact rather than a picker", () => {
-  const assignee = (task: TaskSummary) => {
-    const chip = [
-      ...drawn(task).querySelectorAll<HTMLElement>(".task-card-standing > .luke-badge"),
-    ].at(-1);
-    assert.ok(chip, "the assignee's chip stands");
-    return [chip.textContent, chip.querySelector(".actor-mark")?.getAttribute("data-kind")];
-  };
-
-  assert.deepEqual(
-    assignee({ ...TASK, assignee: { userId: "user-charles", name: "Charles Pan" } }),
-    ["CCharles Pan", "person"],
-  );
-  assert.deepEqual(assignee(TASK), ["No assignee", "unassigned"]);
+  assert.deepEqual(heard({ ...TASK, assignee: { userId: "user-charles", name: "Charles Pan" } }), [
+    "Status: In progress",
+    "Priority: High",
+    "Assignee: Charles Pan",
+  ]);
+  assert.equal(heard(TASK).at(-1), "Assignee: No assignee");
   assert.equal(document.querySelector("[data-task-card] button[aria-haspopup]"), null);
-});
-
-test("a task with no key, status, or priority leads with its name", () => {
-  const { status: _status, priority: _priority, number: _number, ...bare } = TASK;
-  const card = drawn(bare);
-  assert.equal(card.querySelector(".task-card-standing"), null);
-  assert.equal(
-    card.firstElementChild?.querySelector(".luke-hover-card-name")?.textContent,
-    bare.name,
-  );
 });
 
 test("a pull request's line on the card counts its size as every figure is counted, green then red", () => {

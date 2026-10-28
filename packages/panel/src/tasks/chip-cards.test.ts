@@ -382,9 +382,7 @@ const taskCards = {
       : createElement(TaskCard, {
           task: TASK,
           models: [],
-          pictures: false,
           now,
-          onOpenGitHub: () => undefined,
           onShowAgent: () => undefined,
           focus,
         }),
@@ -543,7 +541,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
 
   assert.equal(taskCard.card, "data-task-card");
   assert.equal(taskCard.name, TASK.name);
-  assert.deepEqual(taskCard.details, ["acme/relay"]);
+  assert.match(taskCard.sub ?? "", /^acme\/relay · /u);
   assert.equal(taskCard.focus, undefined);
   assert.equal(sectionCard.card, "data-task-card");
   assert.equal(sectionCard.name, TASK.name);
