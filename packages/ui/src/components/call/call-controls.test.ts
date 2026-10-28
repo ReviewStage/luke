@@ -121,7 +121,7 @@ test("the bar's mutes and End call each hand their press back, and End call alon
   const pressed: string[] = [];
   const scope = draw(
     createElement(CallBar, {
-      status: { voiceWord: "Listening", backend: { brain: undefined } },
+      status: { voiceWord: "Listening", backend: { agent: undefined } },
       microphone: { muted: false, onPress: () => pressed.push("microphone") },
       speaker: { muted: false, onPress: () => pressed.push("speaker") },
       onEnd: () => pressed.push("end"),
@@ -144,7 +144,7 @@ test("the bar's mutes and End call each hand their press back, and End call alon
 test("the bar says what Luke is doing while the backend works, with no subject and no notetaker, and that it works to a reader", () => {
   const scope = draw(
     createElement(CallBar, {
-      status: { voiceWord: "Listening", backend: { brain: { action: "Reading" } } },
+      status: { voiceWord: "Listening", backend: { agent: { action: "Reading" } } },
       microphone: { muted: false, onPress: () => {} },
       speaker: { muted: false, onPress: () => {} },
       onEnd: () => {},

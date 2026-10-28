@@ -1233,7 +1233,7 @@ the agent at once without stopping the worker. Several calls in one step run
 at once, and a call with the subagent task's id sends the worker more, into the same
 session. A call into the agent follows its delegations under either name,
 `delegate` or eve's `worker` in earlier transcripts (`DELEGATION_TOOLS` in
-`src/voice/live-brain.ts`), to follow it under the bound a parked turn
+`src/voice/live-agent.ts`), to follow it under the bound a parked turn
 takes. A worker's row in an agent's tab
 says where the worker's own session stands (the page's `subagents`), since
 the call settles at the receipt.
@@ -1352,7 +1352,7 @@ delegation, so no sandbox opens there either.
 ## The turn event projection
 
 `src/agents/turn-events.ts`'s `projectTurnEvents` is what the voice's live
-brain hears of a turn while it runs, in process (above). Nothing is stored for
+agent hears of a turn while it runs, in process (above). Nothing is stored for
 it: the five events — a slow step began, a turn queued a question,
 every action settled, one sentence of the reply, the turn ended — are a
 projection over the turn row and the turn's journal, the assistant message the
@@ -2378,7 +2378,7 @@ to end. The voice never travels here: it is WebRTC's.
 ### The live session service, attached to the sessions route
 
 The machinery that owns a session's exchange — the delegation adapter that
-hands each ask to the brain and speaks the reply as commentary once the run's
+hands each ask to the agent and speaks the reply as commentary once the run's
 actions settle, the append channel, idle, and the
 graceful close — is `@luke/voice`'s `LiveSessionService`, behind that
 package's `./live-session` door, which names no socket library so a function
@@ -2393,7 +2393,7 @@ one to answer its asks. The desktop composes no exchange of its own since
 E5-3; what it holds is `LiveSessionHolder`, which seeds the session at
 creation, ends it, and reports its idle and its stop. What stops the
 model's output from becoming an action is not the attachment and not the
-sideband but the brain's own gauntlet: `acceptAsk` on every spoken ask, and
+sideband but the agent's own gauntlet: `acceptAsk` on every spoken ask, and
 the host's admission of the conversation again on every tool call a turn
 makes.
 
@@ -2408,7 +2408,7 @@ inserted on first sight and grown in place after, its words cut from those
 segments over the span the ledger holds it at: the developer's line, and
 every utterance of Luke's as an assistant row authored by the voice model,
 whatever prompted it — an answer it gave itself, what it said around an ask
-handed to the brain, the brain's reply read aloud, the opening — so the
+handed to the agent, the agent's reply read aloud, the opening — so the
 record shows what the developer actually heard, and a reading stands beside the message it was read
 from rather than in place of it. A delegation cuts nothing and re-keys
 nothing: the stream's `session.delegation.created` is consumed like any other
@@ -2434,9 +2434,9 @@ taken off at its close — and `observedSideband` hands each event to the record
 once, on its way past the one reader that runs the sideband's arrivals, replay
 included.
 
-### The brain answered in process
+### The agent answered in process
 
-`src/voice/live-brain.ts` is the `LiveBrain` the hosted composition hands
+`src/voice/live-agent.ts` is the `LiveAgent` the hosted composition hands
 the live session service, and it reaches the agent the call speaks into in
 process and never over HTTP. The voice function resolved the account at its handshake and
 dropped the bearer there, so it holds nothing eve's door or this deployment's
@@ -2446,7 +2446,7 @@ service's submission id as the client id, under the eve client the
 composition built for the account as the deployment acting for it
 (admitted for spoken turns by `CODER_DEPLOYMENT_TURNS`, below).
 The run the service keys an exchange by is the ask's id, since eve names a
-turn only once it starts; the brain follows the ask through `askStanding` on
+turn only once it starts; the agent follows the ask through `askStanding` on
 a schedule, projects its turn's events with `projectTurnEvents`
 (`src/agents/turn-events.ts`), and translates each back to the ask's id. There is no HTTP hop
 and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
@@ -2455,7 +2455,7 @@ detach cut short is not lost with it: a spoken ask's row carries the voice
 session it was delegated in and its revision there, how far its turn was told
 (`told_seq`, short of the end), and when its end was told (`end_told_at`), each
 written before the voice hears it. A connection that re-attaches to the session
-adopts it as started and asks the brain to recover it (`recoverRuns`): every
+adopts it as started and asks the agent to recover it (`recoverRuns`): every
 ask of that session whose end was not told comes back as its exchange, under
 its own delegation and revision, and is followed again from the event after
 the last one told. The session's revisions go on from the newest recorded, so
@@ -2466,7 +2466,7 @@ is told, a telling the detach cut between the write and the voice is lost and
 never said twice. A turn that
 does not end inside the follow bound, or an ask the record no longer holds,
 is told as a failed end so the exchange settles rather than waiting forever.
-The bound is `LIVE_BRAIN_FOLLOW_BOUNDS` in `src/voice/live-brain.ts`: the
+The bound is `LIVE_AGENT_FOLLOW_BOUNDS` in `src/voice/live-agent.ts`: the
 plain `FOLLOW`, ten minutes, past eve's own turn deadline with room for one
 queued turn ahead, until the journal shows the turn handed work to the
 `worker`, which eve runs as a subagent task the turn parks on (`turn.waiting`)
@@ -2481,7 +2481,7 @@ delegation, and the follow still stops the moment the turn completes, fails, or
 is cancelled, or the socket's scope closes. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
 mid-turn is the slow step, each question a turn queued, the
-actions settling, and, as the live brain's own and no event of the stream,
+actions settling, and, as the live agent's own and no event of the stream,
 each look's count of the turn's settled calls with the kind of the latest
 (`STEP_SETTLED`), never a call's input or output, which the service words as
 a build-fixed quiet progress note no sooner than `PROGRESS_NOTE_BOUNDS.GAP_MS`
@@ -2531,7 +2531,7 @@ so the thread reads as it was heard: what was said while the agent worked,
 then what it did and thought, then what was said of it.
 
 `src/voice/live-exchange.ts` composes the whole for one account's one
-live session — the brain answered in process, the record over the voice
+live session — the agent answered in process, the record over the voice
 writer with the sideband observed once ahead of the service — over one
 store context, with the eve client handed in as the caller composed it. The
 asks are pinned to the conversation the record writes, the agent's,
@@ -2542,7 +2542,7 @@ composition is a scope's:
 `hostedLiveExchange` answers an effect built in the `Scope` its caller opened
 for the socket, and every fiber the session runs is forked into that scope —
 the one that reports what the record made of each live event, the one that
-makes every record write in arrival order, the brain's follow of each
+makes every record write in arrival order, the agent's follow of each
 accepted ask — so closing the scope
 interrupts each of them. The session's graceful close (its release with
 nothing said, `LiveSessionService.release`, where the relay settled detached)
@@ -2550,10 +2550,10 @@ and the wait on every record write already started are finalizers of the same
 scope, added so their
 reverse order is the order the exchange's old `stop` ran them. No composition
 below the exchange holds a runner, and none of them runs an effect at all:
-`LiveRecord`'s two utterance writes and `LiveBrain`'s submission answer
+`LiveRecord`'s two utterance writes and `LiveAgent`'s submission answer
 effects themselves, the record's on the fiber that makes every write in
-arrival order and the brain's with the `SqlClient` the scope was built on
-provided to it, as `runTool` provides it to the brain's seams.
+arrival order and the agent's with the `SqlClient` the scope was built on
+provided to it, as `runTool` provides it to the agent's seams.
 
 ### The exchange on the sessions route
 
@@ -2607,7 +2607,7 @@ minted as the account's own principal with the deployment named only as its
 carrier (`CODER_DEPLOYMENT_PRESENCE`), so a spoken line joins the agent's
 turn under way; for a cancel of a turn in a session, which is how the stop
 key's `stopAsk` and the hook's carried Stop reach eve; and for a GET of a
-session's event stream (`CODER_DEPLOYMENT_STREAMS`), which the live brain
+session's event stream (`CODER_DEPLOYMENT_STREAMS`), which the live agent
 listens to from its tail so it reads a spoken ask's turn the moment eve
 tells an event rather than only on its 250 ms poll (the poll stays, for a
 stream refused or dropped); and nothing else: any other route or kind of

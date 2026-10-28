@@ -4,7 +4,7 @@ import type { Effect } from "effect";
 /**
  * Where what was said on a live session is written down, behind its own door
  * so the writer can change without the service noticing: the hosted record,
- * where the brain's reply is the assistant message, every spoken word is a
+ * where the agent's reply is the assistant message, every spoken word is a
  * transcript segment, and each speaker's utterance is a row of its own — the
  * developer's line, and Luke's words wherever they are the voice model's own
  * rather than an append read aloud. A row is upserted as its utterance grows:

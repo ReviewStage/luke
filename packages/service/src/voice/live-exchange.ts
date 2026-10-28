@@ -9,10 +9,10 @@ import {
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import type { TaskActivity, TaskShownCode } from "@luke/features/tasks-view";
 import { serialQueue } from "@luke/runtime/effect";
-import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
+import { liveAgentLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   type AdoptableSession,
-  type LiveBrain,
+  type LiveAgent,
   LiveSessionService,
   type LiveSessionStatus,
   type LiveSessionTrace,
@@ -22,7 +22,7 @@ import type { WebSocket } from "ws";
 import type { BrainHostTurn } from "../agents/brain-host/bounds.js";
 import type { AgentSessions } from "../agents/brain-host/eve-sessions.js";
 import type { CallBackend } from "./call-backend.js";
-import { hostedLiveBrain } from "./live-brain.js";
+import { hostedLiveAgent } from "./live-agent.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
 
@@ -42,7 +42,7 @@ import { observedSideband } from "./live-sideband.js";
  * The composition is a scope's, not a socket callback's: it is built in the
  * `Scope` its caller opened for the socket, and every fiber it runs is forked
  * into that scope — the one that reports what the record made of each live
- * event, the brain's follow of each accepted ask, and the service's own — so
+ * event, the agent's follow of each accepted ask, and the service's own — so
  * closing the scope when the socket
  * detaches interrupts each of them. The session's graceful close (or, where
  * the device's socket went with no hang-up, its release with nothing said to
@@ -74,7 +74,7 @@ export interface HostedLiveExchangeOptions {
   readonly hasTask: boolean;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  /** What the voice and the brain are doing, told whole on each change; the device is shown it. */
+  /** What the voice and the agent are doing, told whole on each change; the device is shown it. */
   readonly onActivity?: (activity: TaskActivity) => void;
   /** Code Luke is about to talk about, with its lines, told as he starts to speak; a task call's device is shown it. */
   readonly onCode?: (shown: TaskShownCode) => void;
@@ -141,7 +141,7 @@ export interface HostedLiveExchange {
    * close; an exchange never told closes it.
    */
   endAs(ending: ExchangeEnding): void;
-  readonly brain: LiveBrain;
+  readonly agent: LiveAgent;
   readonly store: HostedStore;
   /**
    * Runs a session the service created for the device: the record observes
@@ -197,7 +197,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   });
   const reported = (message: string | undefined): Effect.Effect<void> =>
     message === undefined ? Effect.void : Effect.sync(() => report(message));
-  const brain = yield* hostedLiveBrain({
+  const agent = yield* hostedLiveAgent({
     accountId,
     conversation,
     backend: options.backend,
@@ -212,18 +212,18 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   });
 
   /**
-   * What the service last said of the voice and the brain, merged into
+   * What the service last said of the voice and the agent, merged into
    * one snapshot the device is told whole each time either changes, so the
    * device holds the frame as it stands and derives nothing from a sequence.
    */
-  let status: LiveSessionStatus = { voice: undefined, brain: undefined };
+  let status: LiveSessionStatus = { voice: undefined, agent: undefined };
   const tellActivity = () => {
-    const { voice: phase, brain } = status;
+    const { voice: phase, agent } = status;
     options.onActivity?.({
       ...(phase === undefined ? undefined : { voice: phase }),
-      ...(brain === undefined
+      ...(agent === undefined
         ? undefined
-        : { planner: brain.action === undefined ? {} : { action: brain.action } }),
+        : { planner: agent.action === undefined ? {} : { action: agent.action } }),
       // Note that no notetaker writes beside the call any more, yet we still send `notes: false`, because a desktop of an earlier release requires the key and would drop the whole frame without it.
       notes: false,
     });
@@ -239,7 +239,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       );
   };
 
-  // The brain and the record are built beside the service here rather than
+  // The agent and the record are built beside the service here rather than
   // by a caller, so the layers that name them are provided on the spot.
   const service = yield* Effect.provide(
     LiveSessionService.make({
@@ -254,7 +254,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       ...(options.onCallEnding ? { onCallEnding: options.onCallEnding } : undefined),
       ...(options.onTrace ? { onTrace: options.onTrace } : undefined),
     }),
-    Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+    Layer.mergeAll(liveAgentLayer(agent), liveRecordLayer(record)),
   );
 
   let ending: ExchangeEnding = EXCHANGE_ENDING.CLOSE;
@@ -267,7 +267,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     endAs: (next) => {
       ending = next;
     },
-    brain,
+    agent,
     store,
     adopt: (opened) =>
       service.adoptSession({

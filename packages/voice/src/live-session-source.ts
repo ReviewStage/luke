@@ -437,7 +437,7 @@ class ServiceLiveSessionSource {
         // Note that a call into an agent with no task names none, which the service keys by the agent alone.
         ...(input.taskId === undefined ? undefined : { planId: input.taskId }),
         agentId: input.agentId,
-        // The brain's turns on the call count the developer's days and spell their times in it.
+        // The agent's turns on the call count the developer's days and spell their times in it.
         timeZone: this.#timeZone(),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));

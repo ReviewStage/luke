@@ -53,7 +53,7 @@ export interface LiveDependencies {
  * The GPT Live session as one concern of the host: the `voice.*` methods the
  * peer asks with, the `voiceLiveSession.changed` phases it is told, and the
  * holder that keeps the session open between them. The exchange is the
- * service's: every spoken ask is answered by the hosted brain, every reply
+ * service's: every spoken ask is answered by the hosted agent, every reply
  * is appended by the service's own exchange over the same socket, and the
  * record is the account's on the service. What this side still does is
  * create the session for the peer's offer into an agent the account
@@ -61,7 +61,7 @@ export interface LiveDependencies {
  * the developer's video toggle to the service. The avatar's grant that toggle
  * draws is the holder's to hand on in process, through the assembly's
  * `avatar` to the desktop's main process, and no method or event here
- * carries it. It reaches no brain and writes no record, so it needs no seam
+ * carries it. It reaches no agent and writes no record, so it needs no seam
  * for either. The holder stands for this composition's own scope, which is
  * the host's, and its graceful close stays a drain step of `compose-host.ts`
  * rather than a finalizer, so a quit ends the session inside its own

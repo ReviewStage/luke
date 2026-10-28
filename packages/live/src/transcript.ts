@@ -36,7 +36,7 @@ const TRANSCRIPT_ROLE_LABEL = {
  * fall between 1.2 s and 5 s, while Luke's between-sentence pauses cluster at
  * 3 to 5 s and above. 4.0 s sits in the trough between the two. 5.0 s was
  * rejected because 48 of Luke's gaps fall in 4 to 5 s, some of them the pause
- * between his acknowledgment and reading a fast brain reply, which are two
+ * between his acknowledgment and reading a fast agent reply, which are two
  * sentences and not one.
  */
 export const UTTERANCE_GAP_MS = 4_000;

@@ -5,19 +5,19 @@ import type { StoredTurnRecord } from "@luke/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { TASK_ACTIVITY_ACTION_MAX_CHARS } from "@luke/features/tasks-view";
 import {
-  LIVE_BRAIN_CANCEL,
-  LIVE_BRAIN_RUN_END,
-  LIVE_BRAIN_RUN_EVENT,
-  LIVE_BRAIN_SUBMISSION,
-  type LiveBrain,
-  type LiveBrainCancel,
-  type LiveBrainJoin,
-  type LiveBrainQuestion,
-  type LiveBrainRecoveredRun,
-  type LiveBrainRecovery,
-  type LiveBrainRunEnd,
-  type LiveBrainRunEvent,
-  type LiveBrainSubmission,
+  LIVE_AGENT_CANCEL,
+  LIVE_AGENT_RUN_END,
+  LIVE_AGENT_RUN_EVENT,
+  LIVE_AGENT_SUBMISSION,
+  type LiveAgent,
+  type LiveAgentCancel,
+  type LiveAgentJoin,
+  type LiveAgentQuestion,
+  type LiveAgentRecoveredRun,
+  type LiveAgentRecovery,
+  type LiveAgentRunEnd,
+  type LiveAgentRunEvent,
+  type LiveAgentSubmission,
 } from "@luke/voice/live-session";
 import {
   Cause,
@@ -68,7 +68,7 @@ import type { CallBackend } from "./call-backend.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
 /**
- * The hosted implementation of the live brain: Luke's judgment reached in
+ * The hosted implementation of the live agent: Luke's judgment reached in
  * process, never over HTTP. The voice function resolved the account at its
  * handshake and dropped the bearer there, so it holds nothing eve's door or
  * this deployment's own routes would take; what it holds is the ask door
@@ -107,18 +107,18 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * that cannot delay the voice. Within one connection nothing is told twice,
  * because each turn's told position is kept in memory as it is told.
  *
- * The brain is built in the socket's own scope and every follow an accepted
+ * The agent is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
- * them and nothing is emitted after; the submission `LiveBrain` declares is
+ * them and nothing is emitted after; the submission `LiveAgent` declares is
  * an effect of the caller's own fiber, with the `SqlClient` and `Database`
  * the scope was built on provided to it where the ask door asks for them, exactly as
- * `runTool` provides it to the brain's seams.
+ * `runTool` provides it to the agent's seams.
  */
 
 /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
 const FOLLOW = Duration.minutes(10);
 
-const LIVE_BRAIN_FOLLOW_BOUNDS = {
+const LIVE_AGENT_FOLLOW_BOUNDS = {
   /** How often the record is read again while an ask's turn runs and eve's stream has said nothing: the measured step boundary hosted is about 300 ms. */
   POLL: Duration.millis(250),
   /**
@@ -145,7 +145,7 @@ const LIVE_BRAIN_FOLLOW_BOUNDS = {
   PARKED_FOLLOW: Duration.sum(FOLLOW, Duration.millis(TURN_ABANDON.AFTER_MS)),
 } as const;
 
-type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Duration.Duration>>;
+type FollowBounds = Readonly<Record<keyof typeof LIVE_AGENT_FOLLOW_BOUNDS, Duration.Duration>>;
 
 /**
  * The stream events that wake no read: the deltas of text, reasoning, tool
@@ -173,30 +173,30 @@ const HOSTED_ASK_REFUSAL_NOTE = {
   [ASK_REFUSAL.STORE]: "I couldn't write that ask down, so I'm not going to answer it here.",
 } as const satisfies Record<(typeof ASK_REFUSAL)[keyof typeof ASK_REFUSAL], string>;
 
-/** The stream's kinds in the service's vocabulary, one word each; the live brain's own activity is none of them, and a test holds the rest equal. */
+/** The stream's kinds in the service's vocabulary, one word each; the live agent's own activity is none of them, and a test holds the rest equal. */
 const RUN_EVENT_OF_TURN_EVENT = {
-  [TURN_EVENT_KIND.SLOW_STEP]: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
-  [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
-  [TURN_EVENT_KIND.QUESTION_WITHDRAWN]: LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN,
-  [TURN_EVENT_KIND.CODE_SHOWN]: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN,
-  [TURN_EVENT_KIND.CALL_ENDING]: LIVE_BRAIN_RUN_EVENT.CALL_ENDING,
-  [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-  [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-  [TURN_EVENT_KIND.ENDED]: LIVE_BRAIN_RUN_EVENT.ENDED,
-} as const satisfies Record<TurnEventKind, LiveBrainRunEvent["kind"]>;
+  [TURN_EVENT_KIND.SLOW_STEP]: LIVE_AGENT_RUN_EVENT.SLOW_STEP,
+  [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_AGENT_RUN_EVENT.QUESTION_QUEUED,
+  [TURN_EVENT_KIND.QUESTION_WITHDRAWN]: LIVE_AGENT_RUN_EVENT.QUESTION_WITHDRAWN,
+  [TURN_EVENT_KIND.CODE_SHOWN]: LIVE_AGENT_RUN_EVENT.CODE_SHOWN,
+  [TURN_EVENT_KIND.CALL_ENDING]: LIVE_AGENT_RUN_EVENT.CALL_ENDING,
+  [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED,
+  [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE,
+  [TURN_EVENT_KIND.ENDED]: LIVE_AGENT_RUN_EVENT.ENDED,
+} as const satisfies Record<TurnEventKind, LiveAgentRunEvent["kind"]>;
 
 const RUN_END_OF_TURN_END = {
-  [TURN_END.COMPLETED]: LIVE_BRAIN_RUN_END.COMPLETED,
-  [TURN_END.CANCELLED]: LIVE_BRAIN_RUN_END.CANCELLED,
-  [TURN_END.FAILED]: LIVE_BRAIN_RUN_END.FAILED,
-} as const satisfies Record<TurnEnd, LiveBrainRunEnd>;
+  [TURN_END.COMPLETED]: LIVE_AGENT_RUN_END.COMPLETED,
+  [TURN_END.CANCELLED]: LIVE_AGENT_RUN_END.CANCELLED,
+  [TURN_END.FAILED]: LIVE_AGENT_RUN_END.FAILED,
+} as const satisfies Record<TurnEnd, LiveAgentRunEnd>;
 
 /**
  * The stream's event as the service hears it, under the ask's id rather than
  * the turn's; code is told with its call, its turn, and `shownAt`, when the
  * turn began, as the task's work reads them back.
  */
-function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveBrainRunEvent {
+function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveAgentRunEvent {
   switch (event.kind) {
     case TURN_EVENT_KIND.SLOW_STEP:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, step: event.step };
@@ -264,13 +264,13 @@ type FollowLook = (typeof FOLLOW_LOOK)[keyof typeof FOLLOW_LOOK];
 const MISSED_MAX_CHARS = 1_200;
 
 /** A join that found nothing to take up and set nothing off. */
-function nothingJoined(joined: boolean): LiveBrainJoin {
+function nothingJoined(joined: boolean): LiveAgentJoin {
   return { joined, runs: [], missed: undefined, questions: [], follow: Effect.void };
 }
 
 /** The questions queued past the position given and not taken back since, oldest first. */
-function questionsOf(events: readonly TurnEvent[], heard: number): LiveBrainQuestion[] {
-  const queued: LiveBrainQuestion[] = [];
+function questionsOf(events: readonly TurnEvent[], heard: number): LiveAgentQuestion[] {
+  const queued: LiveAgentQuestion[] = [];
   for (const event of events) {
     if (event.seq <= heard) continue;
     if (event.kind === TURN_EVENT_KIND.QUESTION_QUEUED) {
@@ -298,7 +298,7 @@ function missedOf(sentences: readonly string[]): string | undefined {
 }
 
 /** No recovered run: the session's revisions start from nothing, and nothing is followed. */
-const NO_RECOVERY: LiveBrainRecovery = { revision: 0, runs: [], follow: Effect.void };
+const NO_RECOVERY: LiveAgentRecovery = { revision: 0, runs: [], follow: Effect.void };
 
 /** What has been told of one turn, whichever follow told it: its teller, the last event's number, and whether its actions settled. */
 interface TurnTold {
@@ -412,7 +412,7 @@ function settledStepsOf(journal: StoredUIMessage | undefined): readonly (string 
  * since eve took it or the start will honour it; a turn that ended any other
  * way had nothing left to cancel.
  */
-function cancelOf(outcome: StopOutcome): LiveBrainCancel {
+function cancelOf(outcome: StopOutcome): LiveAgentCancel {
   if (Result.isSuccess(outcome)) {
     const { status, cancelRequestedAt } = outcome.success;
     const taken =
@@ -420,14 +420,14 @@ function cancelOf(outcome: StopOutcome): LiveBrainCancel {
       (status !== TURN_STATUS.SETTLED &&
         status !== TURN_STATUS.FAILED &&
         cancelRequestedAt !== undefined);
-    return taken ? LIVE_BRAIN_CANCEL.CANCELLED : LIVE_BRAIN_CANCEL.NOT_RUNNING;
+    return taken ? LIVE_AGENT_CANCEL.CANCELLED : LIVE_AGENT_CANCEL.NOT_RUNNING;
   }
   return outcome.failure.refusal === STOP_REFUSAL.UPSTREAM
-    ? LIVE_BRAIN_CANCEL.FAILED
-    : LIVE_BRAIN_CANCEL.NOT_RUNNING;
+    ? LIVE_AGENT_CANCEL.FAILED
+    : LIVE_AGENT_CANCEL.NOT_RUNNING;
 }
 
-export interface HostedLiveBrainOptions {
+export interface HostedLiveAgentOptions {
   /** The account the voice session was opened for, resolved at the handshake: every ask is admitted as theirs. */
   readonly accountId: string;
   /** The conversation every ask lands in: the agent's, the same one its record writes, under the member who started it. */
@@ -448,17 +448,17 @@ export interface HostedLiveBrainOptions {
 }
 
 /**
- * The brain as the exchange holds one. A follow ends when the scope the
- * brain was built in closes, so there is no stop of its own to declare.
+ * The agent as the exchange holds one. A follow ends when the scope the
+ * agent was built in closes, so there is no stop of its own to declare.
  */
-export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(function* (
-  options: HostedLiveBrainOptions,
-): Effect.fn.Return<LiveBrain, never, Scope.Scope | DatabaseServices> {
+export const hostedLiveAgent = /* @__PURE__ */ Effect.fn("web/hostedLiveAgent")(function* (
+  options: HostedLiveAgentOptions,
+): Effect.fn.Return<LiveAgent, never, Scope.Scope | DatabaseServices> {
   const sql = yield* SqlClient.SqlClient;
   const database = yield* Database;
   const socket = yield* Effect.scope;
-  const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
-  const listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  const bounds = { ...LIVE_AGENT_FOLLOW_BOUNDS, ...options.bounds };
+  const listeners = new Set<(event: LiveAgentRunEvent) => void>();
   /** Each followed ask by its ask revision, so the newest of several is known. */
   const followed = new Map<string, number>();
   /** How far each part of a turn a recovered run is on was told by the connection before, as the record holds it. */
@@ -497,13 +497,13 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     { readonly wakes: Set<() => void>; readonly reading: Fiber.Fiber<void> }
   >();
 
-  function emit(event: LiveBrainRunEvent): void {
+  function emit(event: LiveAgentRunEvent): void {
     for (const listener of [...listeners]) listener(event);
   }
 
   /** The one end a follow that could not reach the turn's own tells the service. */
   function endFailed(askId: string): void {
-    emit({ kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.FAILED });
+    emit({ kind: LIVE_AGENT_RUN_EVENT.ENDED, runId: askId, end: LIVE_AGENT_RUN_END.FAILED });
   }
 
   /**
@@ -559,12 +559,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         ),
       };
       toldOfTurn.set(part, told);
-      if (told.settled) emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: told.teller });
+      if (told.settled) emit({ kind: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED, runId: told.teller });
       return told;
     }
     if ((followed.get(askId) ?? 0) > (followed.get(standing.teller) ?? 0)) {
       standing.teller = askId;
-      if (standing.settled) emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: askId });
+      if (standing.settled) emit({ kind: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED, runId: askId });
     }
     return standing;
   });
@@ -630,7 +630,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const tell = Effect.fnUntraced(function* (
     askId: string,
     told: { readonly seq: number; readonly ended: boolean },
-    events: readonly LiveBrainRunEvent[],
+    events: readonly LiveAgentRunEvent[],
   ) {
     if (events.length === 0) return;
     const at = told.ended ? yield* DateTime.nowAsDate : undefined;
@@ -689,11 +689,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     // ask's run ends there, stopped, whatever the turn does next.
     if (joined !== undefined && standing.ask?.cancelRequestedAt !== undefined) {
       yield* tell(askId, { seq: 0, ended: true }, [
-        { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.CANCELLED },
+        { kind: LIVE_AGENT_RUN_EVENT.ENDED, runId: askId, end: LIVE_AGENT_RUN_END.CANCELLED },
       ]);
       return FOLLOW_LOOK.ENDED;
     }
-    // A task call's turns call the brain's tools and an agent call's the
+    // A task call's turns call the agent's tools and an agent call's the
     // agent's, so the journal is read under every tool the backend's rows may name.
     const journal = yield* options.store.messages.byClientId(
       options.conversation.userId,
@@ -720,7 +720,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     const action = telling ? pendingActionOf(heard) : undefined;
     if (action !== told.action) {
       told.action = action;
-      emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
+      emit({ kind: LIVE_AGENT_RUN_EVENT.ACTIVITY, runId: askId, action });
     }
     const last = events.at(-1);
     const ended = last?.kind === TURN_EVENT_KIND.ENDED;
@@ -729,7 +729,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     if (steps.length > told.settled) {
       told.settled = steps.length;
       emit({
-        kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+        kind: LIVE_AGENT_RUN_EVENT.STEP_SETTLED,
         runId: askId,
         step: steps.at(-1),
         settled: steps.length,
@@ -880,7 +880,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     );
     const runs: string[] = [];
     const missed: string[] = [];
-    const questions: LiveBrainQuestion[] = [];
+    const questions: LiveAgentQuestion[] = [];
     const heardAll: ReturnType<typeof options.asks.asks.told>[] = [];
     const turns = new ByTurnPart<{ readonly seq: number; readonly ended: boolean }>();
     for (const ask of unended) {
@@ -943,24 +943,24 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         Effect.provideService(SqlClient.SqlClient, sql),
         Effect.provideService(Database, database),
       ),
-    } satisfies LiveBrainJoin;
+    } satisfies LiveAgentJoin;
   });
 
   /** Accepts one ask through the door and follows it under the revision given. */
   function submit(
     input: AskInput<typeof ASK_ORIGIN.SPOKEN>,
     revision: number,
-  ): Effect.Effect<LiveBrainSubmission> {
+  ): Effect.Effect<LiveAgentSubmission> {
     return Effect.gen(function* () {
       const outcome = yield* acceptAsk(options.asks, input);
       if (Result.isFailure(outcome)) {
         return {
-          outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+          outcome: LIVE_AGENT_SUBMISSION.REFUSED,
           refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.failure.refusal],
         } as const;
       }
       yield* follow(outcome.success.id, revision);
-      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id } as const;
+      return { outcome: LIVE_AGENT_SUBMISSION.ACCEPTED, runId: outcome.success.id } as const;
     }).pipe(
       Effect.provideService(SqlClient.SqlClient, sql),
       Effect.provideService(Database, database),
@@ -972,7 +972,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         Effect.sync(() => {
           options.report("A spoken ask could not be written down; it is refused");
           return {
-            outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+            outcome: LIVE_AGENT_SUBMISSION.REFUSED,
             refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.STORE],
           } as const;
         }),
@@ -1032,7 +1032,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         Effect.catch(() =>
           Effect.sync(() => {
             options.report("A spoken ask's Stop could not be written down");
-            return LIVE_BRAIN_CANCEL.FAILED;
+            return LIVE_AGENT_CANCEL.FAILED;
           }),
         ),
       );
@@ -1046,7 +1046,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           const part = partOf(ask.turnId, ask.joinedAfterStep);
           recoveredSeq.set(part, Math.max(recoveredSeq.get(part) ?? 0, ask.toldSeq));
         }
-        const runs: LiveBrainRecoveredRun[] = [];
+        const runs: LiveAgentRecoveredRun[] = [];
         for (const ask of asked) {
           if (ask.endToldAt !== undefined) continue;
           const standing = yield* askStanding(reads, options.conversation.userId, ask.id);
@@ -1063,7 +1063,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
             stale: settledAt !== undefined && now - settledAt > VOICE_DETACH_GRACE_MS,
           });
         }
-        const recovery: LiveBrainRecovery = {
+        const recovery: LiveAgentRecovery = {
           revision: Math.max(0, ...asked.map((ask) => ask.revision)),
           runs,
           follow: Effect.forEach(runs, (run) => follow(run.runId, run.revision), {

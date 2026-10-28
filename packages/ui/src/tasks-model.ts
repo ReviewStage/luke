@@ -1018,7 +1018,7 @@ const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
  */
 export interface CallStatus {
   voiceWord: string;
-  backend: { brain: { action: string | undefined } | undefined };
+  backend: { agent: { action: string | undefined } | undefined };
 }
 
 /**
@@ -1052,11 +1052,11 @@ export function standingCallStatus(
   const word = STATUS_WORD[view.voiceStatus];
   if (word === undefined) return undefined;
   const phase = VOICE_PHASE_SHOWN.has(view.voiceStatus) ? activity?.voice : undefined;
-  const brain = activity?.planner;
+  const agent = activity?.planner;
   return {
     voiceWord: phase === undefined ? word : VOICE_PHASE_WORD[phase],
     backend: {
-      brain: brain === undefined ? undefined : { action: brain.action },
+      agent: agent === undefined ? undefined : { action: agent.action },
     },
   };
 }

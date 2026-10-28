@@ -214,7 +214,7 @@
   "src/voice/call-backend.test.ts": 3,
   "src/voice/frames.test.ts": 2,
   "src/voice/keyframe.test.ts": 72,
-  "src/voice/live-brain.test.ts": 3126,
+  "src/voice/live-agent.test.ts": 3126,
   "src/voice/live-exchange.test.ts": 1442,
   "src/voice/live-record.test.ts": 2647,
   "src/voice/orphan-sweep.test.ts": 1123,

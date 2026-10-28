@@ -26,19 +26,19 @@ import {
   type LiveAppendEvent,
   type LiveClientEvent,
 } from "@luke/live";
-import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
+import { liveAgentLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
-  LIVE_BRAIN_CANCEL,
-  LIVE_BRAIN_RUN_END,
-  LIVE_BRAIN_RUN_EVENT,
-  LIVE_BRAIN_SUBMISSION,
-  type LiveBrain,
-  type LiveBrainAsk,
-  type LiveBrainCancel,
-  type LiveBrainJoin,
-  type LiveBrainRecovery,
-  type LiveBrainRunEvent,
-  type LiveBrainSubmission,
+  LIVE_AGENT_CANCEL,
+  LIVE_AGENT_RUN_END,
+  LIVE_AGENT_RUN_EVENT,
+  LIVE_AGENT_SUBMISSION,
+  type LiveAgent,
+  type LiveAgentAsk,
+  type LiveAgentCancel,
+  type LiveAgentJoin,
+  type LiveAgentRecovery,
+  type LiveAgentRunEvent,
+  type LiveAgentSubmission,
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
 } from "@luke/voice/live-session";
@@ -136,24 +136,24 @@ function elapse(delayMs: number): Effect.Effect<void> {
   );
 }
 
-class FakeBrain implements LiveBrain {
-  readonly asks: LiveBrainAsk[] = [];
-  /** While set, each ask is taken at once and answered only when this settles, as a brain across the network answers. */
+class FakeAgent implements LiveAgent {
+  readonly asks: LiveAgentAsk[] = [];
+  /** While set, each ask is taken at once and answered only when this settles, as an agent across the network answers. */
   answerWhen: Deferred.Deferred<void> | undefined;
-  readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  readonly #listeners = new Set<(event: LiveAgentRunEvent) => void>();
   #runs = 0;
 
-  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
+  submitAsk(ask: LiveAgentAsk): Effect.Effect<LiveAgentSubmission> {
     return Effect.gen({ self: this }, function* () {
       this.asks.push(ask);
       if (this.answerWhen !== undefined) yield* Deferred.await(this.answerWhen);
       this.#runs += 1;
-      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+      return { outcome: LIVE_AGENT_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
     });
   }
 
   /** The backend is not set exploring here, nor any earlier work taken up: what is recorded is the developer's asks alone. */
-  join(): Effect.Effect<LiveBrainJoin> {
+  join(): Effect.Effect<LiveAgentJoin> {
     return Effect.succeed({
       joined: false,
       runs: [],
@@ -163,15 +163,15 @@ class FakeBrain implements LiveBrain {
     });
   }
 
-  cancelRun(): Effect.Effect<LiveBrainCancel> {
-    return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
+  cancelRun(): Effect.Effect<LiveAgentCancel> {
+    return Effect.succeed(LIVE_AGENT_CANCEL.NOT_RUNNING);
   }
 
-  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+  recoverRuns(): Effect.Effect<LiveAgentRecovery> {
     return Effect.succeed({ revision: 0, runs: [], follow: Effect.void });
   }
 
-  onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {
+  onRunEvent(listener: (event: LiveAgentRunEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
@@ -180,10 +180,10 @@ class FakeBrain implements LiveBrain {
 
   /** The run answers: every action settled, one sentence, and its end. */
   reply(runId: string, sentence: string): void {
-    const events: LiveBrainRunEvent[] = [
-      { kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
-      { kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence },
-      { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId, end: LIVE_BRAIN_RUN_END.COMPLETED },
+    const events: LiveAgentRunEvent[] = [
+      { kind: LIVE_AGENT_RUN_EVENT.ACTIONS_SETTLED, runId },
+      { kind: LIVE_AGENT_RUN_EVENT.REPLY_SENTENCE, runId, sentence },
+      { kind: LIVE_AGENT_RUN_EVENT.ENDED, runId, end: LIVE_AGENT_RUN_END.COMPLETED },
     ];
     for (const event of events) for (const listener of [...this.#listeners]) listener(event);
   }
@@ -191,7 +191,7 @@ class FakeBrain implements LiveBrain {
 
 /** The service composed as the voice service composes it: the record observing the sideband ahead of the service. */
 async function stand(live: VoiceTarget) {
-  const brain = new FakeBrain();
+  const agent = new FakeAgent();
   // The socket's own scope, as the attachment opens one: the fiber that makes every write is forked into it.
   const scope = await database.run(Scope.make());
   const record = await database.run(
@@ -217,13 +217,13 @@ async function stand(live: VoiceTarget) {
           hasTask: true,
           report: () => undefined,
         }),
-        Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+        Layer.mergeAll(liveAgentLayer(agent), liveRecordLayer(record)),
       ),
       scope,
     ),
   );
   return {
-    brain,
+    agent,
     socket,
     service,
     observed,
@@ -341,7 +341,7 @@ it.live(
       f.socket.receive(delegated("dl_1", 2500));
       // Spoken before the delegation, delivered after it: still the ask's.
       f.socket.receive(heard(" right now?", 1800, 2400));
-      yield* settled(() => f.brain.asks.length === 1, "the ask to reach the brain");
+      yield* settled(() => f.agent.asks.length === 1, "the ask to reach the agent");
       // The ask on record is what says the service has the exchange the run's
       // events belong to: it composes the ask, hears the run's id, and attaches
       // the row to the delegation, in that order.
@@ -349,7 +349,7 @@ it.live(
         async () => (await askRow(live.conversation)) !== undefined,
         "the ask on record",
       );
-      f.brain.reply("run-1", "Nothing yet.");
+      f.agent.reply("run-1", "Nothing yet.");
       yield* settled(() => f.commentary().length === 1, "the reply to be spoken");
 
       const voiceSessionId = yield* Effect.promise(() => sessionRowId(live.liveSessionId));
@@ -431,7 +431,7 @@ it.live(
       yield* Effect.promise(() => Promise.all(f.observed));
       yield* elapse(ROW_WRITE_DEBOUNCE_MS);
       f.socket.receive(delegated("dl_shape", 237_600));
-      yield* settled(() => f.brain.asks.length === 1, "the ask to reach the brain");
+      yield* settled(() => f.agent.asks.length === 1, "the ask to reach the agent");
       yield* settled(
         async () => (await askRow(live.conversation, "dl_shape")) !== undefined,
         "the ask on record",

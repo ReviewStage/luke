@@ -39,8 +39,8 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 const TASK_WORKING_LABEL = "Luke is working on it";
 
 /** The backend line's words, subject-free like the voice's: what Luke says with no command pending, and what leads the command he runs. */
-const BRAIN_THINKING = "Thinking";
-const BRAIN_WORKING = "Working";
+const AGENT_THINKING = "Thinking";
+const AGENT_WORKING = "Working";
 
 /** Each call control's name for a reader and its hover, by whether it is on. */
 export const CALL_CONTROL_LABEL = {
@@ -370,7 +370,7 @@ function CallStatusLines({
   muted: boolean;
   titled: boolean;
 }): React.JSX.Element {
-  const brain = status?.backend.brain;
+  const agent = status?.backend.agent;
   return (
     <span className={STATUS}>
       <Text
@@ -382,7 +382,7 @@ function CallStatusLines({
       >
         {status?.voiceWord}
       </Text>
-      {brain !== undefined ? (
+      {agent !== undefined ? (
         <span className={BACKEND}>
           <span className={BACKEND_DOTS}>
             <ThinkingDots />
@@ -392,13 +392,13 @@ function CallStatusLines({
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
             truncate
-            title={titled ? brain.action : undefined}
+            title={titled ? agent.action : undefined}
           >
-            {brain.action === undefined ? (
-              BRAIN_THINKING
+            {agent.action === undefined ? (
+              AGENT_THINKING
             ) : (
               <>
-                {BRAIN_WORKING} · <span className={BACKEND_ACTION}>{brain.action}</span>
+                {AGENT_WORKING} · <span className={BACKEND_ACTION}>{agent.action}</span>
               </>
             )}
           </Text>

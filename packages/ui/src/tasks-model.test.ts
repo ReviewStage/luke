@@ -145,7 +145,7 @@ test("a call's bar says what Luke is doing without naming him, and draws no note
     { voiceStatus: LIVE_STATUS.LISTENING },
     { planner: { action: "ls src" }, notes: true },
   );
-  assert.deepEqual(working?.backend, { brain: { action: "ls src" } });
+  assert.deepEqual(working?.backend, { agent: { action: "ls src" } });
 });
 
 test("an account known to have no OpenAI API key is sent to add one before the microphone is asked for, unknown asks nothing, and its own standing call keeps its mute", () => {

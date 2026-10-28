@@ -17,7 +17,7 @@ import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
  * and Luke's an assistant row, upserted under the id the service's ledger
  * minted and grown as its fragments arrive, its words read from the segments
  * over the span the ledger holds it at, so the Conversation keeps what was
- * said whether or not the brain was consulted. The service hands every
+ * said whether or not the agent was consulted. The service hands every
  * server event here in arrival order and the writer takes what it keeps of
  * each; the upserts are answered on the same queue, after every delta that
  * arrived ahead of the write has taken its place, so a row is read from
