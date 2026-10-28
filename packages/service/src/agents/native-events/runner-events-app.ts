@@ -231,10 +231,7 @@ export interface RunnerEventsOptions<R = never> {
    * the turn was stopped or failed (`../coder-host/agent-queue.ts`). Nothing
    * where left out.
    */
-  readonly turnEnded?: (
-    agent: CodingAgent,
-    ended: { readonly stopped: boolean; readonly failed: boolean },
-  ) => Effect.Effect<void, never, DatabaseServices | R>;
+  readonly turnEnded?: (agent: CodingAgent) => Effect.Effect<void, never, DatabaseServices | R>;
 }
 
 /**
@@ -641,14 +638,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   }
   // Note that the queue is handed on after the answer, because the runner's post need not wait on a send that may wake a sandbox.
   if (turnEnded !== undefined && applied.value.turns.ended) {
-    const reasons = applied.value.ends.map((each) => each.reason);
-    yield* afterResponse(
-      "a coding agent's queue",
-      turnEnded(agent.value, {
-        stopped: reasons.includes(RUNNER_END.STOPPED),
-        failed: reasons.includes(RUNNER_END.FAILED) || reasons.includes(RUNNER_END.INPUT_CLOSED),
-      }),
-    );
+    yield* afterResponse("a coding agent's queue", turnEnded(agent.value));
   }
   if (alive !== undefined && applied.value.keepsAlive) {
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });

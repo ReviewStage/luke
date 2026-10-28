@@ -50,7 +50,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The eighteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The nineteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -86,10 +86,12 @@ interface MaintenanceSweeps {
   sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
   /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
+  /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
+  sweepAgentQueues: (now: number) => SweepRead<number>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the eighteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the nineteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -140,6 +142,8 @@ interface MaintenanceSweepAnswer {
   imageTemplates: Swept<TemplateSweepOutcome>;
   /** What the sweep over the repository snapshots did. */
   repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
+  /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
+  agentQueues: Swept<number>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -168,7 +172,7 @@ const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
     ),
   );
 
-/** The eighteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
+/** The nineteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -197,6 +201,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       "sweepRepositorySnapshots",
       sweeps.sweepRepositorySnapshots(now),
     ),
+    agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
   };
 });
 

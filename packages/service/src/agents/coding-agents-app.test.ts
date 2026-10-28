@@ -9,6 +9,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
+import { type QueuedMessageRow, queueHead } from "@luke/database/models/agent-queue-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -95,6 +96,7 @@ import {
   type AutomationFiring,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import { LINE_GRACE_MILLIS } from "@luke/features/coding-agent-status";
 import {
   agentQueueAnswerSchema,
   CHECK_SUMMARY,
@@ -244,7 +246,7 @@ import {
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
-import { queueAtTurnEnd } from "./coder-host/agent-queue.js";
+import { queueAtTurnEnd, sendQueued, sweepAgentQueues } from "./coder-host/agent-queue.js";
 import { CODER } from "./coder-host/bounds.js";
 import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
@@ -5257,57 +5259,194 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     }),
   );
 
+  /**
+   * An agent whose turn ran while the owner queued `texts`, then ended: the
+   * queue at that end as the runner's events route hands it on (with GitHub
+   * and no network), and the queue as the owner reads it on the transcript.
+   */
+  const queuedBehindEndedTurn = (
+    eve: ReturnType<typeof fakeEve>,
+    texts: readonly string[],
+    ending: typeof RUN_STATUS.SUCCEEDED | typeof RUN_STATUS.FAILED = RUN_STATUS.SUCCEEDED,
+  ) =>
+    Effect.gen(function* () {
+      const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
+        running: true,
+      });
+      for (const text of texts) {
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text,
+          clientKey: randomUUID(),
+        });
+      }
+      yield* writer.consume(target, {
+        kind: RUN_EVENT.TURN_ENDED,
+        conversationId: sessionKey(target.conversationId),
+        turnId,
+        sequence: 2,
+        status: ending,
+        responseIds: [],
+        at: 0,
+      });
+      const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+      const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+      const reach = Layer.mergeAll(github.layer, noNetwork);
+      const turnEnded = queueAtTurnEnd(eveFor, stored).pipe(Effect.provide(reach));
+      /** One queued message handed on, as a hand-off does once it read the queue's head. */
+      const handedOn = (message: QueuedMessageRow) =>
+        sendQueued(eveFor, stored, message).pipe(Effect.provide(reach));
+      // Note that the read at once says whether it would have held, which the page itself does not carry.
+      const queued = Effect.map(
+        ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" })),
+        (answered) => {
+          // SAFETY: the route answers a page as a JSON object.
+          const { holds: _holds, ...page } = answered.body as Record<string, WireBoundaryInput>;
+          return readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, {
+            status: answered.status,
+            body: page,
+          }).queue;
+        },
+      );
+      /** The maintenance sweep's pass over the queues standing unpaused. */
+      const swept = sweepAgentQueues(eveFor).pipe(Effect.provide(reach));
+      return { agent, ask, owner, turnEnded, handedOn, swept, queued, stored };
+    });
+
+  /** How many times eve was handed words holding `text`. */
+  const handedCount = (eve: ReturnType<typeof fakeEve>, text: string) =>
+    eve.sent.filter((each) => JSON.stringify(each.message.message).includes(text)).length;
+
   it.effect(
-    "at the turn's end the queue hands on its first message alone, nothing more while that one awaits its turn, and a stopped turn pauses it",
+    "at the turn's end the queue hands on its first message alone, and nothing more while that one awaits its turn",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
-          running: true,
-        });
-        for (const text of ["First", "Second"]) {
-          yield* queueChanged(ask, owner, agent.id, {
-            change: QUEUE_CHANGE.ADD,
-            text,
-            clientKey: randomUUID(),
-          });
-        }
-        yield* writer.consume(target, {
-          kind: RUN_EVENT.TURN_ENDED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 2,
-          status: RUN_STATUS.SUCCEEDED,
-          responseIds: [],
-          at: 0,
-        });
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        /** The queue at the turn's end, as the runner's events route hands it on, with GitHub and no network. */
-        const turnEnded = (ended: { readonly stopped: boolean; readonly failed: boolean }) =>
-          queueAtTurnEnd(eveFor, stored, ended).pipe(
-            Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
-          );
-        /** The agent's queue as the owner reads it on the transcript. */
-        const queued = Effect.map(
-          ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-          (answered) =>
-            readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).queue,
-        );
+        const { turnEnded, queued } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
 
-        yield* turnEnded({ stopped: false, failed: false });
-        yield* turnEnded({ stopped: false, failed: false });
+        yield* turnEnded;
+        yield* turnEnded;
         assert.deepEqual(
           (yield* queued)?.messages.map((message) => message.text),
           ["Second"],
         );
+        assert.equal(handedCount(eve, "First"), 1);
+        assert.equal(handedCount(eve, "Second"), 0);
+      }),
+  );
+
+  it.effect(
+    "a message an edit held past its turn's end is passed over, keeps its place, and goes once its hold lapses",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, turnEnded, swept, queued } = yield* queuedBehindEndedTurn(eve, [
+          "Edited",
+        ]);
+        const [edited] = (yield* queued)?.messages ?? [];
+        assert.ok(edited !== undefined);
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.HOLD,
+          messageId: edited.id,
+          held: true,
+        });
+
+        yield* turnEnded;
         assert.equal(
-          eve.sent.filter((each) => JSON.stringify(each.message.message).includes("First")).length,
-          1,
+          handedCount(eve, "Edited"),
+          0,
+          "the turn's end passes over a message being edited",
         );
 
-        yield* turnEnded({ stopped: true, failed: false });
-        assert.deepEqual((yield* queued)?.paused, { because: QUEUE_PAUSE.STOPPED });
+        // The edit's window closed without letting go: its hold lapses, and the sweep hands it on.
+        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS + 1));
+        yield* swept;
+        yield* swept;
+        assert.equal(handedCount(eve, "Edited"), 1);
+        assert.deepEqual((yield* queued)?.messages ?? [], []);
+      }),
+  );
+
+  it.effect(
+    "a turn that ended failed pauses the queue rather than handing on, keeping its messages",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { turnEnded, queued } = yield* queuedBehindEndedTurn(
+          eve,
+          ["First"],
+          RUN_STATUS.FAILED,
+        );
+
+        yield* turnEnded;
+
+        assert.equal(handedCount(eve, "First"), 0);
+        const queue = yield* queued;
+        assert.deepEqual(
+          queue?.messages.map((message) => message.text),
+          ["First"],
+        );
+        assert.deepEqual(queue?.paused, { because: QUEUE_PAUSE.TURN_FAILED });
+      }),
+  );
+
+  it.effect(
+    "two hand-offs that read the same head at one turn's end, its IDLE's and its END's, send that message once",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { handedOn, queued, stored } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
+        // Both hand-offs read the head before either sent it, as two racing at one end do.
+        const head = Option.getOrThrow(yield* queueHead(stored.id));
+
+        yield* handedOn(head);
+        yield* handedOn(head);
+
+        assert.equal(handedCount(eve, "First"), 1);
+        const queue = yield* queued;
+        assert.deepEqual(
+          queue?.messages.map((message) => message.text),
+          ["Second"],
+        );
+        assert.equal(queue?.paused, undefined, "the hand-off that lost the race pauses nothing");
+      }),
+  );
+
+  it.effect(
+    "a hand-off eve refuses keeps the message in its place and pauses the queue under the refusal",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve({ sends: EVE_SEND_OUTCOME.FAILED });
+        const { turnEnded, queued } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
+
+        yield* turnEnded;
+
+        const queue = yield* queued;
+        assert.deepEqual(
+          queue?.messages.map((message) => message.text),
+          ["First", "Second"],
+        );
+        assert.equal(queue?.paused?.because, QUEUE_PAUSE.REFUSED);
+        assert.notEqual(queue?.paused?.refusal, undefined);
+      }),
+  );
+
+  it.effect(
+    "a message queued after the turn's end found nothing to hand on still goes at once",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, turnEnded, queued } = yield* queuedBehindEndedTurn(eve, []);
+        yield* turnEnded;
+
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Late",
+          clientKey: randomUUID(),
+        });
+
+        assert.equal(handedCount(eve, "Late"), 1);
+        assert.deepEqual((yield* queued)?.messages ?? [], []);
       }),
   );
 
@@ -5333,6 +5472,29 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const resumed = yield* queueChanged(ask, owner, agent.id, { change: QUEUE_CHANGE.RESUME });
         assert.equal(resumed.paused, undefined);
       }),
+  );
+
+  it.effect("a Stop eve refuses stops nothing, so it pauses nothing queued behind the turn", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve({ cancels: false });
+      const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
+      yield* queueChanged(ask, owner, agent.id, {
+        change: QUEUE_CHANGE.ADD,
+        text: "Then open a pull request.",
+        clientKey: randomUUID(),
+      });
+
+      const stopped = yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+
+      assert.notEqual(stopped.status, HOSTED_HTTP_STATUS.OK);
+      const page = readAnswer(
+        codingAgentMessagesAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+      );
+      assert.equal(page.queue?.messages.length, 1);
+      assert.equal(page.queue?.paused, undefined);
+    }),
   );
 
   it.effect(

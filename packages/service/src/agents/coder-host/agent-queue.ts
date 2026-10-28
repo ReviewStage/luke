@@ -24,13 +24,19 @@ import {
   pauseAgentQueue,
   type QueuedMessageRow,
   queueHead,
+  unpausedQueues,
 } from "@luke/database/models/agent-queue-store";
-import { type CodingAgent, RUNNING_TURN_STATUSES } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  RUNNING_TURN_STATUSES,
+  readCodingAgent,
+} from "@luke/database/models/coding-agent-store";
 import { awaitingLinesOfReached, latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { HostedApiError } from "@luke/features";
-import { type AgentQueue, QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
+import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
+import { TURN_STATUS } from "@luke/wire";
 import { Clock, DateTime, Duration, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../../http/http-effect.js";
@@ -172,14 +178,24 @@ export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
   );
 });
 
-/** The agent's queue paused at its turn's end where the turn was stopped or failed, and handed on otherwise. */
+/**
+ * The agent's queue at its turn's end: paused where the turn stood stopped
+ * or failed, as its row says, and handed on otherwise. Note that the row is
+ * read rather than the runner's word for its end, because a turn the CLI
+ * failed may end its launch as any other.
+ */
 export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
   eveFor: QueueEve,
   agent: CodingAgent,
-  ended: { readonly stopped: boolean; readonly failed: boolean },
 ) {
-  if (ended.stopped || ended.failed) {
-    const because = ended.stopped ? QUEUE_PAUSE.STOPPED : QUEUE_PAUSE.TURN_FAILED;
+  const turns = yield* latestTurnsOfReached([agent.conversationId]).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(Effect.logWarning("agent-queue: a turn read failed", cause), undefined),
+    ),
+  );
+  const status = turns?.get(agent.conversationId)?.status;
+  const because = PAUSE_OF_TURN.get(status ?? "");
+  if (because !== undefined) {
     return yield* pauseAgentQueue(agent.id, because).pipe(
       Effect.catchCause((cause) => Effect.logWarning("agent-queue: a pause failed", cause)),
     );
@@ -187,20 +203,42 @@ export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
   yield* handOnQueue(eveFor, agent);
 });
 
+/** Why a turn's end pauses the queue, by the status the turn ended under. */
+const PAUSE_OF_TURN: ReadonlyMap<string, QueuePause> = new Map([
+  [TURN_STATUS.CANCELLED, QUEUE_PAUSE.STOPPED],
+  [TURN_STATUS.FAILED, QUEUE_PAUSE.TURN_FAILED],
+]);
+
 /**
  * The queue at a native agent's turn's end, as the runner's events route
  * tells it (`../native-events/runner-events-app.ts`'s `turnEnded`): eve
  * reached as the deployment acting for each queued message's member, since
  * no request of theirs stands behind it.
  */
-export const queueAtNativeTurnEnd = (
-  agent: CodingAgent,
-  ended: { readonly stopped: boolean; readonly failed: boolean },
-) =>
+export const queueAtNativeTurnEnd = (agent: CodingAgent) =>
   Effect.gen(function* () {
     const eveFor = yield* deploymentEveForAccounts<EveTypedTurn>(
       deploymentEveOrigin(),
       EVE_MOUNT.CODER,
     );
-    yield* queueAtTurnEnd(eveFor, agent, ended);
+    yield* queueAtTurnEnd(eveFor, agent);
   });
+
+/** How many queues a sweep hands on at most, as each of the sweep's passes is bounded. */
+const QUEUE_SWEEP_LIMIT = 50;
+
+/**
+ * The maintenance sweep's pass over the queues standing unpaused: each
+ * handed on where its agent idles, as a turn's end would, so a queue whose
+ * turn's end found nothing to hand on (its only message held by an edit
+ * since let go of, or a turn ended outside the runner's events) still goes.
+ * Answers how many queues it looked at.
+ */
+export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (eveFor: QueueEve) {
+  const queues = yield* unpausedQueues(QUEUE_SWEEP_LIMIT);
+  for (const { agentId, userId } of queues) {
+    const agent = yield* readCodingAgent(userId, agentId);
+    if (Option.isSome(agent)) yield* handOnQueue(eveFor, agent.value);
+  }
+  return queues.length;
+});

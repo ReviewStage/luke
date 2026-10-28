@@ -83,6 +83,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
+import { controlsAgent } from "./agent-reach.js";
 import { handOnQueue, queueEveFor, sendQueued, wireQueue } from "./coder-host/agent-queue.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
@@ -403,6 +404,8 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     }) {
       const { agent } = yield* reachedAgent(context.userId, input.params.id);
       const { userId } = context;
+      // The queue is the agent's messages to come, so whoever may message the agent alone may change it.
+      if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       const eve = queueEveFor(seams, context.request, userId);
       const body = input.body;
       /** A store's answer for the account's agent, its absence answered as no such agent. */

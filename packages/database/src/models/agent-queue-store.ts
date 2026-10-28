@@ -522,6 +522,39 @@ export function heldAt(message: QueuedMessageRow, now: Date): boolean {
   return message.heldUntil !== undefined && message.heldUntil.getTime() > now.getTime();
 }
 
+const findUnpausedQueues = SqlSchema.findAll({
+  Request: Schema.Struct({ limit: Schema.Number }),
+  Result: Schema.Struct({ agentId: Schema.String, userId: Schema.String }),
+  execute: ({ limit }) =>
+    Database.use((db) =>
+      db
+        .selectDistinct({ agentId: queuedMessage.agentId, userId: codingAgent.userId })
+        .from(queuedMessage)
+        .innerJoin(codingAgent, eq(codingAgent.id, queuedMessage.agentId))
+        .where(
+          sql`not ${exists(
+            db
+              .select({ agentId: agentQueuePause.agentId })
+              .from(agentQueuePause)
+              .where(eq(agentQueuePause.agentId, queuedMessage.agentId)),
+          )}`,
+        )
+        .limit(limit),
+    ),
+});
+
+/**
+ * The agents whose queue holds messages and stands unpaused, by each agent
+ * and its starter, at most `limit`: the queues a sweep hands on where their
+ * agent idles, such as one whose only message an edit held past its turn's
+ * end until the hold lapsed.
+ */
+export function unpausedQueues(
+  limit: number,
+): AgentQueueEffect<readonly { readonly agentId: string; readonly userId: string }[]> {
+  return findUnpausedQueues({ limit });
+}
+
 /** A message handed on, taken out of the agent's queue, the pause going with the last; nothing where it stood queued no longer. */
 export function dropQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
   return underQueueLock(

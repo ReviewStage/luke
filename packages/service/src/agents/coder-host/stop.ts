@@ -217,9 +217,9 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
-  // The developer's Stop pauses what is queued behind the turn too, so nothing more goes until Resume.
-  yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
   yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
+  // The developer's Stop pauses what is queued behind the turn too, once it went, so nothing more goes until Resume.
+  yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
 });
 
 /**

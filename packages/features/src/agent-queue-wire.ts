@@ -1,5 +1,4 @@
 import { Schema as EffectSchema } from "effect";
-import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * agent-queue-wire.ts -- a coding agent's queue: the messages a member queued behind its running turn, each sent as a turn of its own in order once the one before it is over, and whether the queue stands paused.
@@ -27,6 +26,8 @@ export type QueuePause = (typeof QUEUE_PAUSE)[keyof typeof QUEUE_PAUSE];
 /** How many messages one agent's queue holds at most. */
 export const AGENT_QUEUE_BOUNDS = {
   MAX_MESSAGES: 50,
+  /** The longest refusal word a pause carries, past every word the service has. */
+  MAX_REFUSAL_CHARS: 64,
 } as const;
 
 /** One queued message as the queue lists it, in its place. */
@@ -47,10 +48,17 @@ export const queuedMessageSchema = EffectSchema.Struct({
 
 export type QueuedMessage = typeof queuedMessageSchema.Type;
 
-/** Why a queue stands paused, and for a refused hand-off the service's word for what refused it. */
+/**
+ * Why a queue stands paused, and for a refused hand-off the service's word
+ * for what refused it (a `HOSTED_API_ERROR`), carried as the word it is, so
+ * a refusal a newer service names still reads, as one the window has no
+ * words for.
+ */
 export const queuePausedSchema = EffectSchema.Struct({
   because: EffectSchema.Literals(Object.values(QUEUE_PAUSE)),
-  refusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOSTED_API_ERROR))),
+  refusal: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(AGENT_QUEUE_BOUNDS.MAX_REFUSAL_CHARS)),
+  ),
 });
 
 export type QueuePaused = typeof queuePausedSchema.Type;
