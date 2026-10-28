@@ -241,6 +241,18 @@ const findMemberWorkspace = SqlSchema.findOneOption({
     ),
 });
 
+const findMemberWorkspaceIds = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: (userId) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: member.organizationId })
+        .from(member)
+        .where(eq(member.userId, userId)),
+    ),
+});
+
 const findWorkspaceLogo = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ logo: Schema.NullOr(Schema.String) }),
@@ -623,6 +635,13 @@ export function isWorkspaceMember(
   organizationId: string,
 ): WorkspaceStoreEffect<boolean> {
   return Effect.map(findMemberWorkspace({ userId, organizationId }), Option.isSome);
+}
+
+/** The ids of every workspace the account is a member of, in no order. */
+export function memberWorkspaceIds(userId: string): WorkspaceStoreEffect<readonly string[]> {
+  return Effect.map(findMemberWorkspaceIds(userId), (rows) =>
+    rows.map((row) => row.organizationId),
+  );
 }
 
 /**

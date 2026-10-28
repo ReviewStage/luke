@@ -188,9 +188,9 @@ function shownTitle(container: HTMLElement): string | null | undefined {
   return container.querySelector("section.inbox-view [data-inbox-title]")?.textContent;
 }
 
-test("a post's row opens the task's Inbox on the item the agent posted under its key, not the item chosen before, nor another agent's under the same key", async () => {
+test("a post's row opens the task's Inbox on the item the agent posted under its key, not another agent's under the same key", async () => {
   const container = await mount();
-  assert.equal(shownTitle(container), "Which SMTP host?", "the Inbox stands on its newest item");
+  assert.equal(shownTitle(container), undefined, "the Inbox stands on nothing chosen");
 
   const row =
     container.querySelector<HTMLButtonElement>('button[data-call-id="call-post"]') ??

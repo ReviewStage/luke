@@ -84,7 +84,7 @@ const itemTopics = (world: InboxWorld): readonly SyncTopic[] => [
 ];
 
 /** A read as one reader follows it: its definition, and the params its procedure binds. */
-type Followed = readonly [LiveQuery, LiveParams<string>];
+type Followed = readonly [LiveQuery<string, string, readonly SyncTopic[]>, LiveParams<string>];
 
 const wokenBy = (topics: readonly SyncTopic[], [query, params]: Followed) =>
   query

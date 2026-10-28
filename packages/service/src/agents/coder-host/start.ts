@@ -706,8 +706,10 @@ const stoppedSource = (
     HttpClient.HttpClient | DatabaseServices
   >,
   source: Agent,
+  /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
+  by: string | undefined,
 ) =>
-  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
+  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source, undefined, by).pipe(
     Effect.catch((refusal) =>
       Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
     ),
@@ -1178,7 +1180,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     }
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
-  if (continued) yield* stoppedSource(eve, from.source);
+  if (continued) yield* stoppedSource(eve, from.source, ask.startedBy?.id);
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.

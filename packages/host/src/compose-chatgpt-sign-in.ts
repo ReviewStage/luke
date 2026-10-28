@@ -1,5 +1,5 @@
 import { chatGptSignIn, LOOPBACK_CONSENT_CANCELLED, type OpenConsent } from "@luke/credentials";
-import type { HostedCodingAgentClient } from "@luke/features";
+import type { HostedAgentClient } from "@luke/features";
 import { AGENT_CALL_FAILURE, type ChatGptSignInAnswerView } from "@luke/features/agent-view";
 import {
   type ChatGptCredentialsSaveRequest,
@@ -30,7 +30,7 @@ import type { HostKernel } from "./host-kernel.js";
  */
 
 /** The service's side of the sign-in, as this concern asks it. */
-type ChatGptSignInClient = Pick<HostedCodingAgentClient, "chatGptHost" | "saveChatGptCredentials">;
+type ChatGptSignInClient = Pick<HostedAgentClient, "chatGptHost" | "saveChatGptCredentials">;
 
 export interface ChatGptSignInDependencies {
   kernel: Pick<HostKernel, "openExternalThroughNode"> & {

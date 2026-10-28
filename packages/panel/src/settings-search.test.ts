@@ -250,7 +250,7 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
 
 /** Every page's rows as a signed-in desktop reader of a workspace they administer sees them. */
 const FULL_INPUT: SettingsSearchInput = {
-  settings: settingsView({ voiceAvailable: true }),
+  settings: settingsView(),
   accountDrawn: true,
   capabilities: DESKTOP_CAPABILITIES,
   workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },

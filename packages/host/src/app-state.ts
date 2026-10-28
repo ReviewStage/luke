@@ -8,15 +8,7 @@ import type { MicrophoneRoute, MicrophoneStatus } from "@luke/settings/microphon
 import type { NotificationsStatus } from "@luke/settings/settings-controls";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
-import {
-  callTranscriptChangeBetween,
-  isVoiceCallTranscriptChange,
-  type VoiceCallTranscript,
-  type VoiceCallTranscriptChange,
-  type VoiceView,
-  withCallTranscriptChange,
-} from "@luke/voice/voice-view";
-import { EXCESS_KEYS, isRecord, keepIdentity, type UnparsedWireValue } from "@luke/wire";
+import { EXCESS_KEYS, keepIdentity, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Equal, Result, Schema } from "effect";
 import type { MacCommandAsk } from "./mac-command-ask.js";
@@ -98,9 +90,7 @@ export const RUN_PROFILE = {
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
 
 /**
- * What this launch is, as every window is told it and no event ever changes —
- * save the trace gate, which is the host's answer about this run rather than
- * the launch's own argument.
+ * What this launch is, as every window is told it and no event ever changes.
  */
 interface AppRunFacts {
   /** The `--profile` argument as given, which is {@link RUN_PROFILE.IDLE} when absent. */
@@ -115,35 +105,11 @@ interface AppRunFacts {
   captureMode: boolean;
   fixtureMode: boolean;
   accountRequired: boolean;
-  agentTraceEnabled: boolean;
 }
 
 export interface AppAudioSlice {
   microphoneStatus: MicrophoneStatus;
   microphoneRoute?: MicrophoneRoute;
-}
-
-interface AppVoiceSlice {
-  /**
-   * The live conversation as the voice window last reported it, so a panel
-   * that opens mid-exchange draws the exchange rather than an idle voice.
-   * Absent until that window has reported once, and in a fixture or capture
-   * run, which raises no voice window.
-   *
-   * The loudness beside it is deliberately not here. It is a reading taken
-   * twenty times a second that expires in fifty milliseconds, so nothing
-   * bootstraps from it and no version of this document could usefully carry
-   * one: it travels on `app:voice-level-changed` as the stream it is.
-   */
-  view?: VoiceView;
-  /**
-   * Set once the voice window has been given up on for this run, after it
-   * failed to load again and again: no call can run until Luke is reopened,
-   * so where voice is offered says so rather than offering a press that
-   * reaches nothing. Main's own fact, never the window's, and absent
-   * otherwise.
-   */
-  unavailable?: true;
 }
 
 /**
@@ -312,22 +278,10 @@ export interface AppState {
   access: AppAccessSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
-  voice: AppVoiceSlice;
-  /**
-   * What was said on the standing call so far, held whole from the changes
-   * the voice window reports beside its view (`VoiceCallTranscript`); absent
-   * while no call stands, before its first line, and once that window is gone.
-   * Not part of the voice slice, because it grows for the whole call while
-   * the view beside it is reported ten times a second: a window is handed
-   * only what moved in it (`AppStateDelivery`), and the voice and call
-   * windows, which draw none of it, are never handed it.
-   */
-  callTranscript?: VoiceCallTranscript | undefined;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list, the one active task, and its saved document. Only
-   * the panel's Tasks tab draws it, and the active task is the one whose
-   * agents a voice session may be created into.
+   * the panel's Tasks tab draws it.
    */
   tasks: TasksView;
   codingAgents: AppCodingAgentsSlice;
@@ -385,8 +339,8 @@ export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
   return Result.isSuccess(readAppStateSnapshot(value));
 }
 
-/** What a delivery replaces whole: every slice and the window's facts, all but the call transcript. */
-type AppStateEntry = Exclude<keyof AppStateSnapshot, "version" | "callTranscript">;
+/** What a delivery replaces whole: every slice and the window's facts. */
+type AppStateEntry = Exclude<keyof AppStateSnapshot, "version">;
 
 /**
  * One push of the document to a window: what moved in it since the last that
@@ -394,15 +348,13 @@ type AppStateEntry = Exclude<keyof AppStateSnapshot, "version" | "callTranscript
  * is replaced whole, each in `gone` is no longer held, and every entry named
  * in neither is the one the window holds. An entry that went is named in a
  * list of its own rather than as undefined, because the push is JSON and
- * JSON keeps no key whose value is undefined. The call transcript is carried
- * as the change that moved it, never whole after the first, since it grows
- * for the whole call. A window's first delivery names every entry it draws.
+ * JSON keeps no key whose value is undefined. A window's first delivery
+ * names every entry it draws.
  */
 export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
-  readonly callTranscript?: VoiceCallTranscriptChange;
 }
 
 /**
@@ -415,21 +367,19 @@ export function appStateDelivery(
   sent: AppStateSnapshot | undefined,
   next: AppStateSnapshot,
 ): AppStateDelivery | undefined {
-  // SAFETY: `Object.keys` of a snapshot names its own entries, its version, and its transcript, the last two dropped here.
+  // SAFETY: `Object.keys` of a snapshot names its own entries and its version, the last dropped here.
   const names = [...new Set([...Object.keys(sent ?? {}), ...Object.keys(next)])].filter(
-    (name) => name !== "version" && name !== "callTranscript",
+    (name) => name !== "version",
   ) as AppStateEntry[];
   const moved = names.filter((name) => sent === undefined || !Equal.equals(sent[name], next[name]));
   const gone = moved.filter((name) => next[name] === undefined);
-  const callTranscript = callTranscriptChangeBetween(sent?.callTranscript, next.callTranscript);
-  if (sent !== undefined && moved.length === 0 && callTranscript === undefined) return undefined;
+  if (sent !== undefined && moved.length === 0) return undefined;
   return {
     version: next.version,
     entries: Object.fromEntries(
       moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
     ),
     ...(gone.length === 0 ? undefined : { gone }),
-    ...(callTranscript === undefined ? undefined : { callTranscript }),
   };
 }
 
@@ -437,8 +387,7 @@ export function appStateDelivery(
  * The document a window holds once a delivery lands on it: each entry named
  * replaced, keeping the identity of every part of it that did not move, so a
  * memo keyed on a part the delivery left alone still holds; each entry gone
- * held no more; every other entry the very object held; and the transcript
- * with its change applied.
+ * held no more; and every other entry the very object held.
  */
 export function withAppStateDelivery(
   held: AppStateSnapshot,
@@ -451,17 +400,7 @@ export function withAppStateDelivery(
       keepIdentity(held[name as AppStateEntry], value),
     ]),
   );
-  const { callTranscript: heldTranscript, ...rest } = held;
-  const callTranscript =
-    delivery.callTranscript === undefined
-      ? heldTranscript
-      : withCallTranscriptChange(heldTranscript, delivery.callTranscript);
-  const next: AppStateSnapshot = {
-    ...rest,
-    ...entries,
-    ...(callTranscript === undefined ? undefined : { callTranscript }),
-    version: delivery.version,
-  };
+  const next: AppStateSnapshot = { ...held, ...entries, version: delivery.version };
   // Note that an entry gone is held as no key at all, as the document holds it.
   for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
   return next;
@@ -470,8 +409,7 @@ export function withAppStateDelivery(
 /**
  * The boundary declaration of a delivery, held to the same terms as a
  * snapshot's: the version, and the window facts and capabilities where it
- * carries them, each one this build knows. The transcript's change is read
- * by its own Schema.
+ * carries them, each one this build knows.
  */
 const appStateDeliverySchema = Schema.Struct({
   version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -490,11 +428,7 @@ const readAppStateDelivery = readEither(appStateDeliverySchema, { excess: EXCESS
 
 /** The boundary parse for a delivery, as the window's push stream holds every one to it. */
 export function isAppStateDelivery(value: UnparsedWireValue): boolean {
-  return (
-    Result.isSuccess(readAppStateDelivery(value)) &&
-    isRecord(value) &&
-    (value.callTranscript === undefined || isVoiceCallTranscriptChange(value.callTranscript))
-  );
+  return Result.isSuccess(readAppStateDelivery(value));
 }
 
 /**

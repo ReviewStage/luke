@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SyncTopic } from "@luke/database/sync/notification";
-import { type Duration, Effect, type Option } from "effect";
+import { type Duration, Effect, Option } from "effect";
 import { Sync } from "../sync/watch.js";
 
 /**
@@ -56,10 +56,16 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
   return createHash("sha256").update(JSON.stringify(standing)).digest("hex").slice(0, CURSOR_CHARS);
 }
 
-/** A read that moved, and the ids of the transactions whose writes woke the looks before it, each once: none where it moved at the first look or its clock woke it. */
+/**
+ * A read that moved, the ids of the transactions whose writes woke the looks
+ * before it, each once, and the instant the first of the writes that woke the
+ * look that moved was heard (clock milliseconds): none where it moved at the
+ * first look or its clock woke it.
+ */
 export interface Held<A> {
   readonly read: A;
   readonly txids: readonly string[];
+  readonly heardAt: Option.Option<number>;
 }
 
 /**
@@ -80,12 +86,15 @@ export function heldUntil<A, E, R>(
     Effect.gen(function* () {
       const watch = yield* (yield* Sync).watch(topics, poll);
       const woken = new Set<string>();
+      let heardAt = Option.none<number>();
       let standing = yield* read;
       while (!moved(standing)) {
         for (const txid of yield* watch.next) woken.add(txid);
+        // Note that only the wake before the look that moved is kept, since an earlier one that moved nothing, as a parent's write may on a worker's read, is not what this read answers.
+        heardAt = yield* watch.heardAt;
         standing = yield* read;
       }
-      return { read: standing, txids: [...woken] };
+      return { read: standing, txids: [...woken], heardAt };
     }),
   ).pipe(Effect.timeoutOption(hold));
 }

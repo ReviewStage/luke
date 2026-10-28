@@ -147,6 +147,10 @@ interface Watcher {
   txids: Set<string>;
   /** Completed by the first wake since then, and replaced as `next` returns. */
   woken: Deferred.Deferred<void>;
+  /** When the first of those transactions was heard, in clock milliseconds. */
+  heardAt: number | undefined;
+  /** When the first of the transactions the last `next` answered was heard, which `heardAt` reads. */
+  answeredHeardAt: number | undefined;
 }
 
 /** Every open watch on topics: by topic kind, then id, and all of them, for a wake that reaches every one. */
@@ -193,12 +197,16 @@ const decodeNotification = Schema.decodeEffect(SyncNotificationSchema);
 const encodeNotification = Schema.encodeEffect(SyncNotificationSchema);
 
 /**
- * Wakes the watcher, adding the transaction that woke it where a change did.
+ * Wakes the watcher, adding the transaction that woke it where a change did,
+ * and keeping the instant the first of them was heard.
  * Note that completing a deferred may run the fiber waiting on it at once,
  * so the callers below wake from a copy of the set they walk.
  */
-function wake(watcher: Watcher, txid?: string): void {
-  if (txid !== undefined) watcher.txids.add(txid);
+function wake(watcher: Watcher, heard?: { readonly txid: string; readonly at: number }): void {
+  if (heard !== undefined) {
+    watcher.txids.add(heard.txid);
+    watcher.heardAt ??= heard.at;
+  }
   Deferred.doneUnsafe(watcher.woken, Effect.void);
 }
 
@@ -206,10 +214,12 @@ function wakeAll(watchers: Watchers): void {
   for (const watcher of [...watchers.all]) wake(watcher);
 }
 
-/** Wakes the watches on any of the change's topics, each with the change's transaction. */
-function dispatch(watchers: Watchers, change: SyncChange): void {
+/** Wakes the watches on any of the change's topics, each with the change's transaction, heard at `at`. */
+function dispatch(watchers: Watchers, change: SyncChange, at: number): void {
   for (const [kind, id] of change.t) {
-    for (const watcher of [...(watchers.byTopic.get(kind)?.get(id) ?? [])]) wake(watcher, change.x);
+    for (const watcher of [...(watchers.byTopic.get(kind)?.get(id) ?? [])]) {
+      wake(watcher, { txid: change.x, at });
+    }
   }
 }
 
@@ -218,6 +228,8 @@ function taken(watcher: Watcher): readonly string[] {
   const txids = [...watcher.txids];
   watcher.txids = new Set();
   watcher.woken = Deferred.makeUnsafe();
+  watcher.answeredHeardAt = watcher.heardAt;
+  watcher.heardAt = undefined;
   return txids;
 }
 
@@ -344,7 +356,9 @@ const heard = (
               })
             : Effect.andThen(
                 Metric.update(SYNC_METRIC.NOTIFICATIONS, 1),
-                Effect.sync(() => dispatch(hub.watchers, notification)),
+                Effect.flatMap(Clock.currentTimeMillis, (at) =>
+                  Effect.sync(() => dispatch(hub.watchers, notification, at)),
+                ),
               ),
       }),
     ),
@@ -485,7 +499,12 @@ const watchOn =
       const listening = yield* RcRef.get(listener);
       yield* confirmed(listening);
       yield* Effect.timeoutOption(listening.settled.await, fallback);
-      const watcher: Watcher = { txids: new Set(), woken: Deferred.makeUnsafe() };
+      const watcher: Watcher = {
+        txids: new Set(),
+        woken: Deferred.makeUnsafe(),
+        heardAt: undefined,
+        answeredHeardAt: undefined,
+      };
       yield* Effect.acquireRelease(
         Effect.sync(() => register(hub.watchers, watcher, topics)),
         () =>
@@ -494,7 +513,10 @@ const watchOn =
             if (hub.watchers.all.size === 0) listening.idle = true;
           }),
       );
-      return { next: nextOf(watcher, listening, fallback) } satisfies SyncWatch;
+      return {
+        next: nextOf(watcher, listening, fallback),
+        heardAt: Effect.sync(() => Option.fromUndefinedOr(watcher.answeredHeardAt)),
+      } satisfies SyncWatch;
     });
 
 /**

@@ -2187,6 +2187,7 @@ const stopOf = (
   writer: Effect.Effect<StoreWriter>,
   agent: Agent,
   key: string,
+  by: string,
 ) =>
   Effect.gen(function* () {
     const earlier = yield* hostedStoreOrUnavailable(
@@ -2194,7 +2195,7 @@ const stopOf = (
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
-    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key);
+    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key, by);
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = codingAgentStatusOf(after.turn, {
       createdAt: agent.createdAt,
@@ -2233,7 +2234,9 @@ export function runStopAgent(
           `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`,
         );
       }
-      const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));
+      const stop = yield* Effect.result(
+        stopOf(eve, call.writer, agent, call.clientKey, caller.agent.id),
+      );
       if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure, eve));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
       // the developer's, and is answered as stopped so a call run again reads as it first did.

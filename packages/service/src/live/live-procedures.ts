@@ -17,8 +17,9 @@
  * inbox is one such read (`inboxLive`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
- * account reaches and every agent of them and with no task, as two
- * statements built with the account's id (`task-list-live.ts`).
+ * account reaches and every agent of them and with no task, as statements
+ * built with the account's id (`task-list-live.ts`), woken by a write to
+ * the account's topic or to one of its workspaces' (`tasksLive`).
  *
  * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
  * the same way, one statement a part that marks where it stands
@@ -42,7 +43,7 @@
  *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
- * to them. `GET /api/live/workspace-members?workspaceId=` answers one
+ * to them, woken as the task list is (`workspacesLive`). `GET /api/live/workspace-members?workspaceId=` answers one
  * workspace's people as two, its members and who its work names but left,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found, as its held read answers.
@@ -51,6 +52,15 @@
  * each accept link is built on, which the desktop needs since it builds the
  * links itself. Both are woken by a write to the workspace's topic
  * (`workspaceMembersLive`, `workspaceInvitationsLive`).
+ *
+ * `GET /api/live/automations?workspaceId=` answers a workspace's automations
+ * the account reads, each with its newest run, and
+ * `GET /api/live/automation-workspace-runs?workspaceId=` their newest runs,
+ * one statement each (`automation-live.ts`); `GET /api/live/automation-runs?id=`
+ * answers one automation's newest runs, after the automation is read as the
+ * account, so one it does not read is not found. Each is woken by a write
+ * that names the automation's workspace (`automationsLive`,
+ * `automationWorkspaceRunsLive`, `automationRunsLive`).
  *
  * `GET /api/live/channels?workspaceId=` answers one workspace's channels as
  * two statements, its channels and where each one's threads stand
@@ -67,7 +77,8 @@
  * conversation the call will open rather than wait for it. It is woken by
  * Luke Sync (`agentTranscriptLive`), and a reader that names where it holds
  * the newest messages (`cursor`) is answered only those written or amended
- * past it (`liveCursorParts`).
+ * past it (`liveCursorParts`). Its answers are measured
+ * (`transcript-metrics.ts`).
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
@@ -85,7 +96,6 @@ import { readTaskHeader } from "@luke/database/models/task-store";
 import {
   isWorkspaceMember,
   workspaceOf as workspaceOfAccount,
-  workspacesLiveStatements,
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
@@ -101,11 +111,6 @@ import { readEither } from "@luke/wire/effect";
 import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
-import {
-  automationRunsLiveStatements,
-  automationsLiveStatements,
-  automationWorkspaceRunsLiveStatements,
-} from "../automations/automation-live.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
@@ -120,6 +125,9 @@ import {
   agentInboxLive,
   agentPagesLive,
   agentTranscriptLive,
+  automationRunsLive,
+  automationsLive,
+  automationWorkspaceRunsLive,
   channelsLive,
   inboxLive,
   macCommandsLive,
@@ -129,13 +137,15 @@ import {
   taskInboxLive,
   taskPagesLive,
   taskRecordLive,
+  tasksLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
+  workspacesLive,
 } from "../sync/live-queries.js";
 import type { LiveParams, LiveQuery } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { taskListLiveStatements } from "../tasks/task-list-live.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -221,7 +231,9 @@ function readParts<Part extends string>(
  * (`read`) and answered with their own digests, and with the txids of the
  * writes that woke it, which is how the desktop confirms a write once the
  * read it follows shows it. At the hold's end it looks once more, and
- * answers that look, its digests and no rows, where nothing moved.
+ * answers that look, its digests and no rows, where nothing moved. Where a
+ * notification woke it, `onWoken` is handed the instant the first write was
+ * heard, once the rows are read.
  */
 const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string, R>(
   looked: Effect.Effect<ReadParts<Part>, HostedRefusal, R>,
@@ -229,11 +241,15 @@ const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends stri
   moved: (standing: ReadParts<Part>) => boolean,
   topics: readonly SyncTopic[],
   look: Duration.Duration,
+  onWoken?: (heardAt: number) => Effect.Effect<void>,
 ): Effect.fn.Return<ReadParts<Part>, HostedRefusal, R> {
   const woken = yield* heldUntil(looked, moved, topics, look, LIVE_POLL_HOLD.HOLD);
   if (Option.isSome(woken)) {
     // Note that the rows are read after the look that saw them move, so they are at least as new as it, and are answered with their own digests rather than its.
     const answer = yield* read;
+    if (onWoken !== undefined && Option.isSome(woken.value.heardAt)) {
+      yield* onWoken(woken.value.heardAt.value);
+    }
     return { ...answer, queries: wokenBy(answer.queries, woken.value.txids) };
   }
   const standing = yield* looked;
@@ -263,12 +279,22 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   );
 });
 
+/** The topics a defined live read's params name, or that it looks up from them; unavailable where the lookup fails. */
+function topicsOf<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+) {
+  const named = query.topics(params);
+  return Effect.isEffect(named) ? hostedStoreOrUnavailable(named) : Effect.succeed(named);
+}
+
 /**
  * A defined live read's parts (`defineLiveQuery`), built from the params
  * its procedure bound once it admitted the caller, and held on a watch of
- * the topics those params name, which looks again every `look` where
- * nothing wakes it. This is how a procedure answers a read Luke Sync wakes;
- * unavailable where its statements can't be built.
+ * the topics those params name, or that the read looks up from them, which
+ * looks again every `look` where nothing wakes it. This is how a procedure
+ * answers a read Luke Sync wakes; unavailable where its statements can't be
+ * built or its topics looked up.
  */
 export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
@@ -281,7 +307,10 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
 ) {
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* sealedParts(statements.value, asked, query.topics(params), look);
+  // A read that names no `after` is answered at once, so it needs no topics to wait on.
+  const held = asked[LIVE_POLL.AFTER] !== undefined;
+  const topics = held ? yield* topicsOf(query, params) : NO_TOPICS;
+  return yield* sealedParts(statements.value, asked, topics, look);
 });
 
 /**
@@ -307,7 +336,8 @@ function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string |
  * a snapshot's are. Held until any of that moves (`cursorMoved`). A reader
  * that names no cursor, or a read with no cursor parts, is answered as a
  * snapshot is (`liveQueryParts`), which is how a released desktop reads it.
- * Unavailable where its statements can't be built or read.
+ * Unavailable where its statements can't be built or read. `onWoken` is
+ * handed to the hold (`heldParts`), which a snapshot's answer does not take.
  */
 export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
@@ -317,6 +347,7 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   params: LiveParams<Param>,
   asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
+  onWoken?: (heardAt: number) => Effect.Effect<void>,
 ) {
   const following = query.cursor;
   const cursor = asked[LIVE_POLL.CURSOR];
@@ -349,12 +380,14 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const read = polled((sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
   if (after === undefined) return yield* read;
+  const topics = yield* topicsOf(query, params);
   return yield* heldParts(
     polled((sealer) => sealer.digest),
     read,
     (standing) => cursorMoved(standing, after),
-    query.topics(params),
+    topics,
     look,
+    onWoken,
   );
 });
 
@@ -393,16 +426,16 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const statements = taskListLiveStatements(context.userId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(tasksLive, { userId: context.userId }, input);
     }),
     automations: signedIn.automations.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const statements = automationsLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        automationsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(function* ({
       input,
@@ -410,9 +443,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }) {
       yield* sameUser(input, context.userId);
       if (input.workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      const statements = automationWorkspaceRunsLiveStatements(context.userId, input.workspaceId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        automationWorkspaceRunsLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
     }),
     automationRuns: signedIn.automationRuns.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -421,9 +456,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         readAutomation(context.userId, automationId),
       );
       if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const statements = automationRunsLiveStatements(context.userId, automationId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(
+        automationRunsLive,
+        {
+          userId: context.userId,
+          automationId,
+          workspaceId: automation.value.organizationId,
+        },
+        input,
+      );
     }),
     taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -495,12 +536,15 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         agentId: agent.id,
         readerId: context.userId,
       };
-      return yield* liveCursorParts(
+      const answer = yield* liveCursorParts(
         agentTranscriptLive,
         params,
         input,
         LIVE_POLL_HOLD.WATCHED_LOOK,
+        countAnswerWait,
       );
+      yield* countAnswerBytes(answer.queries);
+      return answer;
     }),
     taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -526,9 +570,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
-      const statements = workspacesLiveStatements(context.userId);
-      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input);
+      return yield* liveQueryParts(workspacesLive, { userId: context.userId }, input);
     }),
     workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

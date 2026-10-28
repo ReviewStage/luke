@@ -90,7 +90,7 @@ const archivedQuery = EffectSchema.optionalKey(EffectSchema.String);
  * servers, or its model and effort, read in that order as the old group read
  * them.
  */
-const codingAgentChangeRequestSchema = EffectSchema.Union([
+const agentChangeRequestSchema = EffectSchema.Union([
   agentRenameRequestSchema,
   agentArchiveRequestSchema,
   agentPinRequestSchema,
@@ -99,7 +99,7 @@ const codingAgentChangeRequestSchema = EffectSchema.Union([
 ]);
 
 /** A change as it travels. */
-export type AgentChangeRequest = typeof codingAgentChangeRequestSchema.Encoded;
+export type AgentChangeRequest = typeof agentChangeRequestSchema.Encoded;
 
 /** A Start's fields bar its source, since a Start from an agent lands in that agent's own place on its own path. */
 const { from: _from, ...workspaceStartFields } = agentStartRequestFields;
@@ -201,7 +201,7 @@ export const agentsContract = {
   change: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
-    .input(exactBodyInput(idParams, codingAgentChangeRequestSchema))
+    .input(exactBodyInput(idParams, agentChangeRequestSchema))
     .output(EffectSchema.flip(agentAnswerSchema)),
   /** One agent deleted for good, stopped first where it still works. */
   delete: hostedProcedure

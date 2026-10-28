@@ -716,7 +716,6 @@ function subject(
   options: {
     signedIn?: boolean;
     sendsNetwork?: boolean;
-    typeIntoCall?: (agentId: string, text: string, clientKey: string) => boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
   } = {},
@@ -734,7 +733,6 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: options.accountId ?? (() => "user-dana"),
       client: service.client,
-      ...(options.typeIntoCall === undefined ? undefined : { typeIntoCall: options.typeIntoCall }),
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -2028,110 +2026,6 @@ it.effect(
       yield* harness.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, first);
       yield* settled;
       assert.equal(newestReads(first.agentId), 2);
-    }),
-);
-
-it.effect(
-  "a line typed while this Mac's call is up on the agent goes to the call and is not steered, and the tab hears the agent as it stands",
-  () =>
-    Effect.gen(function* () {
-      const typed: [string, string, string][] = [];
-      const { call, asked } = yield* subject({
-        typeIntoCall: (agentId, text, clientKey) => {
-          typed.push([agentId, text, clientKey]);
-          return agentId === AGENT_ID;
-        },
-      });
-      const {
-        automationId: _automation,
-        workspaceId: _workspace,
-        repository: _repository,
-        ...page
-      } = PAGE;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-          agentId: AGENT_ID,
-          text: "Use the fixture branch.",
-          clientKey: "send-1",
-        }),
-        // Running, as a steer's answer is: the call asks the line a moment after the frame leaves.
-        { agent: { ...page, status: AGENT_STATUS.RUNNING } },
-      );
-      assert.deepEqual(typed, [[AGENT_ID, "Use the fixture branch.", "send-1"]]);
-      assert.deepEqual(asked, [`page:${AGENT_ID}`]);
-    }),
-);
-
-it.effect(
-  "a line typed with no call on the agent, a call on another agent, or files alone steers as before",
-  () =>
-    Effect.gen(function* () {
-      const typed: string[] = [];
-      const other = "0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f";
-      const { call, asked } = yield* subject({
-        typeIntoCall: (agentId, text) => {
-          typed.push(text);
-          return agentId === other;
-        },
-      });
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-          agentId: AGENT_ID,
-          text: "Expire them after a week.",
-          clientKey: "send-1",
-        }),
-        { agent: AGENT },
-      );
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-          agentId: other,
-          text: "",
-          clientKey: "send-2",
-          attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
-        }),
-        { agent: AGENT },
-      );
-      // Only the line with words was offered to the call; the files-only line never was.
-      assert.deepEqual(typed, ["Expire them after a week."]);
-      assert.deepEqual(asked, [
-        `message:${AGENT_ID}:send-1:Expire them after a week.`,
-        `message:${other}:send-2::files pager.txt`,
-      ]);
-
-      const { call: callWithNoCalls, asked: steered } = yield* subject();
-      yield* callWithNoCalls(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-        agentId: AGENT_ID,
-        text: "Expire them after a week.",
-        clientKey: "send-3",
-      });
-      assert.deepEqual(steered, [`message:${AGENT_ID}:send-3:Expire them after a week.`]);
-    }),
-);
-
-it.effect(
-  "a line with files typed while this Mac's call is up on the agent steers with its files, and the call is offered none of it",
-  () =>
-    Effect.gen(function* () {
-      const typed: string[] = [];
-      const { call, asked } = yield* subject({
-        typeIntoCall: (agentId, text) => {
-          typed.push(text);
-          return agentId === AGENT_ID;
-        },
-      });
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
-          agentId: AGENT_ID,
-          text: "What does this pager say?",
-          clientKey: "send-1",
-          attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
-        }),
-        { agent: AGENT },
-      );
-      assert.deepEqual(typed, []);
-      assert.deepEqual(asked, [
-        `message:${AGENT_ID}:send-1:What does this pager say?:files pager.txt`,
-      ]);
     }),
 );
 

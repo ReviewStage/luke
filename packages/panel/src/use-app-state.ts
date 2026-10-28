@@ -237,7 +237,6 @@ export const APP_SLICE = {
   ACCESS: sliceAtom("access"),
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
-  VOICE: sliceAtom("voice"),
   TASKS: sliceAtom("tasks"),
   CODING_AGENTS: sliceAtom("codingAgents"),
   INBOX: sliceAtom("inbox"),

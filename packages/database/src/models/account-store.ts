@@ -135,7 +135,6 @@ export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure,
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
-  voice: accountPreference.voice,
   linkOpen: accountPreference.linkOpen,
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
@@ -146,7 +145,6 @@ const PREFERENCE_COLUMNS = {
 };
 
 const PreferenceRowSchema = Schema.Struct({
-  voice: Schema.NullOr(Schema.String),
   linkOpen: Schema.NullOr(Schema.String),
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
@@ -175,11 +173,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         }
       : AGENT_DEFAULT_CHOICE;
   return {
-    preferences:
-      accountPreferencesFromStored({
-        ...(row.voice ? { voice: row.voice } : undefined),
-        ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
-      }) ?? {},
+    preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
     codingAgent,
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
     chaptersModel: chaptersModelFrom(row.chaptersModel),
@@ -252,7 +246,6 @@ export function readAccountRole(
 
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
-  voice: Schema.optionalKey(Schema.NullOr(Schema.String)),
   linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
   codingAgent: Schema.optionalKey(
     Schema.Struct({
@@ -263,7 +256,8 @@ const PreferenceWriteSchema = Schema.Struct({
   ),
   chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
-  updatedAt: Schema.Date,
+  /** The instant the shared preferences part was written, where the write carries it. */
+  updatedAt: Schema.optionalKey(Schema.Date),
 });
 
 type PreferenceWrite = typeof PreferenceWriteSchema.Type;
@@ -274,7 +268,7 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
-    ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
+    ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
     ...(write.codingAgent === undefined
       ? undefined
       : {
@@ -327,10 +321,10 @@ export function writeAccountPreferences(
 ): Effect.Effect<AccountPreferencesRow, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const updatedAt = yield* DateTime.nowAsDate;
+    // Note that the shared part holds no preference since the voice went, so its write moves the instant alone.
     const stored: PreferenceWrite = {
       userId,
-      updatedAt,
-      ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
+      ...(write.preferences === undefined ? undefined : { updatedAt }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
       ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),

@@ -6,8 +6,8 @@
  * terminal. Its acts carry ids alone, never a frame, an address, or a title;
  * what the socket carries travels on one `MessagePort` per attached view,
  * posted by main to the panel that asked and to no other window, so nothing
- * the page shows enters app state, an act, a trace, or the voice window
- * (root `AGENTS.md`'s cloud browser line). The port is posted on its own
+ * the page shows enters app state, an act, or a trace (root `AGENTS.md`'s
+ * cloud browser line). The port is posted on its own
  * channel with a ticket naming the view the panel minted; the preload hands
  * it into the page the way Electron hands a port to an isolated world, and
  * the page reads it back by that channel. The web app opens the same socket

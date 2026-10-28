@@ -68,8 +68,10 @@ import {
  * line without sending. Either hides the messages the rewind drops at once,
  * until the transcript reads back without them, and says it is rewinding
  * until the service answers; an edit that did not go stays where it went,
- * marked as not sent, its Retry rewinding again, and a revert says why under
- * the box, its Retry asking again.
+ * marked as not sent, its Retry rewinding again where the rewind did not go
+ * and only sending where it did, and a revert says why under the box, its
+ * Retry asking again. A line whose send has not answered yet is no place to
+ * rewind to (`going`), because the service may still withdraw its row.
  */
 
 /** How one message is sent: the agent, the words, the key this send is known by, which Retry carries again, and the files attached, answered as the view hears it. */
@@ -191,6 +193,11 @@ function marked(
   return sent.map((each) => (each.id === id ? { ...each, state } : each));
 }
 
+/** The lines with the one by `id` marked as having taken the agent back already. */
+function rewoundBefore(sent: readonly SentLine[], id: string): readonly SentLine[] {
+  return sent.map((each) => (each.id === id ? { ...each, rewound: true } : each));
+}
+
 /** The composer as an agent's tab holds it: what it draws, the words and files its draft keeps, which a closed box draws none of and Continue carries, and the Retry a line marked as not sent offers. */
 export interface HeldComposer extends AgentComposerControl {
   readonly unsent: {
@@ -221,6 +228,8 @@ export interface HeldComposer extends AgentComposerControl {
   readonly revert: (messageId: string) => void;
   /** The messages a rewind drops, hidden from the transcript until it reads back without them; none while none does. */
   readonly cut: ReadonlySet<string> | undefined;
+  /** The ids the lines sent were written under that the service has not said it took, whose rows it may yet withdraw, so no rewind lands on them. */
+  readonly going: ReadonlySet<string>;
 }
 
 export function useAgentComposer(input: {
@@ -293,11 +302,11 @@ export function useAgentComposer(input: {
         ours((was) => ({ ...was, sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED) }));
         return;
       }
-      // A line written in place of another takes the agent back to just before that one first.
-      if (line.rewinds !== undefined) ours((was) => ({ ...was, reverting: line.rewinds }));
-      const rewound =
-        line.rewinds === undefined ? undefined : await rewindTo(agentId, line.rewinds);
-      if (line.rewinds !== undefined) ours((was) => ({ ...was, reverting: undefined }));
+      // A line written in place of another takes the agent back to just before that one first, once.
+      const rewinds = line.rewound === true ? undefined : line.rewinds;
+      if (rewinds !== undefined) ours((was) => ({ ...was, reverting: rewinds }));
+      const rewound = rewinds === undefined ? undefined : await rewindTo(agentId, rewinds);
+      if (rewinds !== undefined) ours((was) => ({ ...was, reverting: undefined }));
       const answer =
         rewound !== undefined && "failure" in rewound
           ? rewound
@@ -356,12 +365,19 @@ export function useAgentComposer(input: {
         inBox = line.rewinds === undefined && holdsNothing(draft);
         return inBox ? { ...EMPTY_DRAFT, text: line.text, attachments: line.attachments } : draft;
       });
+      // Note that an edit whose rewind went is marked so, because the line it stood in place of is
+      // gone, so its Retry only sends; a rewind to that line again would find no line.
+      const rewoundNow = rewound !== undefined && !("failure" in rewound);
       ours((was) => ({
         ...was,
         failed: { lineId: line.id, clientKey: line.clientKey, inBox, note },
         sent: inBox
           ? was.sent.filter((each) => each.id !== line.id)
-          : marked(was.sent, line.id, SENT_LINE_STATE.FAILED),
+          : marked(
+              rewoundNow ? rewoundBefore(was.sent, line.id) : was.sent,
+              line.id,
+              SENT_LINE_STATE.FAILED,
+            ),
       }));
     });
     queues.current.set(agentId, going);
@@ -500,5 +516,6 @@ export function useAgentComposer(input: {
       ),
     revert,
     cut: held.cut,
+    going: new Set(held.sent.filter((line) => line.taken !== true).map((line) => line.id)),
   };
 }

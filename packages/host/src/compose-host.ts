@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAdminClient,
+  HostedAgentClient,
   HostedAutomationClient,
   HostedChannelClient,
-  HostedCodingAgentClient,
   HostedDeviceAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -11,7 +11,6 @@ import {
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
-  type TaskActivityFrame,
 } from "@luke/features";
 import { HostedInstalledSkillClient } from "@luke/features/installed-skill-client";
 import {
@@ -22,8 +21,6 @@ import {
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, MAC_COMMAND_MODE } from "@luke/settings";
-import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -36,7 +33,6 @@ import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
-import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
 import { composeSettings } from "./compose-settings.js";
@@ -56,7 +52,6 @@ import {
   SignInConsent,
   TerminalSocket,
   type ThisMacHost,
-  VoiceSocket,
 } from "./effect/seams.js";
 import {
   HOST_CONCERN,
@@ -66,7 +61,7 @@ import {
   isPlatformConcern,
   unavailableConcern,
 } from "./host-concerns.js";
-import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
@@ -77,7 +72,6 @@ import { createGatewayService } from "./service.js";
 const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
-  HOST_CONCERN.LIVE,
   HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
@@ -93,7 +87,6 @@ type HostAssemblyRequirements =
   | HostKernelTag
   | HostService
   | Reporter
-  | VoiceSocket
   | Environment
   | AppIdentity
   | ShutdownSignal
@@ -134,32 +127,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const hostService = yield* HostService;
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
-    const openVoiceSocket = yield* VoiceSocket;
 
     const settings = yield* composeSettings();
-    const account = yield* composeAccount({ settings, openSocket: openVoiceSocket });
-    // No agent runs on this Mac: the exchange is the service's, and Luke
-    // speaks only on a call the developer opened into an agent.
-    // The tasks composer is built after the live one and ends its calls, so
-    // the live composer reads the agent a call goes into, and hands the
-    // call's activity and work on, through these late bindings.
-    let callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
-      Effect.succeed(undefined);
-    let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
-    let taskCallEnded: (about: VoiceCallAbout) => void = () => undefined;
-    const live = yield* composeLive({
-      settings,
-      account,
-      callTaskOf: (agentId) => callTaskOf(agentId),
-      showTaskActivity: (activity) => showTaskActivity(activity),
-      taskCallEnded: (about) => taskCallEnded(about),
-    });
+    const account = yield* composeAccount({ settings });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
       sessionCredential: account.sessionCredential,
     });
-    const codingAgentClient = new HostedCodingAgentClient({
+    const codingAgentClient = new HostedAgentClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });
@@ -172,7 +148,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       kernel,
       account,
       accountId,
-      endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
         new HostedTaskClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -197,7 +172,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       accountId,
       client: codingAgentClient,
-      typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
       listed: tasks.listed,
     });
     const automations = yield* composeAutomations({
@@ -303,21 +277,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           openConsent: (yield* SignInConsent).open,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
-    callTaskOf = codingAgents.callTaskOf;
-    showTaskActivity = tasks.showActivity;
-    taskCallEnded = tasks.callEnded;
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
-     * behind an account already signed in runs: the preferences reconciled,
-     * the account's access read, and the voice credential applied.
+     * behind an account already signed in runs: the preferences reconciled
+     * and the account's access read.
      */
     const openCapabilities = Effect.gen(function* () {
       if (account.signedIn()) {
         yield* settings.reconcileAccountPreferences();
         yield* account.refreshAccess;
       }
-      yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
 
@@ -330,7 +300,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* channels.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
-      yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
 
@@ -342,11 +311,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       credential: account.credential,
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
-      setVoice: (voice) =>
-        Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
-      endLiveSession: Effect.suspend(() =>
-        live.service.endSession(LIVE_SESSION_END_CAUSE.VOICE_CHANGED),
-      ),
     });
     const installedSkills = yield* composeInstalledSkills({
       kernel,
@@ -363,7 +327,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,
       [HOST_CONCERN.ACCOUNT]: account,
-      [HOST_CONCERN.LIVE]: live,
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
@@ -400,8 +363,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             account: carried(account.snapshot()),
             sessionReplay: carried(replay),
             access: carried(access),
-            voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
-            agentTraceEnabled: account.agentTrace !== undefined,
           };
         }),
     };
@@ -429,11 +390,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       },
       settings.flushProductEvents,
     );
-    // The live session's graceful close rides inside the same drain, so a quit
-    // mid-call ends the session within the deadline and never after it.
-    const shutdownSteps = yield* shutdownStepsClosingLiveSession(drainSteps, live.service.stop());
-
-    const drain = yield* hostDrain(shutdownSteps, report);
+    const drain = yield* hostDrain(drainSteps, report);
 
     const assembly: HostAssembly = {
       gateway: service.gateway,
@@ -443,15 +400,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       /**
        * The launch's own arming: where the account's capabilities already
        * stand open, the launch opens the gate exactly as a sign-in does.
-       * Where they do not, the launch still applies the voice credential the
-       * signed-out panel is drawn from, because it waits on no account.
        */
       armed: Effect.gen(function* () {
-        if (account.capabilitiesActive()) {
-          yield* openCapabilities;
-        } else {
-          yield* account.applyVoiceCredential;
-        }
+        if (account.capabilitiesActive()) yield* openCapabilities;
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
       drain,

@@ -97,6 +97,7 @@ const onHub = Effect.gen(function* () {
   const announcing: SyncShape = {
     watch: (topics, fallback) =>
       Effect.map(hub.watch(topics, fallback), (watch) => ({
+        ...watch,
         next: Effect.andThen(Queue.offer(looking, undefined), watch.next),
       })),
   };

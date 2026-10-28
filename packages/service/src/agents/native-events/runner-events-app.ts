@@ -16,6 +16,7 @@ import {
   withNativeProjection,
 } from "@luke/database/models/native-projection-store";
 import { setPlanStatus } from "@luke/database/models/provider-key-store";
+import { acceptRunnerLine } from "@luke/database/models/runner-line-store";
 import {
   type ConversationTarget,
   type StoreWriter,
@@ -374,9 +375,13 @@ function landWrite(
       );
     case NATIVE_WRITE.TAKE_LINE:
       // A typed line awaits its turn as a row; a call's ask has none and is bound by its delivery,
-      // the line's id the ask named, so the call follows the turn.
+      // the line's id the ask named, so the call follows the turn. The runner's line is stamped
+      // taken either way, so no later launch is handed it again (`runner-lines-app.ts`).
       return Effect.flatMap(
-        ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
+        Effect.andThen(
+          acceptRunnerLine(target.userId, applying.agentId, write.clientId),
+          ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
+        ),
         (bound) =>
           bound.length > 0
             ? // The call's own rows, written before its line was taken, go into the turn too, and an

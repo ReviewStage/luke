@@ -43,7 +43,6 @@ interface InProcessBridge {
 const unsubscribe = (): void => {};
 /** What has no listener in a page that runs no Browser tab, menu bar, or global key. */
 const neverDelivered = (): (() => void) => unsubscribe;
-const dropped = (): void => {};
 
 /** One subscription set: what a page subscribed, the one door that tells them all, and its close. */
 interface Listeners<Payload> {
@@ -142,7 +141,6 @@ export function createInProcessBridge(
       notifyReady: reports.notifyReady,
       recordSurfaceEvent: reports.recordSurfaceEvent,
       onShowLink: said.onShowLink.subscribe,
-      recordAgentTrace: dropped,
       onMenuCommand: neverDelivered,
     };
     const events: InProcessEvents = {

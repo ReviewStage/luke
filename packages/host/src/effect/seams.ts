@@ -12,7 +12,6 @@ import type {
   DeviceIsolation,
   DevicePlatform,
 } from "@luke/features/device-agent-wire";
-import type { OpenSocket } from "@luke/voice/live-socket";
 import {
   type ConfigProvider,
   Context,
@@ -79,8 +78,8 @@ export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/h
  * The origin of the service this host talks to, such as
  * `https://preview.example.test`, for a shell that knows it: a host in a
  * browser tab calls the origin that served it rather than production
- * cross-origin. Every hosted address the host builds — the account service,
- * the hosted routes, the voice socket — then stands on it, and no development
+ * cross-origin. Every hosted address the host builds — the account service
+ * and the hosted routes — then stands on it, and no development
  * override redirects any of them. It is optional: a host handed none derives
  * its addresses as a desktop build does, so the desktop provides none.
  */
@@ -102,19 +101,11 @@ export class SettingsChangedElsewhere extends Context.Service<
 >()("@luke/host/SettingsChangedElsewhere") {}
 
 /**
- * The voice sideband's WebSocket to the service. It arrives rather than being
- * built here, because the only implementation so far is over `ws`
- * (`@luke/host/node`), and a host that imported it could not load where `ws`
- * does not.
- */
-export class VoiceSocket extends Context.Service<VoiceSocket, OpenSocket>()(
-  "@luke/host/VoiceSocket",
-) {}
-
-/**
- * A terminal's relay WebSocket, on the same terms as the voice socket. Only
- * the terminals concern asks for it, so an assembly that leaves terminals out
- * is handed none.
+ * A terminal's relay WebSocket. It arrives rather than being built here,
+ * because the desktop's is opened over `ws` (`@luke/host/node`), and a host
+ * that imported it could not load where `ws` does not. Only the terminals
+ * concern asks for it, so an assembly that leaves terminals out is handed
+ * none.
  */
 export class TerminalSocket extends Context.Service<TerminalSocket, OpenTerminalSocket>()(
   "@luke/host/TerminalSocket",
@@ -423,7 +414,7 @@ export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSign
   "@luke/host/ShutdownSignal",
 ) {}
 
-/** Every seam tag the host's kernel stands on; the assembly adds `VoiceSocket` and `AccountSource`, and each platform concern it was built with adds its own. */
+/** Every seam tag the host's kernel stands on; the assembly adds `AccountSource`, and each platform concern it was built with adds its own. */
 export type HostSeamTags =
   | StateRoot
   | RunMode

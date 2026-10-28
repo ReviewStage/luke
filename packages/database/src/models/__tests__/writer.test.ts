@@ -16,7 +16,7 @@ import { sessionKey } from "@luke/runtime/vocabulary";
 import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, UNKNOWN_ACTION_STATUS } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
-import { Effect, Option, Ref, Result, Schema } from "effect";
+import { Effect, Metric, Option, Ref, Result, Schema } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
@@ -188,6 +188,60 @@ it.layer(getTestDB())("the store writer's retried steps", (it) => {
         yield* tell(call("call-running"));
         yield* tell({ kind: RUN_EVENT.STEP_STARTED, step: 1 });
         assert.equal((yield* callState("call-running")).state, TOOL_PART_STATE.INPUT_AVAILABLE);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the store writer's journal rewrites", (it) => {
+  it.effect(
+    "counts the bytes each landed amendment rewrites, which climb as the journal grows",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openTarget;
+        const writer = yield* storeWriter({ tools: TOOLS });
+        const turnId = randomUUID();
+        const turn = { conversationId: sessionKey(target.conversationId), turnId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          ...turn,
+          kind: RUN_EVENT.TURN_STARTED,
+          sequence: 1,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
+          at: 0,
+        });
+        // Note that the metric is read as Sentry's layer reads it, from the registry by its name.
+        const rewritten = Effect.gen(function* () {
+          const found = (yield* Metric.snapshot).find(
+            ({ id }) => id === "luke.transcript.journal_rewrite_bytes",
+          );
+          return found?.type === "Histogram" ? found.state : { count: 0, sum: 0 };
+        });
+
+        const opened = yield* rewritten;
+        yield* writer.consume(target, {
+          ...turn,
+          kind: RUN_EVENT.STEP_STARTED,
+          step: 1,
+          sequence: 2,
+        });
+        const first = yield* rewritten;
+        yield* writer.consume(target, {
+          ...turn,
+          kind: RUN_EVENT.TEXT_DRAFTED,
+          step: 1,
+          text: "I will look at the tests first.",
+          sequence: 3,
+        });
+        const second = yield* rewritten;
+
+        assert.equal(first.count - opened.count, 1);
+        assert.equal(second.count - first.count, 1);
+        assert.ok(second.sum - first.sum > first.sum - opened.sum, "a later rewrite writes more");
       }),
   );
 });

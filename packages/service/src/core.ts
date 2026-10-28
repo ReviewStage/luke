@@ -41,5 +41,4 @@ export {
 export { wireValidatedTool } from "@luke/features/turn-run/tool-set";
 export * from "@luke/runtime/vocabulary";
 export * from "@luke/wire";
-export * from "@luke/wire/conversation";
 export * from "@luke/wire/ui-messages";

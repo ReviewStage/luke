@@ -2356,6 +2356,8 @@ export interface SentLine {
   readonly state: SentLineState;
   /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
   readonly rewinds?: string | undefined;
+  /** Whether the agent was already taken back to just before that line, which is gone, so the line's Retry only sends. */
+  readonly rewound?: boolean | undefined;
   /** Whether the service answered that the agent took it; until it does, a row read back may still be withdrawn. */
   readonly taken?: boolean | undefined;
 }

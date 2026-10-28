@@ -149,8 +149,11 @@ async function inbox() {
   fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(NO_EXPERIMENTS);
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    const [listed, setListed] = useState(false);
+    // Note that the item stands chosen, as a press on its row chooses it.
+    const [chosen, setChosen] = useState<InboxChoice | undefined>({
+      taskId: TASK.id,
+      itemId: ITEM.id,
+    });
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     const taskAgents = useInboxTaskAgents(panelFor);
     const sidePanel = useSidePanel(
@@ -181,8 +184,7 @@ async function inbox() {
             onChoose: setChosen,
             onOpenItem: () => undefined,
             onOpenChannel: () => undefined,
-            listed,
-            onListed: setListed,
+            onClear: () => setChosen(undefined),
             pages: [],
             onTaskAgents: taskAgents.onRead,
           },

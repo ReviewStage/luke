@@ -18,8 +18,8 @@ export {
 } from "./account-token.js";
 export { HostedAdminClient } from "./admin-client.js";
 export {
-  HostedAgentClient as HostedCodingAgentClient,
-  type HostedAgentClientOptions as HostedCodingAgentClientOptions,
+  HostedAgentClient,
+  type HostedAgentClientOptions,
 } from "./agent-client.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {

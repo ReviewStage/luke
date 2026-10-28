@@ -5,7 +5,6 @@ import {
   isAccountProvider,
 } from "@luke/credentials/snapshot";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
-import { LIVE_DEFAULTS } from "@luke/live";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@luke/settings/wire";
 import {
   ACTION_RESULT_STATUS,
@@ -23,7 +22,6 @@ import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import type { SettingsEnvironmentOverrides } from "./effect/settings-overrides.js";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
 
 export type { StoredAccount } from "@luke/credentials";
@@ -81,19 +79,6 @@ export interface SettingsStoreOptions {
    * cipher is unavailable.
    */
   cipher: SecretCipher | undefined;
-  /**
-   * What the launch environment overrides, already read: the store reads no
-   * environment of its own, so nothing it answers depends on a variable this
-   * composition was not handed through the `Environment` seam.
-   */
-  overrides: SettingsEnvironmentOverrides;
-  /**
-   * Whether this run will use the account it holds. A fixture or evidence run
-   * will not, and the panel has to mark what would actually happen rather
-   * than what is stored — so `voiceAvailable` is false there however good the
-   * account is. Only the app knows which kind of run this is. True by default.
-   */
-  credentialsUsable?: boolean;
   /**
    * Whether this run is a packaged build, which decides what a setting whose
    * default is the build's reads as while nothing is stored. True by default.
@@ -582,8 +567,6 @@ function parsePersistedSettingsEither(
 export class SettingsStore {
   readonly #directory: () => string;
   readonly #cipher: SecretCipher | undefined;
-  readonly #overrides: SettingsEnvironmentOverrides;
-  readonly #credentialsUsable: boolean;
   readonly #packaged: boolean;
   readonly #sessionAccountEmail: (() => Effect.Effect<string | undefined>) | undefined;
   readonly #fileSystem: FileSystem.FileSystem;
@@ -792,8 +775,6 @@ export class SettingsStore {
   constructor(options: SettingsStoreOptions) {
     this.#directory = options.directory;
     this.#cipher = options.cipher;
-    this.#overrides = options.overrides;
-    this.#credentialsUsable = options.credentialsUsable ?? true;
     this.#packaged = options.packaged ?? true;
     this.#sessionAccountEmail = options.sessionAccountEmail;
     this.#fileSystem = options.fileSystem;
@@ -804,13 +785,9 @@ export class SettingsStore {
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       const persisted = yield* this.#load();
-      const voiceAvailable = yield* this.#voiceAvailable();
       return {
         stored: {
           ...storedSettingsFromPersisted(persisted),
-          // Resolved the way the session source resolves it, so the panel marks
-          // what would actually be heard while the persisted file remains optional.
-          voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
           // Resolved by the build, so a run from source counts nothing until
           // its developer turns usage data on.
           usageData:
@@ -820,15 +797,6 @@ export class SettingsStore {
               : APP_SETTING_SCHEMA.usageData.unpackagedDefault),
         },
         experiments: experimentsOf(persisted, (yield* this.#accountEmailOf())(persisted)),
-        status: {
-          // Whether a spoken turn could actually be opened: an account signed in,
-          // and this run will use it. Resolved here rather than left to the panel
-          // because it is the same question the voice is answered by — what
-          // would actually happen — and it travels with every settings reply,
-          // so signing in is what turns voice on and signing out is what turns
-          // it off.
-          voiceAvailable,
-        },
       };
     });
   }
@@ -948,19 +916,6 @@ export class SettingsStore {
       delete next.experiments;
       return next;
     });
-  }
-
-  /**
-   * Whether a spoken turn has anything to run on: a signed-in account, in a
-   * run that may use credentials. The assembler decides the same way from
-   * the same reads, so the panel's snapshot and the host's own build never
-   * answer the question differently.
-   */
-  #voiceAvailable(): Effect.Effect<boolean, PlatformError> {
-    return Effect.map(
-      this.readAccount(),
-      (account) => this.#credentialsUsable && account !== undefined,
-    );
   }
 
   /**

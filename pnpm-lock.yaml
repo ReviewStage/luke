@@ -224,9 +224,6 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../../packages/voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
@@ -446,9 +443,6 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../../packages/voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
@@ -739,9 +733,6 @@ importers:
 
   packages/gateway:
     dependencies:
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -779,18 +770,12 @@ importers:
       '@luke/gateway':
         specifier: workspace:*
         version: link:../gateway
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -880,18 +865,12 @@ importers:
       '@luke/host':
         specifier: workspace:*
         version: link:../host
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
       '@luke/ui':
         specifier: workspace:*
         version: link:../ui
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1174,9 +1153,6 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1281,46 +1257,6 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
-
-  packages/voice:
-    dependencies:
-      '@luke/features':
-        specifier: workspace:*
-        version: link:../features
-      '@luke/gateway':
-        specifier: workspace:*
-        version: link:../gateway
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
-      '@luke/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@luke/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../wire
-      ai:
-        specifier: 'catalog:'
-        version: 7.0.135(zod@4.5.4)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1452,9 +1388,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@luke/gateway':
-        specifier: workspace:*
-        version: link:../../packages/gateway
       '@luke/live':
         specifier: workspace:*
         version: link:../../packages/live

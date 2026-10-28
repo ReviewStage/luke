@@ -24,7 +24,6 @@ import type { Composer } from "./composer.js";
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
-  LIVE: "live",
   TASKS: "tasks",
   CODING_AGENTS: "codingAgents",
   AUTOMATIONS: "automations",

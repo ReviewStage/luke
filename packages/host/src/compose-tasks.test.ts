@@ -8,7 +8,6 @@ import {
   type TaskCallResult,
   type TaskStarted,
   type TaskWritten,
-  VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
@@ -1008,20 +1007,12 @@ const listAnswers = (
     nextPoll(settledTurns),
   );
 
-/** The one voice call as the live composer holds it: about a task, about the desk, or none. */
-interface StandingCall {
-  about: { readonly taskId: string | undefined } | undefined;
-  /** Where ending a call waits before it lands, as a real call's close does. */
-  closing?: Effect.Effect<void>;
-}
-
 function subject(
   service: FakeService,
   options: {
     signedIn?: boolean;
     /** Whether the run reaches the service, which a fixture run does not. */
     sendsNetwork?: boolean;
-    call?: StandingCall;
     /** The account signed in now, Dana's where none is named. */
     accountId?: () => string;
   } = {},
@@ -1036,7 +1027,6 @@ function subject(
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
     }[] = [];
-    const standing = options.call ?? { about: undefined };
     /** Every followed transcript's page the host told, in order. */
     const pages: WireValue[] = [];
     const tasks = yield* composeTasks({
@@ -1062,13 +1052,6 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       accountId: options.accountId ?? (() => "user-dana"),
-      endTaskCall: (taskId) =>
-        Effect.gen(function* () {
-          const about = standing.about?.taskId;
-          if (about === undefined || (taskId !== undefined && about !== taskId)) return;
-          yield* standing.closing ?? Effect.void;
-          standing.about = undefined;
-        }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = tasks.methods[method];
@@ -1286,7 +1269,7 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     });
     assert.equal(last()?.activeTaskId, INVITES);
     assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-    assert.equal(tasks.activeTaskId(), INVITES);
+    assert.equal(tasks.snapshot().activeTaskId, INVITES);
 
     yield* openTask(BILLING);
     assert.equal(last()?.activeTaskId, BILLING);
@@ -1910,26 +1893,6 @@ it.effect("a sign-out drops the view the window drew", () =>
   }),
 );
 
-it.effect(
-  "a call into an agent with no task tells its activity to the floating call alone, never to the open task",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { tasks, viewLands, openTask } = yield* subject(service);
-      yield* tasks.lifetime;
-      yield* openTask(INVITES);
-
-      const told = yield* viewLands((next) => next.callActivity?.notes === true);
-      tasks.showActivity({
-        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-        agentId: "taskless-agent",
-        notes: true,
-      });
-      const toldView = yield* told;
-      assert.equal(toldView.activity, undefined);
-      assert.deepEqual(toldView.callActivity, { notes: true });
-    }),
-);
 it.effect(
   "the first refresh follows the account's workspaces with their GitHub organizations, and a sign-out clears them",
   () =>
@@ -2662,7 +2625,7 @@ it.effect("leaving a workspace reaches the service and the view then holds it no
 );
 
 it.effect(
-  "leaving the open plan's workspace ends the plan's call and closes the plan, and a refused leave keeps it open",
+  "leaving the open plan's workspace closes the plan, and a refused leave keeps it open",
   () =>
     Effect.gen(function* () {
       const acmeTask = {
@@ -2672,8 +2635,7 @@ it.effect(
       const service = fakeService([acmeTask]);
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
-      const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last, listed, openTask } = yield* subject(service, { call: standing });
+      const { call, last, listed, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(INVITES);
@@ -2683,7 +2645,6 @@ it.effect(
       assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
       assert.equal(last()?.activeTaskId, INVITES);
       assert.equal(last()?.document.status, TASKS_READ.READY);
-      assert.deepEqual(standing.about, { taskId: INVITES });
 
       service.notPermitted = false;
       const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
@@ -2691,51 +2652,20 @@ it.effect(
       assert.deepEqual(left, { left: true });
       assert.equal(last()?.activeTaskId, undefined);
       assert.deepEqual(last()?.document, { status: TASKS_READ.IDLE });
-      assert.equal(standing.about, undefined);
     }),
 );
 
-it.effect(
-  "leaving a workspace ends a call still standing about one of its plans that is no longer open, and keeps the open plan of another",
-  () =>
-    Effect.gen(function* () {
-      const acmeTask = {
-        ...task(INVITES, "Teammate invitations", "# Draft", 10),
-        workspaceId: ACME.id,
-      };
-      const personalTask = {
-        ...task(BILLING, "Billing", "# Billing", 20),
-        workspaceId: PERSONAL.id,
-      };
-      const service = fakeService([acmeTask, personalTask]);
-      service.memberships = [PERSONAL, ACME];
-      const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last, listed, openTask } = yield* subject(service, { call: standing });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* listed();
-      yield* openTask(BILLING);
-
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
-
-      assert.deepEqual(left, { left: true });
-      assert.equal(standing.about, undefined);
-      assert.equal(last()?.activeTaskId, BILLING);
-    }),
-);
-
-it.effect("leaving another workspace than the open plan's keeps the plan and its call", () =>
+it.effect("leaving another workspace than the open plan's keeps the plan open", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.memberships = [PERSONAL, ACME];
-    const standing: StandingCall = { about: { taskId: INVITES } };
-    const { call, last, openTask } = yield* subject(service, { call: standing });
+    const { call, last, openTask } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     yield* openTask(INVITES);
 
     yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
 
     assert.equal(last()?.activeTaskId, INVITES);
-    assert.deepEqual(standing.about, { taskId: INVITES });
   }),
 );
 
@@ -3266,49 +3196,41 @@ function callRow(lastSegment: number, closedAt: number | null) {
   };
 }
 
-it.effect(
-  "the open task's pages are read again as their mark moves, not on a call's words, its activity, or its end",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const record = recordLive();
-      service.recordLives[INVITES] = record;
-      const { call, tasks, openTask } = yield* subject(service);
-      yield* tasks.lifetime;
-      yield* openTask(INVITES);
-      yield* followSettled;
-      assert.equal(record.held(), 1, "its poll is held while nothing moves");
-      const taken = () => service.recordReads.splice(0).toSorted();
-      taken();
-      const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
-        answered(() => record.set({ plan: [], pages, calls, code: [] }));
-      const page = (version: number) => ({ pageId: "page-1", version });
+it.effect("the open task's pages are read again as their mark moves, not on a call's words", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+    const record = recordLive();
+    service.recordLives[INVITES] = record;
+    const { call, tasks, openTask } = yield* subject(service);
+    yield* tasks.lifetime;
+    yield* openTask(INVITES);
+    yield* followSettled;
+    assert.equal(record.held(), 1, "its poll is held while nothing moves");
+    const taken = () => service.recordReads.splice(0).toSorted();
+    taken();
+    const deliver = (pages: readonly unknown[], calls: readonly unknown[]) =>
+      answered(() => record.set({ plan: [], pages, calls, code: [] }));
+    const page = (version: number) => ({ pageId: "page-1", version });
 
-      // The first answer with rows reads every part, since the reads the task opened with may have missed it.
-      yield* deliver([page(1)], []);
-      assert.deepEqual(taken(), ["pages"]);
+    // The first answer with rows reads every part, since the reads the task opened with may have missed it.
+    yield* deliver([page(1)], []);
+    assert.deepEqual(taken(), ["pages"]);
 
-      yield* deliver([page(2)], []);
-      assert.deepEqual(taken(), ["pages"]);
+    yield* deliver([page(2)], []);
+    assert.deepEqual(taken(), ["pages"]);
 
-      // A call's words landing, its activity, and its end read nothing.
-      yield* deliver([page(2)], [callRow(3, null)]);
-      tasks.showActivity({
-        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-        planId: INVITES,
-        notes: false,
-      });
-      tasks.callEnded({ agentId: "agent-1", taskId: INVITES });
-      yield* deliver([page(2)], [callRow(3, 5_000)]);
-      yield* TestClock.adjust(Duration.seconds(5));
-      yield* followSettled;
-      assert.deepEqual(taken(), []);
+    // A call's words landing read nothing.
+    yield* deliver([page(2)], [callRow(3, null)]);
+    yield* deliver([page(2)], [callRow(3, 5_000)]);
+    yield* TestClock.adjust(Duration.seconds(5));
+    yield* followSettled;
+    assert.deepEqual(taken(), []);
 
-      // Leaving the task lets the follow go.
-      yield* call(GATEWAY_METHOD.TASKS_CLOSE);
-      yield* followSettled;
-      assert.equal(record.held(), 0);
-    }),
+    // Leaving the task lets the follow go.
+    yield* call(GATEWAY_METHOD.TASKS_CLOSE);
+    yield* followSettled;
+    assert.equal(record.held(), 0);
+  }),
 );
 
 it.effect(

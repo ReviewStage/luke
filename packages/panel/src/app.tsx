@@ -52,9 +52,9 @@ import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
-import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
+import { HeldInboxesProvider } from "./tasks/held-inboxes.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
@@ -181,14 +181,15 @@ export function App(): React.JSX.Element {
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
   const account = useAppSlice(APP_SLICE.ACCOUNT);
-  // Note that the account's key is read above the window, because every message box's Dictate reads it.
+  const accountKey =
+    account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  // Note that the account's key is read above the window, because every message box's Dictate reads it,
+  // and the inboxes it holds for the session are that account's.
   return (
-    <OpenAiKeyProvider
-      account={
-        account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined
-      }
-    >
-      {landed ? <AppWindow /> : null}
+    <OpenAiKeyProvider account={accountKey}>
+      <HeldInboxesProvider account={accountKey}>
+        {landed ? <AppWindow /> : null}
+      </HeldInboxesProvider>
     </OpenAiKeyProvider>
   );
 }
@@ -419,7 +420,7 @@ function AppWindow(): React.JSX.Element {
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
     link: copyLink.standing,
-    title: stepTitle(tab, tasks, room === SHELL_ROOM.NARROW),
+    title: stepTitle(tab, tasks),
     tab,
     onTabChange: changeTab,
     settingsView: shownView,
