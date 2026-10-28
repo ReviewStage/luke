@@ -394,45 +394,25 @@ beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 - **Tabs.** `Plan`, the task's document; `Inbox`, what its agents need of
-  the developer; `Board`, the task's whiteboard; `Code`, the code its agents
-  showed on the task, read by the service from each agent's own checkout
-  ("How agents show code" below), live during a call and read back when the
-  task opens (`GET /api/plans/{id}/code`,
-  `packages/service/src/tasks/task-work-store.ts`), so a restart or a switch
-  to another task and back loses none of it; and `Comments`, the plan's
+  the developer; `Board`, the task's whiteboard; and `Comments`, the plan's
   threads. After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
   terminals, and browsers, as the "+" lists them. The plan's versions open in
   the whole window ("History" below). The coding agents themselves have tabs
-  in the task's column beside the task's own ("Agent tabs" below). The Code
-  tab draws every code shown on the task, oldest first, several of one file
-  included, a card each under the call it was shown on, the agent's note on
-  why it showed it
-  above its lines so the feed reads as a walkthrough, a live call's code appending at the
-  bottom; the record's copy of a live call's code is told apart by its
-  `show_code` call, which the `plan.code` frame carries with its turn and
-  time, so it is drawn once. Each card opens its whole file in a File tab,
-  one per file, the snippet's lines lit; opening a file already open chooses
-  its tab and moves the lit lines, and the "+" lists every file shown under
-  Files. The file is read a window of 500 lines at a time as the tab scrolls
-  (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`), from GitHub at the
-  head of the default branch through the Luke GitHub App, under the rule
-  `show_code` keeps
-  (`packages/service/src/tasks/shown-file.ts`); a file changed since is drawn as it is now, and
-  one not on that branch, or not read at all, says so over the lines an agent
-  showed of it. A File tab opened from a code block of the task's Inbox is
-  read at the commit the agent named instead. Over the first line of each
-  range of the file an agent showed with a note stands that note, a card a
-  range, the newest note on a range speaking for it: folded to a line or
-  open, as the tab keeps it, its ⋯ offering View in conversation, the
-  agent's turn that showed the lines; a tab read at a commit draws only the
-  notes shown at that commit. File tabs are kept nowhere. With no code ever shown, the Code tab says so
-  quietly rather than going away. The strip scrolls where the agents
-  overflow it, and no tab closes.
+  in the task's column beside the task's own ("Agent tabs" below). A file
+  named in place, by a mention, a code block of the task's Inbox, or ⌘K,
+  opens whole in a File tab, one per file, the lines named lit; opening a
+  file already open chooses its tab and moves the lit lines. The file is read
+  (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`) from GitHub at the
+  head of the default branch through the Luke GitHub App, a `.env` file never
+  read (`packages/service/src/tasks/shown-file.ts`); a file changed since is
+  drawn as it is now, and one not on that branch, or not read at all, says so
+  in its place. A File tab opened from a code block of the task's Inbox is
+  read at the commit the agent named instead. File tabs are kept nowhere.
+  The strip scrolls where the agents overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for an agent's first drawing on the
-  task's board, the first code an agent puts up, each once per task
-  (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
+  task's board, once per task (`tasks/use-panel-arrivals.ts`), and a subagent opened from an agent's
   transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
@@ -918,32 +898,6 @@ comparative evaluation.
 - **Everything else is the panel's own.** The waveform is the wings', and
   a voice error or notice takes the notice line, with the button left able
   to try again.
-
-### How agents show code
-
-A coding agent reads the task's repository in its own sandbox's checkout
-("From a plan to a pull request" below), not a folder on the Mac, and so
-does the code it puts on the developer's screen. What only the Mac has, it
-reaches with `run_on_mac` (below).
-
-`show_code` (`packages/service/src/tasks/show-code.ts`) reads from the agent's
-checkout: the file named and a window of at most 200 lines around the lines
-pointed at, each line cut to 400 characters, with the path resolved inside
-the checkout root and a `.env` file never read. The call carries a note of
-at most 280 characters, the model's own words on what the lines do for the
-plan and what to notice, and a call without one shows nothing; a walk
-through code is a few calls in order, each a focused range with its own
-note. The lines and the note are the call's answer, so they are journaled with the call, told to the voice as the
-`code_shown` turn event once the call has answered, held until Luke next
-starts to speak, and sent to the Mac on the `plan.code` frame with the
-repository they came from; the Mac colours and draws them and reads nothing
-of its own (`packages/host/src/task-code.ts`). Every answered call's lines
-are read back from the agents' journals when the task opens,
-picked by their parts in the statement and read by the same reading
-(`shownCodeOf`), which holds to the secret-file rule again, so the Code tab
-keeps every code shown after the call. A file that is missing,
-outside the checkout, binary, too large, or secret, and a checkout that
-cannot be reached, answer `rejected` with why, and nothing goes on screen.
 
 ### Commands on the developer's Mac
 

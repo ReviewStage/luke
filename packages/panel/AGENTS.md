@@ -52,7 +52,7 @@ it (the window under it is the shell's: `apps/desktop/src/renderer/AGENTS.md`):
   `scrollIntoView` or a focus then scrolls the whole window into the room a
   sliding pane stands in, and leaves it there. Inside a pane that may still be
   sliding in, scroll its own scroller rather than call `scrollIntoView`, which
-  scrolls every box around the element (`code-pane.tsx`'s `centreWithin`).
+  scrolls every box around the element (`scroll-within.ts`'s `centreWithin`).
 - **Title-bar controls stand still while the panes slide beneath them.** They come
   after the drag strips in DOM order, because a later drag region wins, and draw
   their fills over an opaque `--title-bar-ground`, because a translucent fill

@@ -276,7 +276,6 @@ test("the column's toolbar draws one ⋯, the task's own, on every tab", async (
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.BOARD },
-    { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.CODE },
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.INBOX },
     { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
     { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },

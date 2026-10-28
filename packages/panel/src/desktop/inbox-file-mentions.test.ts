@@ -159,7 +159,6 @@ async function inbox() {
       [],
       [],
       [],
-      [],
       taskAgents.agentIds,
       undefined,
       undefined,

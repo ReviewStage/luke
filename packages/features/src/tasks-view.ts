@@ -231,18 +231,10 @@ export const taskShownCodeSchema = EffectSchema.Struct({
 
 export type TaskShownCode = typeof taskShownCodeSchema.Type;
 
-/**
- * One code shown on the active task as the Code tab draws it: the call that
- * showed it, its turn and when that began, and the lines pointed at with a
- * few of the file around them, plain, as the service read them, which the
- * window colours as it draws them (`code-snippet.tsx`).
- */
-export type TaskCodeShowing = TaskShownCode;
+/** The code of one showing: what Luke named, where it was read, its lines, and his note on them. */
+export type TaskCode = TaskShownCode["code"];
 
-/** The code of one showing as the Code tab draws it: what Luke named, where it was read, its lines, and his note on them. */
-export type TaskCode = TaskCodeShowing["code"];
-
-/** Every code Luke showed on one task, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
+/** Every code Luke showed on one task, oldest first: the plan-work page's `code`, read on its own. */
 export const taskCodeAnswerSchema = EffectSchema.Struct({
   code: EffectSchema.Array(taskShownCodeSchema),
 });
@@ -306,29 +298,6 @@ export const tasksViewSchema = EffectSchema.Struct({
   callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /** The active task's whiteboard as last read or saved; absent with no task open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
-  /**
-   * Every code the active task's agents showed, oldest first, several of one
-   * file included: what the record holds, read with the task, and each code
-   * a call shows since, by its call, so a call's code and the record's copy
-   * of it stand once; absent with none, and cleared with the activity. A
-   * call's end keeps them.
-   */
-  shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
-  /**
-   * The code shown on calls into an agent with no task, which no task's
-   * record holds, oldest first, by its call: what that agent's page draws in
-   * its side panel. Absent before such a call shows any; a call into another
-   * agent with no task replaces it as it shows its first, and a call's end
-   * keeps it, as a task's code is kept.
-   */
-  agentCallCode: EffectSchema.optionalKey(
-    EffectSchema.Struct({
-      agentId: EffectSchema.String,
-      shownCode: EffectSchema.Array(taskShownCodeSchema),
-    }),
-  ),
-  /** Where the read of the active task's code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
-  codeStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with

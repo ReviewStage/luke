@@ -1,4 +1,4 @@
-import type { TaskActivityFrame, TaskCodeFrame } from "@luke/features";
+import type { TaskActivityFrame } from "@luke/features";
 import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@luke/features/analytics";
 import {
   carried,
@@ -36,8 +36,6 @@ export interface LiveDependencies {
   callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
   /** Where the service's word of what each part of Luke is doing on a call goes, and the call's end clearing it. */
   showTaskActivity: (activity: TaskActivityFrame) => void;
-  /** Where code Luke puts on screen during a call goes. */
-  showTaskCode: (code: TaskCodeFrame) => void;
   /** Where a call's end goes, so what it was doing is cleared with it. */
   taskCallEnded: (about: VoiceCallAbout) => void;
 }
@@ -75,7 +73,6 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     },
     // What each part of Luke is doing on the call, as the service says it.
     onTaskActivity: (activity) => dependencies.showTaskActivity(activity),
-    onTaskCode: (code) => dependencies.showTaskCode(code),
     onTaskCallEnded: (about) => dependencies.taskCallEnded(about),
   });
 

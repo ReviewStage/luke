@@ -1,203 +1,72 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Task } from "@luke/features/task-wire";
-import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import type { InboxCodeBlock } from "@luke/features/inbox-wire";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { DesktopTasks } from "../desktop/desktop-tasks.js";
+import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
-import { SIDE_PANEL_TAB } from "./use-side-panel.js";
-import { NO_LOOKS } from "./use-task-looks.js";
+import { InboxCodeCard } from "./inbox-code-card.js";
 
 /**
- * file-ref.test.ts -- a file is named one way wherever it stands: its tab,
- * its row in the side panel's "+", and the head of a card of its code wear
- * its type's icon and hang its card, its whole path and Luke's note on its
- * lines, and the card's path opens it on the card's lines.
+ * file-ref.test.ts -- a file named in place, as the head of an Inbox item's
+ * code card names it: its path and its lines, hanging the file's card naming
+ * the repository the lines are read from, and a press opening the file on
+ * those lines at the item's commit.
  */
-
-const TASK: Task = {
-  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-  workspaceId: "workspace-personal",
-  name: "Teammate invitations",
-  createdAt: 1,
-  updatedAt: 2,
-  repository: "acme/relay",
-  document: { body: "", assumptions: [] },
-};
 
 const PATH = "src/invites/accept.ts";
 
-const NOTE = "A used invite is refused here.";
-
-/** Lines 3–5 of the file, as Luke showed them with a note, read at a commit. */
-const SHOWING: TaskCodeShowing = {
-  callId: "c",
-  turnId: "t",
-  shownAt: 1_000,
-  code: {
-    ref: { path: PATH, startLine: 3, endLine: 5 },
-    repository: TASK.repository ?? "",
-    commit: "0123456789abcdef",
-    firstLine: 3,
-    lineCount: 9,
-    lines: ["const a = 1;", "const b = 2;", "const c = 3;"],
-    note: NOTE,
-  },
+/** Lines 3–5 of the file at a commit of another repository than the task's, as an Inbox item names them. */
+const BLOCK: InboxCodeBlock = {
+  type: "code",
+  repo: "acme/relay",
+  path: PATH,
+  sha: "0123456789abcdef0123456789abcdef01234567",
+  startLine: 3,
+  endLine: 5,
 };
 
 const roots: Root[] = [];
-
-beforeEach(installScrollIntoView);
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
 
-/**
- * The task open, its side panel on the Code tab holding the file's code,
- * and the file's own tab open beside it, read at `commit` where it names
- * one; each file opened recorded.
- */
-function mount(
-  opened: unknown[][],
-  shownCode: readonly TaskCodeShowing[] = [SHOWING],
-  commit?: string,
-): HTMLElement {
+/** The item's code card, its lines still being read, each file opened recorded. */
+function mount(opened: unknown[][]): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const base = tasksControl();
-  const tab = { path: PATH, range: { startLine: 3, endLine: 5 }, opened: 1 };
-  const tasks = tasksControl({
-    page: TASKS_PAGE.DOCUMENT,
-    activeTaskId: TASK.id,
-    region: { kind: DOCUMENT_REGION.READY, task: TASK },
-    shownCode,
-    sidePanel: {
-      ...base.sidePanel,
-      open: true,
-      tab: SIDE_PANEL_TAB.CODE,
-      files: [commit === undefined ? tab : { ...tab, commit }],
+  const card = createElement(InboxCodeCard, {
+    block: BLOCK,
+    code: {
+      repository: BLOCK.repo,
+      readFile: () => new Promise<TasksFileAnswer>(() => undefined),
       onOpenFile: (...asked) => opened.push(asked),
-      // A code card's head is a link, which opens its file as the panel's preview.
-      onPreviewFile: (...asked) => opened.push(asked),
     },
   });
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-      ),
-    ),
-  );
+  act(() => root.render(onRegistry(AtomRegistry.make(), card)));
   return container;
 }
 
-/** The card hung while the pointer rests on `element`: its name and its note. */
-function cardOn(element: Element | null | undefined): (string | null | undefined)[] {
-  assert.ok(element, "the file is named");
-  restOn(element);
-  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
-  assert.ok(card, "the file's card is hung");
-  const read = [
-    card.querySelector(".luke-hover-card-name")?.textContent,
-    card.querySelector(".luke-hover-card-note")?.textContent,
-  ];
-  act(() => {
-    element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
-  });
-  return read;
-}
-
-test("a file's tab, its row in the panel's +, and its code card's head wear its type's icon, and the tab and the head hang its card with Luke's note", () => {
-  const panel = mount([]).querySelector(".side-panel");
-  assert.ok(panel, "the side panel");
-  const tab = [...panel.querySelectorAll('[role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === "accept.ts",
-  );
-  assert.ok(tab, "the file's tab");
-  const head = panel.querySelector(".luke-code-card [data-file-ref]");
-  assert.ok(head, "the code card names the file");
-  const icon = tab.querySelector(".luke-tab-icon")?.innerHTML;
-  assert.equal(head.querySelector("svg")?.outerHTML, icon, "the head wears the tab's icon");
-
-  const add = panel.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
-  assert.ok(add, "the strip's +");
-  act(() => add.click());
-  const row = [...document.querySelectorAll('.luke-searchable-menu [role="option"]')].find(
-    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === "accept.ts",
-  );
-  assert.equal(
-    row?.querySelector(".luke-combobox-option-glyph")?.innerHTML,
-    icon,
-    'the "+" row wears the tab\'s icon',
-  );
-  act(() => add.click());
-
-  assert.deepEqual(cardOn(tab), [PATH, NOTE]);
-  assert.deepEqual(cardOn(head), [PATH, NOTE]);
-});
-
-test("a code card's head hangs the file's card naming the repository its lines were read from, the task's or another", () => {
-  const shared: TaskCodeShowing = {
-    ...SHOWING,
-    callId: "d",
-    code: { ...SHOWING.code, repository: "acme/shared" },
-  };
-  const heads = mount([], [SHOWING, shared]).querySelectorAll(
-    ".side-panel .luke-code-card [data-file-ref]",
-  );
-
-  const named = [...heads].map((head) => {
-    restOn(head);
-    const sub = document.querySelector(
-      ".luke-tooltip-card [data-file-card] .luke-hover-card-sub",
-    )?.textContent;
-    act(() => {
-      head.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
-    });
-    return sub;
-  });
-  assert.deepEqual(named.toSorted(), ["acme/relay", "acme/shared"]);
-});
-
-test("a code card's head says its lines as Lines 3–5, and a press on it opens the file on those lines at the commit Luke read them at", () => {
+test("a code card's head says its lines as Lines 3–5, hangs the file's card naming its repository, and a press on it opens the file on those lines at the item's commit", () => {
   const opened: unknown[][] = [];
   const head = mount(opened).querySelector<HTMLButtonElement>(
     ".luke-code-card button[data-file-ref]",
   );
   assert.ok(head, "the code card's head opens the file");
   assert.equal(head.textContent, `${PATH}Lines 3–5`);
-  act(() => head.click());
-  assert.deepEqual(opened, [[SHOWING.code.ref, SHOWING.code.commit]]);
-});
 
-test("a file's tab read at a commit hangs Luke's note on the lines he showed at that commit, never a later showing's, nor another repository's", () => {
-  const later: TaskCodeShowing = {
-    ...SHOWING,
-    callId: "d",
-    code: { ...SHOWING.code, commit: "fedcba9876543210", note: "Sends the email." },
-  };
-  const elsewhere: TaskCodeShowing = {
-    ...SHOWING,
-    callId: "e",
-    code: { ...SHOWING.code, repository: "acme/other", note: "Another repository's file." },
-  };
-  const panel = mount([], [SHOWING, later, elsewhere], SHOWING.code.commit).querySelector(
-    ".side-panel",
-  );
-  const tab = [...(panel?.querySelectorAll('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === "accept.ts",
-  );
-  assert.deepEqual(cardOn(tab), [PATH, NOTE]);
+  restOn(head);
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, PATH);
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, BLOCK.repo);
+
+  act(() => head.click());
+  assert.deepEqual(opened, [[{ path: PATH, startLine: 3, endLine: 5 }, BLOCK.sha]]);
 });

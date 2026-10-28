@@ -27,6 +27,7 @@ export * from "./components/choice/count-part.js";
 export * from "./components/choice-bar/choice-bar.js";
 export * from "./components/choice-list/choice-list.js";
 export * from "./components/code-card/code-card.js";
+export * from "./components/code-card/file-code-card.js";
 export * from "./components/collection-page/collection-page.js";
 export * from "./components/combobox/combobox.js";
 export * from "./components/combobox/use-combobox-field.js";

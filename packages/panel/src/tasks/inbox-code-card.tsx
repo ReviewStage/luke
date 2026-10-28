@@ -1,12 +1,13 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
-import { ANNOUNCE, ErrorState, SpinnerRegion, TabNotice } from "@luke/ui";
-import { copiedLines } from "@luke/voice/code-pane-model";
+import { ANNOUNCE, ErrorState, FileCodeCard, SpinnerRegion, TabNotice } from "@luke/ui";
+import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
+import { copyThroughShell } from "../copy-feedback.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { FileCodeCard } from "./code-pane.js";
 import { CodeSnippet } from "./code-snippet.js";
+import { FileRef } from "./file-ref.js";
 import type { ReadFileWindow } from "./file-tab.js";
 import {
   CODE_READ,
@@ -18,12 +19,12 @@ import {
 } from "./inbox-model.js";
 
 /**
- * inbox-code-card.tsx -- lines of a file at a commit, as the Code tab draws a card of them, wherever an Inbox item shows them: a code block, and a link to those lines standing alone in its words.
+ * inbox-code-card.tsx -- lines of a file at a commit, as a code card, wherever an Inbox item shows them: a code block, and a link to those lines standing alone in its words.
  *
  * The card is headed by the path and the lines, the file opened in the
  * File tab at the commit from either, and the lines read from GitHub at
  * that commit through the File tab's own read, with a few around them, the
- * named ones lit, drawn as a Code tab card's are (`code-snippet.tsx`). Lines the task cannot read, another repository's or a
+ * named ones lit (`code-snippet.tsx`). Lines the task cannot read, another repository's or a
  * range past the bound, say why and open nothing. The card shows the
  * repository's lines, so it is out of the session recording, which
  * `CodeCard` sees to (`ph-no-capture`).
@@ -40,7 +41,7 @@ export interface InboxCodeDoors {
 }
 
 /**
- * A code block: a card as the Code tab draws one, headed by the path and
+ * A code block: a card headed by the path and
  * the lines, the file opened in the File tab at the block's commit from
  * either, and the lines read from GitHub at that commit with a few around
  * them, the block's own lit; lines the task cannot read say why, and open
@@ -88,15 +89,16 @@ export function InboxCodeCard({
     ANNOUNCE.ALERT,
     shown.kind === CODE_READ.NOTICE && !shown.again ? shown.line : "",
   );
+  // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
+  const onOpen = unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined;
   return (
     <FileCodeCard
-      codeRef={codeRef}
+      title={<FileRef codeRef={codeRef} repository={block.repo} onOpen={onOpen} />}
+      label={fileRefText(codeRef)}
       data={{ "data-inbox-code": "" }}
-      repository={block.repo}
-      note={undefined}
       copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
-      // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
-      onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
+      copy={copyThroughShell}
+      onOpen={onOpen}
       body={
         shown.kind === CODE_READ.READY ? (
           <CodeSnippet code={shown.code} />

@@ -25,7 +25,6 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@luke/ui/tab-strip-model";
-import { shownFiles } from "@luke/voice/code-pane-model";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -76,8 +75,8 @@ import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
  * transcript while its task is open.
  *
  * A pin outlives what it opens only on the open task's word: an agent the
- * task's agents no longer hold, its Changes too, or a file no longer among those Luke showed
- * on it, leaves the row dimmed, opening nothing, with a quiet note on its
+ * task's agents no longer hold, or its Changes, leaves the row dimmed,
+ * opening nothing, with a quiet note on its
  * card, until it is unpinned. Another task's pins are never gone, since
  * nothing of that task is read but its row; a pin is named as its tab is
  * now, from that row where it is another task's (`namedPin`), and by the
@@ -90,20 +89,13 @@ const UNPIN = commandHead(PANEL_COMMAND.UNPIN_TAB);
 /** What a pin's card says once its task no longer holds what it opens. */
 const GONE_NOTE = "No longer on this task";
 
-/** Whether the open task has said the pin's agent, the agent of its Changes, or its file is gone from it; another task's pins and a fixed tab's never are. */
+/** Whether the open task has said the pin's agent, or the agent of its Changes, is gone from it; another task's pins, a file's, and a fixed tab's never are. */
 function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
-  const { tab } = pin;
   if (pin.task !== tasks.activeTaskId) return false;
   const agentId = pinAgentId(pin);
-  if (agentId !== undefined) {
-    const { agents } = tasks.agents;
-    return agents !== undefined && !agents.some((agent) => agent.id === agentId);
-  }
-  // Note that a task Luke showed no code on says nothing of its files, because a file pinned there was browsed to rather than shown.
-  if (!isFileTab(tab) || tasks.shownCode === undefined || tasks.shownCode.length === 0) {
-    return false;
-  }
-  return !shownFiles(tasks.shownCode).some((ref) => ref.path === tab.file);
+  if (agentId === undefined) return false;
+  const { agents } = tasks.agents;
+  return agents !== undefined && !agents.some((agent) => agent.id === agentId);
 }
 
 /**

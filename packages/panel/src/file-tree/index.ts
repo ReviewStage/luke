@@ -52,9 +52,9 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * in an editor's explorer. The pane's search narrows the rows to those whose
  * path holds the query, through Pierre's own search: over the whole
  * repository, in a tree of its own, once the pane has handed its every
- * entry, and over the folders listed so far until then. Its filter shows
- * only the files Luke showed, in a tree of those paths alone, every folder
- * open. Each stands in the repository's place while it is asked for, so the
+ * entry, and over the folders listed so far until then. Narrowed to some
+ * files alone, a change set's, it shows a tree of those paths alone, every
+ * folder open. Each stands in the repository's place while it is asked for, so the
  * folders opened there are as they were when it is let go. A change set's
  * tree marks each file's row with what became of it, through Pierre's own
  * git status, in whichever of them stands, and a pull request's draws at

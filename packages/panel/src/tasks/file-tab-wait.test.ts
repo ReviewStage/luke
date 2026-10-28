@@ -100,14 +100,6 @@ test("a File tab says it is reading the file until its lines are drawn, never st
           { active: true, subject: { task: "task-1", tab: { file: PATH } } },
           createElement(FileTab, {
             file: { path: PATH, range: undefined, opened: 1 },
-            snippet: undefined,
-            notes: {
-              notes: [],
-              folded: [],
-              onFold: () => undefined,
-              taskId: "task-1",
-              agentLabel: () => undefined,
-            },
             readFile: read,
             onRead: () => undefined,
           }),

@@ -52,9 +52,9 @@ import {
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
 import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
+import { centreWithin } from "../scroll-within.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { centreWithin } from "./code-pane.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,

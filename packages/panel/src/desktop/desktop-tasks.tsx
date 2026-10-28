@@ -824,11 +824,6 @@ function PlanDocument({
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
         return tasks.onShowTask(target.task);
-      case TOOL_TARGET.SHOWN_CODE: {
-        // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
-        const showing = tasks.shownCode?.find((each) => each.callId === target.call);
-        return sidePanel.onPreviewFile(target.ref, showing?.code.commit);
-      }
     }
   };
   // A delegation's row in an agent's transcript opens its worker in the side
@@ -988,7 +983,6 @@ function PlanDocument({
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const listedCard = listedOpen ?? opened;
   const sideTab = sidePanel.tab;
-  const { shownCode } = tasks;
   const cards = useMemo(
     () =>
       listedCard === undefined
@@ -998,7 +992,6 @@ function PlanDocument({
             held: views.held,
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
-            shownCode: shownCode ?? [],
             pages: { taskId: listedCard.id },
             task: {
               name: listedCard.name,
@@ -1006,7 +999,7 @@ function PlanDocument({
               card: taskCardOf(tasks, listedCard, now),
             },
           }),
-    [agents, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
+    [agents, views.held, tab, sideTab, listedCard, tasks, now],
   );
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
   // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
@@ -1032,8 +1025,6 @@ function PlanDocument({
       }),
       readAgents: readMentionAgents,
       pullRequests: mentionablePullRequests(agents),
-      shownCode,
-      openFiles: sidePanel.files,
       doors: {
         taskId: opened.id,
         place: { workspace, repository: opened.repository },
@@ -1050,8 +1041,6 @@ function PlanDocument({
     opened,
     workspace,
     pages,
-    shownCode,
-    sidePanel.files,
     agents,
     readMentionAgents,
     openMention,
@@ -1388,7 +1377,6 @@ function PlanDocument({
                             cardId={summaryCard}
                             inbox={inbox.board}
                             held={views.held}
-                            repository={task.repository}
                             onOpenAgent={(agent) => openColumnTab({ agent })}
                           />
                         </TaskBody>
@@ -1404,8 +1392,6 @@ function PlanDocument({
                         taskId={task.id}
                         repository={task.repository}
                         board={tasks.board}
-                        shownCode={tasks.shownCode}
-                        codeFailed={tasks.codeFailed ? { onRetry: tasks.onRetryCode } : undefined}
                         pages={tasks.pages}
                         agents={agents}
                         openAgents={mainTabs.openAgents}

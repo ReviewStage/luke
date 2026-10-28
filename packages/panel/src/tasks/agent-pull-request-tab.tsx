@@ -144,6 +144,7 @@ import {
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
 import { lazyRoute } from "../lazy-route.js";
+import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -167,7 +168,6 @@ import {
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
 import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
-import { scrollerOf } from "./code-pane.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
   type ConversationFilters,

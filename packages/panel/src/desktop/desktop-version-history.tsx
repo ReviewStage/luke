@@ -51,8 +51,8 @@ import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
+import { centreWithin } from "../scroll-within.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { centreWithin } from "../tasks/code-pane.js";
 import {
   type ChangedSection,
   changedSections,

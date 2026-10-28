@@ -259,7 +259,7 @@
   --luke-scroll-fade: 26px;
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --luke-label-fade: 20px;
-  /* How tall a band stuck at a scroller's start stands, a call's checkpoint,
+  /* How tall a band stuck at a scroller's start stands, a section's heading,
      which its fade begins beneath (`ScrollArea`'s `fadeInset`). */
   --luke-scroll-band: var(--luke-space-32);
 

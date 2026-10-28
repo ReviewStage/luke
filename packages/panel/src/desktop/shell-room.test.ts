@@ -122,7 +122,7 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const sidebar = useSidebarCollapse(false, stage.compact);
-  const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], [], undefined, room);
+  const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], undefined, room);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
   const shell = createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, onCancelSignIn: ignore },

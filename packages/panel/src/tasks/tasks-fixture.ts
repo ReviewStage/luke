@@ -22,8 +22,6 @@ import {
 import {
   TASK_CALL_FAILURE,
   TASKS_READ,
-  type TaskCode,
-  type TaskCodeShowing,
   type TasksRepositoriesAnswer,
   type TasksRevisionsAnswer,
   type TasksView,
@@ -392,94 +390,6 @@ const FIXTURE_TASK_LIST: TasksView = {
 };
 
 /**
- * The code on screen in the fixture's call: Luke pointing at the invite
- * check he is asking about, lines 6 to 9 of an invented file, which the
- * Code tab colours as it draws it.
- */
-const FIXTURE_CODE: TaskCode = {
-  ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
-  repository: "ada/relay",
-  firstLine: 1,
-  lineCount: 14,
-  lines: [
-    'import { db } from "../db.js";',
-    "",
-    "// An invite link is good once, and for seven days.",
-    "export async function acceptInvite(token: string) {",
-    "  const invite = await db.invites.find(token);",
-    "  if (!invite || invite.acceptedAt) {",
-    '    throw new InviteError("no-longer-valid");',
-    "  }",
-    '  if (expired(invite)) throw new InviteError("expired");',
-    "  await db.members.add(invite.workspaceId, invite.email);",
-    "  await db.invites.accept(invite.id);",
-    "}",
-    "",
-    "export { acceptInvite };",
-  ],
-};
-
-/** The fixture's file around lines `startLine` to `endLine`, three either side, as the host keeps a card's lines. */
-function fixtureExcerpt(startLine: number, endLine: number): TaskCode {
-  const firstLine = Math.max(1, startLine - 3);
-  return {
-    ...FIXTURE_CODE,
-    ref: { path: FIXTURE_CODE.ref.path, startLine, endLine },
-    firstLine,
-    lines: FIXTURE_CODE.lines.slice(firstLine - 1, endLine + 3),
-  };
-}
-
-/** The coding agent on the fixture's task whose typed turn showed the last of its code. */
-const FIXTURE_CODING_AGENT_ID = "7b3c5d7e-9f1a-4b2c-8d4e-6f8a0b2c4d6e";
-
-/**
- * Every code shown on the fixture's task: Luke's in its call, a walkthrough
- * of one file in three steps, each with his note (where a link lands, the
- * check he is asking about, and the expiry after it), and after the call, one
- * more from a typed turn of the task's coding agent.
- */
-const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
-  {
-    callId: "fixture-show-1",
-    turnId: "fixture-turn-1",
-    shownAt: Date.parse("2026-10-07T16:21:00Z"),
-    code: {
-      ...fixtureExcerpt(4, 5),
-      note: "An invite link lands here: acceptInvite finds the invite by its token, so this is where a used link has to be refused.",
-    },
-  },
-  {
-    callId: "fixture-show-2",
-    turnId: "fixture-turn-1",
-    shownAt: Date.parse("2026-10-07T16:21:00Z"),
-    code: {
-      ...fixtureExcerpt(6, 8),
-      note: 'A used invite is already refused here. A withdrawn one should be refused the same way, as "no longer valid".',
-    },
-  },
-  {
-    callId: "fixture-show-3",
-    turnId: "fixture-turn-1",
-    shownAt: Date.parse("2026-10-07T16:21:00Z"),
-    code: {
-      ...fixtureExcerpt(9, 9),
-      note: "Expiry is checked after that, so a link that is both withdrawn and expired reads as no longer valid.",
-    },
-  },
-  {
-    callId: "fixture-show-4",
-    turnId: "fixture-turn-typed",
-    shownAt: Date.parse("2026-10-07T16:40:00Z"),
-    agentId: FIXTURE_CODING_AGENT_ID,
-    code: {
-      ...fixtureExcerpt(10, 11),
-      note: "The member is added before the invite is marked accepted, so a failure between the two leaves the link good for a second use.",
-    },
-  },
-];
-
-/**
  * The open task mid-call, the brain running a repository command, so the
  * capture shows both of the status row's lines.
  */
@@ -488,7 +398,6 @@ const FIXTURE_OPEN_TASK: TasksView = {
   activeTaskId: FIXTURE_TASK.id,
   document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
   activity: { planner: { action: "grep -rn pending src/members" } },
-  shownCode: FIXTURE_SHOWN_CODE,
 };
 
 /**
@@ -736,15 +645,17 @@ function commentsActAnswer(
 const FIXTURE_OPEN_BOARD: TasksView = { ...FIXTURE_OPEN_TASK, board: FIXTURE_BOARD };
 
 /** The side panels the fixture profiles open their task with. */
-const FIXTURE_CODE_PANEL: SidePanelState = {
+const FIXTURE_DOCUMENT_PANEL: SidePanelState = {
   open: true,
   tabs: SIDE_PANEL_TABS,
-  tab: SIDE_PANEL_TAB.CODE,
+  tab: SIDE_PANEL_TAB.PLAN,
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
-const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
-const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN };
-const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
+const FIXTURE_BOARD_PANEL: SidePanelState = {
+  ...FIXTURE_DOCUMENT_PANEL,
+  tab: SIDE_PANEL_TAB.BOARD,
+};
+const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_DOCUMENT_PANEL, open: false };
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the
@@ -769,9 +680,8 @@ export function fixtureTasksView(run: {
 }
 
 /**
- * The side panel a fixture run opens its task with: on the code Luke has on
- * screen under the tasks profile, on the whiteboard under the
- * tasks-board profile, on the plan under the tasks-transcript and
+ * The side panel a fixture run opens its task with: on the whiteboard under
+ * the tasks-board profile, on the plan under the tasks, tasks-transcript, and
  * tasks-work profiles, whose call the task's column shows, the latter with
  * Luke at work on it, on the agent's tab each agent profile names, and
  * closed under any other. Nothing for a live run, which opens the panel as
@@ -782,9 +692,9 @@ export function fixtureSidePanel(run: {
   readonly profile: string;
 }): StagedSidePanel | undefined {
   if (!run.fixtureMode) return undefined;
-  const agent = agentSidePanel(run.profile, FIXTURE_CODE_PANEL, FIXTURE_TASK_ID);
+  const agent = agentSidePanel(run.profile, FIXTURE_DOCUMENT_PANEL, FIXTURE_TASK_ID);
   if (agent !== undefined) return agent;
-  if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_CODE_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_DOCUMENT_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_BOARD_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_DOCUMENT_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_DOCUMENT_PANEL;

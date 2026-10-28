@@ -9,8 +9,6 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import type { CodeRef } from "@luke/features/task-wire";
-import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -20,9 +18,6 @@ import {
   CloseIcon,
   CollapseIcon,
   ConfirmDialog,
-  EmptyState,
-  ERROR_STATE_PLACEMENT,
-  ErrorState,
   ExpandIcon,
   Fill,
   IconButton,
@@ -70,8 +65,6 @@ import {
   type TerminalStripTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
-import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
-import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   Fragment,
@@ -96,6 +89,7 @@ import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { centreWithin } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
@@ -120,15 +114,12 @@ import {
   useCloudBrowserDrafts,
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
-import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import {
   agentGlyphState,
   agentName,
   agentStateWords,
   subagentActor,
 } from "../tasks/coding-agent-model.js";
-import { fileLook, newestFileNote } from "../tasks/file-ref.js";
-import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import {
@@ -261,24 +252,6 @@ interface StripActivity {
  * exit has played (`useSidePanelDrawing`); its arrivals are pane-motion.tsx's.
  */
 
-/** What the Code tab says while Luke has shown no code on the task. */
-const NO_CODE_LINE = "No code yet.";
-
-/** What the Code tab says where the task's code could not be read and none is held. */
-const UNREAD_CODE_LINE = "The code could not be read.";
-
-/**
- * The calls the Code tab's feed groups its code under: none, since every
- * call is an agent's now and drawn in that agent's tab, so the feed heads
- * each code by the turn that showed it.
- */
-const NO_CODE_CALLS: readonly CodeFeedCallSource[] = [];
-
-/** The task's code read that did not land, and its retry, which the Code tab offers while it holds no code. */
-interface CodeFailed {
-  readonly onRetry: () => void;
-}
-
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
  * on the task's area: the panel is dragged no wider than the area less this,
@@ -314,8 +287,7 @@ const NO_PAGES: readonly PageLine[] = [];
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Pull request, and its Terminal, the Code a call
- * into it showed where it has no task to hold it, and no plan's Board,
+ * agent's workers, its Pull request, and its Terminal, and no plan's Board,
  * Call, files, or pages. A tab of an agent's page is no plan's to
  * pin, so none is offered. Beside the window's Inbox it stands for the
  * chosen item's task, holding what the item opened there, the task's
@@ -344,31 +316,23 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
-/** The Code tab alone, which an agent's page offers while a call into it showed code. */
-const CODE_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.CODE];
-
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
-  [SIDE_PANEL_HOLDER.AGENT]: CODE_KINDS,
+  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 
 /**
  * The fixed kinds a holder's panel offers: the Inbox only on a task holding an
- * agent, and an agent's page Code only while a call into its agent showed
- * some. The panel's "+" and ⌘K both ask here, so neither offers a tab that
+ * agent. The panel's "+" and ⌘K both ask here, so neither offers a tab that
  * would open blank.
  */
 export function offeredPanelKinds(
   holder: SidePanelHolder,
-  drawn: { readonly inbox: boolean; readonly code: boolean },
+  drawn: { readonly inbox: boolean },
 ): readonly FixedSidePanelTab[] {
-  return HOLDER_KINDS[holder].filter(
-    (kind) =>
-      (kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox) &&
-      (kind !== SIDE_PANEL_TAB.CODE || holder === SIDE_PANEL_HOLDER.TASK || drawn.code),
-  );
+  return HOLDER_KINDS[holder].filter((kind) => kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox);
 }
 
 /** Whether a task's panel offers its Inbox: it holds an agent, an archived one among them, or already holds the tab, since only an agent posts. */
@@ -425,7 +389,6 @@ const NO_SUBAGENTS: readonly string[] = [];
 
 /** The "+" menu's sections after the fixed kinds, which the task's summary lists under the same headings. */
 export const ADD_SECTION = {
-  FILES: "Files",
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
   TERMINAL: "Terminal",
@@ -609,9 +572,6 @@ export function showPullRequest(
 export interface PanelCards {
   readonly agents: CodingAgentsControl;
   readonly held: HeldTranscripts;
-  /** Every code Luke showed on the task, whose newest note on a file its row's card says. */
-  readonly shown: readonly TaskCodeShowing[];
-  readonly repository: string | null;
   /** The open plan, or the agent on no task, whose pages a page row's card previews. */
   readonly pagePlace: PagePlace;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
@@ -681,13 +641,10 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 /**
  * What the panel may open, as its "+" menu offers it, the task's summary
  * lists it (`task-summary.tsx`), and ⌘K finds it: the fixed kinds given,
- * every one for the "+" and those the task has used for the summary; then,
- * under Files, each file an agent showed on the task, by name with its
- * folder beside it. Each row wears its tab's own look (`tab-look.tsx`): a
- * file as every place names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
- * that tab rather than opening another, as a browser's tab search does, so
- * no row says it is open; a file not open opens through the panel's one
- * door for a file on the newest snippet of it. Then, under Pull requests,
+ * every one for the "+" and those the task has used for the summary. Each
+ * row wears its tab's own look (`tab-look.tsx`). Picking a row whose tab is
+ * open chooses that tab rather than opening another, as a browser's tab
+ * search does, so no row says it is open. Then, under Pull requests,
  * each agent's pull request (`changesOffers`), named as its Pull request tab
  * is, by its number and title (a kind still spelled `changes`, as the tab
  * of its files alone was), with the agent whose it is beside it, found by
@@ -697,7 +654,6 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
-  files: readonly ShownFile[];
   /** The agents' Changes tabs on offer; none where the caller offers none. */
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
@@ -721,33 +677,11 @@ export function panelEntries(input: {
   /** What the rows' cards read, where the caller hangs them; none where it hangs its own. */
   cards?: PanelCards | undefined;
 }): AddEntry[] {
-  const { panel, files, changes = [], pages = [], cards } = input;
+  const { panel, changes = [], pages = [], cards } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind, input.plan),
     onPick: () => panel.onChoose(kind),
   }));
-  // Note that a file's row is named by its place in the list, because a path
-  // may spell a kind's word or another row's id, and the list only grows.
-  const fileRows = files.map((ref, at) => {
-    const tab = panel.files.find((file) => file.path === ref.path);
-    const open = tab !== undefined;
-    // Note that the card's note is of the revision the row opens: the open tab's, else the one shown.
-    const commit = open ? tab.commit : ref.commit;
-    const card =
-      cards === undefined
-        ? undefined
-        : hungCard({
-            kind: TAB_KIND.FILE,
-            path: ref.path,
-            note: newestFileNote(cards.shown, ref.path, { repository: cards.repository, commit }),
-          });
-    return {
-      row: { id: String(at), ...fileLook(ref.path), section: ADD_SECTION.FILES },
-      card,
-      onPick: () =>
-        open ? panel.onOpenFile({ path: ref.path }) : panel.onOpenFile(ref, ref.commit),
-    };
-  });
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the task's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
@@ -824,13 +758,12 @@ export function panelEntries(input: {
     onPick: () => input.terminals?.onNew(agent.id),
   }));
   const browserRows = browserEntries(input.browsers, cards);
-  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
+  return [...kinds, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
 /**
  * What a holder's panel offers by its "+" rules (`panelEntries`): the kinds
- * `offeredPanelKinds` lets it, each file Luke showed on the task, each of
- * the task's agents' pull requests, the plan's pages, a terminal for each
+ * `offeredPanelKinds` lets it, each of the task's agents' pull requests, the plan's pages, a terminal for each
  * agent where the platform runs them and the panel is not the Inbox's, and
  * a new Browser tab in each agent's cloud browser, the one viewed first,
  * on a task's own panel while the experiment is on. The panel's "+" and
@@ -842,7 +775,6 @@ export function panelOffers(input: {
   taskId: string;
   panel: SidePanelControl;
   agents: CodingAgentsControl;
-  shownCode: readonly TaskCodeShowing[];
   pages: readonly PageLine[];
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
@@ -853,7 +785,7 @@ export function panelOffers(input: {
   plan: PlanStanding | undefined;
   cards: PanelCards;
 }): AddEntry[] {
-  const { holder, taskId, panel, agents, shownCode, onNewTerminal, cards } = input;
+  const { holder, taskId, panel, agents, onNewTerminal, cards } = input;
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.heldIds }),
   );
@@ -869,11 +801,7 @@ export function panelOffers(input: {
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
     panel,
-    kinds: offeredPanelKinds(holder, {
-      inbox: inboxOffered(agents, panel),
-      code: shownCode.length > 0,
-    }),
-    files: shownFiles(shownCode),
+    kinds: offeredPanelKinds(holder, { inbox: inboxOffered(agents, panel) }),
     changes: changesOffers(agents, changes),
     pages: input.pages,
     // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
@@ -966,10 +894,6 @@ function stripTabs(input: {
   terminals: readonly TerminalStripTab[];
   /** The task's agents' cloud Browser tabs, as the service lists them. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
-  /** Every code Luke showed on the task, whose newest note on a file its tab's card says. */
-  shown: readonly TaskCodeShowing[];
-  /** The task's repository, whose showings alone a file tab's card reads its note from. */
-  repository: string | null;
   held: HeldTranscripts;
   copied: TranscriptCopier;
   /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
@@ -993,8 +917,8 @@ function stripTabs(input: {
   /** The task's Inbox as its board reads, which its tab's card says; none beside anything but a task's page. */
   inbox: InboxBoardView | undefined;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, onOpenAgent, shownAgent, pagePlace } = input;
+  const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
+  const { copied, onOpenAgent, shownAgent, pagePlace } = input;
   const { cloudBrowsers } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
@@ -1055,20 +979,14 @@ function stripTabs(input: {
     };
   });
   // A file's tab hangs the file's card, as every place naming the file does.
-  const fileTabs = files.map(({ path, commit }) => {
-    const note = newestFileNote(shown, path, { repository, commit });
-    return {
-      tab: { file: path },
-      look: look(
-        { file: path },
-        {
-          ...tabLook({ kind: TAB_KIND.FILE, path }),
-          card: hungCard({ kind: TAB_KIND.FILE, path, note }),
-        },
-      ),
-      close: () => panel.onClose({ file: path }),
-    };
-  });
+  const fileTabs = files.map(({ path }) => ({
+    tab: { file: path },
+    look: look(
+      { file: path },
+      { ...tabLook({ kind: TAB_KIND.FILE, path }), card: hungCard({ kind: TAB_KIND.FILE, path }) },
+    ),
+    close: () => panel.onClose({ file: path }),
+  }));
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
     const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
@@ -1227,8 +1145,6 @@ function PanelTabs({
   pages,
   terminals,
   cloudBrowsers,
-  shown,
-  repository,
   offers,
   held,
   actionsSlot,
@@ -1253,7 +1169,7 @@ function PanelTabs({
   agents: CodingAgentsControl;
   /** The open subagent tabs the task draws, in the strip's order. */
   subagents: readonly DrawnSubagent[];
-  /** The open file tabs of files shown on the task, in the strip's order. */
+  /** The open file tabs, in the strip's order. */
   files: readonly OpenFile[];
   /** The open Changes tabs of the task's agents, in the order opened. */
   changes: readonly ChangesStripTab[];
@@ -1263,10 +1179,6 @@ function PanelTabs({
   terminals: readonly TerminalStripTab[];
   /** The task's agents' cloud Browser tabs, as the service lists them. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
-  /** Every code Luke showed on the task, whose notes the file tabs' cards say. */
-  shown: readonly TaskCodeShowing[];
-  /** The task's repository, whose showings alone the file tabs' cards read. */
-  repository: string | null;
   /** What the "+" offers (`panelEntries`), which the empty panel offers too. */
   offers: readonly AddEntry[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
@@ -1301,8 +1213,6 @@ function PanelTabs({
     pages,
     terminals,
     cloudBrowsers,
-    shown,
-    repository,
     held,
     copied,
     onOpenAgent,
@@ -1738,22 +1648,16 @@ export function taskCards(input: {
   agents: CodingAgentsControl;
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
-  /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
-  shownCode: readonly TaskCodeShowing[];
   /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
   pages: PagePlace | undefined;
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
-  const { agents, held, chosen, shownCode, pages, task } = input;
+  const { agents, held, chosen, pages, task } = input;
   // The task the transcript stands on, whose Plan tab a row opens; none for an agent on no task.
   const taskId = pages !== undefined && "taskId" in pages ? pages.taskId : undefined;
   const subjectOf = (opened: ToolTarget, name: string | undefined): CardSubject | undefined => {
     switch (opened.kind) {
-      case TOOL_TARGET.SHOWN_CODE: {
-        const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
-        return { kind: TAB_KIND.FILE, path: opened.ref.path, note };
-      }
       case TOOL_TARGET.AGENT: {
         const subject = agentSubject(agents, opened.agent, held, chosen({ agent: opened.agent }));
         return { kind: TAB_KIND.AGENT, subject, models: agents.models };
@@ -1818,7 +1722,7 @@ export function taskCards(input: {
   };
 }
 
-/** An agent on the task as its tab names it, which heads the code it showed and its notes on it; none for an agent the task does not list. */
+/** An agent on the task as its tab names it; none for an agent the task does not list. */
 function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
   const agent = agents.agents?.find((each) => each.id === agentId);
   return agent === undefined ? undefined : agentName(agent, agents.models);
@@ -1832,8 +1736,6 @@ function TabContent({
   pagePlace,
   repository,
   board,
-  shownCode,
-  codeFailed,
   files,
   pages,
   agents,
@@ -1844,11 +1746,9 @@ function TabContent({
   cards,
   onWorkerStatus,
   onWorkerHeld,
-  onOpenFile,
   fileTree,
   onBrowseFile,
   onFileHistory,
-  onFoldNote,
   onCloseTab,
   pullRequestViews,
   onPullRequestView,
@@ -1868,11 +1768,8 @@ function TabContent({
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
   board: Board | undefined;
-  shownCode: readonly TaskCodeShowing[] | undefined;
-  /** Whether a File tab reads the files code was shown in: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
+  /** Whether a File tab reads the task's files: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
   codeFilesRead: boolean;
-  /** The task's code read that did not land, where the last did not. */
-  codeFailed: CodeFailed | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
@@ -1891,16 +1788,12 @@ function TabContent({
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: TabViews["onWorkerHeld"];
-  /** Opens a file of the task's repository in a tab of its own, the reference's lines lit. */
-  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
   fileTree: TreeShown;
   /** Shows a file browsed to from a File tab's tree or breadcrumbs, or chosen with ⌘ in the Changes tree (`SidePanelControl.onBrowseFile`). */
   onBrowseFile: (from: string | undefined, path: string, newTab: boolean) => void;
   /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
   onFileHistory: (from: string, step: FileHistoryStep) => void;
-  /** Folds or opens a note on a File tab (`SidePanelControl.onFoldNote`). */
-  onFoldNote: (path: string, callId: string, folded: boolean) => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
   /** What each Pull request tab shows, by agent and number (`SidePanelControl.pullRequestViews`). */
@@ -2034,8 +1927,6 @@ function TabContent({
           taskId={taskId}
           repository={repository}
           file={file}
-          snippet={snippetOf(shownCode, file)}
-          shownCode={shownCode}
           readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId, ...window })}
           readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
           readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
@@ -2049,8 +1940,6 @@ function TabContent({
             canGoForward: (file.forward?.length ?? 0) > 0,
             onStep: (step) => onFileHistory(file.path, step),
           }}
-          onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
-          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
         />
       </Fragment>
     );
@@ -2098,29 +1987,6 @@ function TabContent({
       // An archived task's board only shows, as its agents only read.
       return (
         <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
-      );
-    case SIDE_PANEL_TAB.CODE:
-      // Note that no code read yet is a wait, and only code read as none says so.
-      if (shownCode === undefined && codeFailed !== undefined) {
-        return (
-          <ErrorState onRetry={codeFailed.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {UNREAD_CODE_LINE}
-          </ErrorState>
-        );
-      }
-      if (shownCode === undefined) return <SpinnerRegion delay label={readingWords("the code")} />;
-      return shownCode.length === 0 ? (
-        <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
-          {NO_CODE_LINE}
-        </EmptyState>
-      ) : (
-        <CodePane
-          shown={shownCode}
-          calls={NO_CODE_CALLS}
-          taskId={codeFilesRead ? taskId : undefined}
-          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
-          onOpenFile={codeFilesRead ? onOpenFile : undefined}
-        />
       );
     case SIDE_PANEL_TAB.COMMENTS:
       return (
@@ -2358,8 +2224,6 @@ export function SidePanel({
   taskId,
   repository,
   board,
-  shownCode,
-  codeFailed,
   pages,
   agents,
   openAgents,
@@ -2385,10 +2249,6 @@ export function SidePanel({
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   board: Board | undefined;
-  /** Every code Luke showed on the task, oldest first. */
-  shownCode: readonly TaskCodeShowing[] | undefined;
-  /** The task's code read that did not land, where the last did not; none where the panel reads no task's code. */
-  codeFailed: CodeFailed | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   agents: CodingAgentsControl;
@@ -2534,16 +2394,12 @@ export function SidePanel({
         chosen: (chosen) =>
           (chosenTab !== undefined && sameTab(chosen, chosenTab)) ||
           (shownAgent !== undefined && sameTab(chosen, { agent: shownAgent })),
-        shownCode: shownCode ?? [],
         pages: pagePlaceOf(holder, taskId),
       }),
-    [agents, drawnTranscripts, chosenTab, shownAgent, shownCode, holder, taskId],
+    [agents, drawnTranscripts, chosenTab, shownAgent, holder, taskId],
   );
-  // The file tabs of files shown on the task or browsed to on it, in the strip's order.
-  const offered = shownFiles(shownCode ?? []);
-  const files = panel.files.filter(
-    (file) => file.browsedOn === taskId || offered.some((ref) => ref.path === file.path),
-  );
+  // The file tabs of files opened on the task, in the strip's order.
+  const files = panel.files.filter((file) => file.browsedOn === taskId);
   // An agent's Changes tab stands while the agent is the task's, archived or not, as its pull request does.
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.heldIds }),
@@ -2631,7 +2487,6 @@ export function SidePanel({
     taskId,
     panel,
     agents,
-    shownCode: shownCode ?? [],
     pages: taskPages,
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
@@ -2642,8 +2497,6 @@ export function SidePanel({
     cards: {
       agents,
       held: drawnTranscripts,
-      shown: shownCode ?? [],
-      repository,
       pagePlace: pagePlaceOf(holder, taskId),
       shownAgent,
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
@@ -2692,8 +2545,6 @@ export function SidePanel({
           pages={pageTabs}
           terminals={terminals}
           cloudBrowsers={cloudBrowsers}
-          shown={shownCode ?? []}
-          repository={repository}
           offers={offers}
           held={drawnTranscripts}
           wiring={wiring}
@@ -2786,8 +2637,6 @@ export function SidePanel({
                 pagePlace={pagePlaceOf(holder, taskId)}
                 repository={repository}
                 board={board}
-                shownCode={shownCode}
-                codeFailed={codeFailed}
                 files={files}
                 pages={taskPages}
                 agents={agents}
@@ -2798,11 +2647,9 @@ export function SidePanel({
                 cards={cards}
                 onWorkerStatus={views.onWorkerStatus}
                 onWorkerHeld={views.onWorkerHeld}
-                onOpenFile={panel.onPreviewFile}
                 fileTree={fileTree}
                 onBrowseFile={panel.onBrowseFile}
                 onFileHistory={panel.onFileHistory}
-                onFoldNote={panel.onFoldNote}
                 onCloseTab={panel.onClose}
                 pullRequestViews={panel.pullRequestViews}
                 onPullRequestView={panel.onPullRequestView}

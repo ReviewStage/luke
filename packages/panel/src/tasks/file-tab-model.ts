@@ -1,6 +1,6 @@
 import { GITHUB_PAGE, gitHubPageLink } from "@luke/features/link-grammar";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
-import type { TaskCode, TaskCodeShowing, TasksFileAnswer } from "@luke/features/tasks-view";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
@@ -58,8 +58,8 @@ export function shortCommit(sha: string): string {
 /**
  * What a File tab says in place of a file refused: the table's line, and
  * for a missing file the branch it was looked for on where the service
- * named it, since the snippet was read from a checkout that held it, or
- * the commit it was read at, which an agent may not have pushed.
+ * named it, or the commit it was read at, which an agent may not have
+ * pushed.
  */
 export function refusalLine(
   refusal: TaskFileRefusal,
@@ -73,70 +73,6 @@ export function refusalLine(
     return `This file is not on ${branch}, the branch Luke reads from GitHub.`;
   }
   return FILE_REFUSAL_LINE[refusal];
-}
-
-/** Whether lines Luke showed are the lines a tab reads: any of his showings for a read of the default branch, and one read at the same commit for a read pinned to one. */
-export function shownWhereRead(code: TaskCode, commit: string | undefined): boolean {
-  return commit === undefined || code.commit === commit;
-}
-
-/**
- * The lines Luke showed of a File tab's file, which the tab draws where
- * the file itself cannot be: the newest showing of the lines the tab was
- * opened on, or else the newest of the file at all, of those read where
- * the tab reads.
- */
-export function snippetOf(
-  shown: readonly TaskCodeShowing[] | undefined,
-  file: OpenFile,
-): TaskCode | undefined {
-  const ofFile = (shown ?? []).filter(
-    (each) => each.code.ref.path === file.path && shownWhereRead(each.code, file.commit),
-  );
-  const opened = ofFile.findLast(
-    ({ code: { ref } }) =>
-      ref.startLine === file.range?.startLine && ref.endLine === file.range?.endLine,
-  );
-  return (opened ?? ofFile.at(-1))?.code;
-}
-
-/** A note Luke wrote on lines of a File tab's file as he showed them: the call that showed them and when, the lines, and his words. */
-export interface FileNote {
-  readonly callId: string;
-  /** The turn that showed the lines, which a link to the note names; none where a test or a caller names none. */
-  readonly turnId?: string | undefined;
-  /** The agent whose turn showed the lines; none where the record has not named it yet. */
-  readonly agentId?: string | undefined;
-  readonly shownAt: number;
-  readonly startLine: number;
-  readonly endLine: number;
-  readonly note: string;
-}
-
-/**
- * The notes the task's agents wrote on a File tab's file, one a range, in the file's
- * order: the newest showing of each range speaks for it, since the newer
- * note is the one he meant last. A showing of the whole file, one from
- * another repository or commit than the tab reads, and one from before
- * notes were asked for leave no note.
- */
-export function notesOf(
-  shown: readonly TaskCodeShowing[] | undefined,
-  path: string,
-  repository: string | null,
-  commit: string | undefined,
-): readonly FileNote[] {
-  const notes: FileNote[] = [];
-  for (const { callId, turnId, agentId, shownAt, code } of (shown ?? []).toReversed()) {
-    const { startLine, endLine } = code.ref;
-    if (code.ref.path !== path || code.note === undefined) continue;
-    if (startLine === undefined || endLine === undefined) continue;
-    if (repository !== null && code.repository !== repository) continue;
-    if (!shownWhereRead(code, commit)) continue;
-    if (notes.some((each) => each.startLine === startLine && each.endLine === endLine)) continue;
-    notes.push({ callId, turnId, agentId, shownAt, startLine, endLine, note: code.note });
-  }
-  return notes.toSorted((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
 }
 
 /**

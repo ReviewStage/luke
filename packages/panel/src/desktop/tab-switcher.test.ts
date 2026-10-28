@@ -186,7 +186,7 @@ test("a tab chosen by hand is a screen of its own, and a quick tap goes back to 
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   const pressed = tab();
   assert.equal(
@@ -207,7 +207,7 @@ test("arriving on a task is one screen, the tabs that arrive with it taking it i
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
   press();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, {}, { agent: "x" }));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told, {}, { agent: "x" }));
 
   tab();
   letGo();
@@ -218,13 +218,13 @@ test("a screen picked restores both its panes, the task opened once", async () =
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, {}, { agent: "x" }));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told, {}, { agent: "x" }));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen() }));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told, { inboxView: inboxOpen() }));
 
   tab();
   letGo();
-  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: code"]);
+  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: comments"]);
 });
 
 test("held, the cards show with the screen here first and dimmed; ⇧ steps back around, and Escape goes nowhere", async () => {
@@ -234,7 +234,7 @@ test("held, the cards show with the screen here first and dimmed; ⇧ steps back
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   tab();
   tab();
@@ -270,7 +270,7 @@ async function heldOnField() {
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
   tab();
   tab();
   return field;
@@ -322,7 +322,7 @@ test("a task's card is named as Back's list names the screen: the task, then its
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   tab();
   tab();
@@ -331,7 +331,7 @@ test("a task's card is named as Back's list names the screen: the task, then its
     card.querySelector(".luke-tab-card-detail")?.textContent,
   ]);
   assert.deepEqual(words, [
-    [DOCUMENT_TASK.name, "Code"],
+    [DOCUMENT_TASK.name, "Comments"],
     [DOCUMENT_TASK.name, "Plan"],
   ]);
 });
@@ -358,7 +358,7 @@ test("a task's card says the task and its agent's tab by the names they go by no
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, named("Token refresh"), column));
   press();
   await window.draw(
-    onTask(SIDE_PANEL_TAB.CODE, told, named("Token renewal", "Auth rewrite"), column),
+    onTask(SIDE_PANEL_TAB.COMMENTS, told, named("Token renewal", "Auth rewrite"), column),
   );
 
   tab();
@@ -372,7 +372,9 @@ test("a task's card says the task and its agent's tab by the names they go by no
   };
   assert.deepEqual(left(), ["Auth rewrite", "Token renewal · Plan"]);
 
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, named(undefined, "Auth rewrite"), column));
+  await window.draw(
+    onTask(SIDE_PANEL_TAB.COMMENTS, told, named(undefined, "Auth rewrite"), column),
+  );
   assert.deepEqual(left(), ["Auth rewrite", "Token refresh · Plan"]);
 });
 
@@ -449,7 +451,7 @@ async function channelCardNames(chosen: string | undefined): Promise<string[]> {
   await window.draw(
     onTask(SIDE_PANEL_TAB.PLAN, told, { workspace, inboxView: { ...inboxView, open: true } }),
   );
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { workspace, inboxView }));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told, { workspace, inboxView }));
 
   tab();
   tab(true);
@@ -476,7 +478,7 @@ test("a card pressed while the cards show is gone to, a place through its own do
   const told = asked();
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   tab();
   tab(true);
@@ -512,7 +514,7 @@ test("the screen left is taken as a still of the work area for its card, drawn a
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   tab();
   tab();
@@ -535,7 +537,7 @@ test("a window that is no desktop app leaves ⌃Tab to the browser", async () =>
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   assert.equal(tab().defaultPrevented, false);
   letGo();
@@ -549,7 +551,7 @@ test("the menu bar's Next recent tab goes at once, as a tap does", async () => {
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
 
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.NEXT_RECENT_TAB));
@@ -563,7 +565,7 @@ test("a dialog over the window keeps ⌃Tab, so nothing moves behind it", async 
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
   const dialog = document.createElement("div");
   dialog.setAttribute("aria-modal", "true");
   document.body.append(dialog);
@@ -581,10 +583,10 @@ test("a screen whose tab closed since it was left is no stop", async () => {
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() }));
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   press();
-  const closed = onTask(SIDE_PANEL_TAB.CODE, told);
+  const closed = onTask(SIDE_PANEL_TAB.COMMENTS, told);
   await window.draw({
     ...closed,
-    sidePanel: { ...closed.sidePanel, strip: [SIDE_PANEL_TAB.CODE] },
+    sidePanel: { ...closed.sidePanel, strip: [SIDE_PANEL_TAB.COMMENTS] },
   });
 
   tab();
@@ -596,14 +598,14 @@ test("a task's screens stay stops while the Inbox stands in its place with a pan
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
   press();
-  const over = onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen() });
+  const over = onTask(SIDE_PANEL_TAB.COMMENTS, told, { inboxView: inboxOpen() });
   await window.draw({ ...over, sidePanel: { ...over.sidePanel, strip: [] } });
 
   tab();
   letGo();
-  assert.deepEqual(told.shown, ["panel the task: code"]);
+  assert.deepEqual(told.shown, ["panel the task: comments"]);
 });
 
 test("a tab closed on its task's page stays let go once the Inbox stands in the task's place", async () => {
@@ -612,7 +614,7 @@ test("a tab closed on its task's page stays let go once the Inbox stands in the 
   const window = await mounted();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { boundFor: undefined }));
   press();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told));
   press();
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
   const closed = onTask(SIDE_PANEL_TAB.PLAN, told);
@@ -690,10 +692,10 @@ test("a screen picked past unsaved work is restored only once the leave is confi
         asks.push(() => leave(...args)),
   };
   const window = await mounted();
-  await window.draw(onTask(SIDE_PANEL_TAB.CODE, told, { leaveGuard: guarded }, { agent: "x" }));
+  await window.draw(onTask(SIDE_PANEL_TAB.COMMENTS, told, { leaveGuard: guarded }, { agent: "x" }));
   press();
   await window.draw(
-    onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen(), leaveGuard: guarded }),
+    onTask(SIDE_PANEL_TAB.COMMENTS, told, { inboxView: inboxOpen(), leaveGuard: guarded }),
   );
 
   tab();
@@ -710,7 +712,7 @@ test("a screen picked past unsaved work is restored only once the leave is confi
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });
   letGo();
   asks[0]?.();
-  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: code"]);
+  assert.deepEqual(told.shown, ['column the task: {"agent":"x"}', "panel beside the task: comments"]);
 });
 
 test("a narrow room's panel, which fills the window as it stands, is opened on the screen's tab and not toggled shut", async () => {
@@ -726,15 +728,15 @@ test("a narrow room's panel, which fills the window as it stands, is opened on t
     },
   });
   const window = await mounted();
-  const filled = onTask(SIDE_PANEL_TAB.CODE, told);
+  const filled = onTask(SIDE_PANEL_TAB.COMMENTS, told);
   await window.draw(narrow({ ...filled, sidePanel: { ...filled.sidePanel, fullScreen: true } }));
   press();
-  const shut = onTask(SIDE_PANEL_TAB.CODE, told, { inboxView: inboxOpen() });
+  const shut = onTask(SIDE_PANEL_TAB.COMMENTS, told, { inboxView: inboxOpen() });
   await window.draw(narrow({ ...shut, sidePanel: { ...shut.sidePanel, open: false } }));
 
   tab();
   letGo();
-  assert.deepEqual(told.shown, ["panel the task: code"]);
+  assert.deepEqual(told.shown, ["panel the task: comments"]);
   assert.deepEqual(turned, []);
 });
 
@@ -754,14 +756,14 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
   const shut = onTask(SIDE_PANEL_TAB.PLAN, told, {}, { agent: "x" });
   await window.draw(doors({ ...shut, sidePanel: { ...shut.sidePanel, open: false } }));
   press();
-  const filled = onTask(SIDE_PANEL_TAB.CODE, told, {}, { agent: "x" });
+  const filled = onTask(SIDE_PANEL_TAB.COMMENTS, told, {}, { agent: "x" });
   await window.draw(doors({ ...filled, sidePanel: { ...filled.sidePanel, fullScreen: true } }));
   press();
   await window.draw(doors(onTask(SIDE_PANEL_TAB.PLAN, told, { inboxView: inboxOpen() })));
 
   tab();
   letGo();
-  assert.deepEqual(told.shown, ["panel the task: code"]);
+  assert.deepEqual(told.shown, ["panel the task: comments"]);
   assert.deepEqual(panel, ["full screen turned"]);
 
   press();
@@ -775,7 +777,7 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
   );
   tab(true);
   letGo();
-  assert.deepEqual(told.shown, ["panel the task: code", 'column the task: {"agent":"x"}']);
+  assert.deepEqual(told.shown, ["panel the task: comments", 'column the task: {"agent":"x"}']);
   assert.deepEqual(panel, ["full screen turned", "shut"]);
 });
 

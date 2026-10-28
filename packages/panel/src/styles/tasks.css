@@ -371,42 +371,6 @@
   height: var(--luke-control-icon);
 }
 
-/* The Code tab's log (`code-pane.tsx`), whose calls each open at a
-   checkpoint stuck to the log's top (../ai-elements/checkpoint.tsx): the
-   log's fade starts beneath the checkpoint's band
-   (`SCROLL_FADE_INSET.BAND`), so the time stands whole and what scrolls
-   under it dissolves just below it. The band is held at that inset's height
-   whatever it holds, because a band taller than the inset would slice what
-   passes under its foot, and one shorter would fade its own foot; and the
-   log keeps no top padding, because a sticky checkpoint would leave what
-   scrolled under it showing in that band. What the keys reach, and a card a
-   File tab's note reveals (code-pane.tsx), scrolls in past both. A divider
-   sticks to the log's top as its cards scroll under it, on the well's own
-   ground, which is the feed's, so nothing shows through; a call's start
-   sticks as a divider does, whether or not the call still stands. */
-.checkpoint-log .checkpoint {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--luke-color-well);
-}
-
-/* One line, as a teammate's heading already keeps (`.call-caller`), so a
-   time that would wrap in a narrow panel cannot outgrow the band. */
-.checkpoint-log :is([data-checkpoint], [data-call-marker="start"]) {
-  height: var(--luke-scroll-band);
-  white-space: nowrap;
-}
-
-.checkpoint-log .call-marker[data-call-marker="start"] {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  box-sizing: border-box;
-  padding-block: 0;
-  background: var(--luke-color-well);
-}
-
 /* A crumb's tree (file-breadcrumbs.tsx), hung under the crumb on a menu's
    surface, is a place the desktop's window is not dragged by; it holds the
    keyboard itself only until the tree takes it, or where the tree has no row
@@ -1235,8 +1199,8 @@
    scroller's top while its section is in view, on the panel's own ground so
    nothing shows through; the next section's heading pushes it off, since a
    sticky box stands only inside its own section. It is held at the
-   scroller's band (`SCROLL_FADE_INSET.BAND`), as a call's checkpoint is
-   (`.checkpoint-log`), because the fade begins beneath that band: taller,
+   scroller's band (`SCROLL_FADE_INSET.BAND`), because the fade begins
+   beneath that band: taller,
    it would slice what passes under its foot, and shorter, it would fade
    its own. The whole row presses as a `DisclosureSummary` does: the chevron
    leading at its inset and the row filled under the pointer; what stands at
@@ -1670,32 +1634,6 @@
 }
 
 /* What a read left on GitHub, counted as a press in the caption's type. */
-/* A note under a line of a whole file (file-tab.tsx), its card or its
-   chip: Pierre stands it at the code's column, sticky in view while
-   unwrapped lines scroll sideways, so it keeps only the room between it and
-   the lines, and none while it is a chip alone, which floats over the end of
-   its line. */
-.whole-file-note:has(> .diff-thread-chip-row:only-child:not([open])) {
-  padding-block: 0;
-}
-
-.whole-file-note .file-note {
-  margin: 0;
-}
-
-/* Luke's note under the lines it is on (file-note.tsx): the annotation card
-   (`.annotation-card`), measured as one so a narrow place steps its parts
-   back, in the element Pierre keeps for it under a File tab's line or a
-   Code card's (`.whole-file-note`, `.diff-note`), which insets it. */
-.file-note {
-  container: annotation luke-room / inline-size;
-}
-
-/* Luke is told by his wing mark, at the card's face size (`--luke-glyph-size`), on the card a review thread wears. */
-.file-note .annotation-card {
-  --luke-glyph-size: var(--annotation-face);
-}
-
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
    selectable, breaking a long path anywhere rather than widening the
    column. Its headings are a note's, a step above the words around them and

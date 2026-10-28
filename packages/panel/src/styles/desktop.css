@@ -28,9 +28,6 @@
   --comment-card-width: 288px;
   --comment-margin-gap: var(--luke-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
-  /* The measure code is read at, a step wider than words', so a hundred
-     columns stand beside their line numbers without wrapping. */
-  --code-reading-width: 840px;
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
@@ -1454,7 +1451,6 @@ body,
      where it is spent: a percentage there is of the box's frame, which is
      the panel's width. */
   --reading-room: calc((100% - var(--luke-page-measure)) / 2);
-  --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
   /* The container every tab answers its width from (`@container
      side-panel`, tasks.css), so one width lays out every tab narrow; it
@@ -1480,10 +1476,6 @@ body,
 .side-panel-content .draft-fork-dock,
 .side-panel-content .agent-tab-foot .agent-composer {
   padding-inline: max(var(--content-inset), var(--reading-room));
-}
-
-.side-panel-content .code-pane .conversation-log {
-  padding-inline: max(var(--content-inset), var(--code-reading-room));
 }
 
 /* Tabs ------------------------------------------------------------------------ */
