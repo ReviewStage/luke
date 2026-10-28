@@ -526,7 +526,7 @@ function SummaryRow({
 }) {
   const editing = editor !== undefined;
   return (
-    <RowHintOptions card={entry.card} cardBeside>
+    <RowHintOptions card={entry.card}>
       <ListRow
         ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}

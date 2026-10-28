@@ -224,7 +224,7 @@ function AgentRow({
   const endedByKey = useRefocusAfterEdit(editing, row);
   return (
     <>
-      <RowHintOptions card={card} cardBeside>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={agent.id}
@@ -454,20 +454,10 @@ function AutomationRow({
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const nextWords = automationNextText(automation, now);
-  const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, which its card counts as its control.
-  const hold = useCallback((press: HTMLElement | null) => {
-    item.current = press?.parentElement ?? null;
-  }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   return (
-    <RowHintOptions
-      card={<AutomationCard automation={automation} workspaceName={workspaceName} />}
-      cardBeside
-      cardRegion={item}
-    >
+    <RowHintOptions card={<AutomationCard automation={automation} workspaceName={workspaceName} />}>
       <ListRow
-        ref={hold}
         motionKey={automation.id}
         leading={
           <span className={HOME_ROW_PICTURE}>

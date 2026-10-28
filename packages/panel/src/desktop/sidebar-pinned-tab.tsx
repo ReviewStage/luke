@@ -388,8 +388,6 @@ interface PinnedRowDrawn {
   inSight: boolean;
   tasks: TasksControl;
   onOpen: () => void;
-  /** The row's item, its press's parent, which its card counts as its control. */
-  item: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -414,21 +412,13 @@ function PinnedTabRow({
   description?: React.ReactNode;
   rowRef?: ((press: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
-  const { pin, card, glyph, gone, current, inSight, tasks, onOpen, item } = drawn;
+  const { pin, card, glyph, gone, current, inSight, tasks, onOpen } = drawn;
   const place = useRowPlace();
   const editing = editor !== undefined;
-  // Note that the row's item is its press's parent, which its card counts as its control.
-  const hold = useCallback(
-    (press: HTMLElement | null) => {
-      item.current = press?.parentElement ?? null;
-      rowRef?.(press);
-    },
-    [item, rowRef],
-  );
   return (
-    <RowHintOptions card={card} cardBeside cardRegion={item}>
+    <RowHintOptions card={card}>
       <ListRow
-        ref={hold}
+        ref={rowRef}
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
@@ -565,7 +555,6 @@ export function SidebarPinnedTab({
   const livePullRequest = pinPullRequest(kept, task, tasks);
   const agent = pinAgent(kept, task, tasks);
   const pin = namedPin(kept, task, agent, livePullRequest, tasks.agents.models);
-  const item = useRef<HTMLElement | null>(null);
   const gone = pinGone(pin, tasks);
   const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
     tasks.onOpenPinnedTab({ ...pin, tab: { agent: agentId } }),
@@ -593,7 +582,6 @@ export function SidebarPinnedTab({
     inSight,
     tasks,
     onOpen,
-    item,
   };
   const open = openAgentOf(pin, tasks);
   if (open !== undefined) return <PinnedAgentRow agent={open} drawn={drawn} />;

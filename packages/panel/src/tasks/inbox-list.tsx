@@ -90,15 +90,7 @@ import {
   UsersIcon,
 } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import {
-  type RefObject,
-  useCallback,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -488,24 +480,13 @@ export function InboxItemRow({
     shown: true,
     keyed: chosen,
   });
-  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
-  const region = useRef<HTMLElement | null>(null);
-  const hold = useCallback(
-    (element: HTMLElement | null) => {
-      region.current = element?.parentElement ?? null;
-      ref?.(element);
-    },
-    [ref],
-  );
   return (
     <>
       <RowHintOptions
         card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
-        cardBeside
-        cardRegion={region}
       >
         <ListRow
-          ref={hold}
+          ref={ref}
           motionKey={listed.item.id}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={<UnreadMark unread={unread} />}
