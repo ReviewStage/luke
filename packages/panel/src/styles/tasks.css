@@ -2003,9 +2003,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* The composer answers its card's width, not the window's, so it holds in
    the main column and the side panel alike (`agent-composer.tsx`). The
    presses never give way, the model chip's words do first, and the ⋯
-   stands only once it has something to take in. */
+   stands only once it has something to take in. The card is a `luke-room`
+   too, so the badge saying where the agent runs gives up its words under
+   it (`agent-place.tsx`) rather than under a room around the box. */
 .agent-composer > form {
-  container: composer / inline-size;
+  container: composer luke-room / inline-size;
 }
 
 .agent-composer-actions > :is(.agent-servers, .agent-context) {
