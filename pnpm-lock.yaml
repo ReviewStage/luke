@@ -1086,9 +1086,6 @@ importers:
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire

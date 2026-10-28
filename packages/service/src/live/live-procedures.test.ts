@@ -3,14 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@luke/database/models/agent-browser-tabs";
-import { writeDrawing } from "@luke/database/models/board-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { queueMacCommand } from "@luke/database/models/mac-command-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@luke/features/agent-browser-tab-wire";
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
 import {
   accountInboxLiveAnswerSchema,
@@ -23,8 +21,6 @@ import {
   macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
   scopeInboxLiveAnswerSchema,
-  taskBoardLiveAnswerSchema,
-  taskBoardLiveRowsSchema,
   taskBrowserTabsLiveAnswerSchema,
   taskBrowserTabsLiveRowsSchema,
   taskHistoryLiveAnswerSchema,
@@ -56,8 +52,8 @@ import { pollSealer } from "./poll-sealer.js";
  * The reads the desktop follows, answered by the procedure the way the
  * hosted oRPC route answers it: refused without a bearer, and otherwise
  * every part answered polled for the bearer's own account, its rows inline
- * at the poll address; a task's whiteboard, pages, and calls for an account
- * that reaches the task and not found for one that does not; a poll past
+ * at the poll address; a task's record, pages, Browser tabs, and history
+ * for an account that reaches the task and not found for one that does not; a poll past
  * the digest the reader saw held until the rows move; and a plan's inbox,
  * or an agent's, for an account that reaches it and not found for one that
  * does not. Whose rows each statement reads is held by its builder's own
@@ -226,11 +222,8 @@ it.layer(getTestDB())("the account's live reads", (it) => {
   );
 });
 
-/** One box Luke drew, so the board has a row to read. */
-const BOX = [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }] as const;
-
-/** The procedures answering a task's live read as `bearer`, its board's unless `path` names another, over the store. */
-const askBoard = (options: {
+/** The procedures answering a task's live read as `bearer`, its record's unless `path` names another, over the store. */
+const askTask = (options: {
   readonly bearer: string;
   /** The account the read names; the bearer's own where left out. */
   readonly forUser?: string;
@@ -251,7 +244,7 @@ const askBoard = (options: {
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
     const url = readOf(
-      options.taskId === undefined ? LIVE_INBOX : (options.path ?? "/api/live/task-board"),
+      options.taskId === undefined ? LIVE_INBOX : (options.path ?? "/api/live/task-record"),
       options.forUser ?? options.bearer,
     );
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
@@ -268,34 +261,7 @@ const askBoard = (options: {
     return { status: response.status, body };
   });
 
-it.layer(getTestDB())("the task board's live read", (it) => {
-  it.effect(
-    "a task's board is answered polled with its rows inline for an account that reaches it, and not found for one that does not",
-    () =>
-      Effect.gen(function* () {
-        const dana = yield* openUser;
-        const eli = yield* openUser;
-        const started = yield* startTask(dana, { name: "Teammate invitations" });
-        yield* writeDrawing(dana, started.id, BOX);
-
-        const own = yield* askBoard({ bearer: dana, taskId: started.id });
-        assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(own.body);
-        assert.equal(answer.url, LIVE_POLL_URL);
-        assert.deepEqual(
-          Schema.decodeUnknownSync(taskBoardLiveRowsSchema)({ board: answer.queries.board.rows }),
-          { board: [{ taskId: started.id, drawingNumber: 1, appliedDrawing: 0, imaged: false }] },
-        );
-
-        const notFound = {
-          status: HOSTED_HTTP_STATUS.NOT_FOUND,
-          body: { error: HOSTED_API_ERROR.NOT_FOUND },
-        };
-        assert.deepEqual(yield* askBoard({ bearer: eli, taskId: started.id }), notFound);
-        assert.deepEqual(yield* askBoard({ bearer: dana, taskId: "not-a-task" }), notFound);
-      }),
-  );
-
+it.layer(getTestDB())("a task's live reads", (it) => {
   it.effect(
     "a task's pages and calls are answered polled a part each for an account that reaches it, and not found for one that does not",
     () =>
@@ -303,12 +269,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         const dana = yield* openUser;
         const eli = yield* openUser;
         const started = yield* startTask(dana, { name: "Teammate invitations" });
-        const ask = (bearer: string) =>
-          askBoard({
-            bearer,
-            taskId: started.id,
-            path: "/api/live/task-record",
-          });
+        const ask = (bearer: string) => askTask({ bearer, taskId: started.id });
 
         const own = yield* ask(dana);
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
@@ -317,10 +278,12 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         for (const query of [answer.queries.pages, answer.queries.calls]) {
           assert.deepEqual(query.rows, [], "the task holds no pages or calls yet");
         }
-        assert.deepEqual(yield* ask(eli), {
+        const notFound = {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
-        });
+        };
+        assert.deepEqual(yield* ask(eli), notFound);
+        assert.deepEqual(yield* askTask({ bearer: dana, taskId: "not-a-task" }), notFound);
       }),
   );
 
@@ -342,7 +305,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         const path = "/api/live/task-pages";
 
         assert.deepEqual(
-          yield* askBoard({
+          yield* askTask({
             bearer: eli,
             taskId: started.id,
             path,
@@ -350,7 +313,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
         assert.deepEqual(
-          yield* askBoard({
+          yield* askTask({
             bearer: dana,
             forUser: eli,
             taskId: started.id,
@@ -363,7 +326,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
           "a read started for another account is signed out",
         );
 
-        const polled = yield* askBoard({ bearer: dana, taskId: started.id, path });
+        const polled = yield* askTask({ bearer: dana, taskId: started.id, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
         const rows = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(polled.body);
         assert.equal(rows.url, LIVE_POLL_URL);
@@ -412,7 +375,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         const path = "/api/live/task-browser-tabs";
 
         assert.deepEqual(
-          yield* askBoard({
+          yield* askTask({
             bearer: eli,
             taskId: started.id,
             path,
@@ -420,7 +383,7 @@ it.layer(getTestDB())("the task board's live read", (it) => {
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
 
-        const polled = yield* askBoard({ bearer: dana, taskId: started.id, path });
+        const polled = yield* askTask({ bearer: dana, taskId: started.id, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
         const rows = Schema.decodeUnknownSync(taskBrowserTabsLiveAnswerSchema)(polled.body);
         assert.equal(rows.url, LIVE_POLL_URL);
@@ -450,13 +413,13 @@ it.layer(getTestDB())("the task board's live read", (it) => {
         const started = yield* startTask(dana, { name: "Teammate invitations" });
         const path = "/api/live/task-history";
 
-        const own = yield* askBoard({ bearer: dana, taskId: started.id, path });
+        const own = yield* askTask({ bearer: dana, taskId: started.id, path });
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(taskHistoryLiveAnswerSchema)(own.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(answer.queries.revisions.rows, [], "the plan is not saved yet");
         assert.deepEqual(
-          yield* askBoard({
+          yield* askTask({
             bearer: eli,
             taskId: started.id,
             path,
@@ -573,31 +536,41 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
       Effect.gen(function* () {
         const dana = yield* openUser;
         const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const path = "/api/live/task-pages";
         const poll = (after: string) =>
-          askBoard({ bearer: dana, taskId: started.id, poll: true, after });
-        const first = yield* askBoard({ bearer: dana, taskId: started.id });
-        const seen = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(first.body);
+          askTask({ bearer: dana, taskId: started.id, path, poll: true, after });
+        const first = yield* askTask({ bearer: dana, taskId: started.id, path });
+        const seen = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(first.body);
         const digest = liveDigestOf(seen.queries);
         assert.ok(digest !== undefined);
 
         const unchanged = yield* Effect.forkChild(poll(digest));
         yield* TestClock.adjust(Duration.seconds(25));
-        const held = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
+        const held = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
           (yield* Fiber.join(unchanged)).body,
         );
-        assert.equal(held.queries.board.rows, undefined, "unchanged carries no rows");
+        assert.equal(held.queries.pages.rows, undefined, "unchanged carries no rows");
         assert.equal(liveDigestOf(held.queries), digest);
 
         const moved = yield* Effect.forkChild(poll(digest));
         yield* TestClock.adjust(Duration.seconds(3));
-        yield* writeDrawing(dana, started.id, BOX);
+        const shown = Option.getOrThrow(
+          yield* writePage(
+            dana,
+            taskPageOwner(started.id),
+            { title: "Invite funnel", html: "<p>One</p>" },
+            { kind: PAGE_SHOWER.LUKE },
+          ),
+        );
         yield* TestClock.adjust(Duration.seconds(3));
-        const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
+        const answer = Schema.decodeUnknownSync(taskPagesLiveAnswerSchema)(
           (yield* Fiber.join(moved)).body,
         );
         assert.deepEqual(
-          Schema.decodeUnknownSync(taskBoardLiveRowsSchema)({ board: answer.queries.board.rows }),
-          { board: [{ taskId: started.id, drawingNumber: 1, appliedDrawing: 0, imaged: false }] },
+          Schema.decodeUnknownSync(taskPagesLiveRowsSchema)({
+            pages: answer.queries.pages.rows,
+          }).pages.map((page) => [page.id, page.version]),
+          [[shown.id, 1]],
         );
         assert.notEqual(liveDigestOf(answer.queries), digest);
       }),
@@ -631,19 +604,10 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         };
         for (const forUser of ["user-eli", ""]) {
           assert.deepEqual(
-            yield* askBoard({ bearer: dana, forUser, taskId: started.id }),
+            yield* askTask({ bearer: dana, forUser, taskId: started.id }),
             signedOut,
           );
-          assert.deepEqual(yield* askBoard({ bearer: dana, forUser }), signedOut);
-          assert.deepEqual(
-            yield* askBoard({
-              bearer: dana,
-              forUser,
-              taskId: started.id,
-              path: "/api/live/task-record",
-            }),
-            signedOut,
-          );
+          assert.deepEqual(yield* askTask({ bearer: dana, forUser }), signedOut);
         }
       }),
   );

@@ -33,7 +33,6 @@ import type { ConversationTarget } from "./writer.js";
  * writes the confirmed seconds beside when and why the session ended. A connection that ends without `session.closed`
  * writes nothing more: the last snapshot standing with `closed_at` null is
  * the honest record, and a later connection's `session.closed` confirms it.
- * The seconds the quota meters are a separate ledger, `recordVoiceSeconds`.
  *
  * A connection that ends without `session.closed` — its device socket gone
  * without a hang-up, a close OpenAI never confirmed, a refusal after the

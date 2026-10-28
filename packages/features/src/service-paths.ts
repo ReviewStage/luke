@@ -79,8 +79,6 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
-  /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
-  LIVE_TASK_BOARD: "/api/live/task-board",
   /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_TASK_RECORD: "/api/live/task-record",
   /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
@@ -337,18 +335,6 @@ export const HOSTED_SERVICE_PATH = {
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /**
-   * Where an owner or admin connects Linear for a whole workspace (POST):
-   * answers Vercel Connect's sign-in address, which returns the browser to
-   * `/api/workspaces/linear/connected` (`linear-wire.ts`).
-   */
-  WORKSPACE_LINEAR_CONNECT: "/api/workspaces/linear/connect",
-  /** Where Vercel Connect returns the browser from a workspace's Linear sign-in (GET), which lands it on the integrations landing page. */
-  WORKSPACE_LINEAR_CONNECTED: "/api/workspaces/linear/connected",
-  /** A workspace's Linear disconnected by an owner or admin (POST), answering the workspace. */
-  WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
-  /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
-  WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
-  /**
    * Where an owner or admin installs Luke's Sentry integration for a
    * workspace (POST): answers Sentry's install address, carrying a
    * single-use intent Sentry returns to `SENTRY_INSTALLED` with
@@ -390,17 +376,6 @@ export const HOSTED_SERVICE_PATH = {
   /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
   WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
   WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
-} as const;
-
-/**
- * Where the hosted voice service answers: a Vercel Function of the same
- * service, reached at `HOSTED_VOICE_SERVICE_ORIGIN`, the socket form of the
- * service's own origin. The path is a WebSocket upgrade; one connection
- * carries one session, or one attachment to a session that stands.
- */
-export const VOICE_SERVICE_PATH = {
-  /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
-  SESSIONS: "/api/voice/sessions",
 } as const;
 
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */

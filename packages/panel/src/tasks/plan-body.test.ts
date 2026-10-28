@@ -406,7 +406,7 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(dismissed, 1);
 });
 
-test("a plan read and not edited names itself by one h1, its title, with the title's ⋯ at the end of its line", async () => {
+test("a plan read and not edited names itself by one h1, its title, with its Copy link button at the end of its line", async () => {
   const view = await draw(TASK, {
     sectionLinks: {
       workspace: "acme",
@@ -417,13 +417,13 @@ test("a plan read and not edited names itself by one h1, its title, with the tit
   });
 
   const headings = view.querySelectorAll("h1");
-  const more = view.querySelector('[aria-label="Title actions"]');
+  const more = view.querySelector('.luke-page-header-actions [aria-label="Copy link"]');
 
   assert.equal(headings.length, 1, "the plan page names itself once");
   assert.equal(headings[0]?.textContent, TASK.name);
   assert.ok(
     more?.closest(".luke-page-header-actions"),
-    "the title carries its ⋯ in the header's acts",
+    "the title carries its Copy link button in the header's acts",
   );
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);
 });

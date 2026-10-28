@@ -803,9 +803,8 @@ export const startCredentialStands = (userId: string, model: string) =>
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
  * chose, or for a local agent its Mac's own login where it has one
- * (`localAgentRuntimeChoice`), a blank Start, one a Call opens a call into (`call`), a continue
- * and a fork alike, since a call reaches a native harness's agent as it
- * reaches eve's (`voice/deployment-exchange.ts`). Where no credential of
+ * (`localAgentRuntimeChoice`), a blank Start, a continue and a fork alike.
+ * Where no credential of
  * the account's pays, the Start is refused by name, the provider beside
  * it, and nothing is written.
  */

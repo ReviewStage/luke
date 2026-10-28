@@ -1,13 +1,9 @@
-import { type AccountRefreshFailed, HOSTED_VOICE_SERVICE_ORIGIN } from "@luke/features";
+import type { AccountRefreshFailed } from "@luke/features";
 import type { LiveDiagnostics } from "@luke/live";
-import { APP_SETTING_SCHEMA, type AppSettingField, type AppSettingValue } from "@luke/settings";
+import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import { Effect } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import {
-  HostedLiveSessionSource,
-  type LiveSessionSource,
-  unavailableLiveDiagnostics,
-} from "./live-session-source.js";
+import { type LiveSessionSource, unavailableLiveDiagnostics } from "./live-session-source.js";
 import type { OpenSocket } from "./live-socket.js";
 
 interface VoiceSettings {
@@ -63,7 +59,6 @@ export interface VoiceCapabilityApplication {
 
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
-  #liveSessions: LiveSessionSource | undefined;
   #unavailableLiveDiagnostics: LiveDiagnostics;
   #applications = 0;
 
@@ -75,13 +70,11 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * Where a GPT Live session comes from: the signed-in account through Luke's
-   * voice service, on the OpenAI API key the account saved there, never on
-   * Luke's. Nothing when no account stands, or when the host handed no socket
-   * seam. No credential reaches this process: the service opens the key.
+   * Where a GPT Live session comes from: nowhere, since Luke's voice service
+   * is gone and no session is opened on a key of the developer's own.
    */
   get liveSessions(): LiveSessionSource | undefined {
-    return this.#liveSessions;
+    return undefined;
   }
 
   get unavailableLiveDiagnostics(): LiveDiagnostics {
@@ -89,46 +82,14 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * Reads the account gate and the preferences, and publishes the capability
-   * set they decide as one unit, after every read has completed. Two
-   * applications can overlap — a sign-out while a preference read is still
-   * out — and the older must never publish over the newer: each application
-   * takes its number before its first await and checks it after its last,
-   * and one that has been overtaken installs nothing.
+   * Publishes the capability set, which offers no live session, and reports
+   * why. Each application takes its number as it begins, so a caller about to
+   * build on the published set can ask whether a newer one has begun since.
    */
   apply(): Effect.Effect<VoiceCapabilityApplication, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
+    return Effect.sync(() => {
       const application = ++this.#applications;
       const isCurrent = () => application === this.#applications;
-      // The one credential anything here runs on: the signed-in account,
-      // while this run may use credentials at all. Read before the first
-      // suspension, so an application answers for the gate as it stood when
-      // it began and a later change is the next application's to publish.
-      const useHosted = this.#options.credentialsUsable() && this.#options.accountSignedIn();
-      const readAccount = () =>
-        this.#options.settings.readAccount().pipe(Effect.orElseSucceed(() => undefined));
-      const seams = {
-        readAccessToken: () => Effect.map(readAccount(), (account) => account?.accessToken),
-        refreshAccount: this.#options.refreshAccount,
-        readAccountKey: () => Effect.map(readAccount(), (account) => account?.email),
-      };
-      const voice = yield* this.#options.settings
-        .get(APP_SETTING_SCHEMA.voice.field)
-        .pipe(Effect.orElseSucceed(() => undefined));
-      if (!isCurrent()) return { latest: false, isCurrent };
-
-      const openSocket = this.#options.openSocket;
-      this.#liveSessions =
-        openSocket && useHosted
-          ? new HostedLiveSessionSource({
-              serviceOrigin: this.#options.hostedVoiceServiceOrigin ?? HOSTED_VOICE_SERVICE_ORIGIN,
-              openSocket,
-              readAccessToken: seams.readAccessToken,
-              refreshAccount: seams.refreshAccount,
-              readAccountKey: seams.readAccountKey,
-              ...(voice ? { voice } : undefined),
-            })
-          : undefined;
       this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
         fixtureMode: this.#options.fixtureRun(),
       });
@@ -140,10 +101,6 @@ export class VoiceCapabilityAssembler {
   #report(): void {
     // The console where none is handed in: a desktop's main process and a browser tab both have one.
     const write = this.#options.report ?? ((message: string) => console.warn(message.trimEnd()));
-    if (this.#liveSessions) {
-      write(`Luke voice: enabled (hosted, ${this.#liveSessions.diagnostics().model})\n`);
-    } else {
-      write(`Luke voice: unavailable — ${this.#unavailableLiveDiagnostics.lastOutcome}\n`);
-    }
+    write(`Luke voice: unavailable — ${this.#unavailableLiveDiagnostics.lastOutcome}\n`);
   }
 }

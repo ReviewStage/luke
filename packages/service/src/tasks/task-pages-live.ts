@@ -65,7 +65,7 @@ function taskPagesNewest(userId: string, taskId: string) {
       .selectDistinctOn([planPageVersion.pageId], NEWEST_COLUMNS)
       .from(planPageVersion)
       .innerJoin(task, eq(task.id, planPageVersion.taskId))
-      // Note that membership is a join, as the board's live read reads it, rather than the held read's subquery.
+      // Note that membership is a join, as the record's live read reads it, rather than the held read's subquery.
       .innerJoin(
         member,
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),

@@ -4,9 +4,8 @@
  * What waits on the developer across the account, as the address to
  * subscribe at and one sealed statement per part of the account inbox's
  * answer; the task list, as its tasks and every agent of them and with no
- * task; and one task's whiteboard, named by `?id=`, as the statement that
- * marks where it stands, and its pages and calls the same way, and its
- * Browser tabs, the agent's pointer on each among them; and one
+ * task; and one task's record, pages, and calls, named by `?id=`, as the
+ * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
  * statements its pages are read from; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
@@ -42,7 +41,6 @@ import {
   LIVE_USER_QUERY,
   macCommandsLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
-  taskBoardLiveAnswerSchema,
   taskBrowserTabsLiveAnswerSchema,
   taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
@@ -124,10 +122,6 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
     .input(liveReadSchema)
     .output(EffectSchema.flip(accountInboxLiveAnswerSchema)),
-  taskBoard: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BOARD }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskBoardLiveAnswerSchema)),
   taskRecord: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
     .input(liveTaskSchema)

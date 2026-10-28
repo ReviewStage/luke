@@ -88,10 +88,6 @@
     "dest": "/api/default.js?route=triggers/sentry/installed"
   },
   {
-    "src": "/api/workspaces/linear/connected",
-    "dest": "/api/default.js?route=workspaces/linear/connected"
-  },
-  {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   },
@@ -118,14 +114,6 @@
   {
     "src": "/api/terminal/sessions\\.js",
     "dest": "/api/terminal/sessions.js"
-  },
-  {
-    "src": "/api/voice/sessions",
-    "dest": "/api/voice/sessions"
-  },
-  {
-    "src": "/api/voice/sessions\\.js",
-    "dest": "/api/voice/sessions.js"
   },
   {
     "src": "/api/(.*)",

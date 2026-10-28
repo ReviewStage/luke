@@ -44,7 +44,6 @@ import {
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
-  type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
   type TasksPagesAnswer,
@@ -79,7 +78,6 @@ import {
   tasksEditParamsSchema,
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
-  tasksLinearIssuesParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPagesParamsSchema,
@@ -318,9 +316,6 @@ export type TasksClient = Pick<
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
-    | "linearConnect"
-    | "linearDisconnect"
-    | "linearIssues"
     | "sentryInstallations"
     | "sentryInstall"
     | "sentryDisconnect"
@@ -2315,52 +2310,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // Vercel Connect's address is answered to the caller that opens it and
-    // held nowhere: the grant lands in the browser, and the follow carries
-    // the connection.
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting Linear names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.linearConnect(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting Linear names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const disconnected = yield* workspaceCall(
-          client.workspaces.linearDisconnect(read.workspaceId),
-        );
-        return carried<TasksWorkspaceAnswer>(
-          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // The issues are answered to the window that asked and held nowhere: a
-    // picker reads them as it opens and as its search changes.
-    [GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksLinearIssuesParamsSchema,
-          params,
-          "reading Linear issues names a workspace",
-        );
-        if (!gate()) return carried<TasksLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
-        const listed = yield* served(client.workspaces.linearIssues(read));
-        return carried<TasksLinearIssuesAnswer>(
-          listed.ok ? { issues: listed.answer } : { failure: listed.failure },
         );
       }),
     // A workspace's Sentry is answered to the window that asked and held
