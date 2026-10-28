@@ -1482,7 +1482,7 @@ test("an agent kept in a section stands among its tasks in its order, which Task
   ]);
 });
 
-test("an agent's menu offers Move to section after Pin and Archive, as a task's does, and a section chosen writes it there", async () => {
+test("an agent's menu offers Move to section beside Pin, before Archive, as the one agent menu orders them, and a section chosen writes it there", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes, SECTIONS, WITH_SWEEP);
 
@@ -1490,8 +1490,8 @@ test("an agent's menu offers Move to section after Pin and Archive, as a task's 
   const labels = menuLabels();
   assert.deepEqual(labels.slice(labels.indexOf("Pin"), labels.indexOf("Pin") + 3), [
     "Pin",
-    "Archive",
     "Move to section",
+    "Archive",
   ]);
   act(() => item("Move to section").click());
   act(() => item("Launch").click());
