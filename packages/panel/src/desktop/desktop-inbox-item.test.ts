@@ -224,7 +224,7 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     [...page.querySelectorAll(".inbox-view-items .luke-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
-    ["Item actions"],
+    ["Inbox item actions"],
     "beside the crumbs the bar holds the item's ⋯ menu alone",
   );
   act(() => crumbs[0]?.click());

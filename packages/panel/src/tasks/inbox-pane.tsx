@@ -829,14 +829,14 @@ function phoneItemGroups(
       ? []
       : [
           {
-            label: "Previous item",
+            label: "Previous inbox item",
             icon: <ChevronUpIcon />,
             disabled: pager.onPrevious === undefined,
             onSelect: () => pager.onPrevious?.(),
             command: APP_COMMAND.PREVIOUS_INBOX_ITEM,
           },
           {
-            label: "Next item",
+            label: "Next inbox item",
             icon: <ChevronDownIcon />,
             disabled: pager.onNext === undefined,
             onSelect: () => pager.onNext?.(),
@@ -858,6 +858,7 @@ function phoneItemGroups(
                 status: holder.task.status,
               }).icon,
               onSelect: onOpenHolder,
+              command: APP_COMMAND.OPEN_IN_TASK,
             },
           ]
         : [
@@ -868,11 +869,13 @@ function phoneItemGroups(
               onSelect: onOpenHolder,
             },
           ];
+  // ⌘O opens the item's task, or its agent where no task holds it (`desktop-inbox.tsx`).
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
     icon: <BotIcon />,
     onSelect: by.onOpen,
+    ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
   };
   const panel: MenuAction[] =
     phone.onShowPanel === undefined
@@ -886,22 +889,24 @@ const OPEN_TASK = "Open task";
 const OPEN_AUTOMATION = "Open automation";
 const OPEN_AGENT = "Open agent";
 
-/** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_THING = "Item";
+/** What the pane's ⋯ menu is called, which is its tooltip too, as the item's row names its own. */
+const ITEM_THING = "Inbox item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
- * agent's tab end theirs: Mark as read or unread, naming U, as the item's
- * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open, Close
- * without answering, asked first (`inbox-close.tsx`). It is keyed by its
- * item where it is drawn, so a question asked on one item never closes the
- * next, and the menu and the question go with the pane once it is hidden.
+ * agent's tab end theirs, offering what the item's row's menu offers in the
+ * same order (`inbox-item-actions.tsx`): Copy link; Mark as read or unread,
+ * naming U; Move to channel…; and, while the item is open, Resolve without
+ * answering, asked first. It is keyed by its item where it is drawn, so a
+ * question asked on one item never closes the next, and the menu and the
+ * question go with the pane once it is hidden.
  */
 function InboxItemMenu({
   holder,
   item,
   shown,
   onMark,
+  onMove,
   onClose,
   lead = NO_LEAD,
   heading,
@@ -910,6 +915,7 @@ function InboxItemMenu({
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
+  onMove: InboxPaneDoors["onMove"];
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -919,6 +925,7 @@ function InboxItemMenu({
   const menu = useMenu(shown);
   const { close, groups: itemGroups } = useInboxItemActions(holder, item, {
     onMark,
+    onMove,
     onClose,
     shown,
     keyed: true,
@@ -1077,6 +1084,8 @@ export interface InboxPaneDoors {
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
+  /** Asks which channel the item's thread moves to, from the bar's ⋯ menu; none where Channels is off. */
+  readonly onMove?: ((item: InboxItem) => void) | undefined;
 }
 
 /** What starts a new thread from an item's box instead of a reply, where the page offers one. */
@@ -1364,6 +1373,7 @@ export function InboxPane({
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
+              onMove={doors.onMove}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1406,6 +1416,7 @@ export function InboxPane({
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
+                onMove={doors.onMove}
                 onClose={doors.onClose}
               />
             </>

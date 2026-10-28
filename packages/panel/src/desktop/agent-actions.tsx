@@ -91,6 +91,8 @@ export interface AgentMenuDoors {
   section?: MenuEntry | undefined;
   /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
   onOpenTerminal?: (() => void) | undefined;
+  /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
+  onOpenInTask?: (() => void) | undefined;
   /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Deletes the agent for good, asked first (`agent-delete.tsx`). */
@@ -102,12 +104,14 @@ export interface AgentMenuDoors {
  * groups every menu of the window keeps: Copy link and the transcript's two
  * copies; Rename and the read mark; Pin and Move to section; Show terminal,
  * which prints ⌘J only where the menu is the chosen tab's, since the chord
- * opens that tab's terminal; Archive or Unarchive; and last and alone,
- * Permanently delete. A group with nothing in it is left out, so a surface
+ * opens that tab's terminal, and Open in task, which prints ⌘O on the same
+ * terms, for an agent drawn apart from its task; Archive or Unarchive; and
+ * last and alone, Permanently delete. A group with nothing in it is left out, so a surface
  * with few doors draws the few groups it has in the same order.
  */
 export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
-  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal } = doors;
+  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
+    doors;
   const { archive, deletion } = doors;
   const copies: MenuEntry[] = [
     ...(copyLink === undefined ? [] : [copyLink]),
@@ -142,10 +146,14 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
         ]),
     ...(section === undefined ? [] : [section]),
   ];
-  const opened: MenuEntry[] =
-    onOpenTerminal === undefined
+  const opened: MenuEntry[] = [
+    ...(onOpenTerminal === undefined
       ? []
-      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, doors.chosen === true)];
+      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, doors.chosen === true)]),
+    ...(onOpenInTask === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.OPEN_IN_TASK, onOpenInTask, doors.chosen === true)]),
+  ];
   return [
     copies,
     named,

@@ -35,6 +35,7 @@ export const APP_COMMAND = {
   // Note that Mark done keeps Archive's id, because it took Archive's place and its chord, so the menu bar's item and any saved use of the id still reach it.
   MARK_TASK_DONE: "archive-plan",
   DELETE_TASK: "delete-plan",
+  OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
   NEXT_TASK: "next-plan",
   TOGGLE_SIDEBAR: "toggle-sidebar",
@@ -174,6 +175,7 @@ interface ShortcutKey {
 
 export const SHORTCUT_KEY = {
   N: { accelerator: "N", glyph: "N", key: "n", code: "KeyN" },
+  O: { accelerator: "O", glyph: "O", key: "o", code: "KeyO" },
   A: { accelerator: "A", glyph: "A", key: "a", code: "KeyA" },
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
   M: { accelerator: "M", glyph: "M", key: "m", code: "KeyM" },
@@ -423,6 +425,8 @@ export const APP_SHORTCUTS = {
     label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
+  // Note that ⌘O opens the focused thing in its full place, as Mail and Finder open the selection: an agent beside the Inbox in its task, an Inbox item in its task or its agent's page.
+  [APP_COMMAND.OPEN_IN_TASK]: { label: "Open in task", chord: { key: SHORTCUT_KEY.O } },
   [APP_COMMAND.PREVIOUS_TASK]: {
     label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
@@ -785,6 +789,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COMMENT_ON_SELECTION,
       APP_COMMAND.MARK_TASK_DONE,
       APP_COMMAND.DELETE_TASK,
+      APP_COMMAND.OPEN_IN_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.ASK_LUKE,
       APP_COMMAND.INBOX,
