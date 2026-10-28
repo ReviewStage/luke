@@ -695,6 +695,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     ...(wakeups === undefined ? undefined : { wakeups }),
   };
   yield* sink.emit(last);
-  yield* sink.drain;
+  // A stopped launch is Luke's own doing, so it does not wait out an outage for its last events.
+  yield* end === RUNNER_END.STOPPED ? sink.drainStopped : sink.drain;
   return end;
 });
