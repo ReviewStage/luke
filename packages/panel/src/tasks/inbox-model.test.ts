@@ -34,7 +34,6 @@ import {
   doDecision,
   EMPTY_INBOX_DRAFT,
   EVERYONES,
-  firstChoice,
   holderName,
   INBOX_DIRECTION,
   INBOX_GROUPING,
@@ -579,26 +578,6 @@ test("To do lists only what waits, and the item chosen where one is given, as th
   );
 });
 
-test("with nothing chosen, the first listed item that waits stands chosen, else the first listed, and nothing where nothing is listed", () => {
-  const all = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined } as const;
-  assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.TASK }))?.item.id,
-    "threshold",
-  );
-  assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
-    "expiry",
-  );
-  const settled = [
-    { holder: taskHolder(BILLING), items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] },
-  ];
-  assert.equal(
-    firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
-    "done",
-  );
-  assert.equal(firstChoice(inboxList([], { ...all, grouping: INBOX_GROUPING.TASK })), undefined);
-});
-
 test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
   const newest = inboxList(TASKS, {
     grouping: INBOX_GROUPING.NONE,
@@ -746,7 +725,7 @@ test("a task done or canceled hides none of its items: its open ones need you an
   assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
 });
 
-test("To do keeps the reader's own update once it is opened and settled while its task is under way, and lets it go once the task is done, as it lets a settled ask, a resolved update, and a thread only the reader wrote on go; the first choice stays an ask that waits", () => {
+test("To do keeps the reader's own update once it is opened and settled while its task is under way, and lets it go once the task is done, as it lets a settled ask, a resolved update, and a thread only the reader wrote on go", () => {
   const said = message({
     text: "The pull request is ready for your review.",
     createdAt: 1_000,
@@ -783,17 +762,15 @@ test("To do keeps the reader's own update once it is opened and settled while it
   });
   assert.deepEqual(drawn(toDo), ["update", "waits"]);
   assert.equal(inboxCounts(tasks, ME.userId)[INBOX_SHOW.TO_DO], 2);
-  assert.equal(firstChoice(toDo)?.item.id, "waits");
 });
 
-test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
+test("a teammate's open item is never the next that needs you, which goes to the reader's own", () => {
   const list = inboxList(SHARED, {
     grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(firstChoice(list)?.item.id, "mine-invites");
   assert.deepEqual(
     ["danas", "mine-invites", "unnamed"].map(
       (id) => nextNeedingYou(list, id, () => false)?.item.id,
@@ -871,18 +848,13 @@ test("To do lists the reader's own open items and their own unread ones, a settl
   });
 });
 
-test("the first item chosen and the next one reach the reader's own unread update as they reach what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
+test("the next item reaches the reader's own unread update as it reaches what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
   const all = inboxList(UNREAD_SHARED, {
     grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(
-    firstChoice(all)?.item.id,
-    "mine-followed",
-    "All chooses the reader's own unread update first, past a teammate's newer items",
-  );
   assert.equal(nextNeedingYou(all, "danas", () => false)?.item.id, "mine-followed");
   assert.equal(
     nextNeedingYou(all, "mine-followed", () => false)?.item.id,

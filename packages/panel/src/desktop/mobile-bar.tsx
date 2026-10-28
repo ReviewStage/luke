@@ -41,7 +41,7 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl): boolean {
   // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
   if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
   const { inboxView, boardView, automationsView, adminView, agentView, personView } = tasks;
-  if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
+  if (inboxView.open) return inboxView.chosen === undefined;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
   if (boardView.open) return true;
   // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list and the Runs tab stand over the bar.

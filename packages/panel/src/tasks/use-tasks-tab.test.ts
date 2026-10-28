@@ -1238,7 +1238,7 @@ test("with Channels on, a channel's link opens the Inbox narrowed to it, which a
   );
   const channel = {
     open: tab.control().inboxView.open,
-    listed: tab.control().inboxView.listed,
+    chosen: tab.control().inboxView.chosen,
     channelId: place().channelId,
   };
   act(() =>
@@ -1250,7 +1250,7 @@ test("with Channels on, a channel's link opens the Inbox narrowed to it, which a
   const thread = place().channelId;
   act(() => tab.control().inboxView.onOpenItem({ taskId: "alerts", itemId: opened }, design));
 
-  assert.deepEqual(channel, { open: true, listed: false, channelId: app });
+  assert.deepEqual(channel, { open: true, chosen: undefined, channelId: app });
   assert.equal(thread, app);
   assert.deepEqual(tab.control().inboxView.chosen, { taskId: "alerts", itemId: opened });
   assert.equal(place().channelId, design);
@@ -1625,65 +1625,29 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so i
   assert.equal(tab.control().inboxShown, null);
 });
 
-test("the Inbox opened stands its list over the item last chosen, in a narrow room and a wide one, from elsewhere and from the item alike", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES, room: SHELL_ROOM.WIDE });
-  act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
+test("the Inbox opens on nothing chosen, from its row, from a link, and as the window rests on it, whatever was chosen in it before", () => {
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
+    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
+  );
+  const choose = () => {
+    act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-1" }));
+    act(() => tab.control().boardView.onOpen());
+  };
 
+  choose();
   act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().inboxView.listed, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+  const fromRow = tab.control().inboxView.chosen;
+  choose();
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.INBOX } }));
+  const fromLink = tab.control().inboxView.chosen;
+  choose();
+  act(() => tab.control().onSelect(TASK.id));
+  act(() => tab.control().onLeaveTask());
 
-  act(() => tab.control().inboxView.onListed(false));
-  act(() => tab.control().inboxView.onOpen());
-  assert.equal(tab.control().inboxView.listed, true, "from the item");
-});
-
-test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
-
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().inboxView.onOpen());
-  const chosen = tab.control().inboxView.chosen;
-  act(() => tab.control().inboxView.onOpenItem({ taskId: "notes", itemId }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().inboxView.onOpen());
-  const linked = tab.control().inboxView.chosen;
-  act(() => tab.control().onChooseWorkspace(ACME.id));
-  act(() => tab.control().inboxView.onClose());
-  act(() => tab.control().inboxView.onOpen());
-
-  assert.deepEqual(chosen, { taskId: "notes", itemId: "notes-item-0" });
-  assert.deepEqual(linked, { taskId: "notes", itemId });
-  assert.equal(tab.control().inboxView.chosen, undefined);
-});
-
-test("a link to the Inbox stands on the item last chosen in the workspace it lists, as the sidebar's row does", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().boardView.onOpen());
-  act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.INBOX } }));
-
-  assert.equal(tab.control().inboxView.open, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
-});
-
-test("the Inbox chosen by one account is not stood on by the next to sign in on this Mac", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
-  act(() => tab.control().inboxView.onClose());
-  tab.stand({ signedIn: false });
-  tab.stand({ signedIn: true, account: "teammate@example.com" });
-  act(() => tab.control().inboxView.onOpen());
-
-  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(fromRow, undefined);
+  assert.equal(fromLink, undefined);
+  assert.equal(tab.control().inboxView.open, true, "leaving the plan rests on the Inbox");
   assert.equal(tab.control().inboxView.chosen, undefined);
 });
 
@@ -2554,23 +2518,6 @@ test("with no plan open the window rests on the Inbox: it stands once the list l
 
   act(() => tab.control().inboxView.onOpenItem({ taskId: TASK.id, itemId: "item-2" }));
   assert.equal(tab.control().resting, false, "an item opened by a press is a place of its own");
-});
-
-test("leaving an open plan rests on the Inbox, on the item last chosen there", () => {
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
-    { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
-  );
-  assert.equal(tab.control().inboxView.open, false, "an open plan stands with nothing over it");
-  act(() => tab.control().inboxView.onOpen());
-  act(() => tab.control().inboxView.onChoose({ taskId: TASK.id, itemId: "item-1" }));
-  act(() => tab.control().onSelect(TASK.id));
-
-  act(() => tab.control().onLeaveTask());
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
-  assert.equal(tab.control().boundFor, undefined);
-  assert.equal(tab.control().inboxView.open, true);
-  assert.deepEqual(tab.control().inboxView.chosen, { taskId: TASK.id, itemId: "item-1" });
 });
 
 test("another workspace listed with no plan open rests the window again, on that workspace's Inbox rather than the item chosen in the last", () => {

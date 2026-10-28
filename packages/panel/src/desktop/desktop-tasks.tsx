@@ -52,9 +52,14 @@ import {
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListSkeleton, SearchEmpty, ShowEmpty } from "../tasks/inbox-list.js";
 import {
-  firstChoice,
+  InboxList,
+  InboxListSkeleton,
+  InboxPaneEmpty,
+  SearchEmpty,
+  ShowEmpty,
+} from "../tasks/inbox-list.js";
+import {
   INBOX_GROUPING,
   INBOX_SHOW,
   type InboxListed,
@@ -447,15 +452,14 @@ function TaskInboxTab({
   // place, both held still while the tab is shown (`use-held-inbox-list.ts`).
   const { list, steps } = useHeldInboxList(groups, filter, asked, shown);
   const listed = listedItems(list);
-  const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
-  // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
-  if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
+  // Note that nothing is chosen until a row's press or a call's row chooses it, so the pane beside the list stands empty till then.
+  const chosen = listedItems(steps).find(({ item }) => item.id === asked);
   const filteredOut =
     searched === undefined &&
     show.show !== INBOX_SHOW.ALL &&
     listed.length === 0 &&
     items.length > 0;
-  const columns = useInboxColumns(chosen?.item.id);
+  const columns = useInboxColumns(chosen?.item.id, { onClear: () => setAsked(undefined) });
   // The tab's ⋯ copies the open item's link, and none while the list stands alone, since no link names a task's Inbox whole.
   const linkItem = useCopyLinkItem();
   const link =
@@ -559,8 +563,8 @@ function TaskInboxTab({
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <Toolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
-          {inbox.read && listed.length === 0 && !filteredOut && searched === undefined ? (
-            <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
+          {inbox.read && !filteredOut && searched === undefined ? (
+            <InboxPaneEmpty listed={listed.length} />
           ) : null}
         </section>
       ) : (

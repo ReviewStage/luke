@@ -1138,6 +1138,11 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
+/** A count of threads with its words, as a channel's card or the Inbox's empty pane says it: "1 thread", "3 threads". */
+export function threadsWords(count: number): string {
+  return `${count} ${count === 1 ? "thread" : "threads"}`;
+}
+
 /** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it, or Luke for the member's operator. */
 export const INBOX_HOLDER = {
   TASK: "plan",
@@ -1908,12 +1913,6 @@ export function nextNeedingYou(
       ? [...above.reverse(), ...below.reverse()]
       : [...below, ...above];
   return ahead.find((listed) => toDo(listed, view.readerId) && listed.item.id !== chosen);
-}
-
-/** The item that stands chosen where none is: the first listed the reader is not done with (`toDo`), else the first listed. */
-export function firstChoice(view: InboxListView): InboxListed | undefined {
-  const listed = listedItems(view);
-  return listed.find((each) => toDo(each, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

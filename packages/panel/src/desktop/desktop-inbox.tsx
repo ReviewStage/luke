@@ -11,17 +11,9 @@ import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import {
-  EmptyState,
-  ERROR_STATE_PLACEMENT,
-  ErrorState,
-  STATUS_TONE,
-  Toolbar,
-  useMinute,
-} from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, STATUS_TONE, Toolbar, useMinute } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -47,7 +39,7 @@ import {
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, InboxPaneEmpty } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -55,7 +47,6 @@ import {
   type InboxListed,
   itemWorkspaceId,
   listedItems,
-  NEEDS_YOU,
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { type InboxNewThread, InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
@@ -82,7 +73,7 @@ import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
@@ -123,8 +114,9 @@ import { taskCardOf } from "./task-card.js";
  * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the
  * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
  * task's own held read, which stands in for the list's read of that task
- * so an answer shows at once. With nothing chosen, the first item listed
- * that waits stands chosen, else the first listed. The pane's crumbs open
+ * so an answer shows at once. Nothing is chosen until a row is pressed or a
+ * link asks for an item, the pane saying meanwhile how many threads the list
+ * holds (`InboxPaneEmpty`), so nothing is read by the Inbox opening. The pane's crumbs open
  * the task or the agent's tab, leaving the Inbox; what the item opens that
  * a task's side panel draws opens in that panel beside it instead, standing
  * for the chosen item's task (`use-tasks-tab.ts`): a code block's Open its
@@ -301,11 +293,10 @@ export function DesktopInbox({
   // Note that a phone shows one thing at a time across the screen: the list, or the item in its place.
   const phone = room === SHELL_ROOM.NARROW;
   // A missing item's pane stands where its item would, and so does one whose read failed, so a narrow Inbox shows the notice rather than the list.
-  // Note that the window keeps whether the list was asked for, so its history can go back to it.
-  const { listed, onListed, onSingle } = view;
+  const { onClear, onSingle } = view;
   const columns = useInboxColumns(
     chosen?.item.id ?? (missing || chosenFailed ? asked?.itemId : undefined),
-    { asked: listed, onAsk: onListed, onSingle },
+    { onClear, onSingle },
   );
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -330,16 +321,6 @@ export function DesktopInbox({
     folds.folded,
     direction,
   );
-  // A choice that asks for its item opens it once, the one column the Inbox shows being the
-  // item's; Back from it then stands on the list, the choice taken already.
-  const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
-  const taken = useRef<InboxChoice | undefined>(undefined);
-  const openColumn = columns.onOpen;
-  useEffect(() => {
-    if (!opensItem || asked === undefined || taken.current === asked) return;
-    taken.current = asked;
-    openColumn(asked.itemId);
-  }, [opensItem, asked, openColumn]);
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
   const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
   // Where the chosen item's links are written: under its own workspace, by slug once the workspaces are read.
@@ -655,9 +636,7 @@ export function DesktopInbox({
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
-                        {NEEDS_YOU.NONE}
-                      </EmptyState>
+                      <InboxPaneEmpty listed={listedItems(list).length} newTask={newTask} />
                     )}
                   </section>
                 ) : (

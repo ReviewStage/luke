@@ -71,24 +71,6 @@ test("the Inbox's step names the task its item is of, and Settings and a new acc
   assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Welcome" });
 });
 
-test("an Inbox showing one column names no item while its list stands, as its step holds none", () => {
-  const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
-  const base = tasksControl({ tasks: [TASK] });
-  const listed = tasksControl({
-    tasks: [TASK],
-    inboxView: { ...base.inboxView, open: true, chosen, single: true, listed: true },
-  });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, listed), { label: "Inbox", detail: undefined });
-  const narrowListed = tasksControl({
-    tasks: [TASK],
-    inboxView: { ...base.inboxView, open: true, chosen, listed: true },
-  });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, narrowListed, true), {
-    label: "Inbox",
-    detail: undefined,
-  });
-});
-
 test("with Channels on, a step on a channel listed later is named by the channel's name now, with the task of the thread open in it", () => {
   const channel = {
     id: "channel-1",

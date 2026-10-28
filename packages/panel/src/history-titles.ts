@@ -132,17 +132,11 @@ function taskName(tasks: StepNameTasks, taskId: string | undefined): string | un
   return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
-/** What the step the window stands on is called, in a room that is `narrow` or not; none while nothing names it, as a task not yet listed. */
-export function stepTitle(
-  tab: PanelTab,
-  tasks: StepTitleTasks,
-  narrow = false,
-): StepTitle | undefined {
+/** What the step the window stands on is called; none while nothing names it, as a task not yet listed. */
+export function stepTitle(tab: PanelTab, tasks: StepTitleTasks): StepTitle | undefined {
   if (tab === PANEL_TAB.SETTINGS) return { label: "Settings" };
   if (tasks.inboxView.open) {
-    // Note that an Inbox showing one column names no item while its list stands, as its step holds none.
-    const single = narrow || tasks.inboxView.single === true;
-    const chosen = single && tasks.inboxView.listed ? undefined : tasks.inboxView.chosen;
+    const { chosen } = tasks.inboxView;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     return { label: INBOX_WORDS, detail: taskName(tasks, holder) };
   }
