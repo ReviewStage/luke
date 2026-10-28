@@ -345,6 +345,9 @@
     var(--spacing-select-box) +
     var(--luke-icon-gap)
   );
+  /* How far in from a compact chip's start a box stands centred on the
+     chip's mark, as a board card's box stands over its status chip. */
+  --spacing-select-box-inset: calc((var(--spacing-chip-compact) - var(--spacing-select-box)) / 2);
   --grid-template-columns-tasks-list: var(--tasks-list-columns);
   --spacing-dialog-action-gap: var(--luke-dialog-action-gap);
   --spacing-dialog-action: var(--luke-dialog-action-width);
