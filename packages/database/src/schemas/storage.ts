@@ -158,6 +158,20 @@ export function turnlessUserLine(table: {
 }
 
 /**
+ * That a row of `messages` is no developer's line its hand-over withdrew
+ * and no turn took since: every read that shows a line reads it through
+ * this. A turn's own row stands whatever its stamp says, because a release
+ * that kept no stamp takes a withdrawn line into its turn and leaves the
+ * stamp behind.
+ */
+export function standingLine(table: {
+  readonly withdrawnAt: SQLWrapper;
+  readonly turnId: SQLWrapper;
+}): SQL {
+  return sql`(${table.withdrawnAt} is null or ${table.turnId} is not null)`;
+}
+
+/**
  * One `UIMessage` per row. A message in flight is mutable until
  * `finished_at` is set, and its tool parts are written before the tool runs
  * and completed after, so the row is the write-ahead record a resume reads;

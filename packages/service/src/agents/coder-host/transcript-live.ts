@@ -10,7 +10,7 @@ import { agentReachableBy } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
-import { asks, conversations, messages, turns } from "@luke/database/schemas/storage";
+import { asks, conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
 import { CODING_AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/coding-agent-wire";
 import { TRANSCRIPT_WINDOW } from "@luke/features/transcript-window";
 import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
@@ -146,7 +146,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
       and(
         eq(windowMessage.conversationId, target.conversationId),
         eq(windowMessage.userId, target.userId),
-        isNull(windowMessage.withdrawnAt),
+        standingLine(windowMessage),
       ),
     )
     .orderBy(desc(windowMessage.seq))
@@ -267,7 +267,7 @@ export function transcriptWindowLiveStatements(
         eq(messages.conversationId, target.conversationId),
         eq(messages.userId, target.userId),
         // A line its hand-over withdrew reads nowhere until a turn takes it (`message-reads.ts`).
-        isNull(messages.withdrawnAt),
+        standingLine(messages),
         reached,
       ),
     )
@@ -328,7 +328,7 @@ export function transcriptLiveStatements(
       and(
         eq(messages.conversationId, conversationId),
         eq(messages.userId, userId),
-        isNull(messages.withdrawnAt),
+        standingLine(messages),
         reached,
       ),
     );

@@ -43,6 +43,7 @@ import {
   conversations,
   messages,
   type StoredTurnUsage,
+  standingLine,
   turnlessUserLine,
   turns,
 } from "../schemas/storage.js";
@@ -196,7 +197,7 @@ function pageLimit(cursor: { readonly limit?: number }): number {
 const MESSAGE_CONVERSATION_STANDS = and(
   eq(conversations.id, messages.conversationId),
   isNull(conversations.deletedAt),
-  isNull(messages.withdrawnAt),
+  standingLine(messages),
 );
 
 const TURN_CONVERSATION_STANDS = and(
@@ -1075,7 +1076,7 @@ const findSentLine = SqlSchema.findOneOption({
             eq(messages.userId, key.userId),
             eq(messages.clientId, key.clientId),
             // A line its hand-over withdrew was not sent, and a send repeated under its key sends it afresh.
-            isNull(messages.withdrawnAt),
+            standingLine(messages),
             // A line its dispatch claim still hands over is not sent yet: the hand-over may withdraw it.
             sql`not (${conversations.dispatchLine} is not distinct from ${messages.id} and ${conversations.dispatchClaimedAt} > ${key.claimExpiredBefore})`,
           ),
