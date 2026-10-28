@@ -96,7 +96,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
         clientId: randomUUID(),
         role: MESSAGE_ROLE.USER,
         parts: [{ type: "text", text: prompt }],
-        metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+        metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK),
         placedAt,
       }),
     );
@@ -340,7 +340,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
             clientId: randomUUID(),
             role: MESSAGE_ROLE.USER,
             parts: [{ type: "text", text: handed }],
-            metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+            metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK),
             placedAt: new Date(),
           }),
         );

@@ -21,16 +21,6 @@ export const BRAIN_REQUEST_STATUS = {
 
 export type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUEST_STATUS];
 
-/** Where the ask came from: the developer's own voice, or a requester's spawn. */
-export const BRAIN_REQUEST_ORIGIN = {
-  /** Spoken; the voice service's own transcript is the record, and the question here is the host's relay of it. */
-  SPOKEN: "spoken",
-  /** A child's delegated task, handed to the child's own conversation by its requester's spawn. */
-  CHILD: "child",
-} as const;
-
-export type BrainRequestOrigin = (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAIN_REQUEST_ORIGIN];
-
 /**
  * Why a run ended without a reply, as a fixed word rather than a provider's
  * sentence: the host words each one for the thread, so no raw model or

@@ -1696,11 +1696,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 2,
-          message: userMessage(
-            randomUUID(),
-            SNAPSHOT,
-            userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
-          ),
+          message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
         });
 
         const page = readAnswer(
@@ -4541,11 +4537,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           conversationId: sessionKey(target.conversationId),
           turnId,
           sequence: 2,
-          message: userMessage(
-            randomUUID(),
-            SNAPSHOT,
-            userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
-          ),
+          message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
         });
         if (!turn.running) {
           yield* writer.consume(target, {
@@ -6837,11 +6829,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         ...turn,
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         sequence: 2,
-        message: userMessage(
-          randomUUID(),
-          SNAPSHOT,
-          userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
-        ),
+        message: userMessage(randomUUID(), SNAPSHOT, userMetadataOf(BRAIN_TURN_TRIGGER.ASK)),
       });
       yield* writer.consume(target, {
         ...turn,
@@ -8212,7 +8200,7 @@ const transcriptRow = (
           parts: parts as never,
           metadata:
             role === MESSAGE_ROLE.USER
-              ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined)
+              ? userMetadataOf(BRAIN_TURN_TRIGGER.ASK)
               : { author: MESSAGE_AUTHOR.BRAIN },
           placedAt: new Date(),
         })
