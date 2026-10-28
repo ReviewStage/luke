@@ -37,7 +37,8 @@ import { registerDevice } from "../device-store.js";
  * The work queued for a local agent's Mac, over a real dialect: a line is
  * queued in order to the Mac the agent is pinned to, at a place never
  * handed out before, claimed
- * once with its secrets cleared in the claim, and settled once with its
+ * once with its secrets cleared in the claim, or again under the token its
+ * claim carried but never with its secrets twice, and settled once with its
  * runner's exit; a request is claimed once and answered once, its answer
  * read back as the Mac gave it; nothing is queued for, claimed by, or read
  * by another account; a discard line goes only to a Mac that registered it
@@ -148,6 +149,68 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           yield* deviceAgentLineSettlement(userId, queued.id),
           Option.some({ exitCode: 137 }),
         );
+      }),
+  );
+
+  it.effect(
+    "a line claimed under a token is claimed again under that token alone, until it is settled",
+    () =>
+      Effect.gen(function* () {
+        const { userId, deviceId, agentId } = yield* openAccount();
+        const queued = Option.getOrThrow(
+          yield* queueDeviceAgentLine(userId, message(agentId, "hello")),
+        );
+        const token = randomUUID();
+
+        const first = yield* claimDeviceAgentLine(userId, deviceId, queued.id, token);
+        const again = yield* claimDeviceAgentLine(userId, deviceId, queued.id, token);
+        const underAnother = yield* claimDeviceAgentLine(userId, deviceId, queued.id, randomUUID());
+        const underNone = yield* claimDeviceAgentLine(userId, deviceId, queued.id);
+        yield* settleDeviceAgentLine(userId, deviceId, queued.id);
+        const afterSettle = yield* claimDeviceAgentLine(userId, deviceId, queued.id, token);
+
+        const expected = {
+          id: queued.id,
+          agentId,
+          seq: queued.seq,
+          kind: DEVICE_AGENT_LINE_KIND.MESSAGE,
+          payload: { text: "hello" },
+          sealedSecrets: null,
+          secretsGone: false,
+        };
+        assert.deepEqual(first, Option.some(expected));
+        assert.deepEqual(again, Option.some(expected), "the same claim is answered the same");
+        assert.deepEqual(underAnother, Option.none());
+        assert.deepEqual(underNone, Option.none());
+        assert.deepEqual(afterSettle, Option.none(), "a settled line is never claimed again");
+      }),
+  );
+
+  it.effect(
+    "a launch line claimed twice at once under one token hands its secrets to one claim, and the other says they are gone",
+    () =>
+      Effect.gen(function* () {
+        const { userId, deviceId, agentId } = yield* openAccount();
+        const queued = Option.getOrThrow(yield* queueDeviceAgentLine(userId, launch(agentId)));
+        const token = randomUUID();
+
+        const claims = yield* Effect.all(
+          [
+            claimDeviceAgentLine(userId, deviceId, queued.id, token),
+            claimDeviceAgentLine(userId, deviceId, queued.id, token),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        const answered = claims
+          .map((claim) => Option.getOrThrow(claim))
+          .map((line) => [line.sealedSecrets, line.secretsGone] as const)
+          .sort((one, other) => Number(one[1]) - Number(other[1]));
+        assert.deepEqual(answered, [
+          [SEALED, false],
+          [null, true],
+        ]);
+        assert.equal(yield* storedSecrets(queued.id), null);
       }),
   );
 

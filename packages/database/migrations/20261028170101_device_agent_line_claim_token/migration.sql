@@ -1,0 +1,1 @@
+ALTER TABLE "device_agent_line" ADD COLUMN "claim_token" uuid;

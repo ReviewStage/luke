@@ -7,9 +7,12 @@
  * Mac, and goes to the Mac the agent is pinned to, which must be the
  * account's too; a Mac reads and claims only the rows naming it. A row is
  * claimed once, by the first claim that finds it waiting, and settled or
- * answered once, after it was claimed. A launch line's sealed secrets are
- * read by its claim alone, which clears them in the same statement, so a
- * second claim, a listing, or a read after it finds none
+ * answered once, after it was claimed. A line's claim may carry a token its
+ * Mac minted for it, and the same claim asked again under that token, as
+ * after its answer was lost, is answered the line again until it is
+ * settled. A launch line's sealed secrets are read by its first claim
+ * alone, which clears them in the same statement, so a second claim, a
+ * claim asked again, a listing, or a read after it finds none
  * (`../schemas/device-agent.ts`). The secrets are opaque here: the service
  * seals them before the queue and opens them after the claim.
  *
@@ -76,7 +79,14 @@ const ClaimedLineSchema = Schema.Struct({
   sealedSecrets: Schema.NullOr(Schema.String),
 });
 
-export type DeviceAgentClaimedLine = typeof ClaimedLineSchema.Type;
+/**
+ * A line as a claim answers it: as its first claim handed it over, or, for
+ * the same claim asked again, without secrets, and saying where it is a
+ * launch line whose secrets the first claim took.
+ */
+export type DeviceAgentClaimedLine = typeof ClaimedLineSchema.Type & {
+  readonly secretsGone: boolean;
+};
 
 /** A request as a Mac lists and claims it. */
 const WaitingRequestSchema = Schema.Struct({
@@ -320,13 +330,17 @@ const findWaitingLines = SqlSchema.findAll({
 });
 
 const claimLine = SqlSchema.findOneOption({
-  Request: Schema.Struct({ ...DeviceRowKeySchema.fields, now: Schema.Date }),
+  Request: Schema.Struct({
+    ...DeviceRowKeySchema.fields,
+    claimToken: Schema.NullOr(Schema.String),
+    now: Schema.Date,
+  }),
   Result: ClaimedLineSchema,
-  execute: ({ userId, deviceId, id, now }) =>
+  execute: ({ userId, deviceId, id, claimToken, now }) =>
     Database.use((db) =>
       db
         .update(deviceAgentLine)
-        .set({ claimedAt: now, sealedSecrets: null })
+        .set({ claimedAt: now, claimToken, sealedSecrets: null })
         .from(lineBefore)
         .where(
           and(
@@ -347,6 +361,34 @@ const claimLine = SqlSchema.findOneOption({
           // `returning` reads the updated row, whose secrets are cleared.
           sealedSecrets: lineBefore.sealedSecrets,
         }),
+    ),
+});
+
+/** A line the Mac claimed under the token given and has not settled, without its secrets, which its claim took. */
+const findClaimedUnder = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...DeviceRowKeySchema.fields, claimToken: Schema.String }),
+  Result: WaitingLineSchema,
+  execute: ({ userId, deviceId, id, claimToken }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: deviceAgentLine.id,
+          agentId: deviceAgentLine.agentId,
+          seq: deviceAgentLine.seq,
+          kind: deviceAgentLine.kind,
+          payload: deviceAgentLine.payload,
+        })
+        .from(deviceAgentLine)
+        .where(
+          and(
+            eq(deviceAgentLine.id, id),
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            eq(deviceAgentLine.claimToken, claimToken),
+            isNotNull(deviceAgentLine.claimedAt),
+            isNull(deviceAgentLine.settledAt),
+          ),
+        ),
     ),
 });
 
@@ -646,16 +688,36 @@ export function deviceAgentLinesWaiting(
 }
 
 /**
- * Claims one line for the account's Mac, handing over its sealed secrets
- * and clearing them in the same statement; none where it is not that Mac's,
- * another claim took it first, or the expiry withdrew it.
+ * Claims one line for the account's Mac under the token its Mac minted for
+ * it, where it names one, handing over its sealed secrets and clearing them
+ * in the same statement. The same claim asked again under the same token is
+ * answered the line again, without its secrets, until the line is settled.
+ * None where it is not that Mac's, another claim took it first, it was
+ * settled, or the expiry withdrew it.
+ *
+ * Note that the claim asked again is a read beside the claim rather than a
+ * wider claim, because only the statement that takes a waiting line ever
+ * reads its secrets, so no two answers can both carry them.
  */
 export function claimDeviceAgentLine(
   userId: string,
   deviceId: string,
   id: string,
+  claimToken?: string,
 ): DeviceAgentEffect<Option.Option<DeviceAgentClaimedLine>> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) => claimLine({ userId, deviceId, id, now }));
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const claimed = yield* claimLine({ userId, deviceId, id, claimToken: claimToken ?? null, now });
+    if (Option.isSome(claimed) || claimToken === undefined) {
+      return Option.map(claimed, (line) => ({ ...line, secretsGone: false }));
+    }
+    const again = yield* findClaimedUnder({ userId, deviceId, id, claimToken });
+    return Option.map(again, (line) => ({
+      ...line,
+      sealedSecrets: null,
+      secretsGone: line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH,
+    }));
+  });
 }
 
 /**
