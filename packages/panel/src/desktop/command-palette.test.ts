@@ -2308,7 +2308,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
   };
   const seen: string[] = [];
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_SEEN]: ({ agentId }) => {
+    [ACT_KIND.AGENTS_SEEN]: ({ agentId }) => {
       seen.push(agentId);
       return Promise.resolve(undefined);
     },
@@ -2795,7 +2795,7 @@ function servingLuke(agentId: string): SentPortAct[] {
   fakeActPortAnswering((request) => {
     sent.push(request);
     return Promise.resolve(
-      request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
+      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
     );
   });
   return sent;
@@ -2883,7 +2883,7 @@ test("⌘K offers no Ask Luke and ensures nothing while the account has the oper
 
   assert.ok(!rows().includes("Ask Luke"));
   assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR),
+    sent.filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR),
     [],
   );
 });

@@ -72,7 +72,7 @@ import {
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
-import { steerCodingAgentWritten } from "./coder-host/steer.js";
+import { steerAgentWritten } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -362,7 +362,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
-        const { txid } = yield* steerCodingAgentWritten(eve, writer, context.userId, agent, {
+        const { txid } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
         });

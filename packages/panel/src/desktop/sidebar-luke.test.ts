@@ -96,7 +96,7 @@ function serve(ensure: (payload: unknown) => WireBoundaryInput): SentPortAct[] {
   fakeActPortAnswering((request) => {
     sent.push(request);
     return Promise.resolve(
-      request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR ? ensure(request.payload) : undefined,
+      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? ensure(request.payload) : undefined,
     );
   });
   return sent;
@@ -105,7 +105,7 @@ function serve(ensure: (payload: unknown) => WireBoundaryInput): SentPortAct[] {
 /** Every ensure the window asked, by its payload. */
 function ensures(sent: readonly SentPortAct[]): unknown[] {
   return sent
-    .filter((request) => request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR)
+    .filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR)
     .map((request) => request.payload);
 }
 

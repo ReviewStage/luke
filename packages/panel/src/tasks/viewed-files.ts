@@ -22,9 +22,9 @@ import { noteOf, type WriteNote } from "./pull-request-writes.js";
  * The marks are GitHub's own, the ones its Viewed box sets, so they are read
  * and written by the service on the member's own GitHub sign-in and never on
  * the Luke GitHub App (`pull-request-write-wire.ts`): the read
- * (`CODING_AGENTS_PULL_REQUEST_VIEWED`) each time the changes are read, so
+ * (`AGENTS_PULL_REQUEST_VIEWED`) each time the changes are read, so
  * the two describe the same push, and a mark or an unmark as one of the
- * pull request's changes (`CODING_AGENTS_PULL_REQUEST_ACTION`). A file marked
+ * pull request's changes (`AGENTS_PULL_REQUEST_ACTION`). A file marked
  * viewed and changed since (GitHub's dismissed) reads as not viewed, as
  * GitHub unticks it.
  *
@@ -134,7 +134,7 @@ export function useViewedFiles(
         ? PULL_REQUEST_ACTION.MARK_FILE_VIEWED
         : PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED;
       sentAt.set(path, pressing.current.get(path)?.presses ?? 0);
-      void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, {
+      void act(ACT_KIND.AGENTS_PULL_REQUEST_ACTION, {
         ...pullRequestAsked(agentId, number),
         request: { action, path },
       })

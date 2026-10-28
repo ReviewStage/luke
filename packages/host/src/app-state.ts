@@ -131,7 +131,7 @@ interface AppSessionReplaySlice {
  * is drawn from. Main's, because main is what watches the agents while no
  * tab does, and so a reload of the window does not lose the dots.
  */
-interface AppCodingAgentsSlice {
+interface AppAgentsSlice {
   unseen: readonly string[];
 }
 
@@ -288,7 +288,7 @@ export interface AppState {
    * the panel's Tasks tab draws it.
    */
   tasks: TasksView;
-  codingAgents: AppCodingAgentsSlice;
+  agents: AppAgentsSlice;
   inbox: AppInboxSlice;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;

@@ -269,7 +269,7 @@ beforeEach(() => {
       return membersRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(MEMBERS);
     },
     // An agent read by its own id stands at rest, as its page reads it.
-    [ACT_KIND.CODING_AGENTS_PAGE]: ({ agentId }: { agentId: string }) =>
+    [ACT_KIND.AGENTS_PAGE]: ({ agentId }: { agentId: string }) =>
       Promise.resolve({
         agent: {
           id: agentId,

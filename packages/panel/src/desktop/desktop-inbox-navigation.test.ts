@@ -1106,7 +1106,7 @@ function heldStarts(): AgentInboxStartParams[] {
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
       world.inboxes.set(BILLING.id, [STARTED, ...(world.inboxes.get(BILLING.id) ?? [])]);
       pushAgain();
@@ -1467,7 +1467,7 @@ test("words written in the box while its new thread starts stay in it once the t
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CODING_AGENTS_INBOX_START ? answer.promise : previous(request),
+      request.kind === ACT_KIND.AGENTS_INBOX_START ? answer.promise : previous(request),
   });
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();

@@ -30,7 +30,7 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../eve-host/door.
  * the route on its session cookie alone, as the deployment acting for the
  * account the cookie named (`stop.ts`'s `eveFor`), on the same rows below.
  * What else the deployment does here is carry the three things a coding
- * agent does for the member who started it (`agents/coding-agent-tools.ts`),
+ * agent does for the member who started it (`agents/agent-tools.ts`),
  * since its session holds no bearer of the account's: a message it sends an
  * agent, admitted only on a session the named account's agent recorded, the
  * opening that starts an agent, admitted only on a conversation the named

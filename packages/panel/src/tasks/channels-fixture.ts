@@ -1231,14 +1231,14 @@ function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSee
 }
 
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
+  [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
     const pushed: AgentInboxChanged["inbox"] = {
       items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
     };
     return pushedOnce(pushed);
   },
   // The account's feed of every item, which the window's Inbox draws from: each task's threads, and the stray agent's.
-  [ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+  [ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
     const taskIds = new Set(
       THREADS.flatMap((each) => (each.taskId === undefined ? [] : [each.taskId])),
     );
@@ -1254,7 +1254,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     };
     return pushedOnce(pushed);
   },
-  [ACT_KIND.CODING_AGENTS_PAGE]: ({ agentId }) =>
+  [ACT_KIND.AGENTS_PAGE]: ({ agentId }) =>
     agentId === STRAY.agentId
       ? {
           agent: {
@@ -1275,19 +1275,19 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
           },
         }
       : { failure: AGENT_CALL_FAILURE.NOT_FOUND },
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {
+  [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
   },
   [ACT_KIND.AUTOMATIONS_FOLLOW]: (follow) =>
     pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => MEMBERS,
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
-  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: ({ itemId, text, answers }) => {
+  [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
+  [ACT_KIND.AGENTS_INBOX_MESSAGE]: ({ itemId, text, answers }) => {
     const item = replied(itemId, text, answers);
     return item === undefined ? { failure: "unanswered" } : { item };
   },
-  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: () => longRunPicture(),
+  [ACT_KIND.AGENTS_INBOX_ATTACHMENT]: () => longRunPicture(),
   [ACT_KIND.TASKS_PULL_REQUEST]: ({ number }) =>
     number === RELEASE_PULL_REQUEST.number ? RELEASE_PULL_REQUEST : null,
   [ACT_KIND.CHANNELS_LIST]: () => channelsAnswer(),

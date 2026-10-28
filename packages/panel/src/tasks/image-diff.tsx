@@ -19,7 +19,7 @@ import { useAct } from "../act.js";
  * the service through the repository's contents on the App's token, as the
  * Pull request tab reads any picture its pull request names
  * (`@luke/features/github-image`'s raw-file address, the act
- * `CODING_AGENTS_GITHUB_IMAGE`): the before at the merge base GitHub counts
+ * `AGENTS_GITHUB_IMAGE`): the before at the merge base GitHub counts
  * the changes from, the after at the head. So the window asks GitHub nothing
  * itself, holds no token, and draws each from a `data:` URL of its own
  * making, which the panel's policy admits; a side waits under the window's
@@ -88,7 +88,7 @@ function useImageRead() {
   const { act } = useAct();
   return useCallback(
     (agentId: string, address: string) =>
-      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId, src: address }),
+      act(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId, src: address }),
     [act],
   );
 }

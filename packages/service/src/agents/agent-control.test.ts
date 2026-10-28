@@ -21,7 +21,7 @@ import {
 } from "../testing/github-app-fake.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 import { startFromOf } from "./coder-host/replay.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
+import { steerAgent } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_MOUNT, type EveTypedTurn, eveSessions } from "./eve-host/eve-sessions.js";
 
@@ -77,7 +77,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
           mount: EVE_MOUNT.CODER,
         });
         const steer = (userId: string) =>
-          steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
+          steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
             text: "Carry on.",
             clientKey: randomUUID(),
             sender: { kind: MESSAGE_SENDER.MEMBER, userId },
@@ -130,7 +130,7 @@ it.layer(getTestDB())("an agent on its starter's own GitHub token", (it) => {
 
         assert.ok(Option.isSome(yield* readAgent(tokenless, agent.id)));
         const refused = yield* Effect.flip(
-          steerCodingAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
+          steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), tokenless, agent, {
             text: "Carry on.",
             clientKey: randomUUID(),
             sender: { kind: MESSAGE_SENDER.MEMBER, userId: tokenless },

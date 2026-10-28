@@ -1,7 +1,7 @@
 /**
  * recording-eve.ts -- eve's coding-agent service as a sweep's test fakes it, writing down every message sent.
  *
- * A sweep that hands an agent a line (`steerCodingAgent`) reaches eve per
+ * A sweep that hands an agent a line (`steerAgent`) reaches eve per
  * account; this stands in for it at the client's boundary, opening every
  * session it is asked to and writing down each message sent by session, or
  * refusing every send as unreachable, so a test reads back what each agent

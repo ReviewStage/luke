@@ -941,7 +941,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   const marked: string[] = [];
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
+    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
       marked.push(`${unread ? "unread" : "read"}:${itemId}`);
       return Promise.resolve({ id: itemId, unread });
     },
@@ -978,7 +978,7 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   showEverything();
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
       Promise.resolve({ id: itemId, unread }),
   });
   const notice = (id: string, title: string, at: number): InboxItem => ({

@@ -224,7 +224,7 @@ function runStartedAt(row: AgentLiveRow, now: number): number | undefined {
   return turnOf(row) === undefined ? row.createdAt : (row.startedAt ?? row.queuedAt ?? undefined);
 }
 
-/** When the agent last did something settled, as the service's `codingAgentActivityAt` reads it: its start, or its newest turn to end's end, whichever is later; a turn's start is none. A statement from before that end was carried names the newest turn's own. */
+/** When the agent last did something settled, as the service's `agentActivityAt` reads it: its start, or its newest turn to end's end, whichever is later; a turn's start is none. A statement from before that end was carried names the newest turn's own. */
 function activityAt(row: AgentLiveRow): number {
   return Math.max(row.createdAt, row.lastSettledAt ?? row.settledAt ?? 0);
 }

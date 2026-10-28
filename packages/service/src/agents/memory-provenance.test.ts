@@ -24,7 +24,7 @@ import {
   TURN_STATUS,
 } from "../core.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { AGENT_CALLER, type CodingAgentCall } from "./coding-agent-tools.js";
+import { AGENT_CALLER, type AgentCall } from "./agent-tools.js";
 import { MEMORY_PROVENANCE_REFUSAL } from "./memory-provenance.js";
 import { runAgentRemember } from "./memory-tools.js";
 
@@ -143,7 +143,7 @@ const writeTurn = (
 
 /** A `remember` from the agent, as its tool door calls it. */
 const remember = (agent: Agent) => {
-  const call: CodingAgentCall = {
+  const call: AgentCall = {
     caller: { kind: AGENT_CALLER.AGENT, agent },
     eve: undefined,
     writer: Effect.die(new Error("a memory call writes no line")),

@@ -99,7 +99,7 @@ const START_STAGE_WORDS = {
 const COPY_STAGE_MS = 3_000;
 
 /** A Start as the draft's send asks it, the plan left for the caller to name. */
-export type ForkStart = Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">;
+export type ForkStart = Omit<PortActPayload<typeof ACT_KIND.AGENTS_START>, "taskId">;
 
 /**
  * A message's opening words as the fork's chip quotes them: its first line

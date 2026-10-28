@@ -284,7 +284,7 @@ test("an archived agent's chip, which no list the window holds names, wears the 
     `${HOME}/plan/${TASK_ID}/agent/${onTask} and ${HOME}/agent/${onNone}`,
     [],
     (request) => {
-      const read = request.kind === ACT_KIND.CODING_AGENTS_PAGE ? request.payload.agentId : "";
+      const read = request.kind === ACT_KIND.AGENTS_PAGE ? request.payload.agentId : "";
       const found = models.get(read);
       if (found === undefined) return undefined;
       return {

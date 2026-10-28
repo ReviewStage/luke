@@ -21,17 +21,17 @@ import {
 } from "../../core.js";
 import type { HostedRefusal } from "../../http/http-effect.js";
 import {
+  type AgentCall,
+  type AgentToolServices,
   agentToolRejected,
-  type CodingAgentCall,
-  type CodingAgentToolServices,
   callerTask,
   callerUserId,
   callerWorkspace,
   orStoreRefusal,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
 import { workspaceAgent } from "../workspace-agents.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
-import { agentLineSender, steerCodingAgent } from "./steer.js";
+import { agentLineSender, steerAgent } from "./steer.js";
 
 /**
  * agent-message.ts -- `message_agent`: one coding agent's message to another of its workspace, shown in the two agents' transcripts alone.
@@ -150,9 +150,9 @@ function messageLine(sender: Agent, senderMention: string, text: string): string
 
 /** One call of `message_agent`: the words handed to another agent of the caller's workspace, or why nothing was sent. */
 export function runMessageAgent(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readMessage(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.UNREADABLE));
@@ -183,7 +183,7 @@ export function runMessageAgent(
         agentName(sender),
         step,
       );
-      const sent = yield* steerCodingAgent(eve, call.writer, userId, target, {
+      const sent = yield* steerAgent(eve, call.writer, userId, target, {
         text: messageLine(sender, mention, text),
         clientKey: call.clientKey,
         sender: agentLineSender(sender),

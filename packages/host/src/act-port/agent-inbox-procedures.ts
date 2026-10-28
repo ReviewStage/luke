@@ -42,25 +42,23 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
 export interface AgentInboxProceduresDependencies {
   host: {
     /** A task's or agent's inbox followed at the host, heard through `onInboxChanged`; following again starts over. */
-    codingAgentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
-    codingAgentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
+    agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
+    agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
     onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
     /** Every item the account reaches followed at the host, heard through `onAccountItemsChanged`; following again starts over, told whole. */
-    codingAgentAccountItemsFollow(): Effect.Effect<void>;
-    codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
+    agentAccountItemsFollow(): Effect.Effect<void>;
+    agentAccountItemsUnfollow(): Effect.Effect<void>;
     onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
-    codingAgentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
-    codingAgentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
-    codingAgentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
-    codingAgentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
-    codingAgentInboxReadState(
-      params: AgentInboxReadStateParams,
-    ): Effect.Effect<AgentInboxReadStateView>;
-    codingAgentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
-    codingAgentInboxAttachment(
+    agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
+    agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
+    agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
+    agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
+    agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
+    agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
+    agentInboxAttachment(
       params: AgentInboxAttachmentParams,
     ): Effect.Effect<AgentInboxAttachmentView>;
-    codingAgentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
+    agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   };
 }
 
@@ -94,15 +92,15 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
   /** The account's items while any window holds a stream of them open, every change told so far folded into one. */
   const openItems: OpenFollows<AgentAccountItems> = MutableHashMap.empty();
   return {
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const changes = followedStream(
         {
           keyOf: (scope: AgentInboxScope) => ({ kind: scope.kind, id: scope.id }),
-          follow: host.codingAgentInboxFollow,
-          unfollow: host.codingAgentInboxUnfollow,
+          follow: host.agentInboxFollow,
+          unfollow: host.agentInboxUnfollow,
           onChanged: host.onInboxChanged,
           valueOf: (changed: AgentInboxChanged, scope: AgentInboxScope) =>
             changed.scope.kind === scope.kind && changed.scope.id === scope.id
@@ -114,15 +112,15 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       );
       return streamed(yield* Stream.toAsyncIterableEffect(changes));
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW
+    [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW
     ].effect(function* ({ context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const told = followedStream(
         {
           keyOf: () => ACCOUNT_ITEMS,
-          follow: host.codingAgentAccountItemsFollow,
-          unfollow: host.codingAgentAccountItemsUnfollow,
+          follow: host.agentAccountItemsFollow,
+          unfollow: host.agentAccountItemsUnfollow,
           onChanged: host.onAccountItemsChanged,
           valueOf: (changed: AgentAccountItems) => Option.some(changed),
           fold: itemsFolded,
@@ -132,54 +130,54 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       );
       return streamed(yield* Stream.toAsyncIterableEffect(told));
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxAnswer(input);
+      return yield* host.agentInboxAnswer(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxClose(input);
+      return yield* host.agentInboxClose(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxMessage(input);
+      return yield* host.agentInboxMessage(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_START]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_START
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxStart(input);
+      return yield* host.agentInboxStart(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxReadState(input);
+      return yield* host.agentInboxReadState(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxReadAll(input);
+      return yield* host.agentInboxReadAll(input);
     }),
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentInboxAttachment(input);
+      return yield* host.agentInboxAttachment(input);
     }),
     // Note that the picture's answer, a failure among them, is the panel's to read, as an inbox image's is.
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]: actPort[
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.codingAgentPicture(input);
-    }),
+    [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: actPort[AGENT_INBOX_ACT_KIND.AGENTS_PICTURE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentPicture(input);
+      },
+    ),
   };
 }

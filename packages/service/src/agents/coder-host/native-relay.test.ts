@@ -62,8 +62,8 @@ import {
   runnerChoiceApplied,
   sessionsRouter,
 } from "./runtime-sessions.js";
-import { startCodingAgent } from "./start.js";
-import { STEER_OUTCOME, steerCodingAgent } from "./steer.js";
+import { startAgent } from "./start.js";
+import { STEER_OUTCOME, steerAgent } from "./steer.js";
 import { type EveReach, stoppedTurn } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -336,7 +336,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             Effect.provide(relay.layer),
           );
           assert.equal(
-            yield* steerCodingAgent(sessions, writer, teammate, onClaudeCode, steerLine(teammate)),
+            yield* steerAgent(sessions, writer, teammate, onClaudeCode, steerLine(teammate)),
             STEER_OUTCOME.SENT,
           );
 
@@ -391,7 +391,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             null,
             new Date(0),
           );
-          const started = yield* startCodingAgent(routedSessions(eve.sessions, starter), starter, {
+          const started = yield* startAgent(routedSessions(eve.sessions, starter), starter, {
             taskId: null,
             organizationId: workspaceId,
             repository: `${RELAY.owner}/${RELAY.name}`,
@@ -475,7 +475,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           for (const agent of [relaunched, launched, onEve]) {
             assert.equal(
-              yield* steerCodingAgent(sessions, writer, owner, agent, steerLine(owner, words)),
+              yield* steerAgent(sessions, writer, owner, agent, steerLine(owner, words)),
               STEER_OUTCOME.SENT,
             );
           }
@@ -636,7 +636,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               Effect.provide(relay.layer),
             );
             const sent = yield* Effect.result(
-              steerCodingAgent(sessions, writer, owner, onClaudeCode, steerLine(owner)),
+              steerAgent(sessions, writer, owner, onClaudeCode, steerLine(owner)),
             );
             assert.ok(Result.isFailure(sent));
             assert.equal(sent.failure.error, HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE);

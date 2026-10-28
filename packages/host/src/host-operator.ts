@@ -648,11 +648,11 @@ export interface HostOperator {
     params: TasksWorkspaceInvitationCancelParams,
   ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
-  codingAgentModels(): Effect.Effect<AgentModelsAnswer>;
+  agentModels(): Effect.Effect<AgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
-  codingAgentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
+  agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
   /** The default written; the choice as kept, or why it is unchanged. */
-  codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
+  agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
   /** The account's hosts, as Settings lists them; or why there is no list. */
   hostsList(): Effect.Effect<HostsAnswerView>;
   hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
@@ -663,35 +663,35 @@ export interface HostOperator {
   /** One of the account's install tokens revoked; done, or why not. */
   hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
   /** One task's coding agents with their status; or why there is no list. */
-  codingAgentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
+  agentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
   /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
-  codingAgentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
+  agentWorkspaceList(params: AgentWorkspaceListParams): Effect.Effect<AgentListAnswer>;
   /** An agent started on a task under the press's own key; the agent, or why none started. */
-  codingAgentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
+  agentStart(params: AgentStartParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
-  codingAgentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
+  agentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
   /** One agent sent a message naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  codingAgentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
+  agentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  codingAgentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
+  agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  codingAgentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
-  codingAgentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+  agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
+  agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
-  codingAgentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
+  agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  codingAgentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
+  agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  codingAgentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
+  agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  codingAgentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
-  codingAgentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
+  agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
+  agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
   /** The account's operator in a workspace, Luke, ensured, or reset and ensured afresh: its id, or why there is none. */
-  codingAgentEnsureOperator(
+  agentEnsureOperator(
     params: AgentOperatorEnsureParams,
   ): Effect.Effect<AgentOperatorEnsureAnswerView>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
-  codingAgentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
+  agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   channelsList(params: ChannelsListParams): Effect.Effect<ChannelsView>;
   /** A channel made; the workspace's channels as they then stand, or why it was not made. */
@@ -737,9 +737,7 @@ export interface HostOperator {
   /** A followed list or history as it now stands, each time it moves while followed. */
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
-  codingAgentPullRequest(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentPullRequestAnswerView>;
+  agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
   pullRequestChapters(
     params: PullRequestChaptersParams,
@@ -783,31 +781,29 @@ export interface HostOperator {
   /** One installed skill removed; or why it stands. */
   installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
-  codingAgentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
+  agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
   /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
-  codingAgentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
+  agentGitHubImage(params: AgentGitHubImageParams): Effect.Effect<AgentGitHubImageView>;
   /** One change to an agent's pull request, made on GitHub as the account on its own GitHub sign-in; how GitHub took it, or why there is no answer. */
-  codingAgentPullRequestAction(
+  agentPullRequestAction(
     params: AgentPullRequestActionParams,
   ): Effect.Effect<AgentPullRequestWriteAnswerView>;
   /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
-  codingAgentPullRequestViewed(
+  agentPullRequestViewed(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentPullRequestViewedAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
-  codingAgentOverviewPullRequest(
+  agentOverviewPullRequest(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
-  codingAgentReviewOptions(
-    params: AgentPullRequestParams,
-  ): Effect.Effect<AgentReviewOptionsAnswerView>;
+  agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
-  codingAgentOverviewChecks(
+  agentOverviewChecks(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewChecksAnswerView>;
   /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
-  codingAgentOverviewConversation(
+  agentOverviewConversation(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
@@ -837,35 +833,33 @@ export interface HostOperator {
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
   /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
-  codingAgentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
+  agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
-  codingAgentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
+  agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** A followed inbox, its items whole or why there are none, each time it changes. */
   onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  codingAgentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
+  agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
   /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
-  codingAgentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
+  agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
   /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  codingAgentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
+  agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
   /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
-  codingAgentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
+  agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
-  codingAgentInboxReadState(
-    params: AgentInboxReadStateParams,
-  ): Effect.Effect<AgentInboxReadStateView>;
+  agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  codingAgentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
+  agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
-  codingAgentAccountInboxFollow(): Effect.Effect<void>;
+  agentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
-  codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
+  agentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits across the followed account, or why there is none, each time it moves. */
   onAccountInboxChanged(listener: (answer: AgentAccountInboxAnswerView) => void): () => void;
   /** Every inbox item the account reaches, followed from now until let go or signed out, heard through `onAccountItemsChanged`; following again starts over, told whole. */
-  codingAgentAccountItemsFollow(): Effect.Effect<void>;
+  agentAccountItemsFollow(): Effect.Effect<void>;
   /** The account's items let go: nothing more is heard of them until they are followed again. */
-  codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
+  agentAccountItemsUnfollow(): Effect.Effect<void>;
   /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move. */
   onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
@@ -877,13 +871,11 @@ export interface HostOperator {
   transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
   /** A followed transcript's next page, or why there is none, each time it moves. */
   onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
-  codingAgentInboxAttachment(
-    params: AgentInboxAttachmentParams,
-  ): Effect.Effect<AgentInboxAttachmentView>;
+  agentInboxAttachment(params: AgentInboxAttachmentParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
-  codingAgentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
+  agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
-  codingAgentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
+  agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
@@ -1015,7 +1007,7 @@ function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
 
-const CODING_AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+const AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
@@ -1664,169 +1656,169 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_START, request),
         answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
       ),
-    codingAgentModels: () =>
+    agentModels: () =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_MODELS),
-        answerOf(agentModelsAnswerSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_MODELS),
+        answerOf(agentModelsAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentDefaultRead: () =>
+    agentDefaultRead: () =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ),
-        answerOf(agentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_DEFAULT_READ),
+        answerOf(agentDefaultAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentDefaultWrite: (choice) =>
+    agentDefaultWrite: (choice) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, {
+        client.call(GATEWAY_METHOD.AGENTS_DEFAULT_WRITE, {
           model: choice.model,
           effort: choice.effort,
           ...(choice.contextWindow === undefined
             ? undefined
             : { contextWindow: choice.contextWindow }),
         }),
-        answerOf(agentDefaultAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentDefaultAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsList: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_LIST),
-        answerOf(hostsAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(hostsAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsPresence: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_PRESENCE),
-        answerOf(devicePresenceAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(devicePresenceAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsRemove: (id) =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_REMOVE, { id }),
-        answerOf(hostDoneAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsKeepInstallToken: (tokenHash) =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_KEEP_INSTALL_TOKEN, { tokenHash }),
-        answerOf(hostInstallTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(hostInstallTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsRevokeInstallToken: (id) =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN, { id }),
-        answerOf(hostDoneAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentWorkspaceList: (params) =>
+    agentWorkspaceList: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, params),
-        answerOf(agentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_LIST, params),
+        answerOf(agentListAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentList: (params) =>
+    agentList: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_LIST, {
+        client.call(GATEWAY_METHOD.AGENTS_LIST, {
           taskId: params.taskId,
           ...(params.includeArchived === undefined
             ? undefined
             : { includeArchived: params.includeArchived }),
         }),
-        answerOf(agentListAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentListAnswerViewSchema, AGENT_UNANSWERED),
       ),
     // Note that the Start goes on whole, as the act port decoded it against the same schema the
     // Gateway's method reads, because a field copied by name is one a later field is left out of,
     // as an empty draft's `blank` was, which handed its agent the plan.
-    codingAgentStart: (params) =>
+    agentStart: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_START, params),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_START, params),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentMessages: (params) =>
+    agentMessages: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+        client.call(GATEWAY_METHOD.AGENTS_MESSAGES, {
           agentId: params.agentId,
           after: params.after,
           ...("callId" in params ? { callId: params.callId } : undefined),
         }),
-        answerOf(agentMessagesAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentMessagesAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentMessage: (params) =>
+    agentMessage: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+        client.call(GATEWAY_METHOD.AGENTS_MESSAGE, {
           agentId: params.agentId,
           text: params.text,
           clientKey: params.clientKey,
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentChoose: (params) =>
+    agentChoose: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHOOSE, {
+        client.call(GATEWAY_METHOD.AGENTS_CHOOSE, {
           agentId: params.agentId,
           model: params.model,
           effort: params.effort,
           ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentRename: (params) =>
+    agentRename: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_RENAME, {
+        client.call(GATEWAY_METHOD.AGENTS_RENAME, {
           agentId: params.agentId,
           title: params.title,
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentServers: (params) =>
+    agentServers: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_SERVERS, {
+        client.call(GATEWAY_METHOD.AGENTS_SERVERS, {
           agentId: params.agentId,
           disabledServers: params.disabledServers,
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentStop: (params) =>
+    agentStop: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_STOP, { agentId: params.agentId }),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentRewind: (params) =>
+    agentRewind: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_REWIND, {
+        client.call(GATEWAY_METHOD.AGENTS_REWIND, {
           agentId: params.agentId,
           messageId: params.messageId,
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentArchive: (params) =>
+    agentArchive: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, {
+        client.call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
           agentId: params.agentId,
           archived: params.archived,
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentDelete: (params) =>
+    agentDelete: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_DELETE, { agentId: params.agentId }),
-        answerOf(agentDeleteAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: params.agentId }),
+        answerOf(agentDeleteAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentPin: (params) =>
+    agentPin: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PIN, {
+        client.call(GATEWAY_METHOD.AGENTS_PIN, {
           agentId: params.agentId,
           pinned: params.pinned,
           ...(params.position === undefined ? undefined : { position: params.position }),
         }),
-        answerOf(agentAgentAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
-    codingAgentEnsureOperator: (params) =>
+    agentEnsureOperator: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, {
+        client.call(GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, {
           workspaceId: params.workspaceId,
           ...(params.reset === undefined ? undefined : { reset: params.reset }),
           ...(params.restore === undefined ? undefined : { restore: params.restore }),
           ...(params.timeZone === undefined ? undefined : { timeZone: params.timeZone }),
         }),
-        answerOf(agentOperatorEnsureAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentOperatorEnsureAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentPage: (params) =>
+    agentPage: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
-        answerOf(agentPageAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
+        answerOf(agentPageAnswerViewSchema, AGENT_UNANSWERED),
       ),
     channelsList: (params) =>
       Effect.map(
@@ -1932,33 +1924,30 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    codingAgentPullRequest: (params) =>
+    agentPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(agentPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, pullRequestRead(params)),
+        answerOf(agentPullRequestAnswerViewSchema, AGENT_UNANSWERED),
       ),
     pullRequestChapters: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
-        answerOf(pullRequestChaptersAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
+        answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
     pullRequestChaptersGenerate: (params) =>
       Effect.map(
-        client.call(
-          GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE,
-          pullRequestChaptersRead(params),
-        ),
-        answerOf(pullRequestChaptersAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
+        answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chaptersModelRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_READ),
-        answerOf(chaptersModelAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chaptersModelWrite: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        answerOf(chaptersModelAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
       ),
     installedSkillsList: (params) =>
       Effect.map(
@@ -2010,53 +1999,53 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, params),
         answerOf(installedSkillRemovedViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
-    codingAgentChanges: (params) =>
+    agentChanges: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, pullRequestRead(params)),
-        answerOf(agentChangesAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_CHANGES, pullRequestRead(params)),
+        answerOf(agentChangesAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentGitHubImage: (params) =>
+    agentGitHubImage: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
-        answerOf(agentGitHubImageViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, params),
+        answerOf(agentGitHubImageViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentPullRequestAction: (params) =>
+    agentPullRequestAction: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
+        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION, {
           ...pullRequestRead(params),
           request: params.request,
         }),
-        answerOf(agentPullRequestWriteAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentPullRequestWriteAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentPullRequestViewed: (params) =>
+    agentPullRequestViewed: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
-        answerOf(agentPullRequestViewedAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
+        answerOf(agentPullRequestViewedAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentOverviewPullRequest: (params) =>
+    agentOverviewPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(agentOverviewPullRequestAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
+        answerOf(agentOverviewPullRequestAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentReviewOptions: (params) =>
+    agentReviewOptions: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
-        answerOf(agentReviewOptionsAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
+        answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentOverviewChecks: (params) =>
+    agentOverviewChecks: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
-        answerOf(agentOverviewChecksAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
+        answerOf(agentOverviewChecksAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentOverviewConversation: (params) =>
+    agentOverviewConversation: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
-        answerOf(agentOverviewConversationAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
+        answerOf(agentOverviewConversationAnswerViewSchema, AGENT_UNANSWERED),
       ),
     providerKeysRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_READ),
-        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
     providerKeySave: (params) =>
       Effect.map(
@@ -2065,7 +2054,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.kind === undefined ? undefined : { kind: params.kind }),
           key: params.key,
         }),
-        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
     providerKeyRemove: (params) =>
       Effect.map(
@@ -2073,7 +2062,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           provider: params.provider,
           ...(params.kind === undefined ? undefined : { kind: params.kind }),
         }),
-        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
     providerKeyForAgents: (params) =>
       Effect.map(
@@ -2082,33 +2071,33 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           kind: params.kind,
           forAgents: params.forAgents,
         }),
-        answerOf(providerKeysAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chatGptSignIn: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
-        answerOf(chatGptSignInAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
     githubTokenRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
-        answerOf(githubTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
     githubTokenSave: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: params.token }),
-        answerOf(githubTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
     githubTokenRemove: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
-        answerOf(githubTokenAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
     memoriesRead: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: params.workspaceId }),
-        answerOf(memoriesAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(memoriesAnswerViewSchema, AGENT_UNANSWERED),
       ),
     memoryForget: (params) =>
       Effect.map(
@@ -2116,7 +2105,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           id: params.id,
         }),
-        answerOf(memoriesAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(memoriesAnswerViewSchema, AGENT_UNANSWERED),
       ),
     dictationTranscribe: (params) =>
       Effect.map(
@@ -2125,15 +2114,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           durationMs: params.durationMs,
           keywords: [...params.keywords],
         }),
-        answerOf(dictationTranscribeAnswerViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(dictationTranscribeAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentInboxFollow: (scope) =>
+    agentInboxFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id })),
+    agentInboxUnfollow: (scope) =>
       fire(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id }),
-      ),
-    codingAgentInboxUnfollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, {
           kind: scope.kind,
           id: scope.id,
         }),
@@ -2147,28 +2134,28 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    codingAgentInboxAnswer: (params) =>
+    agentInboxAnswer: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_ANSWER, {
           itemId: params.itemId,
           revision: params.revision,
           reply: params.reply,
           clientKey: params.clientKey,
         }),
-        answerOf(agentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentInboxClose: (params) =>
+    agentInboxClose: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
           itemId: params.itemId,
           revision: params.revision,
           clientKey: params.clientKey,
         }),
-        answerOf(agentInboxAnsweredViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentInboxMessage: (params) =>
+    agentInboxMessage: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
           itemId: params.itemId,
           text: params.text,
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
@@ -2176,39 +2163,39 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...(params.answers === undefined ? undefined : { answers: params.answers }),
           ...(params.revision === undefined ? undefined : { revision: params.revision }),
         }),
-        answerOf(agentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxMessagedViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentInboxStart: (params) =>
+    agentInboxStart: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_START, {
           agentId: params.agentId,
           ...(params.title === undefined ? undefined : { title: params.title }),
           text: params.text,
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
         }),
-        answerOf(agentInboxMessagedViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxMessagedViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentInboxReadState: (params) =>
+    agentInboxReadState: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
           itemId: params.itemId,
           unread: params.unread,
         }),
-        answerOf(agentInboxReadStateViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentInboxReadAll: (params) =>
+    agentInboxReadAll: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
           ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
           itemIds: params.itemIds,
         }),
-        answerOf(agentInboxReadAllViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxReadAllViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentAccountInboxFollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
-    codingAgentAccountInboxUnfollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW, {})),
+    agentAccountInboxFollow: () =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
+    agentAccountInboxUnfollow: () =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_UNFOLLOW, {})),
     onAccountInboxChanged: (listener) =>
       on(
         GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED,
@@ -2218,10 +2205,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    codingAgentAccountItemsFollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW, {})),
-    codingAgentAccountItemsUnfollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW, {})),
+    agentAccountItemsFollow: () =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW, {})),
+    agentAccountItemsUnfollow: () =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_UNFOLLOW, {})),
     onAccountItemsChanged: (listener) =>
       on(
         GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED,
@@ -2232,21 +2219,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         listener,
       ),
     transcriptFollow: (transcript) =>
-      fire(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript)),
-      ),
+      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript))),
     transcriptOlder: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_OLDER, {
+        client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
           ...transcriptParams(params),
           before: params.before,
         }),
-        answerOf(agentTranscriptOlderAnswerSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentTranscriptOlderAnswerSchema, AGENT_UNANSWERED),
       ),
     transcriptUnfollow: (transcript) =>
-      fire(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript)),
-      ),
+      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript))),
     onTranscriptChanged: (listener) =>
       on(
         GATEWAY_EVENT.TRANSCRIPT_CHANGED,
@@ -2256,23 +2239,23 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    codingAgentInboxAttachment: (params) =>
+    agentInboxAttachment: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT, {
           itemId: params.itemId,
           attachmentId: params.attachmentId,
         }),
-        answerOf(agentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
+        answerOf(agentInboxAttachmentViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentPicture: (params) =>
+    agentPicture: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
-        answerOf(agentInboxAttachmentViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_PICTURE, params),
+        answerOf(agentInboxAttachmentViewSchema, AGENT_UNANSWERED),
       ),
-    codingAgentPart: (params) =>
+    agentPart: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PART, params),
-        answerOf(agentPartViewSchema, CODING_AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.AGENTS_PART, params),
+        answerOf(agentPartViewSchema, AGENT_UNANSWERED),
       ),
     onSettingsChanged: (listener) =>
       on(

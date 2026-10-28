@@ -55,10 +55,10 @@ function linked(
     yield* linkClientNotices({
       state,
       host: {
-        codingAgentList: () => UNANSWERED,
-        codingAgentPage: () => UNANSWERED,
-        codingAgentAccountInboxFollow: () => Effect.void,
-        codingAgentAccountInboxUnfollow: () => Effect.void,
+        agentList: () => UNANSWERED,
+        agentPage: () => UNANSWERED,
+        agentAccountInboxFollow: () => Effect.void,
+        agentAccountInboxUnfollow: () => Effect.void,
         onAccountInboxChanged: () => () => undefined,
         onAccountChanged: () => () => undefined,
         tasksRefresh: () => Effect.void,

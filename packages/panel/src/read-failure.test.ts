@@ -69,7 +69,7 @@ beforeEach(() => {
   fakeActPort({
     // Every followed inbox could not be read until the service answers again, then holds nothing.
     ...host.procedures,
-    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
+    [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });
 });

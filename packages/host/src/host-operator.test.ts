@@ -182,9 +182,9 @@ it.effect(
       const operator = operatorOver(client);
       const from = { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
 
-      yield* operator.codingAgentStart({ idempotencyKey: "press-1", from });
-      yield* operator.codingAgentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
-      yield* operator.codingAgentStart({
+      yield* operator.agentStart({ idempotencyKey: "press-1", from });
+      yield* operator.agentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
+      yield* operator.agentStart({
         taskId: "task-1",
         idempotencyKey: "press-3",
         blank: true,
@@ -194,13 +194,10 @@ it.effect(
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
         [
-          [GATEWAY_METHOD.CODING_AGENTS_START, { idempotencyKey: "press-1", from }],
+          [GATEWAY_METHOD.AGENTS_START, { idempotencyKey: "press-1", from }],
+          [GATEWAY_METHOD.AGENTS_START, { taskId: "task-1", idempotencyKey: "press-2", from }],
           [
-            GATEWAY_METHOD.CODING_AGENTS_START,
-            { taskId: "task-1", idempotencyKey: "press-2", from },
-          ],
-          [
-            GATEWAY_METHOD.CODING_AGENTS_START,
+            GATEWAY_METHOD.AGENTS_START,
             { taskId: "task-1", idempotencyKey: "press-3", blank: true, call: true },
           ],
         ],
@@ -217,17 +214,17 @@ it.effect(
       const workspaceId = "workspace-acme";
       const timeZone = "America/New_York";
 
-      yield* operator.codingAgentEnsureOperator({ workspaceId });
-      yield* operator.codingAgentEnsureOperator({ workspaceId, reset: true, timeZone });
-      yield* operator.codingAgentEnsureOperator({ workspaceId, restore: "operator-old", timeZone });
+      yield* operator.agentEnsureOperator({ workspaceId });
+      yield* operator.agentEnsureOperator({ workspaceId, reset: true, timeZone });
+      yield* operator.agentEnsureOperator({ workspaceId, restore: "operator-old", timeZone });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
         [
-          [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, { workspaceId }],
-          [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, { workspaceId, reset: true, timeZone }],
+          [GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, { workspaceId }],
+          [GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR, { workspaceId, reset: true, timeZone }],
           [
-            GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR,
+            GATEWAY_METHOD.AGENTS_ENSURE_OPERATOR,
             { workspaceId, restore: "operator-old", timeZone },
           ],
         ],
@@ -240,7 +237,7 @@ it.effect("a nod on an inbox notice travels to the host as its revision and its 
     const { client, requests } = recordingClient();
     const operator = operatorOver(client);
 
-    yield* operator.codingAgentInboxAnswer({
+    yield* operator.agentInboxAnswer({
       itemId: "item-1",
       revision: 2,
       reply: INBOX_REPLY.ACKNOWLEDGED,
@@ -251,7 +248,7 @@ it.effect("a nod on an inbox notice travels to the host as its revision and its 
       requests.map((request) => [request.method, request.params]),
       [
         [
-          GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER,
+          GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
           { itemId: "item-1", revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
         ],
       ],
@@ -271,13 +268,13 @@ it.effect(
         choices: ["Ship it"],
       };
 
-      yield* operator.codingAgentInboxMessage({
+      yield* operator.agentInboxMessage({
         itemId: "item-1",
         text: "Ship it today.",
         clientKey: "message-1",
         answers,
       });
-      yield* operator.codingAgentInboxMessage({
+      yield* operator.agentInboxMessage({
         itemId: "item-1",
         text: "Any news?",
         clientKey: "message-2",
@@ -287,11 +284,11 @@ it.effect(
         requests.map((request) => [request.method, request.params]),
         [
           [
-            GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE,
+            GATEWAY_METHOD.AGENTS_INBOX_MESSAGE,
             { itemId: "item-1", text: "Ship it today.", clientKey: "message-1", answers },
           ],
           [
-            GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE,
+            GATEWAY_METHOD.AGENTS_INBOX_MESSAGE,
             { itemId: "item-1", text: "Any news?", clientKey: "message-2" },
           ],
         ],

@@ -68,7 +68,7 @@ export function useGitHubImageRead(): (owner: string, address: string) => Promis
   const { act } = useAct();
   return useCallback(
     (owner: string, address: string) =>
-      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
+      act(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
     [act],
   );
 }

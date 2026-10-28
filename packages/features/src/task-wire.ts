@@ -177,7 +177,7 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * of the asking member's own devices (a Mac's desktop app or a host) by its
  * id, which the service checks is theirs, beat lately, and runs some model
  * before it keeps it. It decides where every agent started on the task runs
- * (`startCodingAgent`'s resolver), and is set when the task is created.
+ * (`startAgent`'s resolver), and is set when the task is created.
  */
 const taskRunsOnRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ machine: EffectSchema.Literal(AGENT_MACHINE.VERCEL) }),

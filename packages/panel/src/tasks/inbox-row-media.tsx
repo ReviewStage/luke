@@ -16,7 +16,7 @@ import type { InboxImage } from "./use-task-inbox.js";
  * hold the chosen item's pictures alone (`use-task-inbox.ts`), so the list
  * reads its rows' media itself, once for the whole list and as each row is
  * first drawn: a picture by the attachment read the pane's takes
- * (`ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT`), held by its attachment, and
+ * (`ACT_KIND.AGENTS_INBOX_ATTACHMENT`), held by its attachment, and
  * a page's newest version through its place's pages, a task's or an agent
  * with no task's (`ACT_KIND.TASKS_PAGES`), each place read once, and again once an item
  * naming one of its pages changes, as an agent showing a page anew does. A
@@ -93,7 +93,7 @@ export function useRowMediaReads(
       const mine = {};
       asked.current.set(attachmentId, mine);
       const standsFor = () => asked.current.get(attachmentId) === mine;
-      act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, { itemId, attachmentId }).then(
+      act(ACT_KIND.AGENTS_INBOX_ATTACHMENT, { itemId, attachmentId }).then(
         (answer) => {
           if (!standsFor()) return;
           const image: InboxImage =

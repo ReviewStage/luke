@@ -477,7 +477,7 @@ beforeEach(() => {
         drawWrite();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+      if (request.kind === ACT_KIND.AGENTS_MODELS) {
         catalogReads += 1;
         const value = catalogRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
@@ -488,13 +488,13 @@ beforeEach(() => {
             };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+      if (request.kind === ACT_KIND.AGENTS_DEFAULT_READ) {
         const value = defaultRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
           : { choice: DEFAULT_CHOICE };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+      if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
         const { words } = request.payload;
         if (words === undefined ? agentListRefused : agentSearchRefused) {

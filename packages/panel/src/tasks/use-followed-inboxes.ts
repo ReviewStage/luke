@@ -13,7 +13,7 @@ import { heldInboxes } from "./held-inboxes.js";
  * use-followed-inboxes.ts -- the inboxes of the plans, or of the agents with no plan, a surface draws, followed while it draws them and pushed to the window as each changes.
  *
  * The window holds one stream open on its act port per plan or agent it
- * draws (`codingAgents.inboxFollow`), and closes it as it stops; the host
+ * draws (`agents.inboxFollow`), and closes it as it stops; the host
  * follows each inbox while any stream of it stands and sends every change
  * down each, so nothing here asks again, holds a cursor, or keeps a loop.
  * Each inbox's items are held by the surface (`held-inboxes.tsx`) as they
@@ -50,7 +50,7 @@ export const windowInboxFollower: InboxFollower = {
     let stopped = false;
     let stream: AsyncIteratorObject<Heard, unknown, unknown> | undefined;
     void (async () => {
-      stream = await askAct(ACT_KIND.CODING_AGENTS_INBOX_FOLLOW, scope);
+      stream = await askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, scope);
       if (stopped) {
         await stream.return?.(undefined);
         return;

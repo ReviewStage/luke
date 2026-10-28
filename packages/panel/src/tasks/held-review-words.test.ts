@@ -63,7 +63,7 @@ beforeEach(() => {
   changes = [];
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       changes.push(request);
       return Promise.resolve({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE });
     },

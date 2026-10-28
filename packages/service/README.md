@@ -1126,7 +1126,7 @@ an agent on no plan, as an automation's run starts one, is offered
 neither, and one handed a prompt on a plan only `show_page`, so no agent is
 offered a tool its every call would refuse.
 Beside them stand
-the agent tools (`src/agents/coding-agent-tools.ts`): `list_agents`, every other agent on
+the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its
 own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
@@ -1463,7 +1463,7 @@ lays it out are `src/chapters/chapters-prompt.ts`.
 
 ## The agent routes
 
-`src/agents/coding-agents-app.ts` is the group the desktop starts, lists,
+`src/agents/agents-app.ts` is the group the desktop starts, lists,
 reads, messages, re-models, and stops a task's agents through. An agent
 belongs to its task's workspace: every route reads it through the task's
 membership gate (`agent-store.ts`), so any member lists, reads,
@@ -1512,7 +1512,7 @@ conversation's rows past the cursor as `UIMessage`s, the cursor to read on
 from, the agent's status as the page was read, and, where that status is
 `failed`, `failureReason` as one of the wire's fixed words (`model`,
 `sandbox`, `github`, `abandoned`, `other`), mapped by
-`src/agents/coder-host/status.ts`'s `codingAgentFailureOf` from the turn row's failure
+`src/agents/coder-host/status.ts`'s `agentFailureOf` from the turn row's failure
 word and the host's own refusal sentences in its detail, so nothing eve or
 a provider said reaches the desktop
 (`src/agents/coder-host/transcript.ts`): a row is new past a cursor when its sequence
@@ -1630,7 +1630,7 @@ reading as unchanged, a file only moved carries an empty patch, and a
 list cut at the bound says so. An agent with no pull request yet answers
 a null one. The agent's sandbox is no source: nothing outside its session
 reaches it and its diff is not kept in the store.
-`src/agents/coding-agents-app.test.ts` answers the routes over a fake eve, a
+`src/agents/agents-app.test.ts` answers the routes over a fake eve, a
 scripted GitHub, a fixed catalog, and PGlite; `src/agents/coder-host/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
 over the sandbox double, and the held read on the test clock;
