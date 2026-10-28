@@ -281,7 +281,12 @@ function developerTurn(message: CodingAgentMessage): CopiedTurn {
   const sent = agentMessageOf(message);
   if (sent !== undefined) {
     const blocks = [{ kind: COPIED_BLOCK.WORDS, text: agentMessageWords(words) ?? words }] as const;
-    return { speaker: SPEAKER.MESSAGE, from: sent.from, blocks };
+    // Note that a reworked row names no sender of its own, so the copy goes unattributed rather than naming the wrong one.
+    return {
+      speaker: SPEAKER.MESSAGE,
+      ...(sent.from === undefined ? {} : { from: sent.from }),
+      blocks,
+    };
   }
   const blocks = [{ kind: COPIED_BLOCK.WORDS, text: inboxLineWords(words) }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };

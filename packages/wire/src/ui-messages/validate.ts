@@ -13,6 +13,8 @@ import {
   type AssistantMessageMetadata,
   isRecord,
   isWireString,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   SCHEMA_REFUSAL,
   type SchemaPath,
@@ -180,7 +182,34 @@ function withoutLegacyUserKey(metadata: UnparsedWireValue): UnparsedWireValue {
   return rest;
 }
 
-/** A validated row typed by its role, its metadata read under that role's schema; a stored-row read forgives the legacy key, the write door does not. */
+/**
+ * Once a row names its kind rather than an author, a user row carries no
+ * `author` and an assistant row of the brain's says `model`. A stored-row read
+ * fills in what this build's types expect, so a row of either shape reads the
+ * same and the release serving while the rewrite runs can still read the
+ * page; the write door fills in nothing. A voice row keeps its author, and
+ * anything that is not a record is left for the schema to judge.
+ */
+function withUserAuthor(metadata: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(metadata) || "author" in metadata) return metadata;
+  // A note says what opened the turn and an agent message who sent it; every other line was the developer's by the old vocabulary.
+  if ("source" in metadata) return { ...metadata, author: MESSAGE_AUTHOR.BRAIN };
+  const author =
+    metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE
+      ? MESSAGE_AUTHOR.AGENT
+      : MESSAGE_AUTHOR.DEVELOPER;
+  return { ...metadata, author };
+}
+
+/** The brain's assistant row, which a reworked row spells `model` and this build `brain`. */
+const REWORKED_BRAIN_AUTHOR = "model";
+
+function withBrainAuthor(metadata: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(metadata) || metadata.author !== REWORKED_BRAIN_AUTHOR) return metadata;
+  return { ...metadata, author: MESSAGE_AUTHOR.BRAIN };
+}
+
+/** A validated row typed by its role, its metadata read under that role's schema; a stored-row read forgives the legacy key and fills in the author a reworked row drops, the write door does neither. */
 function readStoredMessage(
   message: ValidatedMessage,
   storedRow: boolean,
@@ -193,18 +222,23 @@ function readStoredMessage(
     case MESSAGE_ROLE.USER: {
       const role = message.role;
       return Result.map(
-        underMetadata(readUserMetadata(storedRow ? withoutLegacyUserKey(metadata) : metadata)),
+        underMetadata(
+          readUserMetadata(storedRow ? withUserAuthor(withoutLegacyUserKey(metadata)) : metadata),
+        ),
         (value) => ({ id, role, parts, metadata: value }),
       );
     }
     case MESSAGE_ROLE.ASSISTANT: {
       const role = message.role;
-      return Result.map(underMetadata(readAssistantMetadata(metadata)), (value) => ({
-        id,
-        role,
-        parts,
-        metadata: value,
-      }));
+      return Result.map(
+        underMetadata(readAssistantMetadata(storedRow ? withBrainAuthor(metadata) : metadata)),
+        (value) => ({
+          id,
+          role,
+          parts,
+          metadata: value,
+        }),
+      );
     }
     case MESSAGE_ROLE.SYSTEM:
       if (metadata !== undefined) return refuse(SCHEMA_REFUSAL.MALFORMED, ["metadata"]);
