@@ -20,6 +20,8 @@ import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
+import { macCommand } from "../schemas/mac-command.js";
+import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { task } from "../schemas/task.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
@@ -99,6 +101,30 @@ export const repositoryPinSync = defineSyncTable(repositoryPin, {
   topics: [{ kind: TOPIC.ACCOUNT, column: repositoryPin.userId }],
 });
 
+/**
+ * A command an agent queued for the account's Mac, on the account's topic,
+ * which the Mac's read of the commands it may claim is woken on. Note that
+ * the account's listener row (`mac_command_listener`), which every such read
+ * rewrites, is not captured: no read waits on it.
+ */
+export const macCommandSync = defineSyncTable(macCommand, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: macCommand.userId }],
+});
+
+/** A comment thread on a task's plan, on the task's topic. */
+export const planCommentThreadSync = defineSyncTable(planCommentThread, {
+  topics: [{ kind: TOPIC.TASK, column: planCommentThread.taskId }],
+});
+
+/**
+ * An entry of a plan's comment thread, on the task's topic. Note that an
+ * entry's write moves its thread's revision in the same transaction, so the
+ * two notify one topic under one txid, which Postgres sends once.
+ */
+export const planCommentSync = defineSyncTable(planComment, {
+  topics: [{ kind: TOPIC.TASK, column: planComment.taskId }],
+});
+
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
   codingAgentSync,
@@ -109,4 +135,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   taskSectionEntrySync,
   agentSectionEntrySync,
   repositoryPinSync,
+  macCommandSync,
+  planCommentThreadSync,
+  planCommentSync,
 ];
