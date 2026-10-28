@@ -110,7 +110,7 @@ export interface ThisMacHostDependencies {
   accountId: () => string | undefined;
   /** Whether the account's Local agents experiment is on. */
   switchedOn: Effect.Effect<boolean>;
-  /** The setup the service lists for the device, by its id; none where it could not be read or lists no such device. */
+  /** The setup the service lists for the device, by its id, nothing to say where it lists no such device; none where it could not answer. */
   deviceSetup: (
     deviceId: string,
   ) => Effect.Effect<Option.Option<ThisMacSetup>, never, HttpClient.HttpClient>;
@@ -275,22 +275,40 @@ export function composeThisMacHost(
         : registeredStanding(registered.success);
     });
 
-    /** The setup the service lists for the device, read again where the last read is older than `SETUP_READ_EVERY`, or `fresh`. */
-    const setupOf = (deviceId: string, fresh: boolean) =>
+    /**
+     * The setup the service lists for the device, read now: none where it
+     * could not answer. The read is kept for Settings, but for one that
+     * could not answer, which keeps the setup last read, so a failure stays
+     * drawn with its Retry through a service that cannot say.
+     */
+    const setupNow = (deviceId: string) =>
+      Effect.gen(function* () {
+        const setup = yield* dependencies.deviceSetup(deviceId);
+        const kept = yield* Ref.get(setupRead);
+        yield* Ref.set(setupRead, {
+          at: yield* Clock.currentTimeMillis,
+          deviceId,
+          setup: Option.isNone(setup) && kept?.deviceId === deviceId ? kept.setup : setup,
+        });
+        return setup;
+      });
+
+    /** The setup Settings draws for the device: the one kept, read again where it is older than `SETUP_READ_EVERY`. */
+    const setupShown = (deviceId: string) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         const kept = yield* Ref.get(setupRead);
         if (
-          !fresh &&
-          kept !== undefined &&
-          kept.deviceId === deviceId &&
-          now - kept.at < Duration.toMillis(SETUP_READ_EVERY)
+          kept === undefined ||
+          kept.deviceId !== deviceId ||
+          now - kept.at >= Duration.toMillis(SETUP_READ_EVERY)
         ) {
-          return kept.setup;
+          yield* setupNow(deviceId);
         }
-        const setup = yield* dependencies.deviceSetup(deviceId);
-        yield* Ref.set(setupRead, { at: now, deviceId, setup });
-        return setup;
+        return Option.flatMap(
+          Option.fromUndefinedOr(yield* Ref.get(setupRead)),
+          (read) => read.setup,
+        );
       });
 
     /**
@@ -375,8 +393,7 @@ export function composeThisMacHost(
           const { deviceId } = record.value;
           // Note that only a turn-on or a setup that failed starts luke-host again, since one that is ready may be mid-turn.
           const restarts =
-            explicit &&
-            ((yield* Ref.get(turnOnFailed)) || setupFailed(yield* setupOf(deviceId, true)));
+            explicit && ((yield* Ref.get(turnOnFailed)) || setupFailed(yield* setupNow(deviceId)));
           const next = restarts ? yield* restarted(deviceId) : yield* standingNow;
           yield* Ref.set(turnOnFailed, next.standing === THIS_MAC_HOST_STANDING.FAILED);
           return yield* set(ofDevice(next, deviceId));
@@ -394,7 +411,7 @@ export function composeThisMacHost(
     const read = (next: ThisMacHostStanding) =>
       next.deviceId === undefined
         ? Effect.succeed(next)
-        : Effect.map(setupOf(next.deviceId, false), (setup) => withSetup(next, setup));
+        : Effect.map(setupShown(next.deviceId), (setup) => withSetup(next, setup));
 
     const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {
       [GATEWAY_METHOD.THIS_MAC_HOST_READ]: () =>

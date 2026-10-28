@@ -54,7 +54,8 @@ const until = (holds: () => boolean) =>
  * This Mac's `luke-host` composed over a state folder of its own, with the
  * Local agents experiment on until the test turns it off, or off from the
  * start where `off` says so, the account's device id already kept there, a
- * service that enrolls the Mac and lists the setup `setup` says, and a login
+ * service that enrolls the Mac and lists the setup `setup` says until the
+ * test lists another (none where it cannot answer), and a login
  * item that refuses as many unregisters as `refusedUnregisters` says; what
  * each fake was asked, in the order it was asked.
  */
@@ -68,6 +69,7 @@ const thisMac = (
 ) =>
   Effect.gen(function* () {
     let on = options.off !== true;
+    let setup = options.setup ?? Option.none<ThisMacSetup>();
     let refusals = options.refusedUnregisters ?? 0;
     const asked: string[] = [];
     const enrolled: string[] = [];
@@ -105,7 +107,7 @@ const thisMac = (
       account: { capabilitiesActive: () => true },
       accountId: () => USER_ID,
       switchedOn: Effect.sync(() => on),
-      deviceSetup: () => Effect.succeed(options.setup ?? Option.none()),
+      deviceSetup: () => Effect.sync(() => setup),
       client,
     }).pipe(
       Effect.provide(
@@ -140,7 +142,10 @@ const thisMac = (
     const switchOff = () => {
       on = false;
     };
-    return { asked, enrolled, call, switchOff };
+    const listSetup = (next: Option.Option<ThisMacSetup>) => {
+      setup = next;
+    };
+    return { asked, enrolled, call, switchOff, listSetup };
   });
 
 it.effect(
@@ -325,6 +330,27 @@ it.effect.each([
         yield* call(GATEWAY_METHOD.THIS_MAC_HOST_TURN_ON);
 
         assert.equal(asked.includes(`login item ${HOST_LOGIN_ITEM_ACT.UNREGISTER}`), false);
+      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+    ),
+);
+
+it.effect(
+  "a setup failure the service listed stays with its Retry while the service cannot answer",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const why = "the sandbox image could not be pulled";
+        const { call, listSetup } = yield* enrolledMac(
+          Option.some({ setup: DEVICE_SETUP.FAILED, setupFailure: why }),
+        );
+        listSetup(Option.none());
+        yield* TestClock.adjust(Duration.minutes(1));
+
+        assert.deepEqual(yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ), {
+          standing: THIS_MAC_HOST_STANDING.SETUP_FAILED,
+          reason: why,
+          deviceId: DEVICE_ID,
+        });
       }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
     ),
 );

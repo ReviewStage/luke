@@ -269,16 +269,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           ),
           // Note that the account's devices are read where a Start reads them, so this Mac's setup is the one Runs on shows.
           deviceSetup: (deviceId) =>
-            Effect.map(codingAgentClient.models(), (answer) =>
-              "failure" in answer
-                ? Option.none()
-                : Option.map(
-                    Option.fromUndefinedOr(
-                      answer.macs?.find((device) => device.deviceId === deviceId),
-                    ),
-                    ({ setup, setupFailure }) => ({ setup, setupFailure }),
-                  ),
-            ),
+            Effect.map(codingAgentClient.models(), (answer) => {
+              if ("failure" in answer) return Option.none();
+              // Note that a device the answer does not list has no setup to say, which reads as nothing failed.
+              const device = answer.macs?.find((each) => each.deviceId === deviceId);
+              return Option.some({ setup: device?.setup, setupFailure: device?.setupFailure });
+            }),
           client: new HostedDeviceAgentClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             credential: account.credential,
