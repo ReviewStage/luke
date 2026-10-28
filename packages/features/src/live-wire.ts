@@ -310,8 +310,9 @@ export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
  * An open task's plan, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
  * and carries none of their words: the plan's last save (`plan`), the pages agents showed (`pages`), the
- * calls about the task (`calls`), and the `show_code` calls its agents'
- * journals answered (`code`). The desktop reads a part again once its mark moves,
+ * calls about the task (`calls`), and the code its agents showed (`code`),
+ * which answers no rows now that no agent shows code but stands because a
+ * released desktop requires it. The desktop reads a part again once its mark moves,
  * rather than when a call's activity or end suggests it might have; the
  * board is followed on its own (`taskBoardLiveAnswerSchema`). The service
  * answers `not-found` for a task the account does not reach, and
@@ -355,7 +356,7 @@ const taskCallLiveRowSchema = EffectSchema.Struct({
   spoken: EffectSchema.Finite,
 });
 
-/** One journal of an agent on the task as its row delivers it: the ids of the `show_code` calls it answered with lines, as JSON text. */
+/** One journal of an agent on the task as its row delivered it while agents showed code: the ids of the calls that showed it, as JSON text. None is delivered now. */
 const taskCodeLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   calls: EffectSchema.String,

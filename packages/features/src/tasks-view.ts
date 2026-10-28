@@ -54,7 +54,6 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
-  shownCodeSchema,
   taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
@@ -204,37 +203,6 @@ export type CodeToken = typeof codeTokenSchema.Type;
 export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
 
 export type CodeLines = typeof codeLinesSchema.Type;
-
-/**
- * One code Luke or an agent showed on a task: the `show_code` call that
- * showed it, the turn it ran in and when that turn began writing, the agent
- * whose turn it was, and the place and lines as the call answered them.
- */
-const taskShownCodeFields = {
-  callId: EffectSchema.String,
-  turnId: EffectSchema.String,
-  /** Epoch milliseconds the turn that showed it began. */
-  shownAt: EffectSchema.Finite,
-  /** The agent on the task whose turn showed it; absent for Luke's own, and on a call's frame, which the record's copy names it on. */
-  agentId: EffectSchema.optionalKey(EffectSchema.String),
-};
-
-export const taskShownCodeSchema = EffectSchema.Struct({
-  ...taskShownCodeFields,
-  code: shownCodeSchema,
-});
-
-export type TaskShownCode = typeof taskShownCodeSchema.Type;
-
-/** The code of one showing: what Luke named, where it was read, its lines, and his note on them. */
-export type TaskCode = TaskShownCode["code"];
-
-/** Every code Luke showed on one task, oldest first: the plan-work page's `code`, read on its own. */
-export const taskCodeAnswerSchema = EffectSchema.Struct({
-  code: EffectSchema.Array(taskShownCodeSchema),
-});
-
-export type TaskCodeAnswer = typeof taskCodeAnswerSchema.Type;
 
 /**
  * Whether the account has a GitHub account linked, and its login where the

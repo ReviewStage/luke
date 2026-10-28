@@ -1,4 +1,4 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { DEVICE_AGENT_REQUEST_KIND, deviceAgentLayout } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
@@ -8,12 +8,7 @@ import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 
 const AGENT = "6f1c2b9e-1d3a-4c55-9a0e-2f6b8c1d0e11";
 
-/** The variables a command is handed on: a PATH its shell and `touch` are on. */
-const SHELL = { PATH: "/usr/bin:/bin" };
-
-const NODE = NodeChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-);
+const NODE = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
 
 /** A home with one agent's worktree holding a file, a secret beside the home, the agent's gh sign-in, and a symlink in the worktree pointing at each. */
 const staged = Effect.gen(function* () {
@@ -31,14 +26,10 @@ const staged = Effect.gen(function* () {
 });
 
 const read = (layout: ReturnType<typeof deviceAgentLayout>, path: string) =>
-  answeredLocalAgentRequest(
-    layout,
-    {
-      kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
-      args: { path, maxBytes: 1_024 },
-    },
-    SHELL,
-  );
+  answeredLocalAgentRequest(layout, {
+    kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE,
+    args: { path, maxBytes: 1_024 },
+  });
 
 describe("answeredLocalAgentRequest", () => {
   it.effect("reads a file inside the agent's folder", () =>
@@ -76,26 +67,6 @@ describe("answeredLocalAgentRequest", () => {
       const { root, layout } = yield* staged;
       const answer = yield* read(layout, path(root));
       assert.deepStrictEqual(answer, { kind: DEVICE_AGENT_REQUEST_KIND.READ_FILE, bytes: null });
-    }).pipe(Effect.scoped, Effect.provide(NODE)),
-  );
-
-  it.effect("runs no command in a worktree that is a symlink out of the agent's folder", () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const { root, layout } = yield* staged;
-      yield* fileSystem.remove(layout.checkoutPath, { recursive: true });
-      yield* fileSystem.makeDirectory(`${root}/elsewhere`);
-      yield* fileSystem.symlink(`${root}/elsewhere`, layout.checkoutPath);
-      const answer = yield* answeredLocalAgentRequest(
-        layout,
-        {
-          kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-          args: { command: "touch ran" },
-        },
-        SHELL,
-      );
-      assert.strictEqual(answer.kind, DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND);
-      assert.isFalse(yield* fileSystem.exists(`${root}/elsewhere/ran`));
     }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
 });

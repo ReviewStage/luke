@@ -17,7 +17,6 @@ import {
   HTTP_STATUS,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
@@ -521,17 +520,6 @@ export class VoiceService {
             type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
             ...subject,
             ...activity,
-          };
-          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
-        },
-        // Code Luke is about to talk about, with its lines as the agent
-        // read them from its checkout, sent the same way, so the Tasks
-        // tab's code pane draws it as he says it.
-        onCode: (shown) => {
-          const frame: TaskCodeFrame = {
-            type: VOICE_SERVICE_FRAME.TASK_CODE,
-            ...shown,
-            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

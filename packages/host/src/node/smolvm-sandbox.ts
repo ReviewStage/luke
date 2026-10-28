@@ -30,7 +30,7 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * running workload's container. Nested KVM is passed through where the
  * device has `/dev/kvm` (`SmolvmSandboxOptions.nested`), and never on a Mac.
  *
- * Every command in the VM, the runner and a tool's command alike, runs
+ * Every command in the VM, the runner and a check of the folder alike, runs
  * through `machine exec -i`, without which its output is held until it
  * exits, and no TTY: as the device's own user (`--user uid:gid`), since a
  * mount keeps the device's owners and the image's own user could not write

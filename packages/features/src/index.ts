@@ -123,10 +123,8 @@ export {
   sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
-  taskCodeFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "./live-contract.js";
