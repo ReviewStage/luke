@@ -284,7 +284,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
               kind: MESSAGE_SENDER.AGENT,
               name: "Invite expiry",
               model: "anthropic/claude-opus-5.5",
-              agent: { id: sender.agentId, taskId: undefined },
+              agent: { id: sender.agentId },
             },
             {
               kind: MESSAGE_SENDER.AGENT,

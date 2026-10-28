@@ -2,6 +2,7 @@ import type { HostedAgentClient } from "@luke/features";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
+  type AgentAccountItems,
   type AgentAgentAnswer,
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
@@ -58,7 +59,6 @@ import {
   agentTranscriptKeySchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
-  type CodingAgentAccountItems,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -402,7 +402,7 @@ function composed(
     });
 
   /** The account's items as a window is told them. */
-  const tellItems = (told: CodingAgentAccountItems) =>
+  const tellItems = (told: AgentAccountItems) =>
     Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
   /** Whether a window follows the account's items, so a sign-out follows them again for whoever signs in next. */
   let itemsFollowed = false;

@@ -2102,11 +2102,9 @@ interface LockedWorkspace {
   readonly workspaceStep: string;
 }
 
-/** The item as its link names it: under the agent's task, or under the agent where it has none. */
+/** The item as its link names it: under its agent, whichever task it works on, whose reader finds the task by the agent. */
 function itemPlace(agent: InboxAgent, itemId: string): InboxItemPlace {
-  return agent.taskId === null
-    ? { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId }
-    : { kind: LINK_PLACE.INBOX_ITEM, planId: agent.taskId, itemId };
+  return { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId };
 }
 
 /** The address each picture of the item is written by in a message's words (`inbox-attachment-link.ts`). */

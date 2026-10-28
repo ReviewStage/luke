@@ -330,7 +330,7 @@ export function useAgentActions(
 ): AgentActions {
   const { label, shown, terminals, onDeleted } = input;
   const copied = useTranscriptCopier();
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const copyLink = useCopyLinkItem()(agentPlace(agent.id));
   const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);

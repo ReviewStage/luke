@@ -152,7 +152,7 @@ function messageNamed(container: HTMLElement, id: string): HTMLElement {
   return found;
 }
 
-test("a message offers Copy link beside its Copy, copying its link under the agent's task, and says Link copied", async () => {
+test("a message offers Copy link beside its Copy, copying its link under the agent, and says Link copied", async () => {
   const { container } = await drawn(undefined);
 
   const copyLink = messageNamed(container, "msg-7").querySelector<HTMLButtonElement>(
@@ -161,9 +161,7 @@ test("a message offers Copy link beside its Copy, copying its link under the age
   assert.ok(copyLink, "the message offers Copy link");
   await act(async () => copyLink.click());
 
-  assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}/message/msg-7`,
-  ]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT.id}/message/msg-7`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -219,12 +217,11 @@ test("a link to the plan an agent was handed, its first message, brings the plan
 });
 
 test("a line the service has not read back yet has no link of its own", () => {
-  const place = agentMessagePlace(AGENT, MESSAGES);
+  const place = agentMessagePlace(AGENT.id, MESSAGES);
 
   assert.equal(place("sent-0f0e"), undefined);
   assert.deepEqual(place("msg-7"), {
     kind: LINK_PLACE.MESSAGE,
-    planId: AGENT.planId,
     agentId: AGENT.id,
     messageId: "msg-7",
   });

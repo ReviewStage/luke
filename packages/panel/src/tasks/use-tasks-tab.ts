@@ -8,6 +8,7 @@ import type { AgentAttachment, TasklessAgent } from "@luke/features/agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { InboxItemPlace } from "@luke/features/inbox-attachment-link";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
@@ -204,13 +205,15 @@ import { sayRestored } from "./version-view.js";
 
 /** The item chosen in the window's Inbox, and the task it belongs to. */
 /** The item chosen in the window's Inbox, by the task it stands on, or, for an agent with no task, by its agent. */
-export type InboxChoice = (
-  | { readonly taskId: string; readonly itemId: string }
-  | { readonly agentId: string; readonly itemId: string }
-) & {
-  /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
-  readonly opened?: true;
-};
+export type InboxChoice =
+  // Note that an item of a task names the agent that posted it too, which its link is written under, but for one an older link named under its task alone; not as `agentId`, which tells a choice on no task.
+  (
+    | { readonly taskId: string; readonly itemAgentId?: string; readonly itemId: string }
+    | { readonly agentId: string; readonly itemId: string }
+  ) & {
+    /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
+    readonly opened?: true;
+  };
 
 /**
  * The window's Inbox, standing in the task's place beside the sidebar: the
@@ -2539,6 +2542,55 @@ export function useTasksTab(input: {
     }
   };
 
+  /** An Inbox item opened where its task, found already, holds it: in the task's own Inbox tab where the account lists the task, else in the window's Inbox. */
+  const openInboxItemOn = (workspace: string, place: InboxItemPlace, planId: string | null) => {
+    // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
+    const holder = planId === null ? undefined : viewed.tasks.find((task) => task.id === planId);
+    listLinked(holder?.workspaceId ?? workspace);
+    // An item of a task the account lists opens in that task's own Inbox tab, which opens it once its read holds it.
+    if (holder !== undefined) {
+      showPanelTab(holder.id, SIDE_PANEL_TAB.INBOX);
+      setInboxItemReveal((last) => ({
+        planId: holder.id,
+        itemId: place.itemId,
+        ask: (last?.ask ?? 0) + 1,
+      }));
+      return;
+    }
+    // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
+    if (channelsOn) openChannelThread(place.itemId);
+    standInFor({
+      kind: STAND_IN.INBOX,
+      chosen:
+        "planId" in place
+          ? { taskId: place.planId, itemId: place.itemId, opened: true }
+          : { agentId: place.agentId, itemId: place.itemId, opened: true },
+    });
+  };
+
+  /**
+   * An Inbox item opened by its task, which a link under its agent leaves
+   * the reader to find by the agent, as an agent's place is found
+   * (`openAgentPlace`): at once where the agent is the open task's or one on
+   * no task the window lists, else by reading the agent, which opens nothing
+   * where the window moved on before it answered.
+   */
+  const openInboxItem = (workspace: string, place: InboxItemPlace) => {
+    const open = tasks.activeTaskId;
+    if ("planId" in place) openInboxItemOn(workspace, place, place.planId);
+    else if (open !== undefined && agents.agentIds?.includes(place.agentId))
+      openInboxItemOn(workspace, place, open);
+    else if (tasklessAgents?.some((agent) => agent.id === place.agentId))
+      openInboxItemOn(workspace, place, null);
+    else {
+      const mine = navigations.current;
+      readAgentById(act, place.agentId).then((agent) => {
+        if (navigations.current !== mine) return;
+        openInboxItemOn(workspace, place, agent?.planId ?? null);
+      });
+    }
+  };
+
   /**
    * A Luke link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
@@ -2607,32 +2659,9 @@ export function useTasksTab(input: {
         standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
         return;
       }
-      case LINK_PLACE.INBOX_ITEM: {
-        // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
-        const holder =
-          "planId" in place ? viewed.tasks.find((task) => task.id === place.planId) : undefined;
-        listLinked(holder?.workspaceId ?? workspace);
-        // An item of a task the account lists opens in that task's own Inbox tab, which opens it once its read holds it.
-        if (holder !== undefined) {
-          showPanelTab(holder.id, SIDE_PANEL_TAB.INBOX);
-          setInboxItemReveal((last) => ({
-            planId: holder.id,
-            itemId: place.itemId,
-            ask: (last?.ask ?? 0) + 1,
-          }));
-          return;
-        }
-        // Note that a link names the thread and not its channel, which an Inbox narrowed to a channel follows once its item is read (`useThreadChannel`).
-        if (channelsOn) openChannelThread(place.itemId);
-        standInFor({
-          kind: STAND_IN.INBOX,
-          chosen:
-            "planId" in place
-              ? { taskId: place.planId, itemId: place.itemId, opened: true }
-              : { agentId: place.agentId, itemId: place.itemId, opened: true },
-        });
+      case LINK_PLACE.INBOX_ITEM:
+        openInboxItem(workspace, place);
         return;
-      }
       // A channel's link opens the Inbox narrowed to it; one archived or unknown says so there (`desktop-inbox.tsx`).
       case LINK_PLACE.CHANNEL: {
         listLinked(workspace);

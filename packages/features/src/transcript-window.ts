@@ -66,6 +66,7 @@ export const transcriptWindowRowSchema = Schema.Struct({
   memberName: NullableString,
   /** The coding agent that sent the line, while it stands. */
   agentId: NullableString,
+  /** That agent's task, which the window reads no more, since a link names the agent; still selected while desktops that decode it as required stand. */
   agentTaskId: NullableString,
   /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
   journalId: NullableString,
@@ -125,9 +126,6 @@ function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
             agent: true,
             ...(row.senderModel === null ? undefined : { model: row.senderModel }),
             ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-            ...(row.agentId === null || row.agentTaskId === null
-              ? undefined
-              : { taskId: row.agentTaskId }),
           };
     default:
       return undefined;

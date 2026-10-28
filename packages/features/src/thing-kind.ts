@@ -337,10 +337,8 @@ const PLACE_THING: { readonly [K in LinkPlaceKind]: (place: PlaceOf<K>) => Thing
     "planId" in place
       ? { kind: THING_KIND.PAGE, taskId: place.planId, pageId: place.pageId }
       : { kind: THING_KIND.PAGE, agentId: place.agentId, pageId: place.pageId },
-  [LINK_PLACE.AGENT]: (place) =>
-    place.planId === undefined
-      ? { kind: THING_KIND.AGENT, agentId: place.agentId }
-      : { kind: THING_KIND.AGENT, taskId: place.planId, agentId: place.agentId },
+  // Note that an older link naming the agent under its task names the agent alone, as its mention does.
+  [LINK_PLACE.AGENT]: (place) => ({ kind: THING_KIND.AGENT, agentId: place.agentId }),
   [LINK_PLACE.PERSON]: (place) => ({ kind: THING_KIND.PERSON, userId: place.userId }),
   [LINK_PLACE.COMMENT]: asThing,
   [LINK_PLACE.VERSION]: asThing,

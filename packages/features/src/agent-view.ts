@@ -641,12 +641,12 @@ export const agentInboxChangedSchema = EffectSchema.Struct({
 export type AgentInboxChanged = typeof agentInboxChangedSchema.Type;
 
 /** One plan's or agent's items as the account's items are told: which, and every item it holds, none where it holds nothing now. */
-const codingAgentScopeItemsSchema = EffectSchema.Struct({
+const agentScopeItemsSchema = EffectSchema.Struct({
   scope: agentInboxScopeSchema,
   items: EffectSchema.Array(inboxItemSchema),
 });
 
-export type CodingAgentScopeItems = typeof codingAgentScopeItemsSchema.Type;
+export type AgentScopeItems = typeof agentScopeItemsSchema.Type;
 
 /**
  * Every inbox item the account reaches, as the window hears it pushed,
@@ -655,15 +655,15 @@ export type CodingAgentScopeItems = typeof codingAgentScopeItemsSchema.Type;
  * only the scopes that moved, each whole, one holding nothing now with no
  * items. Or why there are none.
  */
-export const codingAgentAccountItemsSchema = EffectSchema.Union([
+export const agentAccountItemsSchema = EffectSchema.Union([
   EffectSchema.Struct({
     whole: EffectSchema.Boolean,
-    scopes: EffectSchema.Array(codingAgentScopeItemsSchema),
+    scopes: EffectSchema.Array(agentScopeItemsSchema),
   }),
   failed,
 ]);
 
-export type CodingAgentAccountItems = typeof codingAgentAccountItemsSchema.Type;
+export type AgentAccountItems = typeof agentAccountItemsSchema.Type;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 const agentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);

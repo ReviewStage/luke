@@ -119,6 +119,27 @@ test("the Inbox left and come back to under the window's root draws the rows it 
   assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
 });
 
+test("the Inbox under the window's root draws each task held whole by the account's feed from it, following none on its own", async () => {
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the billing task's items are drawn",
+  );
+  assert.ok(
+    rows.some((row) => row.endsWith(EXPIRY.title)),
+    "the invites task's items are drawn",
+  );
+  for (const task of [BILLING, INVITES]) {
+    assert.equal(
+      world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: task.id }),
+      false,
+      `${task.name} is drawn from the feed alone`,
+    );
+  }
+});
+
 test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
   const { page } = mount([], { windowRoot: true });
   await settle();
@@ -660,7 +681,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
 });
 
-test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
+test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {
   world.listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -682,7 +703,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   await act(async () => item.click());
 
   assert.deepEqual(world.copied, [
-    `https://tryluke.dev/acme/plan/${BILLING.id}/inbox/${THRESHOLD.id}`,
+    `https://tryluke.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
   ]);
 });
 

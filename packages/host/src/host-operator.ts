@@ -10,6 +10,7 @@ import {
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
+  type AgentAccountItems,
   type AgentAgentAnswer,
   type AgentArchiveParams,
   type AgentChangesAnswerView,
@@ -66,6 +67,7 @@ import {
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
   agentAccountInboxAnswerViewSchema,
+  agentAccountItemsSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
   agentDefaultAnswerViewSchema,
@@ -93,9 +95,7 @@ import {
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
   type ChatGptSignInAnswerView,
-  type CodingAgentAccountItems,
   chatGptSignInAnswerViewSchema,
-  codingAgentAccountItemsSchema,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -867,7 +867,7 @@ export interface HostOperator {
   /** The account's items let go: nothing more is heard of them until they are followed again. */
   codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
   /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move. */
-  onAccountItemsChanged(listener: (told: CodingAgentAccountItems) => void): () => void;
+  onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
   transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
@@ -2227,7 +2227,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED,
         (payload) =>
           Result.getOrUndefined(
-            readEither(codingAgentAccountItemsSchema, { excess: EXCESS_KEYS.DROP })(payload),
+            readEither(agentAccountItemsSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

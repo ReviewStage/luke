@@ -16,6 +16,7 @@
  */
 
 import type {
+  AgentAccountItems,
   AgentInboxAnsweredView,
   AgentInboxAnswerParams,
   AgentInboxAttachmentParams,
@@ -30,7 +31,6 @@ import type {
   AgentInboxScope,
   AgentInboxStartParams,
   AgentPictureParams,
-  CodingAgentAccountItems,
 } from "@luke/features/agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
@@ -48,7 +48,7 @@ export interface AgentInboxProceduresDependencies {
     /** Every item the account reaches followed at the host, heard through `onAccountItemsChanged`; following again starts over, told whole. */
     codingAgentAccountItemsFollow(): Effect.Effect<void>;
     codingAgentAccountItemsUnfollow(): Effect.Effect<void>;
-    onAccountItemsChanged(listener: (told: CodingAgentAccountItems) => void): () => void;
+    onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
     codingAgentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
     codingAgentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
     codingAgentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
@@ -77,10 +77,7 @@ const ACCOUNT_ITEMS = "account";
  * held, the scopes that moved told over those before, and one told with no
  * items left out. A whole change or a failure stands for itself.
  */
-function itemsFolded(
-  held: CodingAgentAccountItems,
-  told: CodingAgentAccountItems,
-): CodingAgentAccountItems {
+function itemsFolded(held: AgentAccountItems, told: AgentAccountItems): AgentAccountItems {
   if ("failure" in held || "failure" in told || told.whole) return told;
   const moved = told.scopes.map((each) => each.scope);
   const kept = held.scopes.filter(
@@ -95,7 +92,7 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
   const openInboxes: OpenFollows<AgentInboxChanged["inbox"], AgentInboxScope> =
     MutableHashMap.empty();
   /** The account's items while any window holds a stream of them open, every change told so far folded into one. */
-  const openItems: OpenFollows<CodingAgentAccountItems> = MutableHashMap.empty();
+  const openItems: OpenFollows<AgentAccountItems> = MutableHashMap.empty();
   return {
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW
@@ -127,7 +124,7 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
           follow: host.codingAgentAccountItemsFollow,
           unfollow: host.codingAgentAccountItemsUnfollow,
           onChanged: host.onAccountItemsChanged,
-          valueOf: (changed: CodingAgentAccountItems) => Option.some(changed),
+          valueOf: (changed: AgentAccountItems) => Option.some(changed),
           fold: itemsFolded,
         },
         openItems,

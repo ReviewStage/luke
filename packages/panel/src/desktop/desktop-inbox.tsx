@@ -451,6 +451,7 @@ export function DesktopInbox({
         taskId === undefined ? (place?.repository ?? null) : (chosenTask?.repository ?? null),
       pullRequests,
       agentIds: named.agentIds,
+      heldIds,
     });
     if (target === undefined || panelFor === undefined) return false;
     // A link pressed with ⌘ goes to its task, opening what it names there as a tab of its own, as against a

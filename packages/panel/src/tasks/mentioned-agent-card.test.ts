@@ -159,7 +159,7 @@ afterEach(() => {
   pending = false;
 });
 
-/** What the main process answers: a task's agents, and the workspace's searched or newest. */
+/** What the main process answers: a task's agents, and the workspace's searched, on a task or none, or newest. */
 function answer(request: AnyAct): FakeActAnswer {
   if (!answering) return { status: FAKE_ANSWER.REFUSED, reason: "Not now." };
   if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
@@ -171,7 +171,7 @@ function answer(request: AnyAct): FakeActAnswer {
     const agents =
       words === undefined
         ? [AUDITOR]
-        : [SWEEPER, AUDITOR].filter((agent) =>
+        : [SWEEPER, AUDITOR, PRORATE].filter((agent) =>
             agent.title?.toLowerCase().includes(words.toLowerCase()),
           );
     return { status: FAKE_ANSWER.DONE, value: { agents } };
@@ -292,15 +292,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** An agent's mention, under its task or under none, as its chip is written. */
+/** An agent's mention, by the agent whichever task it works on, as its chip is written. */
 function mentionOf(agent: AgentSummary, name: string): string {
-  return mentionMarkdown(
-    agent.planId === null
-      ? { kind: MENTION_KIND.AGENT, agentId: agent.id }
-      : { kind: MENTION_KIND.AGENT, taskId: agent.planId, agentId: agent.id },
-    name,
-    PLACE,
-  );
+  return mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: agent.id }, name, PLACE);
 }
 
 /** The acts that read agents, as told. */
@@ -347,7 +341,7 @@ test("chips of agents off their task's page that the window lists read nothing a
   assert.deepEqual(agentReads(), []);
 });
 
-test("a chip of an agent the window lists not reads its task's agents once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
+test("a chip of an agent the window lists not reads the workspace's agents its name finds once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
   const chip = container.querySelector("[data-mention-ref]") ?? undefined;
 
@@ -359,8 +353,8 @@ test("a chip of an agent the window lists not reads its task's agents once as it
   assert.equal(card.name, "Prorate seat changes");
   assert.deepEqual(agentReads(), [
     {
-      kind: ACT_KIND.CODING_AGENTS_LIST,
-      payload: { taskId: BILLING.id, includeArchived: true },
+      kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+      payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
     },
   ]);
 });
@@ -371,10 +365,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
     createElement(MentionNodeChip, {
       mention: {
         name: "Prorate seat changes",
-        target: encodeMention(
-          { kind: MENTION_KIND.AGENT, taskId: BILLING.id, agentId: PRORATE.id },
-          PLACE,
-        ),
+        target: encodeMention({ kind: MENTION_KIND.AGENT, agentId: PRORATE.id }, PLACE),
       },
       doors: {
         taskId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
@@ -407,10 +398,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
     createElement(MentionNodeChip, {
       mention: {
         name: "Prorate seat changes",
-        target: encodeMention(
-          { kind: MENTION_KIND.AGENT, taskId: BILLING.id, agentId: PRORATE.id },
-          PLACE,
-        ),
+        target: encodeMention({ kind: MENTION_KIND.AGENT, agentId: PRORATE.id }, PLACE),
       },
       doors: {
         taskId: BILLING.id,
@@ -437,7 +425,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 });
 
-test("an agent on another task hangs its tab's card, its task's agents read once as it is hung, naming the task it works on", async () => {
+test("an agent on another task hangs its tab's card, the workspace's agents its name finds read once as it is hung, naming the task it works on", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
 
   const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
@@ -451,8 +439,8 @@ test("an agent on another task hangs its tab's card, its task's agents read once
   assert.equal(card.foot, "On Billing by seat");
   assert.deepEqual(agentReads(), [
     {
-      kind: ACT_KIND.CODING_AGENTS_LIST,
-      payload: { taskId: BILLING.id, includeArchived: true },
+      kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+      payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
     },
   ]);
 });
@@ -504,16 +492,6 @@ test("an agent on no task is found by the name its chip was written with, else a
   );
 });
 
-test("where the read answers nothing, the chip's own card says where the agent works", async () => {
-  answering = false;
-  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
-
-  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
-
-  assert.equal(card.tab, false);
-  assert.match(card.words ?? "", /A coding agent on another task/u);
-});
-
 test("a chip of an agent whose read answers nothing draws no mark, leaving its name alone", async () => {
   answering = false;
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
@@ -523,9 +501,9 @@ test("a chip of an agent whose read answers nothing draws no mark, leaving its n
   assert.equal(glyph?.childElementCount, 0);
 });
 
-test("two chips of one task's agents hung one after the other share the task's read", async () => {
+test("two chips of one agent hung one after the other share its read", async () => {
   const container = await drawn(
-    `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "the prorater")}.`,
+    `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "Prorate")}.`,
   );
   const [first, second] = container.querySelectorAll("[data-mention-ref]");
 

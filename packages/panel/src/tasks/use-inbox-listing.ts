@@ -99,10 +99,10 @@ function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   };
 }
 
-/** The choice that opens a listed item: by its task, or by its agent where it has none. */
+/** The choice that opens a listed item: by its task, and its agent, which its link names, or by its agent where it has none. */
 export function choiceOf({ holder, item }: InboxListed): InboxChoice {
   return holder.kind === INBOX_HOLDER.TASK
-    ? { taskId: holder.task.id, itemId: item.id }
+    ? { taskId: holder.task.id, itemAgentId: item.agentId, itemId: item.id }
     : { agentId: item.agentId, itemId: item.id };
 }
 

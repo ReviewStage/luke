@@ -400,22 +400,11 @@ function installClipboard(): string[] {
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
+  const agent = `https://tryluke.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
-    [
-      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX },
-      "main",
-      `${task}/agent/${AGENT.id}`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: SUBAGENT },
-      "side",
-      `${task}/agent/${AGENT.id}/worker/call-1`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
-      "side",
-      `${task}/agent/${AGENT.id}/changes`,
-    ],
+    [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
+    [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
+    [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
     [{ main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.PLAN }, "side", task],
   ];

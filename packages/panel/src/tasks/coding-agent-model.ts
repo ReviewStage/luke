@@ -313,7 +313,6 @@ export function lineSender(
       kind: ACTOR_KIND.AGENT,
       name: sentBy.name,
       ...(sentBy.agentId === undefined ? undefined : { agentId: sentBy.agentId }),
-      ...(sentBy.taskId === undefined ? undefined : { taskId: sentBy.taskId }),
       provider: sentBy.model === undefined ? undefined : providerOf(sentBy.model),
       state: ACTOR_STATE.REST,
     };

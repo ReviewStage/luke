@@ -67,12 +67,7 @@ function wakeLine(wake: DueOperatorWake, step: string): string {
     model: wake.agentModel,
     automationName: wake.agentAutomationName,
   });
-  const task = wake.taskId === null ? undefined : { taskId: wake.taskId };
-  const mention = writtenMention(
-    { kind: MENTION_KIND.AGENT, ...task, agentId: wake.agentId },
-    name,
-    step,
-  );
+  const mention = writtenMention({ kind: MENTION_KIND.AGENT, agentId: wake.agentId }, name, step);
   return `${mention}, one of your member's agents, failed a turn just now. ${AGENT_TOOL.READ_AGENT} reads why; act on it as your policy lets you.`;
 }
 

@@ -313,7 +313,6 @@ function senderOf(sent: LineSent): AgentSender {
         agent: true,
         ...(sent.model === undefined ? undefined : { model: sent.model }),
         ...(sent.agent === undefined ? undefined : { agentId: sent.agent.id }),
-        ...(sent.agent?.taskId === undefined ? undefined : { taskId: sent.agent.taskId }),
       };
   }
 }
@@ -611,7 +610,7 @@ export function delegationNow(
  * and answers the record once it lands; none past the hold says the agent
  * still runs, and none once the agent has ended is none for good. Note that
  * the record notifies the parent's conversation, through the worker's own
- * (`codingAgentDelegationSync`), as the agent's turns and lines do.
+ * (`agentDelegationSync`), as the agent's turns and lines do.
  */
 export function delegationPast(
   parent: ConversationTarget,

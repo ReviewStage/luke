@@ -53,6 +53,19 @@ export interface InboxPanelPlace {
   readonly repository: string | null;
   readonly pullRequests: readonly OpenedPullRequest[];
   readonly agentIds?: readonly string[] | undefined;
+  /** Every agent of what holds the item, an archived one among them, whose Changes the panel still draws. */
+  readonly heldIds?: readonly string[] | undefined;
+}
+
+/** Whether an agent a link names is one of what holds the item: by the task an older link names it under, else by the agent itself, among the agents given. */
+function holdsAgent(
+  at: { readonly planId?: string | undefined; readonly agentId: string },
+  place: InboxPanelPlace,
+  agentIds: readonly string[] | undefined,
+): boolean {
+  return at.planId === undefined
+    ? agentIds?.includes(at.agentId) === true
+    : at.planId === place.taskId;
 }
 
 /**
@@ -74,11 +87,16 @@ export function inboxPanelTarget(
     if (at.kind === LINK_PLACE.PAGE && "planId" in at && at.planId === place.taskId) {
       return { kind: INBOX_PANEL_TARGET.PAGE, pageId: at.pageId };
     }
-    if (at.kind === LINK_PLACE.CHANGES && at.planId === place.taskId) {
+    // An archived agent's Changes still opens beside the item, as its older link under the task did.
+    if (at.kind === LINK_PLACE.CHANGES && holdsAgent(at, place, place.heldIds ?? place.agentIds)) {
       return { kind: INBOX_PANEL_TARGET.CHANGES, agentId: at.agentId };
     }
     // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
-    if (at.kind === LINK_PLACE.AGENT && at.planId !== undefined && at.planId === place.taskId) {
+    if (
+      at.kind === LINK_PLACE.AGENT &&
+      place.taskId !== undefined &&
+      holdsAgent(at, place, place.agentIds)
+    ) {
       return { kind: INBOX_PANEL_TARGET.AGENT, agentId: at.agentId };
     }
     return undefined;

@@ -1820,9 +1820,7 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧�
     `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
   assert.equal(chord, "⇧⌘C");
-  assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
-  ]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
@@ -1862,7 +1860,7 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
+    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
     `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
     `https://tryluke.dev/acme/automation/${automationId}`,
   ]);
@@ -1952,9 +1950,7 @@ test("with the side panel filling the window over an agent's tab, ⇧⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}/changes`,
-  ]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}/changes`]);
 });
 
 test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⇧⌘C, as ⇧⌘C there copies", () => {
@@ -3081,7 +3077,9 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
 
   press("Use acme.dev for previews? · Billing usage alerts");
 
-  assert.deepEqual(opened, [{ taskId: ROTATION.id, itemId: PREVIEWS.id, opened: true }]);
+  assert.deepEqual(opened, [
+    { taskId: ROTATION.id, itemAgentId: PREVIEWS.agentId, itemId: PREVIEWS.id, opened: true },
+  ]);
   assert.equal(paletteShown(), false, "the palette closed");
 });
 

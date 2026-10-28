@@ -2036,8 +2036,6 @@ const agentSenderSchema = EffectSchema.Struct({
    * kept, once that agent is gone, and from a service older than it.
    */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** The task that agent works on, where `agentId` is given and it works on one. */
-  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type AgentSender = typeof agentSenderSchema.Type;

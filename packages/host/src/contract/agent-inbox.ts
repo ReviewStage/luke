@@ -18,6 +18,7 @@
  */
 
 import {
+  type AgentAccountItems,
   type AgentInboxChanged,
   agentInboxAnsweredViewSchema,
   agentInboxAnswerParamsSchema,
@@ -32,7 +33,6 @@ import {
   agentInboxScopeSchema,
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
-  type CodingAgentAccountItems,
 } from "@luke/features/agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import { eventIterator, type } from "@orpc/contract";
@@ -50,7 +50,7 @@ export const agentInboxActsContract = {
     "Could not follow the inbox on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(eventIterator(type<CodingAgentAccountItems>())),
+    .output(eventIterator(type<AgentAccountItems>())),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not acknowledge the inbox item on this system.",
   )

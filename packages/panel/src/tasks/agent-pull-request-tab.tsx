@@ -2411,14 +2411,13 @@ function centreCard(card: HTMLElement): void {
  */
 function useThreadJumps(input: {
   agentId: string;
-  planId: string | null;
   number: number | undefined;
   shown: boolean;
   threads: readonly ReviewThread[];
   conversation: Part<AgentOverviewConversation>;
   onView: (view: PullRequestView) => void;
 }) {
-  const { agentId, planId, number, shown, threads, conversation } = input;
+  const { agentId, number, shown, threads, conversation } = input;
   const openPlace = useOpenPlace();
   const toast = useToast();
   const [jump, setJump] = useState<ThreadJump | undefined>(undefined);
@@ -2442,9 +2441,9 @@ function useThreadJumps(input: {
     standing.onRevealed(standing.reveal.ask);
   }, [taken?.reveal.ask, start]);
   const place = (thread: ReviewThread, view: PullRequestThreadView): LinkPlace | undefined =>
-    thread.id === undefined || planId === null || number !== undefined
+    thread.id === undefined || number !== undefined
       ? undefined
-      : { kind: LINK_PLACE.PULL_REQUEST_THREAD, planId, agentId, threadId: thread.id, view };
+      : { kind: LINK_PLACE.PULL_REQUEST_THREAD, agentId, threadId: thread.id, view };
   const latestView = useRef(input.onView);
   latestView.current = input.onView;
   const jumpTo = (thread: ReviewThread, view: PullRequestThreadView) => {
@@ -2879,7 +2878,6 @@ function PullRequestTabBody({
   );
   const threadJumps = useThreadJumps({
     agentId,
-    planId: agent?.planId ?? null,
     number,
     shown,
     threads: threadList,
