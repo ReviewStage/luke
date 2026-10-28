@@ -111,7 +111,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`tasklessMentions`), and the workspace's agents, Luke's box among
+ * them (`tasklessMentions`), the pages the agent showed and the pull request
+ * it opened, and the workspace's agents, Luke's box among
  * them, though he works in no repository; a skill a message names is its
  * chip, which opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
@@ -578,6 +579,22 @@ export function DesktopAgentPage({
   // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: Luke works in none.
   const mentionWorkspace = listed?.slug ?? workspaceId;
   const { onShowMention } = tasks;
+  // An agent on no task offers the pages it showed and the pull request it opened, as a task offers its own.
+  const ownPages = tasks.agentView.pages;
+  const ownPullRequest = control.pullRequests.get(agentId);
+  const ownName = agent === undefined ? undefined : agentName(agent, control.models);
+  const holds = useMemo(
+    () =>
+      planId !== null
+        ? undefined
+        : {
+            agentId,
+            pages: ownPages,
+            pullRequests:
+              ownPullRequest === undefined ? [] : [{ ...ownPullRequest, agent: ownName }],
+          },
+    [planId, agentId, ownPages, ownPullRequest, ownName],
+  );
   const mentions = useMemo(
     () =>
       workspaceId === undefined || mentionWorkspace === undefined
@@ -590,6 +607,7 @@ export function DesktopAgentPage({
               pullRequestOf: pullRequestCard,
               onOpenFile: repositoryPlace === undefined ? undefined : openMentionedFile,
             },
+            holds,
           ),
     [
       workspaceId,
@@ -600,6 +618,7 @@ export function DesktopAgentPage({
       pullRequestCard,
       repositoryPlace,
       openMentionedFile,
+      holds,
     ],
   );
   // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.

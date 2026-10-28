@@ -275,7 +275,7 @@ test("a heading just renamed is offered by its new words, before the editor hand
 
 test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
   const page: TaskMentionsValue = {
-    taskId: TASK.id,
+    holder: { taskId: TASK.id },
     taskName: TASK.name,
     workspace: "acme",
     repository: TASK.repository,
@@ -294,7 +294,7 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
       },
     ],
     doors: {
-      taskId: TASK.id,
+      holder: { taskId: TASK.id },
       place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
@@ -318,7 +318,7 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
     actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
   });
   const page: TaskMentionsValue = {
-    taskId: TASK.id,
+    holder: { taskId: TASK.id },
     taskName: TASK.name,
     workspace: "acme",
     repository: TASK.repository,
@@ -330,7 +330,7 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
         agent("agent-4", "Sweep flaky tests"),
       ]),
     doors: {
-      taskId: TASK.id,
+      holder: { taskId: TASK.id },
       place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
@@ -425,7 +425,7 @@ test("@plan: typed in the plan narrows the list to the plan, searched by the wor
 
 test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {
   const page: TaskMentionsValue = {
-    taskId: TASK.id,
+    holder: { taskId: TASK.id },
     taskName: TASK.name,
     workspace: "acme",
     repository: TASK.repository,
@@ -441,7 +441,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
       },
     ],
     doors: {
-      taskId: TASK.id,
+      holder: { taskId: TASK.id },
       place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,

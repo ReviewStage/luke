@@ -28,6 +28,7 @@ import {
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { holderTaskId } from "./mention-holder.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -139,8 +140,8 @@ export function useSectionHeading(taskId: string | undefined, anchor: string): s
   const text =
     taskId === undefined
       ? undefined
-      : page?.taskId === taskId
-        ? page.text()
+      : holderTaskId(page?.holder) === taskId
+        ? page?.text()
         : opened?.id === taskId
           ? opened.document.body
           : undefined;

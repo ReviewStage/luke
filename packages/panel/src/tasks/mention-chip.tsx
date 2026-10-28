@@ -61,6 +61,7 @@ import {
   dateMentionNode,
 } from "./date-picker.js";
 import { useInboxItemTitle } from "./inbox-item-chip.js";
+import { holderTaskId, type MentionHolder } from "./mention-holder.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
@@ -173,9 +174,10 @@ const MENTION_STATE = {
 
 type MentionState = (typeof MENTION_STATE)[keyof typeof MENTION_STATE];
 
-/** What a place drawing mentions knows and does: the plan it draws, where its mentions are written, its sections' anchors, and what opening a mention does. */
+/** What a place drawing mentions knows and does: the task or the agent on no task whose words it draws, where its mentions are written, its plan's sections' anchors, and what opening a mention does. */
 export interface MentionDoors {
-  readonly taskId: string;
+  /** The task, or the agent on no task, whose words the place draws; none where neither holds them, so a section of any plan is drawn as found. */
+  readonly holder: MentionHolder | undefined;
   readonly place: MentionPlace;
   readonly anchors: ReadonlySet<string>;
   readonly onOpenTask: (mention: PlanMention) => void;
@@ -229,7 +231,7 @@ const PAGE_WORDS = "A page on this task";
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
-  if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== doors.taskId) {
+  if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== holderTaskId(doors.holder)) {
     return MENTION_STATE.FOUND;
   }
   return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
@@ -324,7 +326,7 @@ function MentionGlyph({
   return thingMark(thingOfMention(mention), {
     name,
     known,
-    where: { taskId: doors.taskId, workspace: doors.place.workspace },
+    where: { taskId: holderTaskId(doors.holder), workspace: doors.place.workspace },
     workspace: readLink(target)?.workspace ?? doors.place.workspace,
     tiles: agentTiles(doors),
     standing,
@@ -363,7 +365,7 @@ function MentionCard({
   standing: LinkStanding | undefined;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    taskId: doors.taskId,
+    taskId: holderTaskId(doors.holder),
     workspace: doors.place.workspace,
   });
   const repository = doors.place.repository ?? undefined;
@@ -532,7 +534,7 @@ function MentionChip({
   const openLink = useOpenLink();
   const known = useKnownNames();
   const standing = useLinkStanding(mention, {
-    taskId: doors.taskId,
+    taskId: holderTaskId(doors.holder),
     workspace: doors.place.workspace,
   });
   const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
@@ -678,6 +680,11 @@ function WrittenDateChip({
   );
 }
 
+/** The task a place in Luke names, where it names one. */
+function placeTaskId(place: LinkPlace): string | undefined {
+  return "planId" in place ? place.planId : undefined;
+}
+
 /** The mark a place in Luke leads with: its thing's (`thing-mark.tsx`), as a mention of the same thing leads with it. */
 function PlaceGlyph({
   place,
@@ -696,7 +703,7 @@ function PlaceGlyph({
   return thingMark(thingOfPlace(place), {
     name,
     known,
-    where: { taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID, workspace },
+    where: { taskId: placeTaskId(place), workspace },
     workspace,
     tiles: agentTiles(doors),
     standing: undefined,
@@ -786,10 +793,7 @@ function PlaceCard({
   glyph: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const workspaceId = useWordsWorkspaceId({
-    taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
-    workspace,
-  });
+  const workspaceId = useWordsWorkspaceId({ taskId: placeTaskId(place), workspace });
   return thingCard(thingOfPlace(place), {
     own: fallback,
     glyph,
@@ -825,9 +829,6 @@ function InboxItemChip({
         });
   return <PlaceChip place={place} read={read} {...chip} />;
 }
-
-/** The plan of a place that names none, which no plan's id spells. */
-const NO_TASK_ID = "";
 
 /** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";
@@ -908,7 +909,8 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
 /** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
 export interface PastedNames {
   readonly known: KnownNames;
-  readonly taskId: string;
+  /** The plan the words are pasted on; none off a plan. */
+  readonly taskId: string | undefined;
   /** The plan's text as the place holds it. */
   readonly text: () => string;
 }

@@ -29,6 +29,7 @@ import { LINK_COPY } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
 import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
 import { MentionChipCard } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useLinkStanding } from "./use-link-standing.js";
@@ -213,7 +214,7 @@ export function PublishedRow({
     url: pullRequest.url,
   } as const;
   const standing = useLinkStanding(mention, {
-    taskId: mentionDoors.taskId,
+    taskId: holderTaskId(mentionDoors.holder),
     workspace: mentionDoors.place.workspace,
   });
   const card = (

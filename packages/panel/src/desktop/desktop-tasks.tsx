@@ -1091,7 +1091,7 @@ function PlanDocument({
   const mentions = useMemo<TaskMentionsValue | undefined>(() => {
     if (opened === undefined || workspace === undefined) return undefined;
     return {
-      taskId: opened.id,
+      holder: { taskId: opened.id },
       taskName: opened.name,
       workspace,
       repository: opened.repository,
@@ -1104,7 +1104,7 @@ function PlanDocument({
       readAgents: readMentionAgents,
       pullRequests: mentionablePullRequests(agents),
       doors: {
-        taskId: opened.id,
+        holder: { taskId: opened.id },
         place: { workspace, repository: opened.repository },
         anchors: new Set(
           sectionAnchors(planSections(opened.document.body).map((section) => section.heading)),

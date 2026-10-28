@@ -308,13 +308,13 @@ async function settle(): Promise<void> {
 /** What a task's page hands its places, every mention a chip was asked to open kept. */
 function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
     text: () => PLAN_TEXT,
     doors: {
-      taskId: TASK_ID,
+      holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: (mention) => opened.push(mention),
@@ -867,6 +867,30 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   assert.deepEqual(chips.map(chipName), ["Invites by week"]);
   assert.deepEqual(sent, [`Build ${mentionMarkdown(pageMention, "Invites by week", PLACE)}`]);
   assert.equal(sent[0], "Build [@Invites by week](https://tryluke.dev/acme/plan/pl_1/page/page-1)");
+});
+
+test("on the page of an agent no plan holds an @ offers the pages it showed, a pick sent as the agent's page's link", async () => {
+  const page = tasklessMentions(
+    { workspace: "acme", workspaceId: "workspace-1", repository: null },
+    ignore,
+    undefined,
+    {},
+    { agentId: "agent-9", pages: [PAGE], pullRequests: [] },
+  );
+  const { container, sent } = await box(page);
+
+  typeInComposer(container, "Build @invites");
+  await settle();
+  const offered = listed(container);
+  pressInComposer(container, "Enter");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["Invites by week"]);
+  assert.deepEqual(sent, [
+    "Build [@Invites by week](https://tryluke.dev/acme/agent/agent-9/page/page-1)",
+  ]);
 });
 
 test("another agent picked from the @ list is drawn as its chip and sent as its link, which names the agent by its id alone", async () => {

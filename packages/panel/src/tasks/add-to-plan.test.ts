@@ -83,13 +83,13 @@ afterEach(() => {
 });
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
   text: () => PAGE_TEXT,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: null },
     anchors: new Set(["approach"]),
     onOpenTask: () => undefined,
@@ -272,7 +272,8 @@ test("a transcript off a plan's page offers no Add to plan", async () => {
 });
 
 test("a planless agent's transcript, whose page names a workspace and no plan, offers no Add to plan", async () => {
-  await opened(await drawn({ ...PAGE, taskId: "", doors: { ...PAGE.doors, taskId: "" } }));
+  const AGENT = { agentId: "agent-1" };
+  await opened(await drawn({ ...PAGE, holder: AGENT, doors: { ...PAGE.doors, holder: AGENT } }));
 
   assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
   assert.equal(viewerButton("Add to plan"), undefined);

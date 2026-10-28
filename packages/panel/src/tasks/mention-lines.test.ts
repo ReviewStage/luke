@@ -72,13 +72,13 @@ async function settle(): Promise<void> {
 }
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: "acme/relay",
   text: () => "## Goal\n\nInvite by email.\n",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(["goal"]),
     onOpenTask: ignore,

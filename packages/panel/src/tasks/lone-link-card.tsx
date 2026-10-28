@@ -18,6 +18,7 @@ import { LinesChanged, PUBLISHED_META_CLASS } from "./agent-published.js";
 import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { githubName, MentionChipCard } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -110,7 +111,7 @@ function PullRequestRowCard({
   const doors = useMentionDoors();
   const openLink = useOpenLink();
   const standing = useLinkStanding(mention, {
-    taskId: doors.taskId,
+    taskId: holderTaskId(doors.holder),
     workspace: doors.place.workspace,
   });
   const known = standing?.pullRequest;

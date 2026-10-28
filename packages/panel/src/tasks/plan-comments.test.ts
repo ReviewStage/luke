@@ -795,13 +795,13 @@ test("a link to a resolved thread lists it under Resolved, open, and scrolls the
 
 /** The plan's page's mentions, as the page hands them to every box on it. */
 const PAGE_MENTIONS: TaskMentionsValue = {
-  taskId: PLAN.id,
+  holder: { taskId: PLAN.id },
   taskName: "Invitations",
   workspace: "acme",
   repository: "acme/relay",
   text: () => TEXT,
   doors: {
-    taskId: PLAN.id,
+    holder: { taskId: PLAN.id },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(["goal", "approach"]),
     onOpenTask: () => undefined,
