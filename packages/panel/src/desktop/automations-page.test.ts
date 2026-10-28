@@ -222,10 +222,20 @@ function pushStanding(): void {
   }
 }
 
+/**
+ * What stands pushed to every page following a workspace's list, as the host
+ * draws a write on it before the write answers (`@luke/host`'s
+ * `automation-collections.ts`).
+ */
+function drawWrite(): void {
+  for (const follower of listFollowers()) {
+    if (follower.closed) continue;
+    follower.push({ automations: standing.filter((each) => each.workspaceId === follower.id) });
+  }
+}
+
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
-/** The creates held unanswered, each committed and answered by its resolver, where creates are held at all. */
-let heldCreates: (() => void)[] | undefined;
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
 /** Every workspace whose list was read, in order. */
@@ -310,7 +320,6 @@ beforeEach(() => {
   lists = [];
   listHeld = false;
   heldChanges = undefined;
-  heldCreates = undefined;
   listed = [];
   changes = [];
   creates = [];
@@ -371,13 +380,10 @@ beforeEach(() => {
         }
         const automation = { ...was, ...change };
         standing = standing.map((each) => (each.id === automationId ? automation : each));
-        if (heldChanges === undefined) {
-          return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { automation } });
-        }
-        // A held write answers in words of its own, so which answer drew is told by the row's name.
+        drawWrite();
+        const done = { status: FAKE_ANSWER.DONE, value: { automation } } as const;
+        if (heldChanges === undefined) return Promise.resolve(done);
         const held = heldChanges;
-        const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
-        const done = { status: FAKE_ANSWER.DONE, value: { automation: told } };
         return new Promise((resolve) => held.push(() => resolve(done)));
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
@@ -399,16 +405,8 @@ beforeEach(() => {
         const value = hooked
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
-        if (heldCreates !== undefined) {
-          const held = heldCreates;
-          return new Promise((resolve) =>
-            held.push(() => {
-              standing = [made, ...standing];
-              resolve({ status: FAKE_ANSWER.DONE, value });
-            }),
-          );
-        }
         standing = [made, ...standing];
+        drawWrite();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
@@ -476,6 +474,7 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
         deletes.push(request.payload.automationId);
         standing = standing.filter((each) => each.id !== request.payload.automationId);
+        drawWrite();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
@@ -675,94 +674,6 @@ test("a switch turns its automation off, and the row takes the service's answer 
   const row = rowOf(page, "Nightly flaky-test sweep");
   assert.equal(row.querySelector(".automation-row-when")?.textContent, "Off");
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
-});
-
-test("a switch flips at once, before the service answers, and a press made meanwhile waits its turn", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  const sweep = () =>
-    rowOf(page, "Nightly flaky-test sweep").querySelector<HTMLButtonElement>("[role=switch]");
-  const press = () => act(() => sweep()?.click());
-
-  press();
-  await settle();
-  assert.equal(
-    sweep()?.getAttribute("aria-checked"),
-    "false",
-    "it reads off while the write is out",
-  );
-  press();
-  await settle();
-  assert.equal(changes.length, 1, "the second press sends nothing while the first is out");
-  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "but the switch already shows it");
-
-  heldChanges[0]?.();
-  await settle();
-
-  assert.deepEqual(changes, [
-    { automationId: SWEEP.id, change: { enabled: false } },
-    { automationId: SWEEP.id, change: { enabled: true } },
-  ]);
-});
-
-test("presses made while a write is out send only the newest, and none that repeats what was sent", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  const press = () =>
-    act(() =>
-      rowOf(page, "Nightly flaky-test sweep")
-        .querySelector<HTMLButtonElement>("[role=switch]")
-        ?.click(),
-    );
-
-  press();
-  press();
-  press();
-  await settle();
-  heldChanges[0]?.();
-  await settle();
-
-  assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { enabled: false } }]);
-});
-
-test("a switch the service refuses in the editor reads its new state at once, then goes back", async () => {
-  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-
-  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
-
-  assert.equal(
-    page.querySelector("[role=switch]")?.getAttribute("aria-checked"),
-    "false",
-    "it flipped before the refusal came",
-  );
-  await settle();
-  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
-});
-
-test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
-  await settle();
-
-  // Another window renames it meanwhile, and the host pushes the list before the switch answers.
-  standing = standing.map((each) =>
-    each.id === SWEEP.id ? { ...each, name: "Sweep, as another window left it" } : each,
-  );
-  pushStanding();
-  await settle();
-  heldChanges[0]?.();
-  await settle();
-
-  assert.equal(
-    page.querySelector(".automation-row-name")?.textContent,
-    "Sweep, as another window left it",
-  );
 });
 
 test("what changed elsewhere is drawn as the host pushes it, and a switch reads nothing again", async () => {
@@ -1344,25 +1255,6 @@ test("a new automation is created only once it is named and told its task, and t
     archiveSuccessful: false,
     repositories: ["acme/ledger"],
   });
-  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.deepEqual(headings(page), ["Morning triage"]);
-});
-
-test("a new automation whose answer lands after a list pushed before it was made still stands as its own page", async () => {
-  heldCreates = [];
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
-  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create automation").click());
-  await settle();
-
-  // Something else moves the list while the create is out, before it is made.
-  pushStanding();
-  await settle();
-  heldCreates[0]?.();
-  await settle();
-
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
   assert.deepEqual(headings(page), ["Morning triage"]);
 });

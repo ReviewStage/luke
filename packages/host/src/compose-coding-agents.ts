@@ -102,6 +102,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type InboxTxWaits, inboxTxWaits } from "./inbox-tx-waits.js";
+import type { RowWrite } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -109,7 +110,7 @@ import {
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
-import type { AgentRow, RowWrite } from "./task-list-collections.js";
+import type { AgentRow } from "./task-list-collections.js";
 import {
   followTranscript,
   type TranscriptFollows,

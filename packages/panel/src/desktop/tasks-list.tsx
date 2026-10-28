@@ -1275,6 +1275,7 @@ export function TasksList({
           controls={regionId}
         />
       </div>
+      {selection.dialog}
     </CollectionPage>
   );
 }

@@ -41,7 +41,7 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  * pull-request-pickers.tsx -- the header's reviewer and label pickers, as stage-cli's are: two presses side by side after the reviewers, “+ Reviewer” and “+ Label”, each a menu of what may be asked for or put on, what stands now checked.
  *
  * What the pickers offer is the agent's repository's (`review-options`):
- * its collaborators and the teams that reach it, who may be asked for a
+ * the users it may assign and the teams that reach it, who may be asked for a
  * review, and its labels. It is read once, as a picker first opens, on the
  * Luke GitHub App's token as every read is, and read again only where that
  * read failed, which its menu offers as a Retry in the place of its items.
@@ -107,7 +107,7 @@ export interface ReviewOptions {
   readonly ask: () => void;
 }
 
-/** The agent's repository's labels, collaborators, and teams, read once, as a picker first asks, and again only after a failure. */
+/** The agent's repository's labels, assignable users, and teams, read once, as a picker first asks, and again only after a failure. */
 export function useReviewOptions(
   agentId: string,
   readOptions: (agentId: string) => Promise<AgentReviewOptionsAnswerView>,
@@ -398,7 +398,7 @@ function OptionsPicker({
 
 /**
  * The reviewer picker: a menu of the teams that reach the repository, then
- * its collaborators, the pull request's author left out, each checked while
+ * its assignable users, the pull request's author left out, each checked while
  * a review is asked of them; choosing one asks a review of them, or asks it
  * no longer.
  */

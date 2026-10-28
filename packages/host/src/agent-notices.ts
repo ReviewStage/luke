@@ -252,13 +252,14 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
   return [...tasks].map(([taskId, held]) => ({ taskId, items: held }));
 }
 
-/** The open items of agents with no task as the window holds them: each with its agent and its kind, who started it, and the automation and repository standing in a task's place. */
+/** The open items of agents with no task as the window holds them: each with when it last changed, its agent and its kind, who started it, and the automation and repository standing in a task's place. */
 function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice["taskless"] {
   return items.map((item) => ({
     id: item.id,
     agentId: item.agentId,
     title: item.title,
     postedAt: item.postedAt,
+    updatedAt: item.updatedAt,
     agentTitle: item.agentTitle,
     agentModel: item.agentModel,
     automationId: item.automationId,
@@ -279,7 +280,7 @@ type InboxAnswered = Pick<
   "items" | "plans" | "planless" | "automations" | "failedRuns"
 >;
 
-/** Whether two answers say alike everything the window draws of each item of an agent with no task: its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
+/** Whether two answers say alike everything the window draws of each item of an agent with no task: when it last changed, its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
 function sameTaskless(
   one: readonly AccountTasklessEntry[],
   other: readonly AccountTasklessEntry[],
@@ -291,6 +292,7 @@ function sameTaskless(
       return (
         was !== undefined &&
         was.id === item.id &&
+        was.updatedAt === item.updatedAt &&
         was.agentTitle === item.agentTitle &&
         was.agentModel === item.agentModel &&
         was.automationId === item.automationId &&

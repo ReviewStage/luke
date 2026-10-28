@@ -1147,6 +1147,7 @@ export function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
     agentId: asked.agentId,
     title: asked.title,
     postedAt: asked.postedAt,
+    updatedAt: asked.updatedAt,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",

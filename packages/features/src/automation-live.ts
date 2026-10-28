@@ -21,14 +21,14 @@ import { automationWebhookPath } from "./service-paths.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
- * automation-live.ts -- a workspace's automations and one automation's runs followed over Neon Realtime: the sealed statements the service answers, the rows they deliver, and the list and the history as the held reads answer them, built from the rows at an instant.
+ * automation-live.ts -- a workspace's automations and runs, and one automation's runs, as the host follows them over the service's held poll: the statements the service answers, the rows they deliver, and the list and the histories as the held reads answer them, built from the rows at an instant.
  *
  * A run's agent's status turns on the clock (`agent-status.ts`), so
  * the reader builds each at the instant it reads, and again at
  * `automationsGraceEdge` or `automationRunsGraceEdge`, the next instant the
  * clock alone moves one. A webhook automation is answered with the address
  * its caller posts to on the service the reader reaches, as the held read's
- * client answers it. Realtime keeps no order, so the reader orders.
+ * client answers it. The rows come in no order, so the reader orders.
  */
 
 /** A workspace's automations sealed for following: the address, and one statement. The service answers `unavailable` where its deployment's Realtime is misconfigured. */

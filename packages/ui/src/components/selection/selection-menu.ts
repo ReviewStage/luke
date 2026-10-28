@@ -12,17 +12,27 @@ import type { SelectionAct } from "./selection-bar.js";
  * the selection let go after it where the act lets it go.
  */
 
-/** A row's menu groups for the selection `acts` take: one group, each act an item or a submenu of its choices; none where there is no act. */
+/** One act as a row's menu draws it: an item, red where it cannot be taken back, or a submenu of its choices. */
+function selectionEntry(act: SelectionAct): MenuEntry {
+  const head = act.icon === undefined ? { label: act.label } : { label: act.label, icon: act.icon };
+  if (act.menu === undefined) {
+    return act.danger === true
+      ? { ...head, onSelect: act.onAct, danger: true }
+      : { ...head, onSelect: act.onAct };
+  }
+  // Note that a submenu draws no rule between its items, so the act's groups run on as one list.
+  const items: readonly MenuAction[] = act.menu.flat();
+  return { ...head, items };
+}
+
+/**
+ * A row's menu groups for the selection `acts` take: one group, each act an
+ * item or a submenu of its choices, and after it, alone, the acts that cannot
+ * be taken back, as every menu of the window ends on its delete; none where
+ * there is no act.
+ */
 export function selectionMenu(acts: readonly SelectionAct[]): readonly (readonly MenuEntry[])[] {
-  if (acts.length === 0) return [];
-  return [
-    acts.map((act): MenuEntry => {
-      const head =
-        act.icon === undefined ? { label: act.label } : { label: act.label, icon: act.icon };
-      if (act.menu === undefined) return { ...head, onSelect: act.onAct };
-      // Note that a submenu draws no rule between its items, so the act's groups run on as one list.
-      const items: readonly MenuAction[] = act.menu.flat();
-      return { ...head, items };
-    }),
-  ];
+  const kept = acts.filter((act) => act.danger !== true).map(selectionEntry);
+  const lost = acts.filter((act) => act.danger === true).map(selectionEntry);
+  return [kept, lost].filter((group) => group.length > 0);
 }

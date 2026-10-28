@@ -563,6 +563,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
         agentId: SWEEP_AGENT,
         title: SWEEP_ITEM.title,
         postedAt: SWEEP_ITEM.postedAt,
+        updatedAt: SWEEP_ITEM.updatedAt,
         agentTitle: "Flake sweep",
         agentModel: "anthropic/claude-opus-5.5",
         automationId: null,

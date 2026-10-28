@@ -424,7 +424,7 @@ export const namedReviewOptions = /* @__PURE__ */ Effect.fn("web/namedReviewOpti
   const person = yield* overviewNamer(
     agent.organizationId,
     read.users,
-    "the repository's collaborators",
+    "the repository's assignable users",
   );
   return { labels: read.labels, users: read.users.map(person), teams: read.teams };
 });

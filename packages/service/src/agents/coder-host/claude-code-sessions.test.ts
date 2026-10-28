@@ -248,6 +248,17 @@ function sessionsFor(userId: string, sequence: { next: number }) {
   return claudeCodeSessions(options);
 }
 
+/** The first launch's runner as a row leaves it before the next message: as launched, exited, or tagged as one launched before lines were read from Luke, whose stdin a send writes. */
+const asLaunched = (_api: ReturnType<typeof runnerSandboxApi>) => undefined;
+const runnerExited = (api: ReturnType<typeof runnerSandboxApi>) => {
+  const first = api.commands[0];
+  if (first !== undefined) first.exitCode = 0;
+};
+const launchedBeforeTheRead = (api: ReturnType<typeof runnerSandboxApi>) => {
+  const sandbox = api.sandboxes[0];
+  if (sandbox !== undefined) sandbox.tags[RUNNER_TAG.LAUNCH] = "0";
+};
+
 const message = (agent: Agent, text: string, lineId?: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
@@ -1233,6 +1244,53 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect.each([
+    ["at its upload of the message's files", (rest: string) => rest === "fs/write", asLaunched],
+    ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), asLaunched],
+    ["at the relaunch's command", (rest: string) => rest === "cmd", runnerExited],
+    [
+      "at the stdin of a runner launched before lines were read",
+      (rest: string) => rest.endsWith("/stdin"),
+      launchedBeforeTheRead,
+    ],
+  ] as const)(
+    "a message that meets its sandbox stopping %s resumes the sandbox and runs on a runner launched in its next session",
+    ([, call, leave]) =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* runnerTook(agent.id);
+        sequence.next = 42;
+        const first = api.commands[0];
+        leave(api);
+        api.stopsAt.call = call;
+        const pdf = Buffer.from("%PDF-1.7 the report").toString("base64");
+
+        const sent = yield* sessions.send(opened.sessionId, {
+          ...message(agent, "Now the emails."),
+          message: [
+            { type: "text" as const, text: "Now the emails." },
+            { type: "file" as const, data: pdf, mediaType: "application/pdf", filename: "r.pdf" },
+          ],
+        });
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.equal(api.commands.length, 2);
+        const relaunch = api.commands[1];
+        assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
+        assert.notEqual(relaunch?.sandboxSessionId, first?.sandboxSessionId);
+        const [, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(developerContent(line)[0], { type: "text", text: "Now the emails." });
       }),
   );
 

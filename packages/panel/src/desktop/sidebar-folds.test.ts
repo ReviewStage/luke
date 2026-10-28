@@ -181,7 +181,7 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.ok(menu, "the right-click opens the repository's menu");
   assert.deepEqual(
     [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Unpin", "Mark all done", "Open on GitHub"],
+    ["Status", "Unpin", "Open on GitHub"],
   );
   const ellipsis = sidebar.querySelector('button[aria-label="relay actions"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
@@ -204,6 +204,7 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
           agentId: "agent-2",
           title: "Quarantine the flaky test?",
           postedAt: 2,
+          updatedAt: 2,
           agentTitle: null,
           agentModel: "anthropic/claude-opus-5.5",
           automationId: null,
@@ -216,6 +217,7 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
           agentId: "agent-3",
           title: "Bump the Node image?",
           postedAt: 3,
+          updatedAt: 3,
           agentTitle: null,
           agentModel: "anthropic/claude-opus-5.5",
           automationId: null,

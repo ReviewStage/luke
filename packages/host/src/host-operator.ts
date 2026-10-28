@@ -798,7 +798,7 @@ export interface HostOperator {
   codingAgentOverviewPullRequest(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   codingAgentReviewOptions(
     params: AgentPullRequestParams,
   ): Effect.Effect<AgentReviewOptionsAnswerView>;

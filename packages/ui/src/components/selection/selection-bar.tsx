@@ -25,9 +25,12 @@ import { focusChoosable } from "./list-selection.js";
  * Tab stop, or a `SelectionRegion`'s first row, rather than let it fall to
  * the page as its buttons go.
  *
- * It is drawn in the Tailwind theme's utilities: one line on the surface
- * inside a hairline, the count in the label's type with even digits, the
- * acts wrapping after it, and a control's gap between each.
+ * It is drawn in the Tailwind theme's utilities: one line inside a hairline
+ * on the ground a menu floats on (`bg-popover`), the count in the label's type
+ * with even digits, the acts wrapping after it, and a control's gap between
+ * each. Note that the ground is a menu's rather than a card's, because a list
+ * floats its bar over its rows, and the desktop's dark card ground is nearly
+ * clear, so the rows' words would show through the bar's.
  */
 
 /**
@@ -38,6 +41,8 @@ import { focusChoosable } from "./list-selection.js";
 export type SelectionAct = {
   readonly label: string;
   readonly icon?: React.JSX.Element;
+  /** The act cannot be taken back, as Permanently delete: a chosen row's menu draws it red, last and alone. */
+  readonly danger?: boolean | undefined;
 } & (
   | { readonly onAct: () => void; readonly menu?: undefined }
   | { readonly menu: readonly (readonly MenuAction[])[]; readonly onAct?: undefined }
@@ -120,7 +125,7 @@ export function SelectionBar({
       role="toolbar"
       aria-labelledby={countId}
       aria-controls={controls}
-      className="luke-selection-bar box-border flex min-w-0 items-center gap-control-gap rounded-control border border-border bg-surface py-tight-gap pr-tight-gap pl-list-inset font-ui text-foreground"
+      className="luke-selection-bar box-border flex min-w-0 items-center gap-control-gap rounded-control border border-border bg-popover py-tight-gap pr-tight-gap pl-list-inset font-ui text-foreground"
     >
       <span
         id={countId}

@@ -15,7 +15,7 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { SettingMarks } from "./marks.js";
 
 /**
@@ -70,6 +70,8 @@ interface PickerProps {
   onOpen?: (() => void) | undefined;
   /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed unfiltered. */
   onSearch?: ((query: string) => void) | undefined;
+  /** Counts the asks from elsewhere to open the menu, as the S key's for a task's status, each opening it. */
+  openRequest?: number | undefined;
   onPick: (id: string) => void;
 }
 
@@ -96,6 +98,7 @@ export function Picker({
   width = CHIP_WIDTH.FIELD,
   onOpen,
   onSearch,
+  openRequest,
   onPick,
 }: PickerProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -110,6 +113,13 @@ export function Picker({
     setOpen(false);
     chip.current?.focus();
   };
+
+  // Each ask from elsewhere opens the menu, as a press on the chip would.
+  useEffect(() => {
+    if (openRequest === undefined || openRequest === 0 || disabled) return;
+    onOpen?.();
+    setOpen(true);
+  }, [openRequest]);
 
   return (
     <span

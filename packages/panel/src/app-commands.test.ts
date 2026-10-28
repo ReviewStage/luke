@@ -117,20 +117,22 @@ test("J runs the Inbox's command, and nothing while the press is typing into a f
   assert.deepEqual(moves, ["inbox"]);
 });
 
-/** What the open thing offers on U and P, each press recorded: a plan's, say. */
+/** What the open thing offers on U, P, and S, each press recorded: a plan's, say. */
 function OpenThing({ presses }: { presses: string[] }): null {
   useAppCommand(APP_COMMAND.TOGGLE_READ, () => presses.push("open read"));
   useAppCommand(APP_COMMAND.PIN, () => presses.push("open pin"));
+  useAppCommand(APP_COMMAND.SET_STATUS, () => presses.push("open status"));
   return null;
 }
 
-/** A sidebar row that takes the keyboard, offering U and P while it holds it. */
+/** A sidebar row that takes the keyboard, offering U, P, and S while it holds it. */
 function FocusableRow({ presses }: { presses: string[] }): ReactElement {
   const row = useRef<HTMLDivElement | null>(null);
   useFocusedRowKeys(
     row,
     () => presses.push("row read"),
     () => presses.push("row pin"),
+    () => presses.push("row status"),
   );
   return createElement("div", { ref: row, tabIndex: 0, "aria-label": "Row" });
 }
@@ -147,7 +149,7 @@ function RowWindow({ presses, opened }: { presses: string[]; opened: number }): 
 }
 
 /** Presses a letter alone where the keyboard is. */
-function pressLetter(key: "u" | "p"): void {
+function pressLetter(key: "u" | "p" | "s"): void {
   const target = document.activeElement ?? document.body;
   act(() => {
     target.dispatchEvent(
@@ -156,7 +158,7 @@ function pressLetter(key: "u" | "p"): void {
   });
 }
 
-test("U and P act on the focused sidebar row over the open thing, even once the open thing offers them again after it, and on the open thing once the row lets the keyboard go", () => {
+test("U, P, and S act on the focused sidebar row over the open thing, even once the open thing offers them again after it, and on the open thing once the row lets the keyboard go", () => {
   const presses: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -172,9 +174,11 @@ test("U and P act on the focused sidebar row over the open thing, even once the 
   draw(1);
   pressLetter("u");
   pressLetter("p");
-  assert.deepEqual(presses.splice(0), ["row read", "row pin"]);
+  pressLetter("s");
+  assert.deepEqual(presses.splice(0), ["row read", "row pin", "row status"]);
 
   act(() => row.blur());
   pressLetter("p");
-  assert.deepEqual(presses.splice(0), ["open pin"]);
+  pressLetter("s");
+  assert.deepEqual(presses.splice(0), ["open pin", "open status"]);
 });

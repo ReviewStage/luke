@@ -8,11 +8,12 @@ import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { InboxItemCard, inboxLineGlyph } from "./inbox-item-parts.js";
 import {
+  agentHolder,
   type InboxListed,
+  inboxAgentOf,
   inboxLineKind,
   type TasklessInboxAgent,
   taskHolder,
-  tasklessGroups,
 } from "./inbox-model.js";
 import { useSettledReads } from "./inbox-settling.js";
 import { useMentionedPlace } from "./mentioned-agent-card.js";
@@ -39,7 +40,7 @@ type InboxItemPlace =
   | { readonly planId: string; readonly itemId: string }
   | { readonly agentId: string; readonly itemId: string };
 
-/** The agent with no task an item stands under, as the Inbox groups it: the brief main holds of a waiting one, else the agent's own row among the window's agents. */
+/** The agent with no task an item stands under, as the Inbox groups it: the brief main holds of a waiting one, else the agent's own row among the window's agents (`inboxAgentOf`). */
 function tasklessAgentOf(
   agentId: string,
   waiting: readonly TasklessInboxAgent[],
@@ -48,18 +49,7 @@ function tasklessAgentOf(
   const brief = waiting.find((each) => each.agentId === agentId);
   if (brief !== undefined) return brief;
   const agent = agents.find((each) => each.id === agentId);
-  if (agent === undefined) return undefined;
-  // Note that the agent's kind is kept, so Luke's settled thread still stands under Luke once main lists none of his.
-  return {
-    agentId,
-    ...(agent.kind === undefined ? undefined : { agentKind: agent.kind }),
-    agentTitle: agent.title,
-    agentModel: agent.model,
-    automationId: agent.automationId,
-    automationName: agent.automationName ?? null,
-    repository: agent.repository ?? null,
-    ...(agent.workspaceId === undefined ? undefined : { workspaceId: agent.workspaceId }),
-  };
+  return agent === undefined ? undefined : inboxAgentOf(agent);
 }
 
 /** The item a link names as the Inbox lists it, its holder named as its group's header is; none until its inbox is read, where that read failed, or where the window holds neither its task nor its agent. */
@@ -85,9 +75,7 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
     }
     if (agentId === undefined) return undefined;
     const agent = tasklessAgentOf(agentId, inbox?.taskless ?? [], tasks?.tasklessAgents ?? []);
-    if (agent === undefined) return undefined;
-    const [group] = tasklessGroups([agent], new Map([[agentId, [item]]]), undefined);
-    return group === undefined ? undefined : { holder: group.holder, item };
+    return agent === undefined ? undefined : { holder: agentHolder(agent), item };
   }, [held, place.itemId, planId, agentId, tasks, inbox]);
 }
 

@@ -678,11 +678,13 @@ function PersonColumn({
   const read = useWaitingItems(tasks);
   // With Channels on what waits is threads, so its wait and its failure say so.
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  // An item on a task is theirs where it waits on them (`inboxWaitsOn`), its task's assignee or else its agent's starter, by the task's row from a service that names neither.
+  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
-      holder.kind === INBOX_HOLDER.TASK &&
-      (inboxWaitsOn(item)?.userId ?? agentStarter(holder.task, item.agentId)) === userId,
+      (inboxWaitsOn(item)?.userId ??
+        (holder.kind === INBOX_HOLDER.TASK
+          ? agentStarter(holder.task, item.agentId)
+          : undefined)) === userId,
   );
   const { inboxView } = tasks;
   const openItem = (listed: InboxListed) =>

@@ -31,7 +31,21 @@ import {
   type UtilsRecord,
   type WithoutVirtualProps,
 } from "@tanstack/db";
-import { Cause, type Context, Deferred, Effect, Equal, Exit, type Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  type Context,
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Equal,
+  Exit,
+  Queue,
+  type Scope,
+  Stream,
+} from "effect";
+import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** TanStack's own garbage collection turned off, so a collection, or a live query, lives as long as the scope that made it. */
 export const KEPT_BY_SCOPE = 0;
@@ -127,6 +141,39 @@ export function scopedCollection<Made extends { cleanup(): Promise<void> }>(
   return Effect.acquireRelease(Effect.sync(make), (made) => Effect.promise(() => made.cleanup()));
 }
 
+/**
+ * `draw`, at the host's own instant, as the returned effect asks, and again
+ * at the instant each draw answers the clock alone next moves what it drew,
+ * for as long as the scope stands, the wait for an edge drawn since
+ * replacing the wait for the one before. Note that a live query reads no
+ * clock, so what moves with the clock is built here, from its rows.
+ */
+export function drawnAtEdges(
+  draw: (at: number) => number | undefined,
+): Effect.Effect<Effect.Effect<void>, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const edges = yield* Queue.sliding<number | undefined>(1);
+    const drawn = Effect.flatMap(Clock.currentTimeMillis, (at) =>
+      Effect.asVoid(Queue.offer(edges, draw(at))),
+    );
+    yield* Effect.forkScoped(
+      Stream.fromQueue(edges).pipe(
+        Stream.switchMap((edge) =>
+          edge === undefined
+            ? Stream.empty
+            : Stream.fromEffect(
+                Effect.flatMap(Clock.currentTimeMillis, (now) =>
+                  Effect.sleep(Duration.millis(Math.max(0, edge - now))),
+                ),
+              ),
+        ),
+        Stream.runForEach(() => drawn),
+      ),
+    );
+    return drawn;
+  });
+}
+
 /** A collection a followed read answers whole, and the door its answers come in by. */
 export interface AnsweredCollection<Row extends object, Key extends string> {
   readonly collection: RowCollection<Row, Key>;
@@ -145,6 +192,12 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   readonly confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => void;
   /** Takes a write's own answer that one row is gone in the read's place, as `confirmRow` takes a change. */
   readonly confirmGone: (key: Key) => void;
+  /**
+   * Takes a write's own answer of a row it made in the read's place, as
+   * `confirmRow` takes a change. A row the read answered already is left as
+   * it answered it, which is as new.
+   */
+  readonly confirmNew: (row: Row) => void;
 }
 
 /** A collection of rows keyed by `getKey`, ready and empty until its read first answers, for as long as the scope stands. */
@@ -185,6 +238,10 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       next.delete(key);
       taken(next);
     };
+    const confirmNew = (row: Row) => {
+      const key = options.getKey(row);
+      if (!held.has(key)) taken(new Map(held).set(key, row));
+    };
     /** Takes the rows `next` holds as the synced ones, one transaction writing each that moved. */
     function taken(next: ReadonlyMap<Key, Row>): void {
       const changes = rowChanges(held, next);
@@ -195,7 +252,7 @@ export function answeredCollection<Row extends object, Key extends string>(optio
       writer.commit();
       held = next;
     }
-    return { collection, answer, confirmRow, confirmGone };
+    return { collection, answer, confirmRow, confirmGone, confirmNew };
   });
 }
 
@@ -241,4 +298,120 @@ export function optimistically<A, E>(
       Effect.andThen(Deferred.done(settled, Exit.asVoid(exit)), Effect.promise(kept)),
     );
   });
+}
+
+/**
+ * What a write's service call answered: the caller's own answer, the
+ * transaction it committed in, and the row's fields as the service then
+ * holds them, or that it is gone, taken in the read's place where it hands
+ * no wait; where the answer says none of them, the fields the write drew
+ * are taken instead.
+ */
+export interface RowWritten<Row, Answer> {
+  readonly answer: Answer;
+  readonly txid: string | undefined;
+  readonly fields?: Partial<Row> | typeof ROW_GONE;
+}
+
+/** What a write leaves of a row that it takes out of the read, as a task deleted is. */
+export const ROW_GONE: unique symbol = Symbol("the row is gone");
+
+/** A write the service refused, which takes back what it drew, and what the caller answers for it. */
+export interface RowRefused<Answer> {
+  readonly refused: Answer;
+}
+
+/** A write the service did not answer, which takes back what it drew. */
+class Unwritten extends Data.TaggedError("Unwritten") {}
+
+/**
+ * A write to one row: what the row's fields become, from the row as it is
+ * drawn now, or that it is gone, and the service call that writes it,
+ * answering what the caller answers either way.
+ */
+export type RowWrite<Row> = <Answer>(
+  key: string,
+  change: (row: Row) => Partial<Row> | typeof ROW_GONE,
+  written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
+) => Effect.Effect<Answer>;
+
+/**
+ * The writes to one collection's rows, each drawn at once and standing
+ * while the service writes it: kept once the followed read carries its
+ * transaction, and taken back where the service refused it. Where the read
+ * hands no wait yet, the row as the write's own answer leaves it is taken
+ * in the read's place. Either lands with the drop of what was drawn, so
+ * nothing flickers back between the two. Writes to one row go to the
+ * service in the order asked, each row's newest settling the next write to
+ * it waits on, since each was drawn over the ones before. `drawn` draws the
+ * read as it stands, as each write begins and once it settles.
+ */
+export function rowWrites<Row extends object>(
+  collection: AnsweredCollection<Row, string>,
+  options: {
+    readonly drawn: Effect.Effect<void>;
+    /** The followed read's wait for a write's transaction; none while the follow hands none. */
+    readonly txWait: () => TxWait | undefined;
+  },
+): RowWrite<Row> {
+  const { drawn } = options;
+  const lastWrites = new Map<string, Deferred.Deferred<void>>();
+  /** Confirms a write on the followed read where it hands a wait, or takes the write's own answer in its place where it does not. */
+  const confirmed = (txid: string | undefined, answered: () => void) => {
+    const wait = options.txWait();
+    return wait === undefined || txid === undefined
+      ? Effect.sync(answered)
+      : confirmWrite(wait, txid);
+  };
+  return <Answer>(
+    key: string,
+    change: (row: Row) => Partial<Row> | typeof ROW_GONE,
+    written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
+  ) =>
+    Effect.gen(function* () {
+      const before = lastWrites.get(key);
+      const settled = yield* Deferred.make<void>();
+      lastWrites.set(key, settled);
+      const answered: { value?: Answer } = {};
+      const draw = () => {
+        const row = collection.collection.get(key);
+        if (row === undefined) return;
+        const fields = change(row);
+        if (fields === ROW_GONE) collection.collection.delete(key);
+        else collection.collection.update(key, (draft) => Object.assign(draft, fields));
+      };
+      const work = Effect.gen(function* () {
+        yield* drawn;
+        if (before !== undefined) yield* Deferred.await(before);
+        const result = yield* written;
+        if ("refused" in result) {
+          answered.value = result.refused;
+          return yield* new Unwritten();
+        }
+        answered.value = result.answer;
+        yield* confirmed(result.txid, () => {
+          const { fields } = result;
+          if (fields === ROW_GONE) collection.confirmGone(key);
+          else
+            collection.confirmRow(key, (row) => {
+              const drawnFields = fields ?? change(row);
+              return drawnFields === ROW_GONE ? {} : drawnFields;
+            });
+        });
+      });
+      yield* optimistically(draw, work).pipe(
+        Effect.catchTag("Unwritten", () => Effect.void),
+        Effect.ensuring(drawn),
+        Effect.ensuring(
+          Effect.andThen(
+            Deferred.succeed(settled, undefined),
+            Effect.sync(() => {
+              if (lastWrites.get(key) === settled) lastWrites.delete(key);
+            }),
+          ),
+        ),
+      );
+      // SAFETY: the work sets the answer before it settles, whether the service wrote or refused the row.
+      return answered.value as Answer;
+    });
 }

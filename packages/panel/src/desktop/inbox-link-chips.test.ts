@@ -106,6 +106,7 @@ function item(id: string, agentId: string, words: string): InboxItem {
 function waitingSweep(waiting: InboxItem, workspaceId: string | undefined): AppInboxTasklessItem {
   return {
     ...waitingOf(waiting),
+    updatedAt: waiting.updatedAt,
     agentTitle: "Sweep the flaky tests",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,

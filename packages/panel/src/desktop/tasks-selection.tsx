@@ -1,6 +1,13 @@
-import { TASK_STATUS, TASK_STATUS_ORDER } from "@luke/features/task-wire";
-import { countWords, TERM } from "@luke/features/words";
-import { type SelectionAct, selectionMenu, TaskStatusMark } from "@luke/ui";
+import { countWords, IRREVERSIBLE_WORDS, TERM } from "@luke/features/words";
+import {
+  CONFIRM_LOSS,
+  ConfirmDialog,
+  type DialogQuestion,
+  nextRowOrHead,
+  type SelectionAct,
+  selectionMenu,
+  useConfirmDialog,
+} from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import {
   placeAllWrites,
@@ -9,11 +16,14 @@ import {
   unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { createContext, useId, useRef, useState } from "react";
-import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { sectionGlyph } from "./section-icon-picker.js";
+import { type SectionDialogs, useSectionDialogs } from "./sidebar-sections.js";
+import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 
 /**
  * tasks-selection.tsx -- the tasks chosen together on a page of them, the Tasks page's List and Board and the sidebar alike, and what the selection bar and a chosen row's menu do to them all.
@@ -21,9 +31,10 @@ import { sectionGlyph } from "./section-icon-picker.js";
  * Each page keeps its own selection (`useTasksSelection`): which tasks are
  * chosen, only those it still draws, so a task the filter, a fold, or the
  * service took away is never acted on and is not chosen again once back;
- * and the acts the bar offers on them all, Mark done, Set status, and, while
- * the account keeps sections in the workspace, Move to section, each answered
- * by one toast whose Undo puts every task back where it stood. A row chosen
+ * and the acts the bar offers on them all, as a task row's menu offers them
+ * for one: Status and Move to section, each answered by one toast whose Undo
+ * puts every task back where it stood, and Permanently delete, which asks
+ * first, naming how many. A row chosen
  * among several offers those same acts from its ⋯, a right-click, and the
  * menu key, under how many it acts on (`chosenRowMenu`), as a Mac's list
  * does; one chosen alone keeps its own menu. The sidebar, whose rows stand
@@ -31,13 +42,14 @@ import { sectionGlyph } from "./section-icon-picker.js";
  * `ChosenTasksContext` rather than through every group between.
  */
 
-/** What the selection bar's acts say. */
+/** What the selection bar's Move to section says beyond the sections. */
 const SELECTION_ACT = {
-  MARK_DONE: "Mark done",
-  SET_STATUS: "Set status",
-  MOVE_TO_SECTION: "Move to section",
+  NEW_SECTION: "New section…",
   NO_SECTION: "Remove from section",
 } as const;
+
+/** What a delete of every task chosen answers once the service deleted them all. */
+const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** What the toast says once tasks were moved into the section titled, or out of every section where there is none. */
 function movedNote(count: number, title: string | null): string {
@@ -93,52 +105,78 @@ export interface ChosenTasks {
 }
 
 /**
- * What the selection bar offers the tasks chosen: Mark done; Set status,
- * each status by its mark; and, while the account keeps sections in the
- * workspace, Move to section, each by its glyph, and out of every section.
- * Each acts on them all at once, then lets the selection go.
+ * What the selection bar offers the tasks chosen, as a task row's menu offers
+ * them for one: Status, each status by its mark, the one they all stand at
+ * checked; Move to section, each of the workspace's sections by its glyph,
+ * New section… to make one holding them, and out of every section; and
+ * Permanently delete, which asks first. Each acts on them all at once, then
+ * lets the selection go.
  */
 function selectionActs(
   tasks: TasksControl,
   latest: () => TasksControl,
   taskIds: readonly string[],
   toast: (notice: ReturnType<typeof undoToast>) => void,
-  onActed: () => void,
+  doors: {
+    onActed: () => void;
+    askNew: SectionDialogs["askNew"];
+    askDelete: () => void;
+  },
 ): SelectionAct[] {
+  const { onActed } = doors;
   const acted = (act: () => void) => () => {
     act();
     onActed();
   };
-  const setStatus = SELECTION_ACT.SET_STATUS;
-  const statuses = TASK_STATUS_ORDER.map((status) => ({
-    label: TASK_STATUS_WORDS[status],
-    icon: <TaskStatusMark status={status} />,
-    onSelect: acted(() => tasks.onSettleTasks(taskIds, status)),
-  }));
+  const chosen = tasks.tasks.filter((task) => taskIds.includes(task.id));
+  const status = statusSubmenu(tasks, taskIds, sharedStatus(chosen), onActed);
   const workspaceId = tasks.workspace?.id;
   const sections =
     workspaceId === undefined ? [] : workspaceSections(tasks.taskSections, workspaceId);
   const move = (sectionId: string | null) =>
     acted(() => moveToSection(tasks, latest, taskIds, sectionId, toast));
-  const sectionMenu = [
-    sections.map((section) => ({
-      label: section.title,
-      icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
-      onSelect: move(section.id),
-    })),
-    [{ label: SELECTION_ACT.NO_SECTION, onSelect: move(null) }],
+  const members = taskIds.map((id) => ({ agent: false, id }));
+  const put = (sectionId: string) =>
+    placeAllWrites(latest().taskSections, members, sectionId, Date.now());
+  const sectionMenu = (workspace: string) => [
+    [
+      ...sections.map((section) => ({
+        label: section.title,
+        icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
+        onSelect: move(section.id),
+      })),
+      { label: SELECTION_ACT.NEW_SECTION, onSelect: acted(() => doors.askNew(workspace, put)) },
+    ],
+    ...(sections.length === 0 ? [] : [[{ label: SELECTION_ACT.NO_SECTION, onSelect: move(null) }]]),
   ];
   return [
     {
-      label: SELECTION_ACT.MARK_DONE,
-      icon: <GLYPH.DONE />,
-      onAct: acted(() => tasks.onSettleTasks(taskIds, TASK_STATUS.DONE)),
+      label: status.label,
+      ...(status.icon === undefined ? {} : { icon: status.icon }),
+      menu: [status.items],
     },
-    { label: setStatus, icon: <TaskStatusMark status={TASK_STATUS.TODO} />, menu: [statuses] },
-    ...(sections.length === 0
+    ...(workspaceId === undefined
       ? []
-      : [{ label: SELECTION_ACT.MOVE_TO_SECTION, icon: <GLYPH.MOVE />, menu: sectionMenu }]),
+      : [{ ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION), menu: sectionMenu(workspaceId) }]),
+    { ...commandHead(PANEL_COMMAND.DELETE_TASK), danger: true, onAct: doors.askDelete },
   ];
+}
+
+/**
+ * The question Permanently delete asks of the tasks chosen, naming how many.
+ * Each goes with its board and transcript, which nothing in the app brings
+ * back.
+ */
+function deleteChosenQuestion(count: number): DialogQuestion {
+  const one = count === 1;
+  const named = countWords(count, TERM.TASK);
+  return {
+    title: `Permanently delete ${named}?`,
+    body: `${one ? "The task and its board and transcript" : `The ${named} and their boards and transcripts`} will be deleted. ${IRREVERSIBLE_WORDS}`,
+    verb: "Permanently delete",
+    running: "Deleting",
+    loss: CONFIRM_LOSS.IRREVERSIBLE,
+  };
 }
 
 /** A page's selection of its tasks, as `useTasksSelection` keeps it. */
@@ -154,6 +192,8 @@ export interface TasksSelection {
   readonly acts: readonly SelectionAct[];
   /** The selection a row of the task stands in, where it is one of several chosen; none otherwise. */
   readonly chosenOf: (taskId: string) => ChosenTasks | undefined;
+  /** The questions its acts ask, Permanently delete and New section, which the page draws beside the bar. */
+  readonly dialog: React.JSX.Element;
 }
 
 /**
@@ -171,7 +211,37 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
   const selected: ReadonlySet<string> = new Set([...chosen].filter((id) => drawn.has(id)));
   if (selected.size !== chosen.size) setChosen(selected);
   const onClear = () => setChosen(new Set());
-  const acts = selectionActs(tasks, () => latest.current, [...selected], toast, onClear);
+  const sections = useSectionDialogs(tasks, tasks.shown);
+  // The tasks Permanently delete was asked of, held as it asks, so a selection changed meanwhile deletes none it never named.
+  const [doomed, setDoomed] = useState<readonly string[]>([]);
+  // Note that a refusal leaves only the tasks refused asked of, so Retry sends none already deleted.
+  const deletion = useConfirmDialog(
+    { subject: doomed.length > 0, surfaceOpen: tasks.shown },
+    async () => {
+      const answers = await Promise.all(doomed.map((id) => latest.current.onDeleteTask(id)));
+      const refused = doomed.filter(
+        (_, at) => answers[at]?.status !== ACTION_RESULT_STATUS.ACCEPTED,
+      );
+      if (refused.length === 0) {
+        onClear();
+        return ACCEPTED;
+      }
+      setDoomed(refused);
+      // Note that the tasks deleted leave the selection now, rather than once the list stops drawing them.
+      setChosen(
+        (held) => new Set([...held].filter((id) => refused.includes(id) || !doomed.includes(id))),
+      );
+      return answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED;
+    },
+  );
+  const acts = selectionActs(tasks, () => latest.current, [...selected], toast, {
+    onActed: onClear,
+    askNew: sections.askNew,
+    askDelete: () => {
+      setDoomed([...selected]);
+      deletion.ask();
+    },
+  });
   // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
   const several: ChosenTasks | undefined =
     selected.size > 1 ? { count: selected.size, acts } : undefined;
@@ -182,6 +252,17 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
     onClear,
     acts,
     chosenOf: (taskId) => (several !== undefined && selected.has(taskId) ? several : undefined),
+    dialog: (
+      <>
+        <ConfirmDialog
+          open
+          confirm={deletion}
+          question={deleteChosenQuestion(doomed.length)}
+          restoreTo={nextRowOrHead}
+        />
+        {sections.dialog}
+      </>
+    ),
   };
 }
 
