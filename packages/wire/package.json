@@ -3,11 +3,10 @@
   "version": "0.23.0",
   "private": true,
   "type": "module",
-  "description": "The vocabulary every side speaks and the Schema tooling it is declared with: JSON, action results, turns, message metadata, UI message parts, conversation lines, app-setting ids",
+  "description": "The vocabulary every side speaks and the Schema tooling it is declared with: JSON, action results, turns, message metadata, UI message parts, app-setting ids",
   "exports": {
     ".": "./src/index.js",
     "./app-settings": "./src/app-settings/index.js",
-    "./conversation": "./src/conversation/conversation.js",
     "./effect": "./src/effect/index.js",
     "./host-ids": "./src/host-ids.js",
     "./testing": "./src/testing/index.js",

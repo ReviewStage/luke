@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import type { InlineRename } from "@luke/ui/use-inline-rename";
-import { memo, useLayoutEffect, useRef } from "react";
+import { memo, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -49,6 +49,7 @@ import {
   AddTabSkeleton,
   DoorsTab,
   type HeldTranscripts,
+  type ShownTab,
   type TabDoors,
   type TabLook,
   type TabPin,
@@ -133,6 +134,7 @@ function RenamableTab({
   rename,
   field,
   slot,
+  onShown,
 }: {
   look: TabLook;
   doors: TabDoors;
@@ -142,6 +144,8 @@ function RenamableTab({
   field?: { label: string; maxLength: number } | undefined;
   /** The toolbar's slot the chosen tab's ⋯ stands in. */
   slot?: HTMLElement | null | undefined;
+  /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
+  onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
   const editing = rename?.editing === true;
@@ -167,6 +171,7 @@ function RenamableTab({
       editor={editor}
       tabRef={tab}
       slot={slot}
+      onShown={onShown}
     />
   );
 }
@@ -174,8 +179,9 @@ function RenamableTab({
 /**
  * An agent's tab, whose menu offers the agent's own actions
  * (`agent-actions.tsx`), renamed in place while its task is not archived:
- * the task's column's, and the side panel's beside the Inbox, which hears
- * the tab's whole doors (`onDoors`) for a phone's header to offer them.
+ * the task's column's, and the side panel's beside the Inbox; while it is
+ * the tab shown, a phone's header is handed it, whole doors and all, to
+ * offer what its ⋯ would (`DoorsTab`'s `onShown`).
  */
 export function AgentMenuTab({
   agent,
@@ -186,7 +192,7 @@ export function AgentMenuTab({
   keys,
   terminals,
   slot,
-  onDoors,
+  onShown,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -198,8 +204,8 @@ export function AgentMenuTab({
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
   slot: HTMLElement | null | undefined;
-  /** Hears the tab's doors with the agent's own in them as each draw makes them, and none once the tab is gone. */
-  onDoors?: ((agentId: string, doors: TabDoors | undefined) => void) | undefined;
+  /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
+  onShown: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const actions = useAgentActions(agent, agents, {
     label: look.label,
@@ -226,8 +232,6 @@ export function AgentMenuTab({
     FOCUSED_OFFER,
   );
   const whole: TabDoors = { ...doors, ...actions.doors };
-  useLayoutEffect(() => onDoors?.(agent.id, whole));
-  useLayoutEffect(() => () => onDoors?.(agent.id, undefined), [onDoors, agent.id]);
   return (
     <>
       <RenamableTab
@@ -236,6 +240,7 @@ export function AgentMenuTab({
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
+        onShown={onShown}
       />
       {actions.dialog}
     </>
@@ -471,6 +476,7 @@ export function MainTabStrip({
   shown,
   onOpenTerminal,
   slot,
+  onShown,
 }: {
   task: TaskSummary;
   main: MainTabsControl;
@@ -492,6 +498,8 @@ export function MainTabStrip({
   onOpenTerminal?: ((agentId: string) => void) | undefined;
   /** The toolbar's slot the chosen agent's ⋯ is drawn into; none where the toolbar keeps none, as a phone's. */
   slot?: HTMLElement | null | undefined;
+  /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the agent's ⋯ would (`task-pane-switcher.tsx`); none where the toolbar draws the ⋯. */
+  onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -559,7 +567,12 @@ export function MainTabStrip({
       >
         {strip.map((entry) =>
           entry.agent === undefined ? (
-            <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry)} />
+            <DoorsTab
+              key={tabKey(entry.tab)}
+              look={entry.look}
+              doors={doorsOf(entry)}
+              onShown={onShown}
+            />
           ) : (
             <AgentMenuTab
               key={tabKey(entry.tab)}
@@ -571,6 +584,7 @@ export function MainTabStrip({
               keys={keys}
               terminals={{ onOpenTerminal }}
               slot={slot}
+              onShown={onShown}
             />
           ),
         )}

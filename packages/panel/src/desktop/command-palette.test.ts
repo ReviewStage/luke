@@ -1677,11 +1677,12 @@ function itemChord(label: string): string | null {
   return item.querySelector(".luke-shortcut")?.textContent ?? null;
 }
 
-test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none in either", () => {
+test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", () => {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -1700,13 +1701,13 @@ test("a task's command wears the same chord in ⌘K as in the open task's ⋯, �
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
-  const more = host.querySelector<HTMLButtonElement>('[aria-label="Task actions"]');
-  assert.ok(more, "the task's ⋯ is drawn");
+  // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
+  const more = host.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button");
+  assert.ok(more, "the Plan tab's ⋯ is drawn");
   act(() => more.click());
   assert.equal(deleteKeys, "⌘⌫");
   assert.equal(itemChord("Permanently delete"), deleteKeys);
   assert.equal(doneKeys, null);
-  assert.equal(itemChord("Mark done"), doneKeys);
   assert.equal(copyKeys, "⌥⌘C");
   assert.equal(itemChord("Copy plan"), copyKeys);
 });

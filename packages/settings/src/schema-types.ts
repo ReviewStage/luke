@@ -3,7 +3,6 @@ import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
-import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {
   /** Who is signed in and the ways out, the page Settings opens on. */
@@ -75,8 +74,6 @@ export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETT
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   LOGIN_ITEM: "login-item",
-  VOICE: "voice",
-  MEDIA_DUCK: "media-duck",
   USAGE_DATA: "usage-data",
 } as const;
 
@@ -111,8 +108,8 @@ export interface SettingGuardResult<Value> {
  * can no longer lead to a page without its row.
  */
 export interface SettingsVisibility {
-  /** The runtime facts a row's own condition is judged from, and the experiments the account has on. */
-  settings: RuntimeStatus & { experiments: ExperimentChoices };
+  /** The experiments the account has on, which a gated feature's row stands on. */
+  settings: { experiments: ExperimentChoices };
   /** Whether the Account section stands. */
   accountDrawn: boolean;
   /** What the platform offers, which a platform feature's row stands on. */

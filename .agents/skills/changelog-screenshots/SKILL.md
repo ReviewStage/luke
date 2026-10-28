@@ -18,6 +18,18 @@ workspace writes code and reviews pictures; with the workspace's file sync on,
 anything under its `.context/` appears in the workspace's synced copy on the
 Mac (`$S` below), and nothing syncs back.
 
+Without file sync (a Luke coding agent's sandbox), files cross through scratch
+refs on GitHub, never a command line, which cannot carry a patch of pictures:
+the cloud commits the staged worktree and pushes it to
+`refs/luke-shots/<tag>`, and the Mac fetches it into its clone and diffs it
+against the tag for `build.sh`; the Mac commits its previews and finished PNGs
+through a temporary index (`GIT_INDEX_FILE`, `hash-object` on absolute paths,
+`write-tree`, `commit-tree`) and pushes them to `refs/luke-shots/out`, which
+leaves the developer's checkout untouched. A ref outside `refs/heads` builds no
+Vercel Preview. Delete every scratch ref once the pictures land. The helpers
+run from a copy of `origin/main`'s skill (`git archive`), not the developer's
+own checkout.
+
 ## 1. Plan the shots
 
 Read the release's `CHANGELOG.md` entry and write a shot list in
@@ -128,9 +140,20 @@ Every picture, whatever it shows:
 Each shot's agent verifies in the cloud before anything reaches the Mac:
 `pnpm typecheck`, `pnpm build` (esbuild only; `build:native` needs macOS), and a
 throwaway jsdom render of the shot that checks its key text and the absence of
-"1969", deleted before the diff. Merge the shots by copying each agent's
+"1969", deleted before the diff. Where the sandbox refuses Electron (its
+single-instance lock needs a socket the sandbox may not grant), a release
+from 0.21.0 on previews instead in headless Chromium through the web app's
+fixture switch: `apps/web`'s `vite` and `/app.html?fixture=shot-<name>` stage
+the same shot module, the panel only. Merge the shots by copying each agent's
 `shots/` files into one worktree over the foundation, not by stacking patches:
 an untracked `shots/` folder makes `git diff` patches overlap.
+
+A shot module never imports a value from `tasks/use-tasks-tab.ts` (type
+imports are fine): that module imports the shot registry, so the cycle leaves
+a constant undefined at load and every shot draws a blank window. Name such a
+value by its literal instead. A menu, picker, or popover a step opens closes
+when the capture activates the window; reopen it from an interval or a
+`MutationObserver` until the capture, as `row-menu.ts` and `formatting.ts` do.
 
 ## 3. Build and capture on the Mac
 
@@ -160,7 +183,32 @@ window") while the screen is locked: check
 developer to unlock, and keep the display awake with `caffeinate -d -i -t 3600`
 for the batch. The first launch after a build may still be downloading
 Electron's binary, so capture again if that one fails. A batch of ten takes about two minutes after a
-three-minute build.
+three-minute build. `window.sh` captures 8 seconds after launch; a shot that
+stages late, such as a menu reopened after the activation, takes
+`LUKE_SHOT_SETTLE=12` or more.
+
+### Phone pictures (0.21.0 on)
+
+From 0.21.0 the web app draws the panel on fixture data at
+`/app.html?fixture=<profile>`, a shot profile among them, so a phone picture
+is the staged web app in Safari on an iPhone simulator. Check out and install
+the release with its staging (`LUKE_SHOT_PATCH_DIST=0 build.sh`), then:
+
+```sh
+bash $S/.agents/skills/changelog-screenshots/scripts/phone.sh ~/luke-shots/<v>/phone.png shot-<name>
+python3 $S/.agents/skills/changelog-screenshots/scripts/frame-phone.py ~/luke-shots/<v>/phone.png out/<name>.png
+```
+
+`phone.sh` serves the worktree's web app, boots the simulator (iPhone 17, dark,
+9:41), opens the page twice (the first load transforms every module, so it
+takes over a minute), and writes the device screen with its rounded mask.
+`frame-phone.py` cuts Safari's toolbar from its foot, so the address never
+shows, and lays the phone on the same wallpaper at the standard height, rising
+from the picture's foot. Capture only the screen: Xcode 27 replaces
+Simulator.app with DeviceHub, whose window lists the developer's own devices.
+0.22.0's sheet lit its first row even when opened with touch pointer events
+and a `detail: 1` click, which looks like the sheet's own first focus; check
+that against a real tap before staging around it.
 
 ### The notch era (before 0.7.0)
 

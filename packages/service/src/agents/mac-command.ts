@@ -13,6 +13,7 @@ import {
 } from "@luke/database/models/mac-command-store";
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
@@ -24,7 +25,8 @@ import {
 } from "@luke/features/mac-command-wire";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
+import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
+import { heldUntil } from "../http/held-read.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
@@ -66,7 +68,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
 const MAC_COMMAND_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
-  /** How often a held read, and a call waiting on its result, looks again. */
+  /** How often a held read, and a call waiting on its result, looks again where Luke Sync cannot wake it. */
   POLL: Duration.millis(500),
   /** How lately a Mac must have read for a call to count it listening: one hold, and room for the next read to arrive. */
   LISTENER_FRESH: Duration.seconds(45),
@@ -192,7 +194,12 @@ function answered(result: MacCommandResult): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.RAN, ...result };
 }
 
-/** The command's result once a Mac settles it, looked for until the deadline; nothing past it. */
+/** The account's topic, which every write to its commands notifies (`macCommandSync`): a command queued, claimed, settled, or withdrawn. */
+function commandTopics(userId: string): readonly SyncTopic[] {
+  return [[TOPIC.ACCOUNT, userId]];
+}
+
+/** The command's result once a Mac settles it, looked for again as each write to the account's commands lands, until the deadline; nothing past it. */
 function awaitedResult(
   userId: string,
   queued: MacCommand,
@@ -201,13 +208,15 @@ function awaitedResult(
     Duration.seconds(queued.timeoutSeconds),
     MAC_COMMAND_SERVICE.ANSWER_GRACE,
   );
-  return macCommandResult(userId, queued.id).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL),
-      until: Option.isSome,
-    }),
-    Effect.timeoutOption(deadline),
-    Effect.map(Option.flatten),
+  return Effect.map(
+    heldUntil(
+      macCommandResult(userId, queued.id),
+      Option.isSome,
+      commandTopics(userId),
+      MAC_COMMAND_SERVICE.POLL,
+      deadline,
+    ),
+    (held) => Option.flatMap(held, ({ read }) => read),
   );
 }
 
@@ -294,9 +303,11 @@ export function claimedMacCommand(
 /**
  * The Mac's held read, naming the kinds it runs: it is counted listening
  * for them as the read arrives, and answered with every waiting command of
- * those kinds claimed for it as soon as one waits, or with none once the
- * hold ends. A command of any other kind is left waiting for a Mac that
- * runs it, or for its call to give up on it.
+ * those kinds claimed for it as soon as one waits, looked for again as each
+ * write to the account's commands lands, or with none once the hold ends. A
+ * command of any other kind is left waiting for a Mac that runs it, or for
+ * its call to give up on it. Note that a command ageing out of the claim
+ * window wakes nothing, because it only leaves what the read waits for.
  */
 export function macCommandsFor(
   userId: string,
@@ -308,9 +319,12 @@ export function macCommandsFor(
   );
   return markMacListening(userId).pipe(
     Effect.andThen(
-      Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since, kinds)).pipe(
-        Effect.repeat({ schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL), until: (any) => any }),
-        Effect.timeoutOption(MAC_COMMAND_SERVICE.HOLD),
+      heldUntil(
+        Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since, kinds)),
+        (any) => any,
+        commandTopics(userId),
+        MAC_COMMAND_SERVICE.POLL,
+        MAC_COMMAND_SERVICE.HOLD,
       ),
     ),
     Effect.andThen(Effect.flatMap(queuedSince, (since) => claimMacCommands(userId, since, kinds))),

@@ -4,7 +4,6 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@luke/features/analytics";
-import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import type { UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
@@ -74,18 +73,6 @@ export const BRIDGE = {
     channel: "app:state-request",
     args: noArgs,
     result: result<AppStateSnapshot>(isAppStateSnapshot),
-  }),
-  /**
-   * One tapped live event for the development trace. Fire-and-forget on
-   * purpose: the tap must cost the conversation nothing, and the main process
-   * simply drops it when no traced run is on — which is every packaged run,
-   * because the writer only exists behind the unpackaged `LUKE_TRACE_DIR`
-   * gate.
-   */
-  recordAgentTrace: entry({
-    kind: "send",
-    channel: "app:record-agent-trace",
-    args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({

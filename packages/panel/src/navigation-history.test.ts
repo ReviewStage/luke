@@ -815,7 +815,6 @@ test("an Inbox told no column of its own until an item stands alone in it takes 
         open: true,
         chosen,
         single: chosen !== undefined,
-        listed: false,
       },
     });
   const window = mount(base);

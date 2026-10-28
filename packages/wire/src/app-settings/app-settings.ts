@@ -8,10 +8,13 @@ import { Schema } from "effect";
  * longer offers stay, so a count an older build still sends under one validates.
  */
 export const APP_SETTING_ID = {
+  /** Offered by no build: the voice a call spoke with, removed with calls. */
   VOICE: "voice",
+  /** Offered by no build: a call's captions, removed before calls were. */
   VOICE_CAPTIONS: "voice_captions",
   /** Offered by no build: the Video calls experiment's Avatar picker, removed with video calls. */
   VIDEO_AVATAR: "video_avatar",
+  /** Offered by no build: Quiet Music and Spotify during a call, removed with calls. */
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
   QUIET_DURING_MEETINGS: "quiet_during_meetings",

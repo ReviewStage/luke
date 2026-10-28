@@ -3,18 +3,16 @@ import { Effect, Fiber, Ref } from "effect";
 
 /**
  * The explicit quit, where one concern must not decide another's fate: the
- * counted events and the live session's close each ride beside the run drain
- * rather than inside it.
+ * counted events' last flush rides beside the run drain rather than inside it.
  */
 
 /**
  * A step that begins beside the drain rather than inside it: the first ask
  * forks it, every later ask finds the fiber already running, and what waits
- * on it joins that one fiber. A fork rather than a sequence, because both
- * wrappers below begin their work at one step of the quit and wait for it at
+ * on it joins that one fiber. A fork rather than a sequence, because the
+ * wrapper below begins its work at one step of the quit and waits for it at
  * another; an outcome of either kind is swallowed, since a flush that failed
- * and a session that would not close are counts nobody has rather than quits
- * that failed.
+ * is a count nobody has rather than a quit that failed.
  */
 interface BegunOnce {
   readonly begin: Effect.Effect<void>;
@@ -62,30 +60,6 @@ export function shutdownStepsFlushingEvents(
     closeAdmissions: Effect.andThen(steps.closeAdmissions, flush.begin),
     cancelActive: steps.cancelActive,
     awaitSettled: Effect.all([steps.awaitSettled, flush.settled], {
-      concurrency: "unbounded",
-      discard: true,
-    }),
-    persistUnresolved: steps.persistUnresolved,
-  }));
-}
-
-/**
- * The explicit quit's steps with the live voice session's graceful close
- * folded in. The close begins with the cancellations, so the session stops
- * taking appends the moment the runs stop, and is waited for only inside the
- * coordinator's one deadline beside them: a session whose final event never
- * comes delays the quit by nothing more than the drain already allows, and
- * its usage stands unconfirmed exactly as a lost connection's would. Nothing
- * of the session continues after an intentional quit.
- */
-export function shutdownStepsClosingLiveSession(
-  steps: GatewayShutdownSteps,
-  closeSession: Effect.Effect<void>,
-): Effect.Effect<GatewayShutdownSteps> {
-  return Effect.map(begunOnce(closeSession), (close) => ({
-    closeAdmissions: steps.closeAdmissions,
-    cancelActive: Effect.andThen(close.begin, steps.cancelActive),
-    awaitSettled: Effect.all([steps.awaitSettled, close.settled], {
       concurrency: "unbounded",
       discard: true,
     }),

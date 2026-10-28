@@ -11,18 +11,11 @@ import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { RUN_EVENT, RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
-import { Duration, Effect, Option, Stream } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  EveUnreachable,
-} from "../agents/eve-host/eve-sessions.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching } from "../testing/github-app-fake.js";
+import { recordingEve, sentTo } from "../testing/recording-eve.js";
 import { OPERATOR_WAKE_SWEEP, sweepOperatorWakes } from "./operator-wake-sweep.js";
 
 /**
@@ -36,45 +29,6 @@ import { OPERATOR_WAKE_SWEEP, sweepOperatorWakes } from "./operator-wake-sweep.j
 
 const T0 = new Date("2026-10-22T09:00:00Z").getTime();
 const HOUR_MS = Duration.toMillis(OPERATOR_WAKE_SWEEP.HOLD);
-
-/** eve's coding-agent service, writing down every message sent, by session, or refusing every send. */
-function fakeEve(refusing = false) {
-  const sent: { readonly sessionId: string; readonly message: EveMessage }[] = [];
-  const sessions: AgentSessions = {
-    open: () =>
-      Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` }),
-    send: (sessionId, message) =>
-      refusing
-        ? Effect.fail(
-            new EveUnreachable({
-              // SAFETY: the client's own error shape, built by the fake at the transport it stands for.
-              cause: {
-                _tag: "RequestError",
-                reason: { _tag: "TransportError" },
-                message: "refused",
-              } as never,
-            }),
-          )
-        : Effect.sync(() => {
-            sent.push({ sessionId, message });
-            return {
-              outcome: EVE_SEND_OUTCOME.ACCEPTED,
-              sessionId,
-              deliveryId: randomUUID(),
-            } as const;
-          }),
-    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
-    reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
-  };
-  return { sent, eveFor: () => Effect.succeed(sessions) };
-}
-
-/** The words of a message sent to eve. */
-function sentText(message: EveMessage["message"]): string {
-  if (!Array.isArray(message)) return message;
-  return message.map((part) => (part.type === "text" ? part.text : "")).join("\n");
-}
 
 /** A member of a fresh workspace, their operator with its eve session recorded, and one of their agents. */
 const openMember = Effect.gen(function* () {
@@ -145,21 +99,15 @@ const failedAt = (agent: CodingAgent, at: number) =>
   });
 
 /** One sweep at the instant given, over the eve given. */
-const sweepAt = (at: number, eve: ReturnType<typeof fakeEve>) =>
+const sweepAt = (at: number, eve: ReturnType<typeof recordingEve>) =>
   sweepOperatorWakes(eve.eveFor, new Date(at)).pipe(Effect.provide(githubReaching([]).layer));
-
-/** The words the session was sent, in order. */
-const sentTo = (eve: ReturnType<typeof fakeEve>, sessionId: string) =>
-  eve.sent
-    .filter((each) => each.sessionId === sessionId)
-    .map((each) => sentText(each.message.message));
 
 it.layer(getTestDB())("the wake of an operator whose member's agent failed", (it) => {
   it.effect(
     "a failure wakes the operator once, a second within the hour does not, and one past the hour does",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
+        const eve = recordingEve();
         const { agent, sessionId } = yield* openMember;
 
         yield* failedAt(agent, T0);
@@ -181,8 +129,8 @@ it.layer(getTestDB())("the wake of an operator whose member's agent failed", (it
 
   it.effect("a wake eve refused holds no hour, and is sent at the next sweep", () =>
     Effect.gen(function* () {
-      const refusing = fakeEve(true);
-      const eve = fakeEve();
+      const refusing = recordingEve(true);
+      const eve = recordingEve();
       const { agent, sessionId } = yield* openMember;
 
       yield* failedAt(agent, T0);

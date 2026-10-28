@@ -136,7 +136,7 @@ three layers. Every command handler is `<command>Command`, uniform across
   exports are `<Verb><Qualifier>` without repeating the module's name:
   `skiplist.insert`, not `skiplistInsert` inside `skiplist.ts`.
 - Every entry point of one kind has the same shape of name. Route handlers,
-  brain tools, IPC handlers: each family has one pattern and no exceptions.
+  agent tools, IPC handlers: each family has one pattern and no exceptions.
 - Public versus private is signaled by `export` and nothing else. No
   underscore, no `internal` suffix, no naming marker.
 - Short names where the type is obvious from context: Redis uses `c` for

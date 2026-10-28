@@ -37,7 +37,7 @@ export interface RunnerSelf {
 /** What a harness's launch is handed. */
 export interface LaunchContext<Config> {
   readonly config: Config;
-  /** Luke's stdin lines after the config, ended when Luke closes stdin. */
+  /** Luke's lines after the config: stdin's, ended when Luke closes stdin, and those read from Luke where the config names the read (`lines.ts`). */
   readonly lines: Queue.Dequeue<string, Cause.Done>;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly bearer: Redacted.Redacted;

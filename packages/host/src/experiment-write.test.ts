@@ -48,7 +48,6 @@ const signedInStore = Effect.gen(function* () {
   const store = new SettingsStore({
     directory: () => directory,
     cipher: CIPHER,
-    overrides: { voice: undefined },
     fileSystem: yield* FileSystem.FileSystem,
     path: yield* Path.Path,
   });

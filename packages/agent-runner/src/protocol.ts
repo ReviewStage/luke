@@ -5,7 +5,8 @@
  * service that launches the runner (P08) and the route that takes its events
  * (P09) import it without the SDK behind it. Every line on stdin is one JSON
  * object: the first is the config, each later one a message, a stop, a model
- * change, or a retire.
+ * change, or a retire. A config that names `linesUrl` has the runner read
+ * the later lines from Luke instead (`RUNNER_LINES`).
  *
  * The config says which harness the launch runs: Claude Code (P05), or Codex
  * through `codex app-server` (P20). Secrets never travel in argv or on
@@ -161,6 +162,33 @@ export const CODEX_TOKEN_COMMAND = "codex-token";
 export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });
 export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
 
+/**
+ * How a runner reads Luke's lines past its config where its config names
+ * `linesUrl`, rather than taking them on its stdin, so a line stands at
+ * Luke until the runner says it took it: a GET under the runner's bearer
+ * naming the launch by its first event number and the place of the last
+ * line it read, which Luke holds open until a line past it is queued or the
+ * hold ends, answering the lines past it in order, none at the hold's end.
+ * A message line the runner takes it says it took by its ACCEPTED event, as
+ * ever; any other line is read once the next read names a place past it.
+ * The launch is handed, beside its own, the message lines an earlier launch
+ * never took, so a launch that ended before taking one hands it on.
+ */
+export const RUNNER_LINES = {
+  /** The query's names: the launch's first event number, and the place of the last line read. */
+  QUERY: { LAUNCH: "launch", AFTER: "after" },
+  /** How long Luke holds a read with nothing past its place, as it holds a device's. */
+  HOLD_MS: 20 * 1_000,
+} as const;
+
+const LinePlaceSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+
+/** What Luke answers a read of the runner's lines: the lines past its place, in order, each with its own place. */
+export const RunnerLinesAnswerSchema = Schema.Struct({
+  lines: Schema.Array(Schema.Struct({ seq: LinePlaceSchema, text: Schema.String })),
+});
+export type RunnerLinesAnswer = typeof RunnerLinesAnswerSchema.Type;
+
 /** The image types the Messages API takes in a base64 image block. */
 export const IMAGE_MEDIA_TYPE = {
   PNG: "image/png",
@@ -220,6 +248,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   firstSequence: SequenceSchema,
   /** Where the runner posts its events. */
   eventsUrl: Schema.String,
+  /** Where the runner reads Luke's lines past its config, in place of its stdin (`RUNNER_LINES`); none where Luke writes them to its stdin. */
+  linesUrl: Schema.optionalKey(Schema.String),
   /** The Luke MCP server's streamable-HTTP endpoint. */
   mcpUrl: Schema.String,
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
@@ -262,6 +292,8 @@ export const CodexConfigSchema = Schema.Struct({
   rewindBefore: Schema.optionalKey(Schema.String),
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
+  /** Where the runner reads Luke's lines past its config (`RUNNER_LINES`); none where Luke writes them to its stdin. */
+  linesUrl: Schema.optionalKey(Schema.String),
   mcpUrl: Schema.String,
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),

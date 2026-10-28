@@ -26,7 +26,6 @@ import {
   RowHint,
   RowHintOptions,
   Tooltip,
-  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@luke/ui/tab-strip-model";
@@ -44,14 +43,14 @@ import { agentName, RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
-import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import type { PinnedTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { tabCard } from "./tab-card.js";
-import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
+import { PullRequestLine, RepositoryDetail } from "./task-card.js";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -185,12 +184,12 @@ function pinPullRequest(
 }
 
 /**
- * A pin as the sidebar names it, as the tab itself is named now: a Plan
- * tab's by its task's name, an agent's by the agent's name where the window
- * reads the agent (`pinAgent`), and a Changes tab's by its pull request's
- * number and title. Note that the label it was pinned under is what it falls
- * back to, because another task's agents are read only as far as its row's
- * agent lines name them.
+ * A pin as the sidebar names it, as the tab itself is named now: an
+ * agent's by the agent's name where the window reads the agent
+ * (`pinAgent`), and a Changes tab's by its pull request's number and
+ * title. Note that the label it was pinned under is what it falls back to,
+ * because another task's agents are read only as far as its row's agent
+ * lines name them.
  */
 function namedPin(
   pin: PinnedTab,
@@ -199,7 +198,6 @@ function namedPin(
   pullRequest: PinnedPullRequest | undefined,
   models: readonly CatalogModel[] | undefined,
 ): PinnedTab {
-  if (pin.tab === SIDE_PANEL_TAB.PLAN) return { ...pin, label: task.name };
   if (agent !== undefined) return { ...pin, label: agentName(agent, models) };
   return pullRequest === undefined ? pin : { ...pin, label: pullRequestLabelOf(pullRequest) };
 }
@@ -567,7 +565,6 @@ export function SidebarPinnedTab({
   const livePullRequest = pinPullRequest(kept, task, tasks);
   const agent = pinAgent(kept, task, tasks);
   const pin = namedPin(kept, task, agent, livePullRequest, tasks.agents.models);
-  const now = useMinute();
   const item = useRef<HTMLElement | null>(null);
   const gone = pinGone(pin, tasks);
   const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
@@ -577,9 +574,7 @@ export function SidebarPinnedTab({
   const drawn: PinnedRowDrawn = {
     pin,
     card:
-      pin.tab === SIDE_PANEL_TAB.PLAN ? (
-        taskCardOf(tasks, task, now)
-      ) : changesCard !== null ? (
+      changesCard !== null ? (
         changesCard
       ) : (
         <PinnedTabCard

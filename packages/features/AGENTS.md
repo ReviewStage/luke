@@ -16,9 +16,8 @@ none of which imports this one, so the edge points down.
 
 A client sits here because it speaks nothing but hosted vocabulary and holds no
 credential of its own. **Behavior that needs anything above this boundary belongs
-above it**: the hosted live session source in `@luke/voice`, the account
-preference client in `@luke/host` because the snapshot it carries is settings
-vocabulary.
+above it**: the account preference client in `@luke/host` because the
+snapshot it carries is settings vocabulary.
 
 **A request frame refuses a key it did not name; an answer ignores one a newer
 service added.** Every wire module here keeps that rule.
@@ -61,8 +60,7 @@ run stream's set. The slow step's set is one value, `TURN_SLOW_STEP`, which the
 run stream names `SLOW_STEP_KIND`.
 
 Each event is numbered from one inside its turn, so a reader that took some hears
-the rest exactly once. The service stores no event of this kind; the voice's live
-agent projects them in process from the turn row and its journal.
+the rest exactly once. The service stores no event of this kind.
 
 ## The allowlist is the privacy boundary for `/api/events`
 
