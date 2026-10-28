@@ -50,8 +50,8 @@ export interface HeldInboxes {
   readonly heldOf: (kind: ScopeKind) => HeldKind;
   /** Holds an inbox's follow for one more surface, following it for the first; the release lets it go. */
   readonly hold: (kind: ScopeKind, id: string, follow: Follow) => () => void;
-  /** Clears every inbox of `kind` that could not be read, so its surfaces follow it again. */
-  readonly retry: (kind: ScopeKind) => void;
+  /** Clears the inboxes of `kind` named, or every one, that could not be read, so their surfaces follow them again. */
+  readonly retry: (kind: ScopeKind, ids?: readonly string[]) => void;
   /** Lets go of every follow at once, keeping the items as last pushed. */
   readonly letGoAll: () => void;
 }
@@ -145,9 +145,13 @@ export function heldInboxes(options: {
         release(kind, id);
       };
     },
-    retry: (kind) => {
+    retry: (kind, ids) => {
       const was = heldOf(kind);
-      if (was.failed.size > 0) store(kind, { ...was, failed: new Set() });
+      const failed =
+        ids === undefined
+          ? new Set<string>()
+          : new Set([...was.failed].filter((id) => !ids.includes(id)));
+      if (failed.size !== was.failed.size) store(kind, { ...was, failed });
     },
     letGoAll: () => {
       for (const byId of following.values()) {

@@ -98,8 +98,9 @@ export function useFollowedInboxes(
   const store = forget || windowHeld === undefined ? own : windowHeld;
   const heldNow = () => store.heldOf(kind);
   const held = useSyncExternalStore(store.subscribe, heldNow, heldNow);
-  // The release of each inbox this surface holds now, by its id.
+  // The release of each inbox this surface holds now, by its id, and every inbox it has held since it was drawn.
   const following = useRef(new Map<string, () => void>());
+  const triedHere = useRef(new Set<string>());
 
   // Note that the wanted ids are kept as they were while they name the same inboxes, so a list
   // drawn again, or in another order, follows nothing anew.
@@ -113,6 +114,7 @@ export function useFollowedInboxes(
       if (following.current.has(id)) continue;
       const release = store.hold(kind, id, (scope, hear) => latest.current.follow(scope, hear));
       following.current.set(id, release);
+      triedHere.current.add(id);
     }
     for (const [id, release] of following.current) {
       if (now.has(id)) continue;
@@ -120,11 +122,22 @@ export function useFollowedInboxes(
       release();
     }
   }, [store, kind, wanted]);
+  // Note that an inbox that could not be read before this surface held it is tried again once, as
+  // a surface drawn anew starts clean, while one that fails under it waits for Try again.
+  const asked = [...new Set(ids)].toSorted();
+  const askedRef = useRef<readonly string[]>([]);
+  if (!sameIds(askedRef.current, asked)) askedRef.current = asked;
+  const askedIds = askedRef.current;
+  useEffect(() => {
+    const stale = askedIds.filter((id) => held.failed.has(id) && !triedHere.current.has(id));
+    if (stale.length > 0) store.retry(kind, stale);
+  }, [store, kind, askedIds, held.failed]);
   // Every inbox this surface holds is let go as the surface goes.
   useEffect(
     () => () => {
       for (const release of following.current.values()) release();
       following.current.clear();
+      triedHere.current.clear();
     },
     [store, kind],
   );

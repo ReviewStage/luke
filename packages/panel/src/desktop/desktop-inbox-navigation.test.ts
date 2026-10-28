@@ -12,6 +12,7 @@ import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxStartParams,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
@@ -116,6 +117,28 @@ test("the Inbox left and come back to under the window's root draws the rows it 
   await settle();
   act(() => world.setInboxOpen(true));
   assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
+});
+
+test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
+  const { page } = mount([], { windowRoot: true });
+  await settle();
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  );
+  act(() => world.setInboxOpen(false));
+  await settle();
+
+  act(() => world.setInboxOpen(true));
+  await settle();
+  assert.ok(
+    world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }),
+    "the failed task is followed anew",
+  );
+  assert.ok(
+    listed(page).some((row) => row.endsWith(EXPIRY.title)),
+    "its items are drawn again",
+  );
 });
 
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
