@@ -107,6 +107,7 @@ import {
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
+import type { AgentRow, RowWrite } from "./task-list-collections.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -217,6 +218,12 @@ export interface CodingAgentsDependencies {
    * carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
+  /**
+   * A change to an agent's row of the task list, drawn at once and kept or
+   * taken back as the service answers it (`TasksComposer.writeAgent`); none
+   * writes alone, drawing nothing.
+   */
+  writeAgent?: RowWrite<AgentRow>;
 }
 
 export interface CodingAgentsComposer extends Composer {
@@ -324,6 +331,10 @@ function composed(
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
   const listed = dependencies.listed ?? (() => Effect.void);
+  const writeAgent: RowWrite<AgentRow> =
+    dependencies.writeAgent ??
+    ((_agentId, _change, written) =>
+      Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer)));
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
   const memoryOf = (key: TranscriptKey): TranscriptMemory => {
@@ -649,8 +660,20 @@ function composed(
           params,
           "pinning an agent names the agent and whether it is pinned",
         );
-        const answer = yield* asked(client.pin(agentId, request));
-        if ("txid" in answer) yield* listed(answer.txid);
+        // A pin is drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it.
+        const answer = yield* writeAgent<CodingAgentAgentAnswer>(
+          agentId,
+          (row) =>
+            request.pinned
+              ? {
+                  pinnedAt: row.pinnedAt ?? kernel.now(),
+                  pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
+                }
+              : { pinnedAt: null, pinPosition: null },
+          Effect.map(asked(client.pin(agentId, request)), (answered) =>
+            "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
+          ),
+        );
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR]: (params) =>

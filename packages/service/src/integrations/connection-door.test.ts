@@ -254,7 +254,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
   );
 
   it.effect(
-    "a connected integration lists its provider's tools as the provider listed them, and one the member has not connected lists none",
+    "a connected integration lists its provider's tools as the provider listed them, and one the member has not connected lists none, with no warning",
     () =>
       Effect.gen(function* () {
         const member = yield* memberWithLinear;
@@ -282,11 +282,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         assert.equal(heard.bearers.length, bearersForLinear);
         assert.deepEqual(
           logged.filter((line) => line.includes("notion")),
-          [
-            JSON.stringify([
-              `integration server notion lists no tools: ${integrationUnavailable(NOTION).NOT_CONNECTED}`,
-            ]),
-          ],
+          [],
         );
       }),
   );

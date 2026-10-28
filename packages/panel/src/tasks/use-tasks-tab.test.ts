@@ -34,8 +34,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settin
 import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
-import { PENDING_LIMIT } from "@luke/ui/pending-values";
-import { DOCUMENT_REGION, SETTLED_STATUS, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -416,120 +415,39 @@ const PLATFORM = {
   github: null,
 };
 
-test("a task's name, pin, and status still waiting on the service are let go with a sign-out, so the next account never wears them", async () => {
-  // The service never answers, as when the window signs out with the presses still out.
-  const never = () => new Promise<boolean>(() => undefined);
+test("a member assigned from a chip goes to main with the name the reader knows them by, and a refusal answers so", async () => {
   const tab = mount(
     { shown: true, tasks: listRead([listed()]) },
-    {
-      [ACT_KIND.TASKS_RENAME]: never,
-      [ACT_KIND.TASKS_PIN]: never,
-      [ACT_KIND.TASKS_SET_STANDING]: never,
-    },
+    { [ACT_KIND.TASKS_SET_STANDING]: () => Promise.resolve(false) },
   );
-  const drawn = () => tab.control().listed.tasks.find((task) => task.id === TASK.id);
-
-  await act(async () => {
-    void tab.control().onRenameTask(TASK.id, "Secret launch");
-    tab.control().onMarkTask(TASK.id, TASK_MARK.PIN);
-    tab.control().onSettleTasks([TASK.id], TASK_STATUS.DONE);
-  });
-  const pending = drawn();
-  // Note that the list still holds the task as the window signs out, before main's view empties.
-  tab.stand({ signedIn: false });
-  tab.stand({ signedIn: true });
-
-  assert.equal(pending?.name, "Secret launch");
-  assert.ok(pending?.pinnedAt !== undefined, "the pin was drawn");
-  assert.equal(pending?.status, TASK_STATUS.DONE);
-  assert.equal(drawn()?.name, TASK.name);
-  assert.equal(drawn()?.pinnedAt, undefined);
-  assert.equal(drawn()?.status, listed().status);
-});
-
-test("a task given a name or a status here is pending until the view carries it, so a list held still moves it at once", async () => {
-  const never = () => new Promise<boolean>(() => undefined);
-  const tab = mount(
-    { shown: true, tasks: listRead([listed()]) },
-    { [ACT_KIND.TASKS_RENAME]: never, [ACT_KIND.TASKS_SET_STANDING]: never },
-  );
-  const before = tab.control().pendingTasks;
-
-  await act(async () => {
-    void tab.control().onRenameTask(TASK.id, "Launch plan");
-  });
-  const renaming = tab.control().pendingTasks;
-  tab.stand({ tasks: listRead([{ ...listed(), name: "Launch plan" }]) });
-  const named = tab.control().pendingTasks;
-  await act(async () => {
-    tab.control().onSettleTasks([TASK.id], TASK_STATUS.DONE);
-  });
-
-  assert.deepEqual([...(before ?? [])], []);
-  assert.deepEqual([...(renaming ?? [])], [TASK.id]);
-  assert.deepEqual([...(named ?? [])], []);
-  assert.deepEqual([...(tab.control().pendingTasks ?? [])], [TASK.id]);
-});
-
-test("a priority and an assignee sent from a chip or a drop are drawn at once, waiting on the view, and go back where the list stands the task once the service refuses them", async () => {
-  let answer: (kept: boolean) => void = () => undefined;
-  const tab = mount(
-    { shown: true, tasks: listRead([listed()]) },
-    {
-      [ACT_KIND.TASKS_SET_STANDING]: () =>
-        new Promise<boolean>((resolve) => {
-          answer = resolve;
-        }),
-    },
-  );
-  const drawn = () => tab.control().listed.tasks.find((task) => task.id === TASK.id);
   let kept: Promise<boolean> = Promise.resolve(true);
 
   await act(async () => {
     kept = tab
       .control()
-      .onSetTaskStanding(TASK.id, { priority: TASK_PRIORITY.URGENT, assigneeId: "user-charles" });
-  });
-  const sending = drawn();
-  const waiting = [...(tab.control().pendingTasks ?? [])];
-  await act(async () => {
-    answer(false);
-    await kept;
-  });
-
-  assert.equal(sending?.priority, TASK_PRIORITY.URGENT);
-  assert.equal(sending?.assignee?.userId, "user-charles");
-  assert.deepEqual(waiting, [TASK.id]);
-  assert.equal(drawn()?.priority, undefined);
-  assert.equal(drawn()?.assignee, undefined);
-  assert.deepEqual([...(tab.control().pendingTasks ?? [])], []);
-});
-
-it.effect(
-  "a name the service kept but the list never carries gives way to the list once its time runs out",
-  () =>
-    Effect.gen(function* () {
-      const tab = mount(
-        { shown: true, tasks: listRead([listed()]) },
-        { [ACT_KIND.TASKS_RENAME]: () => Promise.resolve(true) },
-        registryOn(yield* Clock.Clock),
+      .onSetTaskStanding(
+        TASK.id,
+        { priority: TASK_PRIORITY.URGENT, assigneeId: "user-charles" },
+        "Charles",
       );
-      const name = () => tab.control().listed.tasks.find((task) => task.id === TASK.id)?.name;
+  });
 
-      act(() => {
-        void tab.control().onRenameTask(TASK.id, "Launch plan");
-      });
-      yield* landed;
-      const drawn = name();
-      yield* passing(Duration.seconds(10));
-      const waiting = name();
-      yield* passing(PENDING_LIMIT);
-
-      assert.equal(drawn, "Launch plan");
-      assert.equal(waiting, "Launch plan");
-      assert.equal(name(), TASK.name);
-    }),
-);
+  assert.deepEqual(
+    tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_SET_STANDING),
+    [
+      {
+        kind: ACT_KIND.TASKS_SET_STANDING,
+        payload: {
+          taskId: TASK.id,
+          priority: TASK_PRIORITY.URGENT,
+          assigneeId: "user-charles",
+          assigneeName: "Charles",
+        },
+      },
+    ],
+  );
+  assert.equal(await kept, false);
+});
 
 test("New plan opens its dialog over the open plan, which stays open; a second press leaves it as it stands, only a plan that starts closes it, and leaving the tab puts it away", async () => {
   const answers = [
@@ -2632,20 +2550,12 @@ test("an agent's pin still waiting its turn when the account changes is never as
   assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
 });
 
-test("a pin dragged to a new place stands there at once, and goes back with what the drop placed on this Mac and a toast when the service refuses it", async () => {
-  const answers: ((changed: boolean) => void)[] = [];
+test("a pin dragged to a new place the service refuses puts back what the drop placed on this Mac, with a toast", async () => {
   const pinned = { ...listed(), pinnedAt: 5 };
   const tab = mount(
     { shown: true, tasks: listRead([pinned]) },
-    {
-      [ACT_KIND.TASKS_PIN]: () =>
-        new Promise((resolve) => {
-          answers.push(resolve);
-        }),
-    },
+    { [ACT_KIND.TASKS_PIN]: () => Promise.resolve(false) },
   );
-  const position = () =>
-    tab.control().listed.tasks.find((task) => task.id === TASK.id)?.pinPosition;
 
   let putBack = 0;
   await act(async () =>
@@ -2653,11 +2563,7 @@ test("a pin dragged to a new place stands there at once, and goes back with what
       putBack += 1;
     }),
   );
-  const drawn = position();
-  await act(async () => answers[0]?.(false));
 
-  assert.equal(drawn, "a1");
-  assert.equal(position(), undefined);
   assert.equal(putBack, 1);
   assert.equal(newestToastSays(), "The pin could not be moved. Try again.");
 });
@@ -2735,21 +2641,6 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
     [TASK.id],
     "the refused task's tab stays pinned, the pinned task's goes",
   );
-});
-
-test("a pin's place the service took follows the next list, even one a drag on another Mac has moved since", async () => {
-  const pinned = { ...listed(), pinnedAt: 5, pinPosition: "a0" };
-  const tab = mount(
-    { shown: true, tasks: listRead([pinned]) },
-    { [ACT_KIND.TASKS_PIN]: () => Promise.resolve(true) },
-  );
-  const position = () =>
-    tab.control().listed.tasks.find((task) => task.id === TASK.id)?.pinPosition;
-
-  await act(async () => tab.control().onMovePins([{ agent: false, id: TASK.id, position: "a1" }]));
-  tab.stand({ tasks: listRead([{ ...pinned, pinPosition: "a2" }]) });
-
-  assert.equal(position(), "a2");
 });
 
 /** A start's agent, read back where it names one. */

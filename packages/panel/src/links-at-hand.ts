@@ -14,6 +14,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { adminLinkFields } from "./admin/routing.js";
 import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
+import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { type ShownChannel, useShownChannel } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
@@ -22,7 +23,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
  *
- * ⌥⌘C copies the first, as Linear's chord copies the open issue's, and the
+ * ⇧⌘C copies the first, as Linear's chord copies the open issue's, and the
  * command palette offers each as "Copy link to <thing>". Most specific
  * first: the tab of the side panel where the keyboard is in it or the panel
  * fills the window, else the
@@ -363,10 +364,12 @@ export function usePageWorkspace(agentId: string, workspaceId: string | undefine
 }
 
 /**
- * The window's Copy link: ⌥⌘C, offered while anything has a link and the
+ * The window's Copy link: ⇧⌘C, offered while anything has a link and the
  * window is `enabled`, copying the first link at hand as the keyboard
  * stands at the press, and saying "Link copied"; and the links at hand,
- * with their copy, for the command palette to offer each.
+ * with their copy, for the command palette to offer each. The first link
+ * as the keyboard stands outside the side panel and in it is held for the
+ * menus, whose Copy link prints the chord where it copies the same.
  */
 export function useCopyLink(
   tasks: TasksControl,
@@ -396,6 +399,11 @@ export function useCopyLink(
         }
       : undefined,
   );
+  const firstLink = (sidePanelFocused: boolean): string | undefined => {
+    const first = enabled ? linksAt(sidePanelFocused)[0] : undefined;
+    return first === undefined ? undefined : linkOf(first.link.place, first.link.workspace);
+  };
+  useHoldChordLinks(firstLink(false), firstLink(true));
   const standing = linksAt(false).find((each) => each.step === true)?.link;
   return { linksAt, standing, copy, onPageWorkspace };
 }

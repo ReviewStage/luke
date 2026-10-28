@@ -248,7 +248,6 @@ function fakeService() {
   let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
   let startTxid: string | undefined;
-  let pinTxid: string | undefined;
   // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
   /** The transaction the service says wrote a sent message's row; none says none was written. */
@@ -398,7 +397,7 @@ function fakeService() {
     pin: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
-        return pinTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: pinTxid };
+        return { agent: AGENT };
       }),
     ensureOperator: (workspaceId, request) =>
       Effect.sync(() => {
@@ -675,10 +674,6 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
-    /** The transaction a pin answers it committed in; none answers none. */
-    pinCommits: (txid: string | undefined) => {
-      pinTxid = txid;
-    },
   };
 }
 
@@ -756,7 +751,6 @@ function subject(
       pages,
       askedAsTold,
       asked: service.asked,
-      pinCommits: service.pinCommits,
       startCommits: service.startCommits,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
@@ -781,24 +775,6 @@ function subject(
     };
   });
 }
-
-it.effect(
-  "a pin that answers its transaction waits for the task list to carry it before it answers",
-  () =>
-    Effect.gen(function* () {
-      const waited: (string | undefined)[] = [];
-      const { call, pinCommits } = yield* subject({
-        listed: (txid) => Effect.sync(() => void waited.push(txid)),
-      });
-      pinCommits("9101");
-
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.CODING_AGENTS_PIN, { agentId: AGENT_ID, pinned: true }),
-        { agent: AGENT, txid: "9101" },
-      );
-      assert.deepEqual(waited, ["9101"]);
-    }),
-);
 
 it.effect(
   "an ensure of the operator that made one waits for the task list to carry it before it answers",

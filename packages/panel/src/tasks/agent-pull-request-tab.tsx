@@ -510,10 +510,15 @@ function durationOf(check: PullRequestCheck): string | undefined {
   return ran < RAN_AT_LEAST_MS ? undefined : workingTime(ran);
 }
 
-/** What the side panel's toolbar ⋯ offers on the pull request: it opened on GitHub, and the page read again, dimmed while a read is out, which a refresh would only repeat. */
+/**
+ * What the side panel's toolbar ⋯ offers on the pull request: it opened on
+ * GitHub, which ⇧⌘O runs while the tab is chosen and the panel holds the
+ * keys (`side-panel.tsx`), and the page read again, dimmed while a read is
+ * out, which a refresh would only repeat.
+ */
 function pullRequestActions(url: string, reading: boolean, onRefresh: () => void): MenuAction[] {
   return [
-    commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), false),
+    commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), true),
     {
       label: "Refresh",
       icon: <RotateCwIcon aria-hidden="true" />,

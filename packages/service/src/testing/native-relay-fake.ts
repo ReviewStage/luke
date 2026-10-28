@@ -153,6 +153,7 @@ function recordingHarness(
             write("halt", sessionId);
             return true;
           }),
+        deliverWaiting: () => Effect.succeed(false),
       };
       return Option.some(Effect.succeed(sessions));
     },

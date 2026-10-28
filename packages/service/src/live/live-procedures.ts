@@ -86,6 +86,16 @@
  * more, after the plan or the agent is read as the account, so one it does
  * not reach is not found, as its held read answers; each woken by Luke Sync
  * (`taskInboxLive`, `agentInboxLive`).
+ *
+ * `GET /api/live/inbox-items?since=` answers every inbox item the account
+ * reaches as four statements: where each item stands, every open one and
+ * every settled one changed in the last week, and those changed since the
+ * reader's `since` whole, with their threads and files, as a plan's inbox
+ * carries them (`inbox-store.ts`'s `accountItemsLiveStatements`). Its poll
+ * is held on where the items stand alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`),
+ * so a reader whose `since` moved to the items it was just answered is
+ * held rather than answered again; woken by Luke Sync on the account's
+ * topic (`inboxItemsLive`).
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
@@ -101,14 +111,16 @@ import type { SyncTopic } from "@luke/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
 import { codingAgentCallIdSchema, codingAgentCursorSchema } from "@luke/features/coding-agent-wire";
 import {
+  ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
   LIVE_USER_QUERY,
   liveDigestOf,
+  liveDigestOn,
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
-import { Duration, Effect, Option, Result } from "effect";
+import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { unparsedWire } from "../core.js";
@@ -129,6 +141,7 @@ import {
   automationsLive,
   automationWorkspaceRunsLive,
   channelsLive,
+  inboxItemsLive,
   inboxLive,
   macCommandsLive,
   sidebarLive,
@@ -256,16 +269,28 @@ const heldParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends stri
   return moved(standing) ? yield* read : standing;
 });
 
+/** Where a read's rows stand as the reader's `after` names them: every part's digest, or, for a read held on some of its parts alone (`heldOn`), those parts'. */
+function standingDigest<Part extends string>(
+  queries: Record<Part, SealedLiveQueryWire>,
+  heldOn: readonly Part[] | undefined,
+) {
+  return heldOn === undefined ? liveDigestOf(queries) : liveDigestOn(queries, heldOn);
+}
+
 /**
  * Each part's rows read inline at the poll address (`pollSealer`); where
  * the reader names where they last stood (`after`), held until they move
- * past it (`heldParts`). Unavailable where the rows could not be read.
+ * past it (`heldParts`), or, where it is held on some parts alone
+ * (`heldOn`), until those move, so a part whose rows the reader's own query
+ * narrows, such as the items changed since its `since`, answers no poll
+ * that only narrowed it. Unavailable where the rows could not be read.
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   topics: readonly SyncTopic[] = NO_TOPICS,
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
+  heldOn?: readonly Part[],
 ): Effect.fn.Return<ReadParts<Part>, HostedRefusal, SqlClient.SqlClient> {
   const read = readParts(statements, (sealer) => sealer.seal);
   const after = asked[LIVE_POLL.AFTER];
@@ -273,7 +298,7 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   return yield* heldParts(
     readParts(statements, (sealer) => sealer.digest),
     read,
-    (standing) => liveDigestOf(standing.queries) !== after,
+    (standing) => standingDigest(standing.queries, heldOn) !== after,
     topics,
     look,
   );
@@ -292,11 +317,12 @@ function topicsOf<Param extends string, Part extends string>(
  * A defined live read's parts (`defineLiveQuery`), built from the params
  * its procedure bound once it admitted the caller, and held on a watch of
  * the topics those params name, or that the read looks up from them, which
- * looks again every `look` where nothing wakes it. This is how a procedure
- * answers a read Luke Sync wakes; unavailable where its statements can't be
- * built or its topics looked up.
+ * looks again every `look` where nothing wakes it, on every part or on
+ * those it is held on alone (`heldOn`, `sealedParts`). This is how a
+ * procedure answers a read Luke Sync wakes; unavailable where its
+ * statements can't be built or its topics looked up.
  */
-export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
   Part extends string,
 >(
@@ -304,13 +330,14 @@ export const liveQueryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   params: LiveParams<Param>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
+  heldOn?: readonly NoInfer<Part>[],
 ) {
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   // A read that names no `after` is answered at once, so it needs no topics to wait on.
   const held = asked[LIVE_POLL.AFTER] !== undefined;
   const topics = held ? yield* topicsOf(query, params) : NO_TOPICS;
-  return yield* sealedParts(statements.value, asked, topics, look);
+  return yield* sealedParts(statements.value, asked, topics, look, heldOn);
 });
 
 /**
@@ -339,7 +366,7 @@ function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string |
  * Unavailable where its statements can't be built or read. `onWoken` is
  * handed to the hold (`heldParts`), which a snapshot's answer does not take.
  */
-export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
   Part extends string,
 >(
@@ -352,7 +379,7 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const following = query.cursor;
   const cursor = asked[LIVE_POLL.CURSOR];
   if (following === undefined || cursor === undefined) {
-    return yield* liveQueryParts(query, params, asked, look);
+    return yield* queryParts(query, params, asked, look);
   }
   const followed: ReadonlySet<string> = new Set(following.parts);
   const polled = (how: PartRead) =>
@@ -391,6 +418,47 @@ export const liveCursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   );
 });
 
+/**
+ * A defined live read's parts, as `queryParts` and `cursorParts` read them,
+ * under a span named for the read (`web/live/<name>`). Note that every
+ * statement of the read, each look of its hold among them, runs under it,
+ * because a look resumes after a wait on no request's span, and each
+ * statement Sentry saw then was a trace of its own named for the database.
+ */
+export function liveQueryParts<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string },
+  look?: Duration.Duration,
+  heldOn?: readonly NoInfer<Part>[],
+) {
+  return queryParts(query, params, asked, look, heldOn).pipe(
+    Effect.withSpan(`web/live/${query.name}`),
+  );
+}
+
+/** A defined live read's parts in cursor mode, under the read's span as `liveQueryParts` runs one. */
+export function liveCursorParts<Param extends string, Part extends string>(
+  query: LiveQuery<Param, Part>,
+  params: LiveParams<Param>,
+  asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
+  look?: Duration.Duration,
+  onWoken?: (heardAt: number) => Effect.Effect<void>,
+) {
+  return cursorParts(query, params, asked, look, onWoken).pipe(
+    Effect.withSpan(`web/live/${query.name}`),
+  );
+}
+
+/** The instant a reader holds every item changed since, as its query spells it in epoch milliseconds; none for every item, and one of any other shape refused. */
+const sinceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  since: string | undefined,
+): Effect.fn.Return<string, HostedRefusal> {
+  if (since === undefined) return "0";
+  if (!/^\d{1,15}$/.test(since)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return since;
+});
+
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: string,
@@ -422,6 +490,19 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         inboxLive,
         { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
         input,
+      );
+    }),
+    inboxItems: signedIn.inboxItems.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const since = yield* sinceOf(input[ACCOUNT_INBOX_ITEMS.SINCE]);
+      const now = yield* Clock.currentTimeMillis;
+      const settledSince = String(now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS);
+      return yield* liveQueryParts(
+        inboxItemsLive,
+        { userId: context.userId, since, settledSince },
+        input,
+        LIVE_POLL_HOLD.LOOK,
+        ACCOUNT_INBOX_ITEMS.HELD_ON,
       );
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {

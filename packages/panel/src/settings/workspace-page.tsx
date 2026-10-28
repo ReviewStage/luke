@@ -93,7 +93,7 @@ import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { copyLinkItem } from "../copy-link-item.js";
+import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -477,8 +477,13 @@ function MemberRow({
   };
   const openPerson = useOpenPerson();
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const profileActs = [
-    copyLinkItem(copy, linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId)),
+    copyLinkItem(
+      copy,
+      linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
+      chord,
+    ),
     ...(openPerson === undefined
       ? []
       : [

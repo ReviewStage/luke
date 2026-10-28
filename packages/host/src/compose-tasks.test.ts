@@ -194,6 +194,14 @@ interface FakeService extends TasksClient {
   pinsFail: boolean;
   /** The transaction a pin's write answers it committed in, where a test names one. */
   pinTxid: string | undefined;
+  /** The transaction a task's pin answers it committed in, where a test names one. */
+  markTxid: string | undefined;
+  /** Whether a task's pin is refused, as a service that did not answer refuses it. */
+  markFails: boolean;
+  /** The transaction a task's repository change answers it committed in, where a test names one. */
+  repositoryTxid: string | undefined;
+  /** What a task pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
+  markAnswered: Effect.Effect<void>;
   /** What a pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
   pinAnswered: Effect.Effect<void>;
   /** The account's sidebar sections as the service keeps them; none where it does not answer, as before any test sets them. */
@@ -509,6 +517,10 @@ function fakeService(tasks: Task[]): FakeService {
     pins: [],
     pinsFail: false,
     pinTxid: undefined,
+    markTxid: undefined,
+    markFails: false,
+    repositoryTxid: undefined,
+    markAnswered: Effect.void,
     pinAnswered: Effect.void,
     sections: undefined,
     sectionWrites: [],
@@ -916,7 +928,11 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
-        return { ok: true, answer: { task: changed } };
+        const txid = service.repositoryTxid;
+        return {
+          ok: true,
+          answer: { task: changed, ...(txid === undefined ? undefined : { txid }) },
+        };
       }),
     // The service moves the task and answers it whole.
     move: (taskId, workspaceId) =>
@@ -962,7 +978,7 @@ function fakeService(tasks: Task[]): FakeService {
     mark: (taskId, { pinned }) =>
       Effect.sync(() => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
-        if (found === undefined) return undefined;
+        if (found === undefined || service.markFails) return undefined;
         const { pinnedAt, ...rest } = found;
         const pin = pinned === undefined ? pinnedAt : pinned ? MARKED_AT : undefined;
         const marked = {
@@ -972,8 +988,9 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? marked : candidate,
         );
-        return { task: marked };
-      }),
+        const txid = service.markTxid;
+        return { task: marked, ...(txid === undefined ? undefined : { txid }) };
+      }).pipe(Effect.tap(() => service.markAnswered)),
     delete: (taskId) =>
       Effect.sync(() => {
         if (service.deleteFails) return undefined;
@@ -1851,12 +1868,18 @@ it.effect(
 it.effect("a pin still being written when the account signs out is drawn for nobody after", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { call, told, tasks, settled } = yield* subject(service);
+    const { call, told, tasks, settled, listed } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
     const answered = yield* Deferred.make<void>();
     service.pinAnswered = Deferred.await(answered);
+    service.markAnswered = Deferred.await(answered);
 
     const pin = yield* Effect.forkChild(
       call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/secret", pinned: true }),
+    );
+    const taskPin = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true }),
     );
     yield* settled;
     const from = told.length;
@@ -1865,6 +1888,7 @@ it.effect("a pin still being written when the account signs out is drawn for nob
     yield* settled;
     yield* Deferred.succeed(answered, undefined);
     yield* Fiber.join(pin);
+    yield* Fiber.join(taskPin);
     yield* Fiber.join(signingOut);
     yield* settled;
 
@@ -1872,6 +1896,110 @@ it.effect("a pin still being written when the account signs out is drawn for nob
       told.slice(from).flatMap((view) => view.repositoryPins ?? []),
       [],
     );
+    assert.deepEqual(
+      told.slice(from).flatMap((view) => view.tasks.filter((row) => row.pinnedAt !== undefined)),
+      [],
+    );
+  }),
+);
+
+it.effect(
+  "a task's pin stands from the press until the followed list carries its transaction, through an answer from before it, and a refused one is put back",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, told, settled, listed } = yield* subject(service);
+      const pinned = (view: TasksView | undefined) =>
+        view?.tasks.find((row) => row.id === INVITES)?.pinnedAt !== undefined;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      service.live.list.set({}, ["tx-earlier"]);
+      yield* nextPoll(settled);
+
+      service.markTxid = "tx-pin";
+      const from = told.length;
+      const pin = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true }),
+      );
+      yield* settled;
+      const standing = last()?.pendingTasks;
+      // Another Mac's change from before the pin landed is answered without it.
+      const [invites] = service.tasks;
+      assert.ok(invites);
+      service.live.list.set({ plans: [{ ...rowOfTask(invites), name: "Invites" }] }, ["tx-other"]);
+      yield* nextPoll(settled);
+      service.live.list.set({ plans: [{ ...rowOfTask(invites), pinnedAt: MARKED_AT }] }, [
+        "tx-pin",
+      ]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(pin), { changed: true });
+      assert.ok(told.length > from);
+      assert.deepEqual(
+        told.slice(from).filter((view) => !pinned(view)),
+        [],
+        "the pin is never drawn back",
+      );
+      // A list held still while read moves the task the pin stood over, and lets it go once kept.
+      assert.deepEqual(standing, [INVITES]);
+      assert.equal(last()?.pendingTasks, undefined);
+
+      service.markFails = true;
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: false }), {
+        changed: false,
+      });
+      assert.equal(pinned(last()), true);
+    }),
+);
+
+it.effect(
+  "a repository the service answered stands on the task's row through another write's draw, until the list carries it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Draft", 10),
+        task(BILLING, "Billing", "# Draft", 11),
+      ]);
+      const { call, last, settled, listed } = yield* subject(service);
+      const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      // An answer Luke Sync woke hands the follow its wait for a write's transaction.
+      service.live.list.set({}, ["tx-earlier"]);
+      yield* nextPoll(settled);
+
+      service.repositoryTxid = "tx-repository";
+      const changed = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, { taskId: INVITES, repository: "acme/relay" }),
+      );
+      yield* settled;
+      // Another task's pin draws the list again before the list carries the repository.
+      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: BILLING, pinned: true });
+      const drawn = repositoryOf();
+      service.live.list.set({ plans: service.tasks.map(rowOfTask) }, ["tx-repository"]);
+      yield* nextPoll(settled);
+
+      assert.deepEqual(yield* Fiber.join(changed), { repository: "acme/relay" });
+      assert.equal(drawn, "acme/relay");
+      assert.equal(repositoryOf(), "acme/relay");
+    }),
+);
+
+it.effect("a task marked done here is drawn finished now, so the recently finished find it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, told, listed } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
+    const from = told.length;
+
+    yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES, status: TASK_STATUS.DONE });
+
+    const drawn = told[from]?.tasks.find((row) => row.id === INVITES);
+    assert.equal(drawn?.status, TASK_STATUS.DONE);
+    // The harness's host clock reads zero.
+    assert.equal(drawn?.completedAt, 0);
   }),
 );
 

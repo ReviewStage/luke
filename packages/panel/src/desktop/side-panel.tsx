@@ -82,7 +82,7 @@ import {
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { useAppCommand } from "../app-commands.js";
+import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -148,6 +148,7 @@ import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-mode
 import {
   agentTranscript,
   readWholeTranscript,
+  TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
@@ -185,6 +186,7 @@ import {
   entryRow,
   HandTabActionsContext,
   type HeldTranscripts,
+  handedCommand,
   type ShownTab,
   type TabActionGroups,
   type TabDoors,
@@ -1250,8 +1252,37 @@ function PanelTabs({
   const copyLink = useCopyLinkItem();
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
+  // Close others closes every tab but the one at `at`, then shows it; none where there is no other.
+  const closeOthersOf = (entry: DrawnTab, at: number): (() => void) | undefined => {
+    const others = strip.filter((_, place) => place !== at);
+    if (others.length === 0) return undefined;
+    return () => {
+      for (const other of others) other.close();
+      panel.onChoose(entry.tab);
+    };
+  };
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
+  // ⌥⌘W, ⌥⌘C, ⇧⌥⌘C, and ⇧⌘O act on the chosen tab while the panel holds the keys, the copies and Open on GitHub over the open task's own.
+  const closeOthers =
+    chosen === undefined ? undefined : closeOthersOf(chosen, strip.indexOf(chosen));
+  useAppCommand(APP_COMMAND.CLOSE_OTHER_TABS, keys ? closeOthers : undefined);
+  const copyChosen = keys ? chosen?.copy : undefined;
+  useAppCommand(
+    APP_COMMAND.COPY_CONTENT,
+    copyChosen === undefined ? undefined : () => copyChosen(TRANSCRIPT_COPY.CONCISE),
+    FOCUSED_OFFER,
+  );
+  useAppCommand(
+    APP_COMMAND.COPY_FULL_TRANSCRIPT,
+    copyChosen === undefined ? undefined : () => copyChosen(TRANSCRIPT_COPY.FULL),
+    FOCUSED_OFFER,
+  );
+  const openOnGitHub =
+    keys && chosen !== undefined && handed !== undefined && sameTab(handed.tab, chosen.tab)
+      ? handedCommand(handed.actions, APP_COMMAND.OPEN_ON_GITHUB)
+      : undefined;
+  useAppCommand(APP_COMMAND.OPEN_ON_GITHUB, openOnGitHub, FOCUSED_OFFER);
   // Note that the Plan tab offers no pin of its own: the task's Pin, in its document menu, is what pins the task to the sidebar.
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
     if (holder !== SIDE_PANEL_HOLDER.TASK || tab === SIDE_PANEL_TAB.PLAN || !isPinnable(tab))
@@ -1264,7 +1295,6 @@ function PanelTabs({
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const { agent } = entry;
-    const others = strip.filter((_, place) => place !== at);
     // The Plan tab's menu is the task's own, Copy link among it, so the tab adds none of its own.
     const document = entry.tab === SIDE_PANEL_TAB.PLAN ? planMenu : undefined;
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id, and names only its pages by it.
@@ -1279,13 +1309,7 @@ function PanelTabs({
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
-      onCloseOthers:
-        others.length === 0
-          ? undefined
-          : () => {
-              for (const other of others) other.close();
-              panel.onChoose(entry.tab);
-            },
+      onCloseOthers: closeOthersOf(entry, at),
       pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
@@ -1339,6 +1363,7 @@ function PanelTabs({
               look={look}
               doors={doorsOf(entry, at)}
               shown={shown}
+              keys={keys}
               terminals={{ onOpenTerminal: transcriptDoors.onOpenTerminal }}
               slot={slot}
               onShown={onShown}

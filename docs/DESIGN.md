@@ -239,10 +239,8 @@ the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
 never the glyph its button. A button floating over something that moves
 beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--luke-button-ground` and fills over that rather than over
-what passes. What is not one of these is a row, a tab, or a round control and
-says why where it is drawn: the call bar's round mutes, its solid End call
-disc, and its start pill, and a tab's ×, which brightens
-without a fill. A chip, which names a value or a thing rather than an act, is
+what passes. What is not one of these is a row or a tab and says why where it
+is drawn, such as a tab's ×, which brightens without a fill. A chip, which names a value or a thing rather than an act, is
 `@luke/ui`'s Chip.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,

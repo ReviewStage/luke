@@ -1,7 +1,7 @@
 # Contributing to Luke
 
-Luke is a macOS Electron app for working through a task out loud with a voice
-agent that reads your code.
+Luke is a macOS Electron app for working through a task with coding agents
+that read your code, write the task's plan, and open its pull requests.
 
 This page covers setup and points at the documents that own the rest.
 

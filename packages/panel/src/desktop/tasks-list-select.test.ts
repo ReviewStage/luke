@@ -321,10 +321,6 @@ test("⌘-clicking two tasks chooses them without opening either, and the bar's 
     ["t-39", TASK_STATUS.DONE],
     ["t-42", TASK_STATUS.DONE],
   ]);
-  assert.deepEqual(groups(page), [
-    ["Launch", []],
-    ["Backlog", ["ACME-36"]],
-  ]);
   assert.match(newestToastSays() ?? "", /2 tasks marked done/u);
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
@@ -439,10 +435,6 @@ test("Status sets every task chosen at the status picked, under one toast", asyn
   assert.deepEqual(asked, [
     ["t-39", TASK_STATUS.IN_PROGRESS],
     ["t-36", TASK_STATUS.IN_PROGRESS],
-  ]);
-  assert.deepEqual(groups(page), [
-    ["Launch", []],
-    ["In progress", ["ACME-36", "ACME-39", "ACME-42"]],
   ]);
   assert.match(newestToastSays() ?? "", /2 tasks moved to In progress/u);
 });
