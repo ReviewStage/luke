@@ -32,7 +32,8 @@ import { CatalogSection } from "../section";
 
 /**
  * composer-foots.tsx -- a message box's foot in each state: empty, with its
- * Send unavailable; holding files, which stand over its words; near its limit, the counter showing;
+ * Send unavailable; an unfinished answer's, its Send refusing a press and
+ * saying what is missing; holding files, which stand over its words; near its limit, the counter showing;
  * sending; Stop in the send's place, and stopping; with a cut paste's note,
  * a refused send's Retry, and a closed box's mend under its note; in a call,
  * and dictating in a call; then at a field's and a bare frame's inset, and
@@ -137,6 +138,14 @@ function ComposerFoots(): React.JSX.Element {
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
             <Box words="Ask Luke to change something…" send={{ label: "Send", empty: true }} />
+            <Box
+              words="Add a note"
+              send={{
+                label: "Send",
+                empty: true,
+                refuses: { onRefused: ignore, words: "Fill in Invites a member may send a day." },
+              }}
+            />
             <Box
               words="Here are the two screens."
               files={

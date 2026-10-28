@@ -63,6 +63,7 @@ import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from ".
 import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { HOME_ROW_META } from "./home-row.js";
+import { fillInWords, WRITE_AN_ANSWER } from "./inbox-ask-words.js";
 import {
   holderName,
   INBOX_HOLDER,
@@ -467,8 +468,8 @@ function CardAsk({
           glyph={<PenLineIcon />}
           label={
             ask.fields === undefined
-              ? "Write an answer"
-              : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`
+              ? WRITE_AN_ANSWER
+              : fillInWords(ask.fields.map((field) => field.label))
           }
         />
       );

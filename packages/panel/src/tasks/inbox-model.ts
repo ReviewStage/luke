@@ -53,6 +53,12 @@ import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
+import {
+  fillInWords,
+  INBOX_MISSING,
+  type InboxMissing,
+  WRITE_AN_ANSWER,
+} from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
 /**
@@ -324,47 +330,34 @@ export function inboxReply(
   return inboxReplyRefusal(response, answer, draft.attachments) === undefined ? answer : undefined;
 }
 
-/** What an open ask's answer still lacks: an option picked, a required field filled, or the developer's own words. */
-export const INBOX_MISSING = {
-  OPTION: "option",
-  FIELD: "field",
-  WORDS: "words",
-} as const;
-
-/** What the answer lacks; a field's by its label. */
-export type InboxMissing =
-  | { readonly kind: typeof INBOX_MISSING.OPTION }
-  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string }
-  | { readonly kind: typeof INBOX_MISSING.WORDS };
-
 /**
- * What the card's answer still lacks, the first thing in the response's order,
- * or nothing where it lacks nothing it can be told to fill: a choice with
- * no pick and no words of the developer's own lacks an option, a form with
- * nothing to send its first required field left empty, an approval or a
- * to-do its decision, and words their words. A note lacks nothing, its nod
- * being its answer.
+ * What the open ask's answer still lacks where the box holds nothing it can
+ * send (`inboxThreadSend`), or nothing where it sends, no ask it knows
+ * waits, or the developer wrote or attached something of their own, which
+ * a box refuses only past its bound, as its counter says: a `decide` with
+ * no pick lacks an option, and a `do` with nothing ticked or pressed its
+ * decision, an option of its two; an `answer`'s fields their first required
+ * field, or their first where none is, since a form filled in part sends
+ * what was filled; and an `answer` of words alone its words.
  */
-export function inboxMissing(response: InboxResponse, draft: InboxDraft): InboxMissing | undefined {
-  const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
-  switch (response.type) {
-    case INBOX_RESPONSE.CHOICE:
-      return draft.choices.length > 0 || ownWords ? undefined : { kind: INBOX_MISSING.OPTION };
-    case INBOX_RESPONSE.FORM: {
-      if (formSendable(response, draft)) return undefined;
-      const sent = new Set(sentValues(response, draft).map((value) => value.label));
-      const empty = response.fields.find(
-        (field) => field.required === true && !sent.has(field.label),
-      );
-      return empty === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: empty.label };
+export function inboxMissing(
+  thread: readonly InboxMessage[],
+  draft: InboxDraft,
+): InboxMissing | undefined {
+  if (inboxThreadSend(thread, draft) !== undefined) return undefined;
+  if (draft.note.trim() !== "" || draft.attachments.length > 0) return undefined;
+  const asking = openAskOf(thread);
+  if (asking === undefined || !knownAsk(asking.ask)) return undefined;
+  const { ask } = asking;
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+    case INBOX_ASK.DO:
+      return { kind: INBOX_MISSING.OPTION };
+    case INBOX_ASK.ANSWER: {
+      if (ask.fields === undefined) return { kind: INBOX_MISSING.WORDS };
+      const first = ask.fields.find((field) => field.required === true) ?? ask.fields[0];
+      return first === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: first.label };
     }
-    case INBOX_RESPONSE.TEXT:
-      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS };
-    case INBOX_RESPONSE.APPROVAL:
-    case INBOX_RESPONSE.TODO:
-      return decidedOf(response, draft) === undefined ? { kind: INBOX_MISSING.OPTION } : undefined;
-    default:
-      return undefined;
   }
 }
 
@@ -1079,8 +1072,8 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
     }
     case INBOX_ASK.ANSWER:
       return ask.fields === undefined
-        ? "Write an answer"
-        : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`;
+        ? WRITE_AN_ANSWER
+        : fillInWords(ask.fields.map((field) => field.label));
   }
 }
 

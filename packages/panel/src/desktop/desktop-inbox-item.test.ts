@@ -102,6 +102,7 @@ import {
   rowNamed,
   STRAY_AGENT,
   saying,
+  sendHeld,
   sendWords,
   settle,
   skillReads,
@@ -2190,7 +2191,7 @@ test("a plain reply sends no answer and leaves the ask open, the box's Send held
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000010"));
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Add a note");
   assert.equal(sendWords(pane), "Send");
-  assert.equal(answerSend(pane).disabled, true, "an empty box sends nothing");
+  assert.equal(sendHeld(pane), true, "an empty box sends nothing");
   assert.equal(footWords(pane), "", "nothing says replying keeps the ask open");
 
   typeInComposer(pane, "Does it matter for SSO teams?");

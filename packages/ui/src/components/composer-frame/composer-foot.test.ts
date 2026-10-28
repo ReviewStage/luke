@@ -7,7 +7,7 @@ import { ComposerFoot } from "./composer-foot.js";
 
 /**
  * composer-foot.test.ts -- a message box's foot takes no send while the box
- * is empty, says its one note, shows its counter from four fifths of the
+ * is empty, or refuses it saying why where it can, says its one note, shows its counter from four fifths of the
  * limit, offers a remedy beside its note and a mend under it, stands Stop
  * in the send's place, and keeps a call's status beside the send and beside
  * a strip.
@@ -68,6 +68,29 @@ test("the send takes no press while the box is empty, and sends once it holds wo
   act(() => button(container, "Send").click());
   expect(unavailable(button(container, "Send"))).toBe(false);
   expect(sent).toEqual(["sent"]);
+});
+
+test("an empty send that can say why stays pressable but sends nothing, telling its owner, and is described by what the owner says", () => {
+  const heard: string[] = [];
+  const onSend = () => heard.push("sent");
+  const refuses = (words: string | undefined) => ({
+    onRefused: () => heard.push("refused"),
+    words,
+  });
+  const { container, redraw } = draw({
+    send: { label: "Send", empty: true, onSend, refuses: refuses(undefined) },
+  });
+  const send = button(container, "Send");
+  expect(send.disabled).toBe(false);
+  expect(unavailable(send)).toBe(true);
+  act(() => send.click());
+  expect(heard).toEqual(["refused"]);
+
+  redraw({ send: { label: "Send", empty: true, onSend, refuses: refuses("Pick an option.") } });
+  const line = document.getElementById(
+    button(container, "Send").getAttribute("aria-describedby") ?? "",
+  );
+  expect(line?.textContent).toBe("Pick an option.");
 });
 
 test("a send still out is named by its busy words and takes no second press", () => {

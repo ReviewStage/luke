@@ -549,6 +549,7 @@ function ComposeCard({
                 labelId: `${subjectId}label`,
                 "aria-describedby": undefined,
                 "aria-invalid": undefined,
+                "aria-required": undefined,
               }}
               placeholder={FIELD_WORDS.OPTIONAL}
               // Note that the subject is filled with the message box's ground rather than the input's darker well, so To, Subject, and the box read as one head.

@@ -850,10 +850,17 @@ export function answerSend(pane: HTMLElement): HTMLButtonElement {
   );
 }
 
+/** Whether the open item's Send sends nothing as it stands: taking no press, or refusing it to say why (`aria-disabled`). */
+export function sendHeld(pane: HTMLElement): boolean {
+  const send = answerSend(pane);
+  return send.disabled || send.getAttribute("aria-disabled") === "true";
+}
+
 /**
  * What the open item's box says outside its controls, its files, and its
- * note line, its presses' words among it: nothing but a notice's Got it, since the box
- * carries no helper text, its Send held until it holds something to send.
+ * note line, its presses' words among it: nothing but a notice's Got it, or
+ * what an unfinished answer lacks once a send of it was refused, since the
+ * box carries no helper text, its Send held until it holds something to send.
  */
 export function footWords(pane: HTMLElement): string {
   const box = pane.querySelector("form.inbox-answer") ?? assert.fail("the box");

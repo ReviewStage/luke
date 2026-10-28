@@ -20,6 +20,7 @@ import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
+import { INBOX_MISSING } from "./inbox-ask-words.js";
 import {
   ANSWER_TONE,
   acknowledgedOnOpen,
@@ -38,7 +39,6 @@ import {
   INBOX_GROUPING,
   INBOX_LINE,
   INBOX_MEDIA,
-  INBOX_MISSING,
   INBOX_SHOW,
   INBOX_SORT,
   INBOX_STATUS_GROUP,
@@ -305,50 +305,6 @@ test("a thread's form attaches its values to the reply as they are filled, with 
   });
 });
 
-test("what an answer lacks follows what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
-  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
-  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
-  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"] }), undefined);
-  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, note: "Use SQS." }), undefined);
-  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
-  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), undefined);
-
-  const rollout: InboxResponse = {
-    type: INBOX_RESPONSE.FORM,
-    fields: [
-      { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
-      { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
-      { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
-      { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
-    ],
-  };
-  assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.FIELD,
-    label: "Effort",
-  });
-  assert.deepEqual(
-    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
-    { kind: INBOX_MISSING.FIELD, label: "Effort" },
-    "blank words fill nothing",
-  );
-  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
-  assert.equal(
-    inboxMissing(rollout, effort),
-    undefined,
-    "a form filled in part lacks nothing, sending what was filled",
-  );
-  assert.equal(
-    inboxMissing(rollout, withValue(effort, "Reviewer", "Dean")),
-    undefined,
-    "a yes-or-no left alone is a no",
-  );
-
-  assert.deepEqual(inboxMissing(QUESTION, { ...EMPTY_INBOX_DRAFT, note: " " }), {
-    kind: INBOX_MISSING.WORDS,
-  });
-  assert.equal(inboxMissing(QUESTION, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
-});
-
 test("an option picked by its number is the one pick of a choice of one, picked again it stays; of a choice of several it joins the picks, and picked again it leaves them", () => {
   assert.deepEqual(
     withChoice({}, { ...EMPTY_INBOX_DRAFT, choices: ["Postgres"] }, "Redis").choices,
@@ -399,15 +355,44 @@ test("an approval and a task are answered by the decision the card holds, or a p
   });
 });
 
-test("an approval or a to-do lacks its decision until one is picked, and a note lacks nothing", () => {
-  const step: InboxResponse = { type: INBOX_RESPONSE.APPROVAL };
-  const task: InboxResponse = { type: INBOX_RESPONSE.TODO };
-  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
-  assert.deepEqual(inboxMissing(task, { ...EMPTY_INBOX_DRAFT, note: "Did half." }), {
-    kind: INBOX_MISSING.OPTION,
+test("what an empty box's answer lacks follows the open ask: a decide or a to-do an option, a form its first required field in the form's order, and words their words; nothing once anything is filled, written, or attached, or where no ask waits", () => {
+  const decide = [asking({ type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] })];
+  assert.deepEqual(inboxMissing(decide, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
+  assert.equal(inboxMissing(decide, { ...EMPTY_INBOX_DRAFT, choices: ["B"] }), undefined);
+  assert.equal(
+    inboxMissing(decide, { ...EMPTY_INBOX_DRAFT, note: "Why not C?" }),
+    undefined,
+    "words alone are a plain reply",
+  );
+  const toDo = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
+  assert.deepEqual(inboxMissing(toDo, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
+
+  const rollout = [
+    asking({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
+        { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
+        { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
+      ],
+    }),
+  ];
+  assert.deepEqual(
+    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
+    { kind: INBOX_MISSING.FIELD, label: "Effort" },
+    "blank words fill nothing",
+  );
+  assert.equal(
+    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Branch prefix", "luke/")),
+    undefined,
+    "a form filled in part sends what was filled",
+  );
+
+  const words = [asking({ type: INBOX_ASK.ANSWER })];
+  assert.deepEqual(inboxMissing(words, { ...EMPTY_INBOX_DRAFT, note: " " }), {
+    kind: INBOX_MISSING.WORDS,
   });
-  assert.equal(inboxMissing(task, decided(INBOX_REPLY.DONE)), undefined);
-  assert.equal(inboxMissing({ type: INBOX_RESPONSE.NONE }, EMPTY_INBOX_DRAFT), undefined);
+  assert.equal(inboxMissing([], EMPTY_INBOX_DRAFT), undefined);
 });
 
 test("files attached alone answer an item in the developer's own words, and travel apart from the answer", () => {
