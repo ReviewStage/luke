@@ -597,7 +597,7 @@ export function Button({
           </span>
         )}
         {trailing === undefined ? null : (
-          <span className="luke-button-trailing flex-none text-muted-foreground text-caption tabular-nums">
+          <span className="luke-button-trailing inline-flex flex-none items-center text-muted-foreground text-caption tabular-nums">
             {trailing}
           </span>
         )}
