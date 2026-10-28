@@ -132,10 +132,14 @@ let placed: [string, string | null][] = [];
 /** Each task the service was asked to delete, in order. */
 let deleted: string[] = [];
 
+/** The tasks the service refuses to delete. */
+const refusing = new Set<string>();
+
 beforeEach(() => {
   asked = [];
   placed = [];
   deleted = [];
+  refusing.clear();
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
@@ -176,7 +180,7 @@ async function mountPage(): Promise<{
           if (kind === ACT_KIND.TASKS_DELETE) {
             const doomed = Option.getOrUndefined(readDelete(payload));
             if (doomed !== undefined) deleted.push(doomed.taskId);
-            return Promise.resolve(true);
+            return Promise.resolve(doomed === undefined || !refusing.has(doomed.taskId));
           }
           if (kind === ACT_KIND.TASKS_WRITE_SECTION) {
             const places = Option.getOrUndefined(readPlaces(payload))?.writes ?? [];
@@ -480,6 +484,32 @@ test("the bar's Permanently delete asks first, naming how many, and deletes only
   await settle();
 
   assert.deepEqual([...deleted].sort(), ["t-39", "t-42"]);
+  assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
+});
+
+test("a delete the service refuses for some tasks keeps those asked of and chosen, and Retry sends none already deleted", async () => {
+  const { page } = await mountPage();
+  commandClick(page, "ACME-39");
+  commandClick(page, "ACME-42");
+  refusing.add("t-42");
+  const question = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+  const press = () => {
+    const button = [...(question()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+      (each) => each.textContent === "Permanently delete",
+    );
+    act(() => (button ?? assert.fail("the question offers Permanently delete")).click());
+  };
+
+  act(() => barButton(page, "Permanently delete").click());
+  press();
+  await settle();
+  assert.match(question()?.textContent ?? "", /Permanently delete 1 task\?/u);
+  assert.ok(page.querySelector('[role="toolbar"]'), "the selection stands while a task remains");
+
+  refusing.clear();
+  press();
+  await settle();
+  assert.deepEqual(deleted.slice(2), ["t-42"]);
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
 

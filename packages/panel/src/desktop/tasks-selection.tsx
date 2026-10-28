@@ -214,11 +214,19 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
   const sections = useSectionDialogs(tasks, tasks.shown);
   // The tasks Permanently delete was asked of, held as it asks, so a selection changed meanwhile deletes none it never named.
   const [doomed, setDoomed] = useState<readonly string[]>([]);
+  // Note that a refusal leaves only the tasks refused asked of and chosen, so Retry sends none already deleted.
   const deletion = useConfirmDialog(
     { subject: doomed.length > 0, surfaceOpen: tasks.shown },
     async () => {
       const answers = await Promise.all(doomed.map((id) => latest.current.onDeleteTask(id)));
-      onClear();
+      const refused = doomed.filter(
+        (_, at) => answers[at]?.status !== ACTION_RESULT_STATUS.ACCEPTED,
+      );
+      if (refused.length === 0) {
+        onClear();
+        return ACCEPTED;
+      }
+      setDoomed(refused);
       return answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED;
     },
   );
