@@ -146,11 +146,9 @@ it moves every task standing into its starter's first workspace, and
 statement joins into its own where clause. A task is read and written by
 every member of its workspace, whichever of them started it:
 `taskReachableBy` and `reachableTask` gate every task statement in
-`task-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
-and `plan-revisions.ts`, and the voice door's `heldTask`, on the caller's
-membership of the task's workspace rather than on the task's starter. Past
-that gate a shared task's transcript and a new call's earlier calls are
-every member's calls about it.
+`task-store.ts`, `board-store.ts`, `plan-pages.ts`, and `plan-revisions.ts`,
+on the caller's membership of the task's workspace rather than on the task's
+starter.
 
 A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
 `bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@luke/features/picture-wire`)
@@ -179,8 +177,7 @@ the session a teammate opened. From there the caller and the owner are two
 ids: the task, the board, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
-A voice call is the caller's `voice_sessions` row and meter, landing in the
-conversation of the agent it speaks into. A coding agent still runs on its starter's provider keys and GitHub
+A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left, and a workspace renamed or given a photo, through
@@ -347,8 +344,8 @@ which is how the platform mounts it. The routes are unchanged byte for byte:
 a `.func` named `api/default.js.func` answers at `/api/default.js`, the path
 the rewrites already carry. Each function is also emitted at its extensionless
 path, as a `.func` that is a symlink onto the first, because Vercel's own pass
-served both spellings and the clients use the second: the voice sessions open
-at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
+served both spellings and the clients use the second: the terminal relay opens
+at `/api/terminal/sessions` and the desktop posts feedback to
 `/api/feedback`. Reverting the PR that introduced the tree is one
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
@@ -511,19 +508,9 @@ Every module under `server/` that reads or writes this database reads the
 client out of the fiber it runs on rather than holding one of its own, the
 Drizzle `Database` of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
-query modules are on it, the store writer and the voice writer among them.
+query modules are on it, the store writer among them.
 Outside `packages/database/src/models/`, `packages/database/src/models/task-store.ts` is on the same
-client, and `packages/database/src/models/voice-session-record.ts` is on it whole, each of its five methods
-answering an effect over the live session row rather than running one.
-`VoiceService` yields those five
-directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
-`voice/function.ts` hands it, so the registration, the usage snapshot, and the
-close are steps of that effect rather than promises a callback awaited. The
-two meters of `packages/service/src/voice/accounts.ts` — the account's spend and a closed
-session's seconds — are on it on the same terms,
-so the session yields each on its own fiber and a statement any of them was
-refused on ends that session the way its own row failing does, rather than
-becoming a rejected promise the service had to catch.
+client.
 `hostedStore()` takes no argument, and answers an
 `Effect<A, SqlError | Schema.SchemaError, SqlClient>` from every method, so
 the caller composes a store read into whatever it already runs. A route
@@ -569,8 +556,8 @@ requirements a route's own handler has travel as request markers the handler
 provides per request from the context `runWeb` read. The routes the hosted
 oRPC route does not answer are converted this way: auth, the two webhooks,
 the maintenance sweep and key rewrap, the GitHub and integration redirects,
-and the byte routes; the voice route alone exports something else, the
-`http.Server` described under "Hosted voice service".
+and the byte routes; the WebSocket routes alone export something else, the
+`http.Server` described under "WebSocket functions".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -781,8 +768,7 @@ loads the library at all.
 Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
 one atomic upsert before each upstream call (`packages/database/src/models/quota.ts`).
 A dictated clip is counted once it is transcribed instead, as one call and its
-seconds of audio in the row's `dictation_seconds`, beside the voice seconds
-`voice_session_usage` keeps. Nothing is refused on the count, which the admin pages read; a spend limit on
+seconds of audio in the row's `dictation_seconds`. Nothing is refused on the count, which the admin pages read; a spend limit on
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 
@@ -816,22 +802,17 @@ client's, the functions', and the eve root's maps cost every production build
 Sentry, not here: a Slack `#alerts` message on more than ten events in five
 minutes, and an email to the issue's owners on a high-priority issue.
 
-## Hosted voice service
+## WebSocket functions
 
 ### Deploying
 
-Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
-on for the project, and set `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each
-caller's own OpenAI API key is sealed: every call runs on its caller's key,
-and a caller who saved none is refused `openai-key-missing`. `LUKE_LIVE_MODEL` optionally pins
-the model. The exchange also needs `EVE_DEPLOYMENT_SECRET`, the deployment's
-own secret at eve's door and never the cron's `CRON_SECRET`, and without it
-every session is refused as unavailable; eve's
-origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. Luke's
-avatar needs `KEYFRAME_API_KEY` and `LUKE_KEYFRAME_PERSONA_ID` as well; without
-either, a call asking for video goes on as voice. No
-separate service is deployed. Tests run against a fake OpenAI on loopback and an in-memory account side
-(`packages/service/src/voice/service.test.ts`, `packages/service/src/testing/voice-fakes.ts`).
+The terminal relay and the Browser tab's live view are WebSocket functions,
+each exporting the `http.Server` Vercel upgrades into, so enable the
+WebSockets feature on the Vercel team and make sure Fluid compute is on for
+the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
+keys, and `EVE_DEPLOYMENT_SECRET` is the deployment's own secret at eve's door
+and never the cron's `CRON_SECRET`; eve's origin is the deployment's own
+unless `LUKE_EVE_ORIGIN` names another. No separate service is deployed.
 
 ## The agents
 

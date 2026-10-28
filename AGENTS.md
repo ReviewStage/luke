@@ -89,10 +89,7 @@ component, factored out of the surface where it builds the box by hand.
   traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And a host install
   token may be shown once, in the window that minted it, inside the install
-  command or the setup prompt; never anywhere else. And the Keyframe
-  session token for a call's own avatar may reach the panel window, which runs
-  that session, and never the voice window, a Gateway answer or event, app
-  state, a counted event, a trace, or a fixture. And an agent's cloud browser, a
+  command or the setup prompt; never anywhere else. And an agent's cloud browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
@@ -159,9 +156,7 @@ answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted seven days ago, settles as abandoned every turn still running
 past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
-agent's turn, whose one turn is its whole run), and ends on its owner's own
-OpenAI key every voice session whose device detached and did not come back within the grace. It
-also starts due automation runs, and for coding agents on a member's GitHub
+agent's turn, whose one turn is its whole run). It also starts due automation runs, and for coding agents on a member's GitHub
 token it reads their open pull requests' reviews, comments, and checks on that
 token and wakes the agent with them, as the webhook does for the App.
 
