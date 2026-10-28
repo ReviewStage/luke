@@ -1,6 +1,6 @@
 /**
  * admin-overview.ts -- what the Overview measures of the product as it is
- * today: tasks, plans, coding agents, pull requests, calls, the inbox, and
+ * today: tasks, plans, coding agents, pull requests, the inbox, and
  * automations, shaped from the rows the queries read.
  *
  * Everything here is an aggregate or a per-account count of rows Luke already
@@ -9,9 +9,9 @@
  * live in `admin-overview-queries.ts`; this module is the pure fold, so the
  * part with off-by-one risk in a day window is tested without a database.
  *
- * A *meaningful action* is one of four things an account does: creates a task,
- * writes a plan revision as the developer, starts a coding agent, or holds a
- * voice call. An *active developer* is an account with at least one in the
+ * A *meaningful action* is one of three things an account does: creates a
+ * task, writes a plan revision as the developer, or starts a coding agent. An
+ * *active developer* is an account with at least one in the
  * run being counted. `meaningfulActions` in the queries module is the one
  * definition every read here that says "active" counts through.
  */
@@ -45,8 +45,6 @@ import {
 /** How many of the most active accounts the overview names. */
 export const ADMIN_OVERVIEW_ACCOUNTS_LIMIT = 10;
 
-const SECONDS_PER_MINUTE = 60;
-
 /** One ranked account as the query reads it, before its per-feature counts join it. */
 interface AdminActiveAccountSource {
   id: string;
@@ -72,7 +70,6 @@ export interface AdminOverviewSource {
     tasks: ReadonlyMap<string, number>;
     agents: ReadonlyMap<string, number>;
     prsMerged: ReadonlyMap<string, number>;
-    callSeconds: ReadonlyMap<string, number>;
     lastSeenAt: ReadonlyMap<string, number>;
   };
   /** Cohort sizes, and the cohorts' accounts with a meaningful action per week. */
@@ -92,7 +89,6 @@ export function emptyOverviewSource(): AdminOverviewSource {
       tasks: new Map(),
       agents: new Map(),
       prsMerged: new Map(),
-      callSeconds: new Map(),
       lastSeenAt: new Map(),
     },
     retention: { cohortSizes: new Map(), activeByCohortWeek: new Map() },
@@ -123,7 +119,6 @@ function buildActivityDays(
     day,
     [ACTIVITY_FEATURE.AGENTS_STARTED]: on(ACTIVITY_FEATURE.AGENTS_STARTED, day),
     [ACTIVITY_FEATURE.PLAN_REVISIONS]: on(ACTIVITY_FEATURE.PLAN_REVISIONS, day),
-    [ACTIVITY_FEATURE.CALLS_HELD]: on(ACTIVITY_FEATURE.CALLS_HELD, day),
     [ACTIVITY_FEATURE.INBOX_ANSWERED]: on(ACTIVITY_FEATURE.INBOX_ANSWERED, day),
     [ACTIVITY_FEATURE.AUTOMATION_RUNS]: on(ACTIVITY_FEATURE.AUTOMATION_RUNS, day),
   }));
@@ -143,7 +138,6 @@ function buildTopAccounts(source: AdminOverviewSource): AdminOverviewAccount[] {
     tasks: counts.tasks.get(account.id) ?? 0,
     agents: counts.agents.get(account.id) ?? 0,
     prsMerged: counts.prsMerged.get(account.id) ?? 0,
-    callMinutes: Math.round((counts.callSeconds.get(account.id) ?? 0) / SECONDS_PER_MINUTE),
     lastSeenAt: counts.lastSeenAt.get(account.id) ?? null,
   }));
 }

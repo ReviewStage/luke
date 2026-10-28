@@ -433,7 +433,6 @@ function topAccount(id: string, name: string, activeDays: number, admin = false)
     tasks: activeDays * 2,
     agents: activeDays * 3,
     prsMerged: activeDays,
-    callMinutes: activeDays * 14,
     lastSeenAt: NOW - activeDays * HOUR,
   };
 }
@@ -464,7 +463,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     [FUNNEL_STEP.SIGNED_UP, 64],
     [FUNNEL_STEP.GITHUB_CONNECTED, 51],
     [FUNNEL_STEP.CREATED_TASK, 43],
-    [FUNNEL_STEP.HELD_CALL, 31],
     [FUNNEL_STEP.STARTED_AGENT, 27],
     [FUNNEL_STEP.OPENED_PR, 19],
     [FUNNEL_STEP.MERGED_PR, 14],
@@ -476,7 +474,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     [REACH_FEATURE.TASKS, 38],
     [REACH_FEATURE.CODING_AGENTS, 33],
     [REACH_FEATURE.INBOX, 26],
-    [REACH_FEATURE.VOICE_CALLS, 21],
     [REACH_FEATURE.INTEGRATIONS, 29],
     [REACH_FEATURE.AUTOMATIONS, 9],
   ] as const;
@@ -510,7 +507,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
           day,
           [ACTIVITY_FEATURE.AGENTS_STARTED]: wave(index, 20, 0.6),
           [ACTIVITY_FEATURE.PLAN_REVISIONS]: wave(index, 34, 0.5),
-          [ACTIVITY_FEATURE.CALLS_HELD]: wave(index, 8, 0.2),
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: wave(index, 15, 0.4),
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: wave(index, 4, 0.2),
         })),

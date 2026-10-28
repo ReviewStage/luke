@@ -42,12 +42,11 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
       lukeTurns: { failed: 412, total: 29_880 },
       agentRuns: { failed: 68, total: 1000 },
       abandonedTurns: 37,
-      calls: { failed: 0, total: 0 },
       automationRuns: { failed: 43, skipped: 90, total: 1000 },
     },
     daily: [
-      { day: "2026-10-16", lukeTurns: 0.01, agentRuns: 0.05, calls: null, automationRuns: 0.04 },
-      { day: "2026-10-17", lukeTurns: 0.02, agentRuns: null, calls: null, automationRuns: null },
+      { day: "2026-10-16", lukeTurns: 0.01, agentRuns: 0.05, automationRuns: 0.04 },
+      { day: "2026-10-17", lukeTurns: 0.02, agentRuns: null, automationRuns: null },
     ],
     agentFailures: [{ failure: CODING_AGENT_FAILURE.MODEL, count: 40 }],
     automationReasons: [{ reason: AUTOMATION_RUN_REASON.CONCURRENCY, skipped: 90, failed: 0 }],
@@ -86,7 +85,6 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
         githubApp: false,
         githubSignIn: true,
         googleSignIn: false,
-        callAvatar: false,
         errorReporting: true,
         analyticsRecording: true,
         analyticsErasure: true,
@@ -198,7 +196,6 @@ test("each rate reads as a share with what it is a share of", async () => {
   expect(cardOf(page, "Abandoned by the sweep")).toBe(
     "Abandoned by the sweep37turns past their bound",
   );
-  expect(cardOf(page, "Calls dropped")).toBe("Calls dropped—no calls ended in 7 days");
   expect(cardOf(page, "Automation runs failed")).toBe("Automation runs failed4.3%+ 9.0% skipped");
 });
 

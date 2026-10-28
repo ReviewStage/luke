@@ -24,7 +24,6 @@ import type { GitHubInstallationStatus } from "./github-installation-wire.js";
 import type { INTEGRATION_ROW_STATUS, IntegrationRowStatus } from "./integration-row-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 import type { FastAccess, ProviderKeyProvider, ProviderKeyStatus } from "./provider-key-wire.js";
-import type { VoiceCloseReason } from "./voice-close-wire.js";
 
 /* ----- The Overview's metrics (`@luke/service/admin/admin-metrics`) ----- */
 
@@ -97,7 +96,7 @@ export interface AdminMetrics {
     signupTrend: AdminTrend;
     dailySignups: AdminDailySignups[];
   };
-  /** Tasks, agents, pull requests, calls, and who is active, as `admin-overview.ts` shapes them. */
+  /** Tasks, agents, pull requests, and who is active, as `admin-overview.ts` shapes them. */
   overview: AdminOverview;
   /** Signup cohorts retained by any hosted-tier call; the overview carries the meaningful basis. */
   retention: {
@@ -151,8 +150,6 @@ export interface AdminOverviewAccount {
   agents: number;
   /** Pull requests of the account's agents merged in the window. */
   prsMerged: number;
-  /** Minutes of voice calls the account started in the window, rounded. */
-  callMinutes: number;
   /** The account's freshest sign-in session write, in epoch milliseconds; null when none stands. */
   lastSeenAt: number | null;
 }
@@ -366,7 +363,6 @@ export interface AdminReliabilityDay {
   day: string;
   lukeTurns: number | null;
   agentRuns: number | null;
-  calls: number | null;
   automationRuns: number | null;
 }
 
@@ -412,7 +408,6 @@ export interface AdminReliability {
     agentRuns: AdminFailureCount;
     /** Turns of any kind the maintenance sweep settled as abandoned. */
     abandonedTurns: number;
-    calls: AdminFailureCount;
     automationRuns: AdminAutomationCount;
   };
   daily: AdminReliabilityDay[];
@@ -564,7 +559,6 @@ export interface AdminAccountWorkspace {
 /** One entry of the failures timeline: what failed, when, and the enumerated word for why. */
 export type AdminAccountFailure =
   | { kind: typeof ADMIN_FAILURE_KIND.AGENT; at: number; reason: CodingAgentFailure | null }
-  | { kind: typeof ADMIN_FAILURE_KIND.CALL; at: number; reason: VoiceCloseReason }
   | {
       kind: typeof ADMIN_FAILURE_KIND.KEY;
       at: number;
@@ -590,7 +584,6 @@ export interface AdminAccountSupport {
     agentsRead: number;
     pullRequestsOpened: number;
     pullRequestsMerged: number;
-    callMinutes: number;
   };
   recentAgents: AdminAccountAgent[];
   workspaces: AdminAccountWorkspace[];

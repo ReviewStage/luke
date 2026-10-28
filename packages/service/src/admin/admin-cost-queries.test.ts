@@ -5,11 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import { hostedUsage, voiceSessionUsage } from "@luke/database/schemas/usage";
-import { voiceAvatarSessions, voiceSessions } from "@luke/database/schemas/voice";
+import { hostedUsage } from "@luke/database/schemas/usage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { VOICE_DELEGATION_MODE } from "@luke/database/voice-vocabulary";
 import { COST_SOURCE } from "@luke/features/admin-cost-wire";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
 import {
@@ -212,49 +210,15 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
       }),
   );
 
-  it.effect("sum each ledger's seconds and the merged pull requests by day and account", () =>
+  it.effect("sum dictation's seconds and the merged pull requests by day and account", () =>
     Effect.gen(function* () {
       const db = yield* Database;
       const owner = yield* openAccount();
 
-      const liveSessionId = randomUUID();
-      yield* db.insert(voiceSessionUsage).values([
-        { sessionId: liveSessionId, userId: owner, seconds: 45, recordedAt: AT_TODAY.getTime() },
-        { sessionId: randomUUID(), userId: owner, seconds: 90, recordedAt: AT_TODAY.getTime() },
-        { sessionId: randomUUID(), userId: owner, seconds: 30, recordedAt: AT_TODAY.getTime() },
-        { sessionId: randomUUID(), userId: owner, seconds: 500, recordedAt: AT_LONG_AGO.getTime() },
-      ]);
       yield* db.insert(hostedUsage).values([
         { userId: owner, day: YESTERDAY, calls: 3, dictationSeconds: 42 },
         { userId: owner, day: TODAY, calls: 3, dictationSeconds: 0 },
       ]);
-      const [call] = yield* db
-        .insert(voiceSessions)
-        .values({
-          userId: owner,
-          liveSessionId,
-          delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          model: "gpt-live-test",
-        })
-        .returning({ id: voiceSessions.id });
-      yield* db.insert(voiceAvatarSessions).values([
-        {
-          voiceSessionId: call?.id ?? "",
-          userId: owner,
-          personaId: "persona-test",
-          startedAt: AT_TODAY,
-          endedAt: AT_TODAY,
-          seconds: 61,
-        },
-        // Still open: no seconds written yet, so nothing to price.
-        {
-          voiceSessionId: call?.id ?? "",
-          userId: owner,
-          personaId: "persona-test",
-          startedAt: AT_TODAY,
-        },
-      ]);
-
       const workspace = yield* openWorkspace(owner);
       const agentRow = {
         organizationId: workspace,
@@ -303,21 +267,9 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         userId: owner,
       });
 
-      const seconds = [...usage.seconds].sort((left, right) =>
-        `${left.source}${left.model}`.localeCompare(`${right.source}${right.model}`),
-      );
-      // The session whose row names its Live model is told apart from those whose rows are gone.
-      assert.deepEqual(seconds, [
-        { day: TODAY, source: COST_SOURCE.AVATAR, userId: owner, model: null, seconds: 61 },
-        { day: YESTERDAY, source: COST_SOURCE.DICTATION, userId: owner, model: null, seconds: 42 },
-        {
-          day: TODAY,
-          source: COST_SOURCE.VOICE,
-          userId: owner,
-          model: "gpt-live-test",
-          seconds: 45,
-        },
-        { day: TODAY, source: COST_SOURCE.VOICE, userId: owner, model: null, seconds: 120 },
+      // A day with no dictation leaves no row.
+      assert.deepEqual(usage.seconds, [
+        { day: YESTERDAY, source: COST_SOURCE.DICTATION, userId: owner, seconds: 42 },
       ]);
       assert.deepEqual(usage.merged, [{ day: YESTERDAY, userId: owner, merged: 2 }]);
     }),

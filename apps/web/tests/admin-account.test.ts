@@ -87,7 +87,6 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
       agentsRead: 40,
       pullRequestsOpened: 17,
       pullRequestsMerged: 12,
-      callMinutes: 612,
     },
     recentAgents: [
       {
@@ -304,7 +303,6 @@ test("the support sections say what the account did and what broke, by the servi
   expect(page.textContent).toContain("Tasks created · 30 days74");
   expect(page.textContent).toContain("Coding agents · 30 days405% failed");
   expect(page.textContent).toContain("Pull requests merged · 30 days12of 17 opened");
-  expect(page.textContent).toContain("Call minutes · 30 days612");
 
   const agents = rows(page, "The account's newest coding agents");
   expect(agents).toEqual([
@@ -340,7 +338,6 @@ test("an account with nothing to support from says so in each section", async ()
           agentsRead: 0,
           pullRequestsOpened: 0,
           pullRequestsMerged: 0,
-          callMinutes: 0,
         },
         recentAgents: [],
         workspaces: [],

@@ -14,9 +14,7 @@ import { ChartEmpty, ChartFrame, ChartFrameSkeleton, LEGEND, LEGEND_ENTRY } from
 const COST_CHART = {
   [COST_SOURCE.CODING_AGENTS]: { label: "Coding agents", color: "var(--luke-color-chart-1)" },
   [COST_SOURCE.LUKE]: { label: "Luke's own turns", color: "var(--luke-color-chart-2)" },
-  [COST_SOURCE.VOICE]: { label: "Voice", color: "var(--luke-color-chart-3)" },
-  [COST_SOURCE.DICTATION]: { label: "Dictation", color: "var(--luke-color-chart-4)" },
-  [COST_SOURCE.AVATAR]: { label: "Video avatar", color: "var(--luke-color-chart-5)" },
+  [COST_SOURCE.DICTATION]: { label: "Dictation", color: "var(--luke-color-chart-3)" },
 } as const satisfies ChartConfig;
 
 const SOURCES: readonly CostSource[] = Object.values(COST_SOURCE);
@@ -30,9 +28,7 @@ const COST_PLOT_HEIGHT = "12rem";
 const SWATCH = {
   [COST_SOURCE.CODING_AGENTS]: "bg-(--luke-color-chart-1)",
   [COST_SOURCE.LUKE]: "bg-(--luke-color-chart-2)",
-  [COST_SOURCE.VOICE]: "bg-(--luke-color-chart-3)",
-  [COST_SOURCE.DICTATION]: "bg-(--luke-color-chart-4)",
-  [COST_SOURCE.AVATAR]: "bg-(--luke-color-chart-5)",
+  [COST_SOURCE.DICTATION]: "bg-(--luke-color-chart-3)",
 } as const;
 
 function CostLegend(): React.JSX.Element {

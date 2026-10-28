@@ -27,7 +27,6 @@ export type AdminWorkspaceKind = (typeof ADMIN_WORKSPACE_KIND)[keyof typeof ADMI
 /** What failed, by the record it was read from. */
 export const ADMIN_FAILURE_KIND = {
   AGENT: "agent",
-  CALL: "call",
   KEY: "key",
   CONNECTION: "connection",
   AUTOMATION: "automation",

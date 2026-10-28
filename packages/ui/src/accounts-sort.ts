@@ -29,7 +29,6 @@ export const ACCOUNTS_SORT_KEY = {
   TASKS: "tasks",
   AGENTS: "agents",
   PRS_MERGED: "prsMerged",
-  CALL_MINUTES: "callMinutes",
 } as const;
 
 export type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
@@ -45,7 +44,6 @@ const ACCOUNTS_SORT_FIRST_DIRECTION = {
   [ACCOUNTS_SORT_KEY.TASKS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.AGENTS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.PRS_MERGED]: SORT_DIRECTION.DESCENDING,
-  [ACCOUNTS_SORT_KEY.CALL_MINUTES]: SORT_DIRECTION.DESCENDING,
 } satisfies Record<AccountsSortKey, SortDirection>;
 
 /**
