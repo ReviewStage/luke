@@ -80,6 +80,7 @@ function fixture() {
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
+  const agents: AppInboxSlice["agents"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -119,6 +120,7 @@ function fixture() {
         waiting.push(next.waiting);
         holding.push(next.tasks);
         taskless.push(next.taskless);
+        agents.push(next.agents);
         failedRuns.push(next.failedRuns);
       },
       report: () => undefined,
@@ -149,6 +151,7 @@ function fixture() {
     waiting,
     holding,
     taskless,
+    agents,
     badges,
     failedRuns,
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
@@ -588,6 +591,11 @@ it.effect(
         f.taskless.at(-1)?.map((item) => item.workspaceId),
         ["workspace-acme"],
         "the window is told whose workspace's list the item stands in",
+      );
+      assert.deepEqual(
+        f.agents.at(-1)?.map((held) => [held.agentId, held.items, held.updatedAt]),
+        [[AGENT_ID, 1, READ_AT + 1]],
+        "a service before the agents holding items leaves the window to list the agent its open item names",
       );
     }),
 );
