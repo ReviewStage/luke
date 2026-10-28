@@ -1,13 +1,6 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
-  LINEAR_BOUNDS,
-  type LinearIssueSummary,
-  linearIssueIdentifierIn,
-} from "@luke/features/linear-wire";
-import { mentionMarkdownLink } from "@luke/features/link-grammar";
-import {
   type RepositoryPin,
-  TASK_BOUNDS,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -23,7 +16,7 @@ import {
   TASKS_READ,
   type TasksView,
 } from "@luke/features/tasks-view";
-import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import {
   type PendingValue,
   type PendingValues,
@@ -32,7 +25,6 @@ import {
   pendingWithout,
   type SameValue,
 } from "./pending-values.js";
-import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
  * tasks-model.ts -- what the panel's Tasks tab draws, decided from the document alone.
@@ -135,118 +127,6 @@ export function workspaceReaches(
 }
 
 /**
- * The name a plan started from a Linear issue takes: the issue's title,
- * its ends trimmed and cut to a plan name's bound, or the issue's key where
- * its title is blank.
- */
-export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
-  const title = issue.title.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
-  return title === "" ? issue.identifier : title;
-}
-
-/** One issue as the app writes a link to it: its key and title over its own address. */
-function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
-  return mentionMarkdownLink(`${issue.identifier} ${issue.title.trim()}`.trim(), issue.url);
-}
-
-/**
- * The prompt a coding agent New task starts is handed: a mention of each
- * issue picked, in the order picked, one to a line, by its key and title
- * over its own address, a Linear issue's as the app writes its link
- * (`[@ENG-1 Title](https://linear.app/…)`), a GitHub issue's over its page
- * (`[@acme/relay#7 Title](https://github.com/…)`), and one of the
- * workspace's own over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
- * then a blank line and the words, trimmed; the issues alone where no words
- * were written, and the words alone where no issue was picked.
- */
-export function agentPromptOf(
-  issues: readonly Pick<LinearIssueSummary, "identifier" | "title" | "url">[],
-  words: string,
-): string {
-  const said = words.trim();
-  const mentions = issues.map(issueMention).join("\n");
-  if (mentions === "") return said;
-  return said === "" ? mentions : `${mentions}\n\n${said}`;
-}
-
-/** How many of a workspace's Linear issues New task offers under its name field at once. */
-export const ISSUE_MATCH_LIMIT = 6;
-
-/** What New task asks a workspace's Linear for beyond the issues it listed: the one issue a key or link names, or a search. */
-export type LinearIssuesAsk = Omit<LinearIssuesRequest, "workspaceId">;
-
-/**
- * What New task asks Linear for, for the name as typed: the one issue a key
- * or a link to it names, which a search may not find, or a search over
- * every issue for any other words; nothing for a blank name, which the
- * issues listed as the card opened answer.
- */
-export function linearIssuesAskOf(typed: string): LinearIssuesAsk | undefined {
-  const words = typed.trim();
-  if (words === "") return undefined;
-  const identifier = linearIssueIdentifierIn(words);
-  return identifier === undefined
-    ? { query: words.slice(0, LINEAR_BOUNDS.MAX_QUERY_CHARS) }
-    : { identifier };
-}
-
-/** How near an issue Linear found for the words, though neither its title nor its key holds them all, stands: after every one that does. */
-const FOUND_ELSEWHERE = 3;
-
-/**
- * How closely an issue answers what was typed, nearest first: its key or
- * its number typed whole, or a link to it pasted, then every word typed at
- * the start of a word of its title, then every word anywhere in its title or
- * key, then words Linear's search found elsewhere in it.
- */
-function issueNearness(
-  issue: Pick<LinearIssueSummary, "identifier" | "title">,
-  tokens: readonly string[],
-  named: string | undefined,
-): number {
-  if (issue.identifier === named) return 0;
-  if (!matchesTokens([issue.title, issue.identifier], tokens)) return FOUND_ELSEWHERE;
-  const key = issue.identifier.toLowerCase();
-  const number = key.slice(key.lastIndexOf("-") + 1);
-  if (tokens.some((token) => token === key || token === number)) return 0;
-  const words = issue.title.toLowerCase().split(/[^\p{L}\p{N}]+/u);
-  if (tokens.every((token) => words.some((word) => word.startsWith(token)))) return 1;
-  return 2;
-}
-
-/**
- * The issues New task offers for the name typed so far, at most
- * `ISSUE_MATCH_LIMIT` of them: those listed whose title or key holds every
- * word typed, case aside, and every issue Linear answered for the words
- * (`found`: what its search matched, or the one issue a key or link names),
- * each once, nearest first and otherwise listed first; none for a blank
- * name, which leaves the field a plain name.
- */
-export function offeredIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
-  listed: readonly Issue[],
-  typed: string,
-  found: readonly Issue[] = [],
-): readonly Issue[] {
-  const tokens = searchTokens(typed);
-  if (tokens.length === 0) return [];
-  const named = linearIssueIdentifierIn(typed);
-  const foundKeys = new Set(found.map((issue) => issue.identifier));
-  const once = new Map<string, Issue>();
-  for (const issue of [...listed, ...found]) {
-    if (!once.has(issue.identifier)) once.set(issue.identifier, issue);
-  }
-  return [...once.values()]
-    .filter(
-      (issue) =>
-        foundKeys.has(issue.identifier) || matchesTokens([issue.title, issue.identifier], tokens),
-    )
-    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens, named) }))
-    .sort((first, second) => first.nearness - second.nearness || first.order - second.order)
-    .slice(0, ISSUE_MATCH_LIMIT)
-    .map(({ issue }) => issue);
-}
-
-/**
  * The other workspace a task's repository belongs to, where its own
  * workspace's GitHub does not reach it and one of the account's other
  * workspaces' does: the task stranded there by #2524, which moving it to
@@ -314,12 +194,8 @@ export function repositoryChangeFailureNote(failure: RepositoryCallFailure): str
   return REPOSITORY_CHANGE_FAILURE_NOTES[failure];
 }
 
-/** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
-const LINEAR_START_FAILED_NOTE =
-  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it.";
-
-/** What a start from one of the workspace's issues says when the issue is gone, or is another workspace's. */
-const ISSUE_START_FAILED_NOTE = "That issue is gone, or it belongs to another workspace.";
+/** What a start says when the workspace it named is gone, or no longer the account's. */
+const WORKSPACE_START_FAILED_NOTE = "That workspace is gone, or you're no longer a member of it.";
 
 /** What a start says when the device it named for the task's agents would not take them, where the page knows no more of why. */
 const DEVICE_START_FAILED_NOTE =
@@ -327,8 +203,7 @@ const DEVICE_START_FAILED_NOTE =
 
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
-  if (failure === TASK_CALL_FAILURE.LINEAR_UNAVAILABLE) return LINEAR_START_FAILED_NOTE;
-  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return ISSUE_START_FAILED_NOTE;
+  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return WORKSPACE_START_FAILED_NOTE;
   if (failure === TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED) return DEVICE_START_FAILED_NOTE;
   return repositoryFailureNote(failure);
 }

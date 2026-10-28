@@ -17,7 +17,7 @@ import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { Clock, Effect, Option } from "effect";
-import { BRAIN_TURN_TRIGGER, userMetadataOf } from "../../core.js";
+import { TURN_TRIGGER, userMetadataOf } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleNativeAgent } from "../native-events/native-title.js";
@@ -86,7 +86,7 @@ const openedOn = (owner: string, agent: CodingAgent, prompt: string) =>
         clientId: randomUUID(),
         role: MESSAGE_ROLE.USER,
         parts: [{ type: "text", text: prompt }],
-        metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK),
+        metadata: userMetadataOf(TURN_TRIGGER.ASK),
         placedAt,
       }),
     );
@@ -379,7 +379,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
             clientId: randomUUID(),
             role: MESSAGE_ROLE.USER,
             parts: [{ type: "text", text: handed }],
-            metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK),
+            metadata: userMetadataOf(TURN_TRIGGER.ASK),
             placedAt: new Date(),
           }),
         );

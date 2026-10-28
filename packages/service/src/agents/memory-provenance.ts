@@ -36,6 +36,7 @@ import {
 } from "@luke/database/models/message-reads";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
+import { automationRun } from "@luke/features/model-label";
 import { toolPartName } from "@luke/wire/ui-messages";
 import { Effect } from "effect";
 import { MESSAGE_ROLE } from "../core.js";
@@ -94,7 +95,7 @@ const automationLine = (agent: CodingAgent, messageId: string) =>
     (senders) => {
       const sent = senders.get(messageId);
       return sent === undefined
-        ? agent.automationOrigin !== null
+        ? automationRun(agent) !== undefined
         : sent.kind === MESSAGE_SENDER.AUTOMATION;
     },
   );

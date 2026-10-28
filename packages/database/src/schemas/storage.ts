@@ -1,4 +1,4 @@
-import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
+import type { RunModelUsage, RunUsage } from "@luke/features/turn-run";
 import {
   MESSAGE_ROLE,
   type MessageRole,
@@ -158,6 +158,20 @@ export function turnlessUserLine(table: {
 }
 
 /**
+ * That a row of `messages` is no developer's line its hand-over withdrew
+ * and no turn took since: every read that shows a line reads it through
+ * this. A turn's own row stands whatever its stamp says, because a release
+ * that kept no stamp takes a withdrawn line into its turn and leaves the
+ * stamp behind.
+ */
+export function standingLine(table: {
+  readonly withdrawnAt: SQLWrapper;
+  readonly turnId: SQLWrapper;
+}): SQL {
+  return sql`(${table.withdrawnAt} is null or ${table.turnId} is not null)`;
+}
+
+/**
  * One `UIMessage` per row. A message in flight is mutable until
  * `finished_at` is set, and its tool parts are written before the tool runs
  * and completed after, so the row is the write-ahead record a resume reads;
@@ -234,6 +248,17 @@ export const messages = pgTable(
      * kept.
      */
     takenAfterStep: integer("taken_after_step"),
+    /**
+     * When the hand-over of a developer's line to a coding agent answered
+     * that the runtime did not take it; null on every other row, and on a
+     * withdrawn line a turn took all the same. Note that the row is kept
+     * rather than deleted, because a hand-over past its deadline, or whose
+     * record failed after the runtime took it, may still reach a turn, and
+     * the row is the one record of what the line says carried it and who
+     * sent it. Every read leaves such a row out until a turn takes it, and
+     * the maintenance sweep deletes it once no turn can.
+     */
+    withdrawnAt: timestamptz("withdrawn_at"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),
@@ -250,6 +275,8 @@ export const messages = pgTable(
     // The foreign key's check on every turn deleted, by the purge, an agent's delete, or a rewind,
     // finds the messages that turn wrote, which a scan of the table would read through to the last.
     index("messages_turn").on(table.turnId).where(sql`${table.turnId} is not null`),
+    // The sweep finds the withdrawn lines no turn took in time, a handful among every row.
+    index("messages_withdrawn").on(table.withdrawnAt).where(sql`${table.withdrawnAt} is not null`),
   ],
 );
 
@@ -260,8 +287,8 @@ export const messages = pgTable(
  * absent on a row from before the breakdown was kept, whose every step is
  * read as the row's `model`.
  */
-export interface StoredTurnUsage extends BrainRunUsage {
-  readonly byModel?: readonly BrainModelUsage[];
+export interface StoredTurnUsage extends RunUsage {
+  readonly byModel?: readonly RunModelUsage[];
 }
 
 /**

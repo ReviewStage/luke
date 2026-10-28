@@ -1,7 +1,14 @@
 import { Comment, type CommentAuthor, cn } from "@luke/ui";
+import { REPLY_SCOPE } from "./reply-to-selection.js";
 
 /**
  * inbox-comment.tsx -- one message of an Inbox thread as a comment, headed by who wrote it and when: the Inbox's thread draws every message so.
+ *
+ * Every word a comment's body draws may be quoted into a reply: the
+ * agent's and a member's alike, an answer's picks and values, and the
+ * lines saying what became of an ask (`reply-to-selection.tsx`). The
+ * reader's draft reply is the one comment that offers none, since what it
+ * holds is the reader's own, still being written.
  */
 
 /** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, a member closing it without an answer, a message on the thread, or the reader's draft reply at its end. */
@@ -75,6 +82,7 @@ export function InboxComment({
                 ? "overflow-visible"
                 : "overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)]",
             )}
+            {...(kind === COMMENT.DRAFT ? {} : { [REPLY_SCOPE]: "" })}
           >
             {children}
           </div>

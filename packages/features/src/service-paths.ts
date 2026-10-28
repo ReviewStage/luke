@@ -267,14 +267,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
   /**
-   * The issues of a repository a workspace's installation reaches, as New
-   * task's picker reads them (GET): named as `GITHUB_REPOSITORY_ISSUE` names
-   * one, with the words searched for or the number of the one asked; the
-   * answer is `github-repositories-wire.ts`'s, or why the installation
-   * reads none.
-   */
-  GITHUB_REPOSITORY_ISSUES: "/api/github/repositories/issues",
-  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
@@ -398,17 +390,6 @@ export const HOSTED_SERVICE_PATH = {
   /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
   WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
   WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
-} as const;
-
-/**
- * Where the hosted voice service answers: a Vercel Function of the same
- * service, reached at `HOSTED_VOICE_SERVICE_ORIGIN`, the socket form of the
- * service's own origin. The path is a WebSocket upgrade; one connection
- * carries one session, or one attachment to a session that stands.
- */
-export const VOICE_SERVICE_PATH = {
-  /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
-  SESSIONS: "/api/voice/sessions",
 } as const;
 
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */

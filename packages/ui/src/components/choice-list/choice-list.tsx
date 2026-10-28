@@ -22,8 +22,7 @@ import {
  * first open one while none is) and leaves the group in one press, and the
  * arrow keys move along the open rows and choose as they go, wrapping at
  * either end. A press on the checked row does nothing, unless the list is
- * `clearable`, where it takes the choice back, or hears it (`onPressChecked`),
- * as a list of voices does to play the chosen one again. Picking several is a group of
+ * `clearable`, where it takes the choice back. Picking several is a group of
  * checkboxes in a fieldset, each its own Tab stop, toggled by a press or
  * Space, the arrow keys moving the keyboard along them without toggling.
  * Enter presses a row as a button's Enter does, unless what holds the list
@@ -234,8 +233,6 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   select?: ChoiceSelect | undefined;
   /** Whether a pick-one list's checked row, pressed again, takes the choice back. */
   clearable?: boolean | undefined;
-  /** Hears a press on a pick-one list's checked row that changes nothing, for a row that acts when pressed again. */
-  onPressChecked?: ((value: Value) => void) | undefined;
   disabled?: boolean | undefined;
   /** The id of the words that describe the whole group, a settings row's description. */
   describedBy?: string | undefined;
@@ -453,6 +450,7 @@ function ChoiceRow({
   checked,
   tabStop,
   disabled,
+  readOnly,
   dims,
   look,
   across,
@@ -467,6 +465,14 @@ function ChoiceRow({
   /** Whether it is a Tab stop of its own, as each of a group of checkboxes is; a radio group's one stop is its keys' to keep. */
   tabStop: boolean;
   disabled: boolean;
+  /**
+   * Whether it records a pick rather than offering one: it takes no press
+   * and no Tab stop, as an unavailable row does, yet its words select, since
+   * it is read rather than pressed. Note that it refuses the press itself,
+   * through Base UI's `readOnly`, because a disabled row refuses the
+   * pointer too, which would keep a drag over its words from selecting.
+   */
+  readOnly: boolean;
   /** Whether an unavailable row fades, which a read-only list's and a card's do not. */
   dims: boolean;
   look: ChoiceLook;
@@ -487,20 +493,24 @@ function ChoiceRow({
     "data-value": option.value,
     ...rovingItem(),
     // Note that a radio is drawn out of the tab order, which quiets the group's own roving stop, so the stop its keys keep is the only one.
-    tabIndex: tabStop ? 0 : -1,
+    tabIndex: tabStop && !readOnly ? 0 : -1,
     className: cn(
       ROW,
       ROW_LOOK[look],
       across && !card && ROW_ACROSS,
-      "disabled:cursor-default",
+      "disabled:cursor-default aria-disabled:cursor-default",
       dims && "disabled:opacity-disabled",
     ),
     "data-tone": option.tone,
     disabled,
+    readOnly,
+    // Note that a read-only row is announced unavailable, as a disabled one is, which the roving keys pass over too.
+    "aria-disabled": readOnly || undefined,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
     onClick: (event: React.MouseEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
       // Note that the list answers the press itself, because Base UI's own takes no choice back.
       event.preventBaseUIHandler();
+      if (readOnly) return;
       // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole.
       const control = event.currentTarget.querySelector<HTMLElement>(
         ":scope > .luke-choice-control",
@@ -603,7 +613,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const press = (pressed: Value) => {
     const next = afterPress(props, pressed);
     if (next !== undefined) props.onChange(next);
-    else if (one) props.onPressChecked?.(pressed);
   };
   // Note that Base UI's own arrows never run, so a key pressed in a card's controls stays theirs.
   const onKeyDown = (
@@ -619,7 +628,8 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       option={option}
       checked={value.includes(option.value)}
       tabStop={!one}
-      disabled={still || option.disabled === true}
+      disabled={disabled || option.disabled === true}
+      readOnly={readOnly}
       dims={!readOnly && look !== CHOICE_LOOK.CARD}
       look={look}
       across={flow === CHOICE_FLOW.ACROSS}

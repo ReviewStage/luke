@@ -1,6 +1,5 @@
 import { linkLabels } from "@luke/features/mention-link";
-import type { CodeRef } from "@luke/features/task-wire";
-import { type TaskShownCode, VOICE_PHASE, type VoicePhase } from "@luke/features/tasks-view";
+import { VOICE_PHASE, type VoicePhase } from "@luke/features/tasks-view";
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@luke/gateway";
 import {
   chunkForAppend,
@@ -202,23 +201,6 @@ function queuedQuestionNote(question: string, recommendation: string): string {
   return `Ask the developer this next, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
 }
 
-/** Where code on screen is, as the voice is told it: the file and the lines lit, if any. */
-function codePlace(ref: CodeRef): string {
-  if (ref.startLine === undefined || ref.endLine === undefined) return ref.path;
-  return ref.startLine === ref.endLine
-    ? `${ref.path}, line ${ref.startLine}`
-    : `${ref.path}, lines ${ref.startLine} to ${ref.endLine}`;
-}
-
-/**
- * Code the agent put on the developer's screen, as the voice is
- * handed it: context it keeps without saying, so Luke can point at a line
- * by its number the way a person sharing a screen would.
- */
-function codeOnScreenNote(ref: CodeRef): string {
-  return `The developer's screen now shows ${codePlace(ref)}, lit. Refer to it as on screen, by line number where it helps; don't read the code aloud.`;
-}
-
 /**
  * How long after its delegation a run may still end the call. The voice
  * says its goodbye and delegates in the same breath, so the agent's
@@ -308,8 +290,6 @@ export interface LiveSessionServiceOptions {
   hasTask: boolean;
   /** What the standing session's voice and agent are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
-  /** Code the agent named is to go on the developer's screen now, as Luke starts to speak. */
-  onCode?: (shown: TaskShownCode) => void;
   /**
    * The developer said they are done and the agent asked to end
    * the call: the peer hangs up once Luke's goodbye has played, through the
@@ -413,14 +393,6 @@ interface StandingSession {
   readonly openAsks: Map<string, OpenAsk>;
   /** The voice's wait, where it is in one; see `LiveSessionStatus`. */
   voicePhase: VoicePhase | undefined;
-  /**
-   * Code the agent named, held until Luke next starts to say words
-   * queued for him, so it goes on screen as he talks about it; the newest
-   * replaces any still held.
-   */
-  pendingCode:
-    | { readonly shown: TaskShownCode; readonly delegationId: LiveDelegationId }
-    | undefined;
   /**
    * The questions the agent queued that the voice has not been
    * handed yet, oldest first, and whether the voice holds one the developer
@@ -1184,7 +1156,6 @@ export class LiveSessionService {
         claimedDelegations: new Set(),
         openAsks: new Map(),
         voicePhase: undefined,
-        pendingCode: undefined,
         questions: [],
         holdingQuestion: false,
         retained: [],
@@ -1299,10 +1270,7 @@ export class LiveSessionService {
           event.start_ms,
           event.end_ms,
         );
-        if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) {
-          this.#voiceIn(session, undefined);
-          this.#releaseCode(session);
-        }
+        if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) this.#voiceIn(session, undefined);
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         this.#trace({
@@ -1726,13 +1694,6 @@ export class LiveSessionService {
       case LIVE_AGENT_RUN_EVENT.CALL_ENDING:
         this.#endCall(exchange);
         return;
-      // Code is held for the words it belongs to, which start with Luke's next answer.
-      case LIVE_AGENT_RUN_EVENT.CODE_SHOWN: {
-        const session = this.#sessionOf(exchange);
-        const { kind: _kind, runId: _runId, ...shown } = event;
-        if (session) session.pendingCode = { shown, delegationId: this.#delegationOf(exchange) };
-        return;
-      }
       // Note that a sentence is spoken as it is told, with no settle of the
       // service's own to wait for, because the agent tells none ahead of the
       // results of the actions journaled before it: the settled mark it tells
@@ -1847,22 +1808,6 @@ export class LiveSessionService {
     if (next === undefined) return;
     session.holdingQuestion = true;
     this.#speakInto(session, delegationId, queuedQuestionNote(next.question, next.recommendation));
-  }
-
-  /**
-   * Puts the held code on the developer's screen and tells the voice it is
-   * there, so the words Luke has just begun and the lines lit arrive
-   * together.
-   */
-  #releaseCode(session: StandingSession): void {
-    const held = session.pendingCode;
-    if (held === undefined) return;
-    session.pendingCode = undefined;
-    this.#options.onCode?.(held.shown);
-    this.#append(
-      session,
-      thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.shown.code.ref))),
-    );
   }
 
   /**

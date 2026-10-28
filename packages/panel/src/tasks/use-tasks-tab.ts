@@ -8,23 +8,12 @@ import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import type {
-  GitHubRepositoryIssuesAnswer,
-  RepositoryIssuesAsk,
-} from "@luke/features/github-repositories-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import {
-  type CatalogModel,
-  type MacOffer,
-  MODEL_PROVIDER,
-  type ModelChoice,
-} from "@luke/features/models-wire";
+import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
-import type { TaskIssueChoice } from "@luke/features/task-issue-wire";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -45,11 +34,9 @@ import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
-import type { MicrophoneStatus } from "@luke/settings/microphone";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
-import { callTaskName, MICROPHONE_PRESS, microphoneButton } from "@luke/ui/call-card-model";
 import { pendingShown, pendingWithout } from "@luke/ui/pending-values";
 import {
   isAgentTab,
@@ -77,7 +64,6 @@ import {
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
-  type LinearIssuesAsk,
   MARK_FAILED_NOTES,
   markAsked,
   markedView,
@@ -127,25 +113,21 @@ import {
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
-import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { type ActHandle, toastActFailure } from "../act.js";
+import type { ActHandle } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
-import { useOpenAiKeyMissing } from "../openai-key.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { usePendingNow } from "../pending-clock.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
-import { useStandingCall, voiceLostNow, voiceViewNow } from "../use-voice-view.js";
-import type { AgentCallPlace, AgentCallPress } from "./agent-call.js";
+import { useExperiment } from "../use-app-state.js";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -165,7 +147,6 @@ import {
 } from "./coding-agent-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
-import type { NewTaskLink } from "./new-task-links.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { SectionReveal } from "./plan-body.js";
 import type { RevisionSource } from "./plan-history-model.js";
@@ -197,7 +178,6 @@ import {
   type NamedAgents,
   useMainTabs,
 } from "./use-main-tabs.js";
-import { usePanelArrivals } from "./use-panel-arrivals.js";
 import {
   type HistorySpot,
   type PlanHistoryControl,
@@ -528,25 +508,23 @@ export interface NewTaskPreset {
 /**
  * What New task's card held as it pressed Start, which it hands its start
  * so a card opened again on a refusal starts where it was left: the
- * repository, the issues linked, the model on its chip, and the press it
+ * repository, the model on its chip, and the press it
  * made, whose key a Retry asking the same carries again.
  */
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;
-  readonly links: readonly NewTaskLink[];
   readonly choice: ModelChoice | undefined;
   readonly press: NewTaskPress;
 }
 
 /**
- * What a start comes from beyond its name, repository, and workspace: the
- * Linear and GitHub issues it links, each with its relation, the agent New
- * task's composer starts on its words in the task's own start (`handed`).
+ * What a start comes from beyond its name, repository, and workspace: where
+ * its agents run, and the agent New task's composer starts on its words in
+ * the task's own start (`handed`).
  */
 export interface NewTaskStart {
-  readonly issues?: readonly TaskIssueChoice[];
   /** Where the task's agents run, where the card's Runs on chose: the cloud, or one of the member's devices. */
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
@@ -632,10 +610,6 @@ export interface TasksControl {
   copy: { onPress: () => void };
   /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
   edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
-  /** What an agent's tab, or an agent's page, takes calls through, told where its agent stands (`useAgentCallDoors`); none where the window has no voice, as the web's has none. */
-  calls: AgentCallPress | undefined;
-  /** Whether a call into one of the open task's agents is in progress, so the plan may still be written. */
-  live: boolean;
   /** The task's column's tabs: its agents' and its draft's, and which is shown. */
   mainTabs: MainTabsControl;
   /** The side panel beside the open task's column: shown or not, its tab, and its width. */
@@ -783,7 +757,7 @@ export interface TasksControl {
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
     /**
      * Starts the task on the repository given, or none, in the workspace
-     * given, with an empty plan and no call, linking the issues picked,
+     * given, with an empty plan and no call,
      * which closes the dialog and opens the task; with an agent handed over it opens the
      * task on a draft agent's tab holding the agent's prompt, files, and
      * model, which starts the agent at once; answers why the task did not
@@ -814,28 +788,6 @@ export interface TasksControl {
     tasks: readonly { readonly id: string; readonly name: string }[];
     /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
     onShowMention: (mention: PlanMention) => void;
-    /**
-     * The read of a workspace's Linear issues, where that workspace has
-     * Linear connected; none where it has not, which leaves the name a plain
-     * field. Asked nothing, it answers the issues the dialog reads as it
-     * opens; asked a search or an identifier, it answers what Linear finds
-     * for the name as typed.
-     */
-    linearIssuesIn: (
-      workspaceId: string | undefined,
-    ) => ((ask?: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>) | undefined;
-    /**
-     * The read of a repository's GitHub issues through a workspace's
-     * installation, where that workspace has GitHub connected; none where it
-     * has not. Asked nothing, it answers the repository's open issues; asked
-     * words or a number, what GitHub finds for them; either way, or that the
-     * installation grants the App no issues, with where that is granted.
-     */
-    githubIssuesIn: (
-      workspaceId: string | undefined,
-    ) =>
-      | ((repository: string, ask: RepositoryIssuesAsk) => Promise<GitHubRepositoryIssuesAnswer>)
-      | undefined;
   };
   /** Leaves the open task for the page the window rests on (`resting-page.ts`); a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -1127,16 +1079,6 @@ function rememberedChoice(
     : { agentId: chosen.agentId, itemId: chosen.itemId };
 }
 
-/** What a Call press asks the host: the agent, and the task it is on where it is on one. */
-function talkOf(agentId: string, place: AgentCallPlace): { agentId: string; taskId?: string } {
-  return place.taskId === undefined ? { agentId } : { agentId, taskId: place.taskId };
-}
-
-/** What the toast says once a Call press has ended the call standing on another place. */
-function secondCallNote(placeName: string): string {
-  return `Call on ${placeName} ended`;
-}
-
 /**
  * What the open task holds of each fixed tab's kind: its plan always, and of
  * its Inbox whether it may draw one, an agent held, an archived one among
@@ -1159,8 +1101,6 @@ export function useTasksTab(input: {
   account: string | undefined;
   /** The signed-in account's id, whose own work the window names as theirs; none while signed out. */
   accountId?: string | undefined;
-  voiceAvailable: boolean;
-  microphoneStatus: MicrophoneStatus;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
   /** The agents main says ended while no one was looking, each until its tab is shown. */
@@ -2252,83 +2192,9 @@ export function useTasksTab(input: {
     copyWithToast(planMarkdown(region.task), TASK_COPIED_NOTE);
   };
 
-  // A platform with no voice, the web's, takes no calls.
-  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
-  // A call into one of the open task's agents is in progress, so the plan may still be written.
-  // Note that the call is read apart from who is heard on it, so the tab is not drawn again with every breath of a call.
-  const standingCall = useStandingCall();
-  // Note that a call into an agent with no task is no task's, though no task is open either.
-  const live = standingCall?.taskId !== undefined && standingCall.taskId === tasks.activeTaskId;
-  // A Call press that would open a call into one agent while another's call
-  // stands ends that call: it acts at once, since nothing is lost (what was
-  // said stays in that agent's transcript), and its toast's Undo calls the
-  // earlier place again, which ends the new call in turn.
-  const callSurface = pageAgent ?? tasks.activeTaskId;
-  const openAiKeyMissing = useOpenAiKeyMissing();
-  const otherCall = (agentId: string) =>
-    standingCall !== undefined && standingCall.agentId !== agentId ? standingCall : undefined;
-  const callOver = (agentId: string, place: AgentCallPlace, earlier: VoiceCallAbout) => {
-    const ended = secondCallNote(callTaskName(tasks, earlier));
-    const again = talkOf(earlier.agentId, { taskId: earlier.taskId });
-    act(ACT_KIND.TASKS_TALK, talkOf(agentId, place)).then(
-      () => toast(undoToast(ended, () => press(ACT_KIND.TASKS_TALK, again))),
-      toastActFailure,
-    );
-  };
-  // The press names its agent and where it stands, the task it is on or
-  // none, whatever task is open, and the voice window, which owns the call,
-  // opens it into the agent or toggles it. It is read off the document as
-  // the press lands, so a door handed down once answers for the voice as it
-  // stands.
-  const pressCall = (agentId: string, place: AgentCallPlace) => {
-    const now = voiceViewNow();
-    const button = microphoneButton({
-      voiceAvailable: input.voiceAvailable,
-      microphoneStatus: input.microphoneStatus,
-      agentId,
-      archived: place.archived === true,
-      listening: now.listening,
-      call: now.call,
-      voiceStatus: now.voiceStatus,
-      openAiKeyMissing,
-      voiceLost: voiceLostNow(),
-    });
-    // Note that a call runs on the OpenAI key, which Codex's row holds.
-    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY)
-      input.onOpenApiKeys(MODEL_PROVIDER.OPENAI);
-    if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
-      press(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
-    }
-    if (button.press === MICROPHONE_PRESS.OPEN_SETTINGS) press(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
-    if (button.press !== MICROPHONE_PRESS.TALK || callSurface === undefined) return;
-    const earlier = otherCall(agentId);
-    if (earlier === undefined) press(ACT_KIND.TASKS_TALK, talkOf(agentId, place));
-    else callOver(agentId, place, earlier);
-  };
-  const pressCallNow = useRef(pressCall);
-  pressCallNow.current = pressCall;
-  // The doors an agent's tab takes calls through, the same from draw to draw; none where the window has no voice.
-  const callDoors = useMemo<AgentCallPress>(
-    () => ({ onPress: (agentId, place) => pressCallNow.current(agentId, place) }),
-    [],
-  );
-
-  // A fixture's staged task has nothing arriving on it, and a page arrives
-  // only on a call, since what a task opens with it already held.
-  const arrivedTabs = usePanelArrivals({
-    // Note that nothing of the plan's arrives while an agent's page holds the
-    // panel, so the plan's visit ends, and what it gained meanwhile counts as
-    // seen.
-    taskId: fixture === undefined ? (pageAgent ?? tasks.activeTaskId) : undefined,
-    pages: pageAgent === undefined && live ? (tasks.pages ?? NO_PAGES) : undefined,
-    panel: sidePanel,
-  });
-  // An agent that ended unseen marks its tab unread as an arrival does; main
-  // clears it once the tab is shown.
-  const unreadTabs: readonly StripTab[] = [
-    ...arrivedTabs,
-    ...input.unseenAgents.map((agent) => ({ agent })),
-  ];
+  // An agent that ended unseen marks its tab unread; main clears it once the
+  // tab is shown.
+  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => ({ agent }));
 
   // A fixture's repositories are read from nowhere, as its tasks are. The
   // chip lists the repositories of the workspace its task is in: the open
@@ -2579,9 +2445,6 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(from.issues === undefined || from.issues.length === 0
-        ? undefined
-        : { issues: from.issues }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
@@ -2660,27 +2523,6 @@ export function useTasksTab(input: {
           : undefined,
       (refused: Error): Failure => ({ reason: FAILURE_REASON.OTHER, text: refused.message }),
     );
-
-  // The dialog matches its name against the Linear issues of the workspace
-  // it starts in, and searches them, where that workspace has Linear connected.
-  const linearIssuesIn = useCallback<TasksControl["newTask"]["linearIssuesIn"]>(
-    (workspaceId) => {
-      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-      if (linked?.linear?.active !== true) return undefined;
-      return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
-    },
-    [viewed.workspaces, act],
-  );
-  // The dialog lists the chosen repository's GitHub issues, where the workspace has GitHub connected.
-  const githubIssuesIn = useCallback<TasksControl["newTask"]["githubIssuesIn"]>(
-    (workspaceId) => {
-      const linked = viewed.workspaces.find((each) => each.id === workspaceId);
-      if (linked?.github == null || !linked.github.active) return undefined;
-      return (repository, ask) =>
-        act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
-    },
-    [viewed.workspaces, act],
-  );
 
   // New task opens the dialog over whatever stands, an open task and its
   // call included, which stay until a task is started. Note that a press
@@ -3263,9 +3105,6 @@ export function useTasksTab(input: {
     region,
     copy: { onPress: pressCopy },
     edit,
-    // An agent's tab takes calls where the window has a voice to call with; the web's has none.
-    calls: voiceOffered ? callDoors : undefined,
-    live,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
@@ -3512,8 +3351,6 @@ export function useTasksTab(input: {
       onClose: () => setNewTaskAsk(undefined),
       tasks: sidebar,
       onShowMention: guard(showMention),
-      linearIssuesIn,
-      githubIssuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),
     onRenameTask: renameTask,

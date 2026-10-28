@@ -31,7 +31,7 @@ import {
   type CodingAgentSummary,
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
+import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
 
@@ -95,7 +95,7 @@ function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | und
         cancelRequestedAt: turn.cancelRequestedAt?.getTime(),
         queuedAt: turn.queuedAt.getTime(),
         settledAt: turn.settledAt?.getTime() ?? null,
-        sessionEnded: turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        sessionEnded: turn.failure === TURN_FAILURE.SESSION_ENDED,
       };
 }
 
@@ -204,7 +204,7 @@ export function ranDirectlyFolderOf(
   turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): string | undefined {
   if (turn?.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure !== BRAIN_REQUEST_FAILURE.SESSION_ENDED) return undefined;
+  if (turn.failure !== TURN_FAILURE.SESSION_ENDED) return undefined;
   const detail = turn.failureDetail ?? "";
   if (!detail.startsWith(RAN_DIRECTLY_DETAIL)) return undefined;
   const folder = detail.slice(RAN_DIRECTLY_DETAIL.length);
@@ -217,11 +217,11 @@ export function codingAgentFailureOf(
 ): CodingAgentFailure | undefined {
   if (turn === undefined) return CODING_AGENT_FAILURE.NOT_STARTED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
-  if (turn.failure === BRAIN_REQUEST_FAILURE.SESSION_ENDED) {
+  if (turn.failure === TURN_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
+  if (turn.failure === TURN_FAILURE.SESSION_ENDED) {
     return CODING_AGENT_FAILURE.SESSION_ENDED;
   }
-  if (turn.failure !== BRAIN_REQUEST_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
+  if (turn.failure !== TURN_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
   const detail = turn.failureDetail ?? "";
   const named = FAILURE_WORDS.find(([, words]) => words.some((word) => detail.includes(word)));
   return named?.[0] ?? CODING_AGENT_FAILURE.MODEL;

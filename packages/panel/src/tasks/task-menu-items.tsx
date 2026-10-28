@@ -5,7 +5,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { Atom } from "effect/reactivity";
 import { useEffect } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
-import { LINK_COPY } from "../copy-feedback.js";
+import { copyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 
 /**
@@ -41,11 +41,7 @@ export function copyTaskLinkItem(
   taskId: string,
   place: MentionPlace,
 ): MenuAction {
-  return commandAction(
-    PANEL_COMMAND.COPY_LINK,
-    () => copy(encodeMention({ kind: MENTION_KIND.TASK, taskId: taskId }, place), LINK_COPY.COPIED),
-    false,
-  );
+  return copyLinkItem(copy, encodeMention({ kind: MENTION_KIND.TASK, taskId: taskId }, place));
 }
 
 /** Whether a task is unread, as its sidebar row's weight says, and the mark that makes it unread or read. */

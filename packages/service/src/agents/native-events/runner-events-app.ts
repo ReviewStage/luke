@@ -49,7 +49,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { BRAIN_RUN_EVENT, type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
+import { RUN_EVENT, type RunEvent, TURN_ORIGIN } from "../../core.js";
 import { afterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -307,8 +307,8 @@ function turnsMovedBy(writes: readonly NativeWrite[]): TurnsMoved {
     writes.flatMap((write) => (write.kind === NATIVE_WRITE.EVENT ? [write.event.kind] : [])),
   );
   return {
-    started: kinds.has(BRAIN_RUN_EVENT.TURN_STARTED),
-    ended: kinds.has(BRAIN_RUN_EVENT.TURN_ENDED),
+    started: kinds.has(RUN_EVENT.TURN_STARTED),
+    ended: kinds.has(RUN_EVENT.TURN_ENDED),
   };
 }
 
@@ -345,7 +345,7 @@ function reportRefused(what: string, result: Result.Result<unknown, { readonly r
 }
 
 /** Lands the events gathered so far as one write of the writer. */
-function landEvents(applying: Applying, events: readonly BrainRunEvent[]) {
+function landEvents(applying: Applying, events: readonly RunEvent[]) {
   return Effect.gen(function* () {
     if (events.length === 0) return;
     const results = yield* applying.writer.consumeAll(applying.target, events);
@@ -377,7 +377,7 @@ function landWrite(
       );
     case NATIVE_WRITE.TAKE_LINE:
       // A typed line awaits its turn as a row; a call's ask has none and is bound by its delivery,
-      // the line's id the ask named (`brain-host/brain-ask.ts`), so the call follows the turn.
+      // the line's id the ask named, so the call follows the turn.
       return Effect.flatMap(
         ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
         (bound) =>
@@ -462,7 +462,7 @@ function landWrite(
  */
 function landWrites(applying: Applying, writes: readonly NativeWrite[], now: number) {
   return Effect.gen(function* () {
-    let events: BrainRunEvent[] = [];
+    let events: RunEvent[] = [];
     const stops: string[] = [];
     // Only the newest reading of the context stands, so one batch writes it once.
     const lastContext = writes.findLastIndex((write) => write.kind === NATIVE_WRITE.CONTEXT);
@@ -644,7 +644,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     yield* settleTaskIfFinished(target.userId, taskId);
   }
   // A call's ask stopped before the runner took its line ends the turn it opened, as a Stop after
-  // its binding does (`brain-host/brain-ask.ts`), once the batch's writes stand, and
+  // its binding does, once the batch's writes stand, and
   // ahead of anything slower, as a title, so the runner hears the Stop at once.
   for (const turnId of applied.value.stops) {
     yield* stopTurnOfAsk(

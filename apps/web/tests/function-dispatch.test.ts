@@ -221,8 +221,6 @@ test("every route that stays off the oRPC router is reached at its public URL by
   });
   // The functions that answer by their own name are rewritten onto themselves, which the filesystem then serves as before.
   for (const path of [
-    "/api/voice/sessions",
-    "/api/voice/sessions.js",
     "/api/terminal/sessions",
     "/api/terminal/sessions.js",
     "/api/browser/live",
@@ -232,7 +230,7 @@ test("every route that stays off the oRPC router is reached at its public URL by
   ]) {
     assert.equal(firstRule(path)?.dest, path, path);
   }
-  assert.equal(firstRule("/api/voice/sessionsXjs")?.src, ORPC_FALLBACK_SRC);
+  assert.equal(firstRule("/api/terminal/sessionsXjs")?.src, ORPC_FALLBACK_SRC);
 });
 
 test("a path of every hosted resource is landed on the oRPC route at its own public path, segments and query kept", async () => {

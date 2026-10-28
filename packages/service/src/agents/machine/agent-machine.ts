@@ -3,20 +3,19 @@
  *
  * A native agent's runner (`@luke/agent-runner`) runs on a machine Luke
  * opens for it, today a Vercel Sandbox (`vercel-machine.ts`). Its launch
- * (`../coder-host/runner-sessions.ts`) and the doors Luke's MCP tools read
- * a file or run `show_code` through (`../luke-mcp/sandbox-door.ts`) reach
- * that machine here and nowhere else, so a second kind of machine shares one
- * launch path and one set of doors rather than a copy of each that drifts.
+ * (`../coder-host/runner-sessions.ts`) and the door Luke's MCP tools read
+ * a file through (`../luke-mcp/sandbox-door.ts`) reach that machine here
+ * and nowhere else, so a second kind of machine shares one launch path and
+ * one door rather than a copy of each that drifts.
  *
  * The interface is pitched at intent and holds only what the launch and the
- * doors use: where the agent's things stand on the machine (`layout`), open
+ * door use: where the agent's things stand on the machine (`layout`), open
  * the agent's place with its checkout, find it again and record the runner
  * it runs, set the repository's credential at its firewall, resume, stop,
  * and discard it, write files into it, launch the runner there and write
- * its stdin, read whether it ended, end it, read one file, and run one
- * command of the repository's. What a machine keeps of its own beyond that
- * (a Vercel sandbox's snapshots, the Terminal, the browser) stays outside it
- * until a second machine needs it.
+ * its stdin, read whether it ended, end it, and read one file. What a
+ * machine keeps of its own beyond that (a Vercel sandbox's snapshots, the
+ * Terminal, the browser) stays outside it until a second machine needs it.
  *
  * Two machines answer it: Vercel Sandbox (`vercel-machine.ts`) and the
  * starter's Mac (`device-machine.ts`), which the agent's row picks between
@@ -42,14 +41,8 @@ import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { KeyRefusal, PlanRefusal } from "../brain-host/eve-sessions.js";
 import type { CheckoutServices } from "../coder-host/checkout.js";
 import type { RunnerBundle } from "../coder-host/runner-bundle.js";
-import type { RepositorySandbox } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
-import {
-  type CommandExit,
-  type CommandRun,
-  type SandboxFile,
-  SandboxUnavailable,
-} from "../vercel-sandbox-api.js";
+import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
 export type MachineRunning = string & Brand.Brand<"MachineRunning">;
@@ -235,9 +228,6 @@ export interface RunnerLaunch<A, E, R, EL, RL> {
   readonly abandon: (ready: A) => Effect.Effect<void, { readonly _tag: string }, RL>;
 }
 
-/** What one command of a repository's runs: a shell script, where it says, under the environment it names. */
-export type RepositoryCommand = Parameters<RepositorySandbox["run"]>[0];
-
 export interface AgentMachineService {
   /** Where the machine keeps the agent's things. */
   readonly layout: (
@@ -329,11 +319,6 @@ export interface AgentMachineService {
     path: string,
     bound: number,
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
-  /** One command of the repository's run in the session's place as the agent's own user, and waited on. */
-  readonly runRepositoryCommand: (
-    session: string,
-    command: RepositoryCommand,
-  ) => Effect.Effect<CommandRun, SandboxUnavailable>;
 }
 
 /** What a machine does to a place it already opened: everything but where it keeps things, opening a place, and launching a runner in it. */

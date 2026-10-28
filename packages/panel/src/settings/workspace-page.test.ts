@@ -727,8 +727,14 @@ function rowActions(row: HTMLElement): string[] {
   return items;
 }
 
-/** Chooses `label` from the ⋯ on `row`. */
+/** Chooses `label` from the ⋯ on `row`, or presses its button of that name where the row's one act stands alone. */
 async function chooseAction(row: HTMLElement, label: string): Promise<void> {
+  const lone = row.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (lone !== null) {
+    act(() => lone.click());
+    await settle();
+    return;
+  }
   const ellipsis =
     row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the row draws no ⋯");
@@ -1699,9 +1705,9 @@ test("a service from before several connections names one GitHub account alone, 
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
 
-test("Escape in Linear's menu hands focus back to its ⋯", async () => {
-  const { page } = await mount(WITH_LINEAR);
-  const ellipsis = ellipsisOn(rowNamed(page, "Linear"));
+test("Escape in a member's menu hands focus back to its ⋯", async () => {
+  const { page } = await mount(ACME);
+  const ellipsis = ellipsisOn(memberNamed(page, "Sam"));
 
   act(() => ellipsis.click());
   const firstFocused = document.activeElement?.textContent;
@@ -1711,7 +1717,7 @@ test("Escape in Linear's menu hands focus back to its ⋯", async () => {
     );
   });
 
-  assert.equal(firstFocused, "Disconnect");
+  assert.equal(firstFocused, "Copy link");
   assert.equal(document.activeElement, ellipsis);
   assert.equal(ellipsis.getAttribute("aria-expanded"), "false");
 });
@@ -2253,13 +2259,9 @@ test("Cancel invitation, drawn red, sends nothing while an invitation is on its 
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
-  const ellipsis =
-    row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? assert.fail();
-  act(() => ellipsis.click());
   const cancel =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Cancel invitation",
-    ) ?? assert.fail("no Cancel invitation");
+    row.querySelector<HTMLButtonElement>('button[aria-label="Cancel invitation"]') ??
+    assert.fail("no Cancel invitation");
   act(() => cancel.click());
   release();
   await settle();
@@ -2306,8 +2308,8 @@ test("an address already invited is said under the form, and a member is offered
 });
 
 test("a row's menu left open on one workspace closes when another is listed in its place", async () => {
-  const { page, relist } = await mount(WITH_LINEAR);
-  act(() => ellipsisOn(rowNamed(page, "Linear")).click());
+  const { page, relist } = await mount(ACME);
+  act(() => ellipsisOn(memberNamed(page, "Sam")).click());
   const opened = document.querySelector('[role="menu"]:not([data-leaving])') !== null;
 
   await relist({
@@ -2320,7 +2322,6 @@ test("a row's menu left open on one workspace closes when another is listed in i
 
   assert.equal(opened, true);
   assert.equal(document.querySelector('[role="menu"]:not([data-leaving])'), null);
-  assert.equal(ellipsisOn(rowNamed(page, "Linear")).getAttribute("aria-expanded"), "false");
 });
 
 test("a workspaces read that failed says so with Retry, which asks for them again", () => {
@@ -2433,7 +2434,7 @@ test("an admin's Linear Connect is named Connecting while the browser is sent, a
   assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
-test("a connected workspace's Linear reads connected for everyone and stands quiet, its ⋯ disconnects after asking, and a member sees it read only", async () => {
+test("a connected workspace's Linear reads connected for everyone and stands quiet, its Disconnect button asks first, and a member sees it read only", async () => {
   const connected = WITH_LINEAR;
   const admin = await mount(connected);
   const row = rowNamed(admin.page, "Linear");
@@ -2450,7 +2451,7 @@ test("a connected workspace's Linear reads connected for everyone and stands qui
   const unconnected = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
 
   assert.deepEqual(words, ["Linear", "Connected for everyone in this workspace"]);
-  assert.deepEqual(controls, ["Linear actions"]);
+  assert.deepEqual(controls, ["Disconnect"]);
   assert.deepEqual(linearSent(), [
     [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId: connected.id }],
   ]);
@@ -2522,7 +2523,7 @@ test("a Disconnect still being asked is dismissed once a read finds its installa
   sentry = SENTRY_INSTALLED;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect acme");
+  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect");
   const asked = document.querySelector('[role="alertdialog"]') !== null;
   sentry = { configured: true, installations: [] };
   act(() => {
@@ -2571,13 +2572,13 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
 
-test("an installed workspace's Sentry names its organization, its ⋯ disconnects it after asking, and a member sees it read only", async () => {
+test("an installed workspace's Sentry names its organization, its Disconnect button asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(admin.page), "Sentry");
   const words = rowWords(row);
 
-  await chooseAction(row, "Disconnect acme");
+  await chooseAction(row, "Disconnect");
   await confirm("Disconnect");
   const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -2597,13 +2598,13 @@ test("an installed workspace's Sentry names its organization, its ⋯ disconnect
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
-test("in the window, each member's ⋯ opens their profile first, in the workspace the page shows", async () => {
+test("in the window, each member's ⋯ offers Copy link first, then opens their profile in the workspace the page shows", async () => {
   const opened: [string, string | undefined, string | undefined][] = [];
   const { page } = await mount(ACME, [], (userId, name, workspaceId) =>
     opened.push([userId, name, workspaceId]),
   );
 
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Open profile", "Copy link"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Copy link", "Open profile"]);
   await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);

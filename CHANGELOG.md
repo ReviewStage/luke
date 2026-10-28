@@ -96,6 +96,8 @@ a long press, and a right-click open their menu as a sheet from the bottom of
 the screen, every item in reach, rather than a menu floating over the page.
 ([#5552](https://github.com/ReviewStage/luke/pull/5552))
 
+![Luke's web app in Safari on an iPhone, its Tasks page dimmed under a sheet risen from the bottom for Rotate webhook signing secrets: Copy link, Mark as unread, Rename, Version history, Pin, Mark done, Cancel task, Move to section, Change repository, Open on GitHub, and Permanently delete, each a full-width row.](apps/web/public/changelog/0.22.0/menus-rise-from-the-bottom-on-a-phone.png)
+
 ### Long transcripts stay fast
 
 An agent that has run for days, thousands of tool calls and dozens of workers
@@ -198,6 +200,8 @@ and the Inbox marks its chosen items read or resolves them together.
 [#5092](https://github.com/ReviewStage/luke/pull/5092),
 [#5124](https://github.com/ReviewStage/luke/pull/5124))
 
+![The Tasks page's List, close up, with four Todo tasks chosen and the bar at its foot reading 4 selected, Mark done, Set status, Move to section, and Clear.](apps/web/public/changelog/0.21.0/select-several-at-once.png)
+
 ### Nothing you write is lost
 
 Esc, closing, or clicking away keeps your words in a message's Edit box, a
@@ -267,6 +271,8 @@ and its arrows step through that automation's runs.
 [#5450](https://github.com/ReviewStage/luke/pull/5450),
 [#5459](https://github.com/ReviewStage/luke/pull/5459))
 
+![Automations on its Runs tab over the whole window: acme's runs newest first, three working and two failed, fired by Sentry issues and alerts, schedules, GitHub, and a webhook, with Running 3 and Failed 2 beside All and the sidebar's Automations row counting 3.](apps/web/public/changelog/0.21.0/automation-runs.png)
+
 ### Write on pull requests as you write plans
 
 Click into a pull request's description in its tab to edit it in place, and
@@ -283,6 +289,8 @@ in a sheet of their own beneath them. The chosen tab is a raised pill, drawn
 as the sidebar's open place is.
 ([#5324](https://github.com/ReviewStage/luke/pull/5324),
 [#4938](https://github.com/ReviewStage/luke/pull/4938))
+
+![Teammate invitations on its Add teammate invitations agent, its tab row level with the traffic lights, beside #214's Files changed in the side panel, the page and the panel each in a sheet of its own.](apps/web/public/changelog/0.21.0/tabs-on-the-windows-frame.png)
 
 ### Menus and arrow keys on every row
 
@@ -305,6 +313,8 @@ icon, and shortcut everywhere.
 [#5069](https://github.com/ReviewStage/luke/pull/5069),
 [#5111](https://github.com/ReviewStage/luke/pull/5111),
 [#5115](https://github.com/ReviewStage/luke/pull/5115))
+
+![The sidebar, close up, with the pinned Teammate invitations row's menu open: Move up and Move down with ⇧⌘↑ and ⇧⌘↓, then Copy plan, Copy link, Unpin, Mark done, Move to section, and the rest with their shortcuts.](apps/web/public/changelog/0.21.0/menus-and-arrow-keys-on-every-row.png)
 
 ### Luke with a screen reader
 
@@ -850,6 +860,8 @@ titles among them, now runs on your own subscription or key, never Luke's.
 [#4661](https://github.com/ReviewStage/luke/pull/4661),
 [#4803](https://github.com/ReviewStage/luke/pull/4803))
 
+![Settings › Agents over the whole window: Claude and Codex each Connected via subscription, the default model Opus 5.5 at High effort, and Chapters on Sonnet 5.5.](apps/web/public/changelog/0.20.0/coding-agents-on-your-plan.png)
+
 ### Installed skills
 
 Install skills for your coding agents from Settings › Skills: paste an
@@ -870,6 +882,8 @@ Workspace, or Personal badge.
 [#4757](https://github.com/ReviewStage/luke/pull/4757),
 [#4830](https://github.com/ReviewStage/luke/pull/4830),
 [#4901](https://github.com/ReviewStage/luke/pull/4901))
+
+![A coding agent's message box with / typed, close up: its picker lists db-migration and members-tests marked Repo, acme-style, postmortem, and email-preview marked Workspace, and pr-description marked Personal.](apps/web/public/changelog/0.20.0/installed-skills.png)
 
 ### A new look, in motion
 
@@ -924,6 +938,8 @@ itself once its pull request merges and nothing waits on you.
 [#4679](https://github.com/ReviewStage/luke/pull/4679),
 [#4816](https://github.com/ReviewStage/luke/pull/4816),
 [#4886](https://github.com/ReviewStage/luke/pull/4886))
+
+![The Tasks page's List beside the sidebar: acme's tasks grouped In progress, Todo, Backlog, and Done, each row with its priority, key such as ACME-42, repository, its assignee's face, and its creator's face.](apps/web/public/changelog/0.20.0/the-tasks-page.png)
 
 ### Sections
 
@@ -980,6 +996,8 @@ over the agent's work, and a line you type while the call is up goes to it.
 [#4467](https://github.com/ReviewStage/luke/pull/4467),
 [#4495](https://github.com/ReviewStage/luke/pull/4495))
 
+![Add teammate invitations on a call: an earlier call between its Call started and Call ended markers, the standing one marked Live, each spoken answer over its folded tool calls, and the call's mute and end controls in the message box.](apps/web/public/changelog/0.20.0/calls-on-agents.png)
+
 ### Formatting in plans and messages
 
 Format a plan from a toolbar over your selection, or type / to insert a
@@ -994,6 +1012,8 @@ Markdown, by shortcut, or from the toolbar.
 [#4838](https://github.com/ReviewStage/luke/pull/4838),
 [#4841](https://github.com/ReviewStage/luke/pull/4841),
 [#4844](https://github.com/ReviewStage/luke/pull/4844))
+
+![The Teammate invitations plan open to edit, close up, with / typed under its Context and the insert menu showing Quote, Code block, Diagram, Table, Divider, Picture, and Mention.](apps/web/public/changelog/0.20.0/formatting-in-plans-and-messages.png)
 
 ### Preview tabs
 

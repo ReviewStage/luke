@@ -7,7 +7,6 @@ import type { MicrophoneRoute, MicrophoneStatus } from "@luke/settings/microphon
 import type { NotificationsStatus } from "@luke/settings/settings-controls";
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
-import type { OutputAudioState } from "@luke/voice/audio";
 import {
   callTranscriptChangeBetween,
   isVoiceCallTranscriptChange,
@@ -24,20 +23,14 @@ import type { MacCommandAsk } from "./mac-command-ask.js";
 export type { MacCommandAsk } from "./mac-command-ask.js";
 
 /**
- * The launch profiles a window answers to. A capture run stages a
- * conversation it has no voice window for: Luke speaking, that with the
- * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the panel's Tasks tab over a synthetic task, or over its synthetic coding
- * agent and that agent's tabs; or a synthetic account signed in, on a page
- * of Settings, on Admin, on Automations, or with its Inbox and its own page
- * filled. Any other word — the default
- * included — stages nothing.
+ * The launch profiles a window answers to. A fixture run stages the panel's
+ * Tasks tab over a synthetic task, or over its synthetic coding agent and
+ * that agent's tabs; or a synthetic account signed in, on a page of
+ * Settings, on Admin, on Automations, or with its Inbox and its own page
+ * filled. Any other word — the default included — stages nothing.
  */
 export const RUN_PROFILE = {
   IDLE: "idle",
-  SPEAKING: "speaking",
-  MUTED: "muted",
-  DUPLEX: "duplex",
   /** The panel's Tasks tab, opened at launch over a synthetic task. */
   TASKS: "tasks",
   /** The same task mid-call, opened at launch on the transcript of what was said on its calls. */
@@ -79,8 +72,6 @@ export const RUN_PROFILE = {
   AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
   /** The same agent beside a page it showed, open in a tab of its own. */
   AGENT_PAGE: "agent-page",
-  /** The same agent mid-call, the floating call window standing over the panel. */
-  AGENT_CALL: "agent-call",
   /** A synthetic account signed in, Settings opened at launch on its Account page. */
   SETTINGS_ACCOUNT: "settings-account",
   /** The same account, Settings on its team's workspace: its members, an invitation waiting, and its Linear's sign-in expired. */
@@ -129,7 +120,6 @@ interface AppRunFacts {
 export interface AppAudioSlice {
   microphoneStatus: MicrophoneStatus;
   microphoneRoute?: MicrophoneRoute;
-  outputAudio?: OutputAudioState;
 }
 
 interface AppVoiceSlice {
@@ -137,8 +127,7 @@ interface AppVoiceSlice {
    * The live conversation as the voice window last reported it, so a panel
    * that opens mid-exchange draws the exchange rather than an idle voice.
    * Absent until that window has reported once, and in a fixture or capture
-   * run, which raises no voice window, but where a call profile stages one
-   * (`fixture-stage.ts`).
+   * run, which raises no voice window.
    *
    * The loudness beside it is deliberately not here. It is a reading taken
    * twenty times a second that expires in fifty milliseconds, so nothing

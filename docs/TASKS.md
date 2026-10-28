@@ -54,11 +54,10 @@ A reviewer can hold the build to these as easily as to the layout:
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
 - The work column is the agents'. Each agent started on the task stands in
-  a tab of its own, and any of them takes a call; everything else, the plan's document, the task's Inbox,
-  and the code its agents put on screen, stands
+  a tab of its own, and any of them takes a call; everything else, the plan's document and the task's Inbox, stands
   in a side panel ("Side panel" below) that the developer opens and closes.
-  A task opens with the panel shown on its plan; only first code or an Inbox
-  item not yet seen opens it on its own, and there are no second documents.
+  A task opens with the panel shown on its plan; only an Inbox item not yet
+  seen opens it on its own, and there are no second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -97,44 +96,26 @@ sidebar, one page at a time:
 - **Document page**: the open task's saved document. Its header and its
   microphone row hold still, and only the document scrolls between them.
 
-Escape unwinds one page at a time, after any open microphone has been muted
-(Escape mutes first, as it does for any call): the document page back to the
+Escape unwinds one page at a time: the document page back to the
 resting page, which leaves the task, and the resting page closes nothing. Escape on the Settings tab's front page comes back to Tasks.
 
-### Opening, leaving, and calls
+### Opening and leaving
 
 - Opening a task, from the list or by starting one, makes it the host's one
   **active task**, and every panel's Tasks tab shows it on its document page.
   It opens on the agent tab it last showed, or on its plan: the side panel
-  on its Plan tab beside a column that offers **New voice chat** and **New
-  agent**.
-- A call is about an **agent**, never a task. Any agent's tab can take one,
-  from the Call button beside Dictate in its composer, and "+ → New voice
-  chat" starts an agent blank and calls it at once. One call stands on a Mac
-  at a time: calling another agent asks first, then hangs the call up and
-  opens one into that agent. The host creates a call only into an agent of
-  the task the panel has open (`compose-live.ts` reads the agent and checks
-  its task), and the service checks again.
+  on its Plan tab beside a column that offers **New agent**.
 - A task stays open while the developer turns to Settings or closes the
-  window, so a call into one of its agents goes on. The voice's notices (a
-  failure, a notice, or that the Mac's output is off) stand as toasts in the
-  window's one stack (`voice-notice-toast.ts`), and the call card stands
-  while the window has the keyboard. There are no captions: what is said streams into the
-  agent's transcript as it is heard.
+  window.
 - A task is left by Back (`‹`) or Escape on its document page, by opening
-  another task, or by a sign-out. Leaving a task, or opening another, leaves
-  its call standing: the call outlives the tab on screen. Deleting the
-  call's task, and signing out, end it.
-- Luke takes no keys from the machine. The microphone and speaker mute
-  chords answer while a call is in progress wherever the panel stands, and
-  Escape mutes and quiets Luke.
+  another task, or by a sign-out.
 - Nothing polls. An agent's saves reach the open task through its tab: once
   the transcript the tab reads shows an `edit_plan` answered, the task is
   read again (`tasks/agent-tab.tsx`).
   The list and the open task are read when a panel shows the Tasks tab; the
   open task again when a task opens, and the list again when one starts or
-  is deleted. Leaving the tab leaves the task and its call standing, and
-  coming back reads everything again.
+  is deleted. Leaving the tab leaves the task standing, and coming back
+  reads everything again.
 
 ### Task list
 
@@ -234,8 +215,8 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 ### New task
 
 One composer card whose words start a coding agent: the repository chip in
-its head row, the Issue chip beside it, and at its foot the model chip on
-the account's default, Dictate, and Start.
+its head row, and at its foot the model chip on the account's default,
+Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
@@ -244,12 +225,11 @@ the account's default, Dictate, and Start.
    listing the repositories the workspace's GitHub reaches. An agent needs a
    repository, so Start is held without one, and the card says so.
 2. **Start**, the round button; Return presses it. It starts the task with
-   an empty plan and no call, named by its issue where one was picked and
-   Untitled until the agent names it, and the agent on the words, the files,
+   an empty plan and no call, Untitled until the agent names it, and the
+   agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
-   which needs no repository. There is no Plan mode: starting a task never
-   opens a call, which only an agent's own tab starts.
+   which needs no repository. There is no Plan mode.
 
 ### Header
 
@@ -403,14 +383,9 @@ version kept of the task's Call tab is let go. ⌘T and ⌘W answer the column
 holding the focus, the side panel's once the pointer goes into it. A
 subagent's tab stays in the side panel.
 
-- **A new agent from the "+".** The column's "+" offers New voice chat,
-  where the window has a voice, then New agent, unavailable with Start's
-  own reason while Start could not run, then each of the task's agents,
-  picking one opening its tab again. Start's split menu offers New voice
-  chat at its foot too. New voice chat starts an agent blank, on the
-  account's one default model and needing no repository, opens its tab, and
-  calls it; a blank agent's first line, typed or spoken, is drawn as any
-  other line. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
+- **A new agent from the "+".** The column's "+" offers New agent,
+  unavailable with Start's own reason while Start could not run, then each
+  of the task's agents, picking one opening its tab again. New agent opens a draft tab (`tasks/draft-agent-tab.tsx`): no
   transcript yet, the composer focused, and the model chip on the account's
   default. Nothing reaches the service until the first message, which
   starts the agent with those words as its prompt; the agent's own tab then
@@ -419,8 +394,7 @@ subagent's tab stays in the side panel.
 - **The head.** The model · the effort · the status, which the tab's glyph
   wears (`state-glyph.tsx`): the mark of the harness the model runs in
   (Claude Code or Codex), giving way to the working mark while the agent is
-  starting or running, an alert in the danger colour once it failed, and the
-  voice's live mark while a call into the agent is in progress. A Stop
+  starting or running, and an alert in the danger colour once it failed. A Stop
   stands while the agent may still write; it asks the service to cancel the
   turn, and anything the agent pushed stays.
 - **What it published.** Once the agent has pushed, the head wears a pill
@@ -464,14 +438,11 @@ subagent's tab stays in the side panel.
   until it is shown.
 - **Privacy.** Every word is the agent's, the developer's, or the plan's, so
   the tab carries `ph-no-capture`.
-- **The web.** A browser has no voice, so its agent tabs draw their
-  transcripts, calls among them, and their composer, with no Call button,
-  and its "+" offers no New voice chat.
 
 ### Settings › Agents
 
-The model and effort every agent starts on, a voice chat's as a Start's, are
-the account's one default, with no voice default of its own, kept on the service with the account preferences
+The model and effort every agent starts on are
+the account's one default, kept on the service with the account preferences
 (`/api/account/preferences`'s `codingAgent` part) and shown on the Agents
 page of Settings (`settings/coding-agents-page.tsx`): a model menu
 with each model under its harness's mark (Claude Code's for Anthropic's,
@@ -758,26 +729,6 @@ the fixed template once kept as fields was carried
 over to its text by a one-time backfill (34 plans and 32 revisions in
 production), each field's words under its heading.
 
-### Call bar and the panel's voice
-
-- **Call button.** Beside Dictate in an agent's composer, on a platform with
-  a voice. One press calls the agent: the call opens and the microphone
-  opens. A second press, or the call bar's microphone, mutes it, and the
-  microphone stays open between the two because a call runs for minutes. A
-  press while another agent's call stands asks first, then hangs that call
-  up. The press asks for the microphone first where macOS has not granted
-  it, and opens System Settings where it was denied.
-- **Status**, at the call bar's left, in two lines. The first is the voice:
-  the one word `LIVE_STATUS` names, `Connecting`, `Listening`, `Muted`,
-  `Speaking`, or `Closing`, which reads `Handing off` or `About to answer`
-  while the voice waits. The second stands only while the agent works on
-  the call's turn, with the thinking dots and its pending command. The
-  service sends the snapshot as a `plan.activity` frame on the call's own
-  socket each time it changes, and the call's end is told as nothing doing.
-- **Everything else is the panel's own.** The waveform is the wings', and
-  a voice error or notice takes the notice line, with the button left able
-  to try again.
-
 ### Commands on the developer's Mac
 
 `run_on_mac` (`packages/service/src/agents/mac-command.ts`) runs one shell
@@ -866,14 +817,14 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-tasks.tsx`) and its control (`use-tasks-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `@luke/host/act-port`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
+| Acts | `ACT_KIND`, `@luke/host/act-port`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`packages/panel/src/markdown-message.tsx`) over `@luke/ui/markdown`'s note look (Streamdown, GitHub's dialect), raw HTML not rendered, only `http`/`https` links kept; `@luke/ui`'s `prose.css` | A document-scale style for it. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the task's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
-| Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open task's call alone. |
+| Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open task's call alone. |
 | Levels, errors | The voice's notices (`useVoiceNotice`, `voice-notice-toast.ts`), as toasts, and the sidebar's waveform (`desktop/luke-identity.tsx`) | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
-| The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
+| The call | `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with an agent of the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`tasks/agent-tab.tsx`), their control (`tasks/use-coding-agents.ts`) and the held transcript read (`tasks/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | The plan | Hosted storage; the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), research (LUKE-339), the notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and a coding agent's `edit_plan` (`packages/service/src/agents/coder-host/plan-edit.ts`). |
 

@@ -123,10 +123,8 @@ export {
   sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
-  type TaskCodeFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
-  taskCodeFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "./live-contract.js";
@@ -140,7 +138,6 @@ export {
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
   installedSkillPath,
-  VOICE_SERVICE_PATH,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,

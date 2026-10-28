@@ -71,7 +71,7 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
-import type { ChangesThreads } from "./agent-changes-tab.js";
+import type { ChangesReads, ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
 import { OpenFileTabProvider } from "./open-file-tab.js";
@@ -307,6 +307,18 @@ interface DrawOptions {
   readonly openTab?: (path: string) => void;
 }
 
+/** The reads the view was last drawn with, which the Pull request tab's Refresh reads again. */
+let heldReads: ChangesReads | undefined;
+
+/** Reads the changes again as the Pull request tab's Refresh does, the one Refresh its screen offers, with the review threads. */
+async function refreshAsTheTab(threads?: ChangesThreads): Promise<void> {
+  act(() => {
+    heldReads?.ask();
+    threads?.refresh?.();
+  });
+  await flush();
+}
+
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
   const { ChangesTabReading } = await import("../testing/changes-tab.js");
@@ -317,6 +329,9 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
     repository: options.repository ?? "acme/relay",
     tree: options.tree ?? { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
+    onReads: (reads) => {
+      heldReads = reads;
+    },
   });
   const opening =
     options.openTab === undefined
@@ -391,7 +406,9 @@ function typeSearch(words: string): void {
 
 /** The ⋯'s items, the menu opened. */
 function menuItems(): readonly HTMLButtonElement[] {
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  const options = document.querySelector<HTMLButtonElement>(
+    'button[aria-label="Files changed actions"]',
+  );
   act(() => options?.click());
   return [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
 }
@@ -1006,7 +1023,7 @@ test("the ⋯ holds the pull request's actions alone, no file's, its looks set i
 
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Copy patch", "Download patch", "Refresh changes"],
+    ["Copy patch", "Download patch"],
   );
 });
 
@@ -1190,28 +1207,6 @@ test("a review thread is drawn under its line in its file, and one a push outdat
   );
 });
 
-test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
-  let threadReads = 0;
-  await drawTab({
-    threads: {
-      list: [],
-      draw: () => null,
-      refresh: () => {
-        threadReads += 1;
-      },
-    },
-  });
-
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-
-  assert.equal(threadReads, 1);
-});
-
 test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
   let failing = false;
   const flaky = {
@@ -1237,19 +1232,8 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
   });
   assert.equal(refreshNote(), undefined);
 
-  const refresh = async () => {
-    const options = document.querySelector<HTMLButtonElement>(
-      'button[aria-label="Changes actions"]',
-    );
-    act(() => options?.click());
-    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent?.includes("Refresh changes"),
-    );
-    act(() => item?.click());
-    await flush();
-  };
   failing = true;
-  await refresh();
+  await refreshAsTheTab();
 
   const note = refreshNote();
   assert.ok(note, "the refresh says it did not land");
@@ -1448,13 +1432,7 @@ test("an image side whose read did not land is asked for again when the changes 
   assert.match(slot.textContent ?? "", /This picture could not be read\./u);
 
   refusing.clear();
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   slot = await standNearView("logo.png");
 
   assert.deepEqual(asked, [after, after]);
@@ -1511,7 +1489,7 @@ test("an SVG moved with its contents unchanged offers no source, having no lines
   );
 });
 
-test("the comparison chosen for an image, and how far it is faded, outlast Refresh changes", async () => {
+test("the comparison chosen for an image, and how far it is faded, outlast a Refresh", async () => {
   vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
   answerImages();
   commits = { headSha: "9".repeat(40), baseSha: "a".repeat(40) };
@@ -1531,19 +1509,13 @@ test("the comparison chosen for an image, and how far it is faded, outlast Refre
     fade().dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   slot = await standNearView("logo.png");
 
   assert.equal(fade().value, "80");
 });
 
-test("after Refresh changes an image far from the view reads nothing until it comes near again", async () => {
+test("after a Refresh an image far from the view reads nothing until it comes near again", async () => {
   vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
   const asked = answerImages();
   commits = { headSha: "b".repeat(40) };
@@ -1561,13 +1533,7 @@ test("after Refresh changes an image far from the view reads nothing until it co
   slot.remove();
 
   commits = { headSha: "c".repeat(40) };
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   comeIntoView();
   await flush();
   assert.equal(asked.length, 1, "nothing is read while the file is far from the view");
@@ -1852,19 +1818,13 @@ test("a member with no GitHub sign-in is offered one, and no Viewed box stands u
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Sign in with GitHub/u);
 });
 
-test("the marks are read again with the files on Refresh changes, so the two describe the same push", async () => {
+test("the marks are read again with the files on a Refresh, so the two describe the same push", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts")];
   await drawTab();
   assert.equal(viewedReads, 1);
 
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
 
   assert.equal(viewedReads, 2);
 });
@@ -1929,13 +1889,7 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   // A refresh's read stays out while the member marks the file and GitHub takes it.
   const reading = Promise.withResolvers<void>();
   viewedHeld = reading.promise;
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   act(() => viewedBox("c.ts").click());
   await flush();
   held[0]?.answer(DONE);
@@ -1946,12 +1900,7 @@ test("a read asked before a mark settled never undoes it, and a read that does n
 
   viewedHeld = undefined;
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
-  act(() => options?.click());
-  const again = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => again?.click());
-  await flush();
+  await refreshAsTheTab();
   assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true);
 });
 
@@ -2553,13 +2502,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
 
   act(() => expand("src/seats.ts")?.click());
   await flush();
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   act(() => expand("src/plan.ts")?.click());
   await flush();
   assert.notEqual(lastDrawn().files.find((file) => file.path === "src/plan.ts")?.whole, undefined);

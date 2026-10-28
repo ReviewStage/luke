@@ -50,8 +50,6 @@ export const APP_COMMAND = {
   ACTUAL_SIZE: "actual-size",
   ZOOM_IN: "zoom-in",
   ZOOM_OUT: "zoom-out",
-  TOGGLE_MICROPHONE: "toggle-microphone",
-  TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
   MOVE_ROW_UP: "move-row-up",
@@ -194,7 +192,6 @@ export const SHORTCUT_KEY = {
   R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
   // A bare V is Files changed's own, marking the file stood on viewed; no app command holds it.
   V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
-  // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
   L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
   // ⌘E, ⇧⌘X, and the digits but 0 are the writing chords' own (`WRITING_SHORTCUTS`); no app command holds them.
   E: { accelerator: "E", glyph: "E", key: "e", code: "KeyE" },
@@ -394,8 +391,7 @@ export interface AppShortcut {
  * row of a list that reorders up or down it, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
  * close the window as Chrome and VS Code have them,
- * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
- * speaker beside it, ⌘K for the command palette as Linear, Slack, and
+ * ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
  * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
@@ -494,16 +490,6 @@ export const APP_SHORTCUTS = {
     label: "Zoom out",
     chord: { key: SHORTCUT_KEY.MINUS },
     capability: HOST_CAPABILITY.DESKTOP_APP,
-  },
-  [APP_COMMAND.TOGGLE_MICROPHONE]: {
-    label: "Mute or unmute microphone",
-    chord: { key: SHORTCUT_KEY.M, shift: true },
-    capability: HOST_CAPABILITY.VOICE,
-  },
-  [APP_COMMAND.TOGGLE_SPEAKER]: {
-    label: "Mute or unmute speaker",
-    chord: { key: SHORTCUT_KEY.S, shift: true },
-    capability: HOST_CAPABILITY.VOICE,
   },
   [APP_COMMAND.MOVE_TAB_LEFT]: {
     label: "Move tab left",
@@ -650,7 +636,6 @@ export const APP_SHORTCUTS = {
 export const IN_CONTEXT_KEY = {
   STEP_BACK: "in-context-step-back",
   INBOX_OPTION: "in-context-inbox-option",
-  NEW_TASK_ISSUE: "in-context-new-task-issue",
   TAB_STRIP_PREVIOUS: "in-context-tab-strip-previous",
   TAB_STRIP_NEXT: "in-context-tab-strip-next",
   TAB_STRIP_CLOSE: "in-context-tab-strip-close",
@@ -685,8 +670,7 @@ export interface InContextShortcut {
  * The keys that answer in place, each read where its place answers it: the
  * window's layered Escape, once for every layer it steps back from
  * (`app.tsx` in `@luke/panel`); an Inbox ask's options by their number
- * (`inbox-ask-controls.tsx`); New task's ⌘L for its issue
- * (`issue-picker-chip.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
+ * (`inbox-ask-controls.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
  * `@luke/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
  * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
  * `zoom-image.tsx` in `@luke/ui`); ⌘K over selected words for a link
@@ -701,10 +685,6 @@ export const IN_CONTEXT_SHORTCUTS = {
     label: "Choose an ask's option by its number",
     chord: { key: SHORTCUT_KEY.ONE, plain: true },
     through: { key: SHORTCUT_KEY.NINE, plain: true },
-  },
-  [IN_CONTEXT_KEY.NEW_TASK_ISSUE]: {
-    label: "Choose an issue for a new task",
-    chord: { key: SHORTCUT_KEY.L },
   },
   [IN_CONTEXT_KEY.TAB_STRIP_PREVIOUS]: {
     label: "Focus previous tab in strip",
@@ -797,7 +777,7 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Tasks",
-    keys: [IN_CONTEXT_KEY.INBOX_OPTION, IN_CONTEXT_KEY.NEW_TASK_ISSUE],
+    keys: [IN_CONTEXT_KEY.INBOX_OPTION],
     commands: [
       APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,
@@ -845,11 +825,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.MENTION_LINES,
       APP_COMMAND.INSERT_PICTURE,
     ],
-  },
-  {
-    title: "Call",
-    keys: [],
-    commands: [APP_COMMAND.TOGGLE_MICROPHONE, APP_COMMAND.TOGGLE_SPEAKER],
   },
   {
     title: "Navigation",
@@ -1105,7 +1080,7 @@ export interface WritingShortcut {
  * and the Keyboard shortcuts page, the toolbars, and the menus list. The
  * chords are TipTap's own, which are Google Docs' for the most part, with two
  * moved off the window's: Strikethrough takes ⇧⌘X, as Google Docs has it,
- * rather than ⇧⌘S, which is Toggle speaker, and Code block takes none rather
+ * and Code block takes none rather
  * than ⌥⌘C, which is Copy link, since ``` makes one as quickly. Bold's ⌘B is
  * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
  * an editor stops the chords it answers on their way to the window's keymap

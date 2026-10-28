@@ -7,15 +7,14 @@
  * keeps between calls, which repository stands checked out and whether it
  * is shallow, and writing
  * down every run and every firewall policy in the order they came. A clone
- * is answered as the test scripts it, a command from the test's own table,
- * and a file read by `show_code` from the files the test says the checkout
- * holds. Nothing here runs a shell. Synthetic throughout.
+ * is answered as the test scripts it, and a command from the test's own
+ * table. Nothing here runs a shell. Synthetic throughout.
  */
 
 import { CHECKOUT_IDENTITY_VARIABLE } from "@luke/features/checkout-identity";
 import type { SandboxCommandResult, SandboxNetworkPolicy, SandboxRunOptions } from "eve/sandbox";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
-import type { RepositorySandbox, RepositorySandboxDoor } from "../agents/repository-shell.js";
+import type { RepositorySandbox } from "../agents/repository-shell.js";
 
 /** One run as the sandbox saw it. */
 interface SandboxRun {
@@ -55,50 +54,12 @@ export interface SandboxDouble extends RepositorySandbox {
   readonly cloneAnswers: ScriptedClone[];
   /** How the next settings of the commit identity end; one with nothing scripted succeeds. */
   readonly identityAnswers: ScriptedClone[];
-  /** The door the shell opens the sandbox through, counting each opening. */
-  readonly door: RepositorySandboxDoor;
-  openings: number;
 }
 
 /** What a command in the checkout answers, from the test's own table; a command off the table exits 127. */
 export type CommandTable = (command: string) => SandboxCommandResult | undefined;
 
-/** The files the checkout holds, by path relative to its root, as `show_code`'s scripts read them. */
-export type CheckoutFiles = Readonly<Record<string, string>>;
-
-/** The largest file the probe counts the lines of, and how many first bytes it looks for a NUL among, as the script bounds them. */
-const PROBE_BOUNDS = { MAX_FILE_BYTES: 1024 * 1024, TEXT_PROBE_BYTES: 8192 } as const;
-
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
-
-/** The commit a checkout stands at unless a test says otherwise: synthetic, whole, as git names one. */
-const CHECKOUT_COMMIT = "0123456789abcdef0123456789abcdef01234567";
-
-/**
- * The file probe's answer, the facts the script prints on one line: whether
- * the path is a regular file inside the checkout, its bytes, whether a NUL
- * stands among its first bytes, its line count where it is under the
- * bound, and the commit the checkout stands at, empty where git names none.
- */
-function probeFile(files: CheckoutFiles, path: string, commit: string): SandboxCommandResult {
-  const text = files[path];
-  // A path that leaves the checkout resolves to no file of it.
-  if (text === undefined || path.startsWith("/") || path.split("/").includes("..")) {
-    return result(EXIT.OK, "0 0 0 0\n");
-  }
-  const bytes = Buffer.from(text);
-  const binary = bytes.subarray(0, PROBE_BOUNDS.TEXT_PROBE_BYTES).includes(0) ? 1 : 0;
-  const lines = bytes.length <= PROBE_BOUNDS.MAX_FILE_BYTES ? text.split("\n").length : 0;
-  return result(EXIT.OK, `1 ${bytes.length} ${binary} ${lines} ${commit}\n`);
-}
-
-/** The window read's answer: the lines first to last as sed prints them, each with its newline. */
-function windowOf(files: CheckoutFiles, path: string, first: number, last: number) {
-  const text = files[path];
-  if (text === undefined) return result(EXIT.FAILED, "", "no such file");
-  const lines = text.split("\n").slice(first - 1, last);
-  return result(EXIT.OK, lines.map((line) => `${line}\n`).join(""));
-}
 
 const OPEN_INTERNET: SandboxNetworkPolicy = "allow-all";
 
@@ -106,18 +67,11 @@ function result(exitCode: number, stdout = "", stderr = ""): SandboxCommandResul
   return { exitCode, stdout, stderr };
 }
 
-/** A sandbox over the command table and the checkout's files, with a firewall whose policy can be set. */
+/** A sandbox over the command table, with a firewall whose policy can be set. */
 export function sandboxDouble(
   commands: CommandTable,
-  options: {
-    readonly firewall?: boolean;
-    readonly files?: CheckoutFiles;
-    /** The commit the checkout stands at; empty for a checkout git names no commit of. */
-    readonly commit?: string;
-  } = {},
+  options: { readonly firewall?: boolean } = {},
 ): SandboxDouble {
-  const files = options.files ?? {};
-  const commit = options.commit ?? CHECKOUT_COMMIT;
   const { PATH, VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
   let policy: SandboxNetworkPolicy = OPEN_INTERNET;
   const double: SandboxDouble = {
@@ -133,11 +87,6 @@ export function sandboxDouble(
     identities: [],
     cloneAnswers: [],
     identityAnswers: [],
-    openings: 0,
-    door: () => {
-      double.openings += 1;
-      return Promise.resolve(double);
-    },
     run: (run: SandboxRunOptions) => {
       const env = run.env;
       double.runs.push({ command: run.command, workingDirectory: run.workingDirectory, env });
@@ -205,15 +154,6 @@ export function sandboxDouble(
       if (run.workingDirectory === PATH.CHECKOUT && command !== undefined) {
         const answer = commands(command);
         return Promise.resolve(answer ?? result(EXIT.NOT_FOUND, "", "command not found"));
-      }
-      // `show_code`'s two reads of a file: the probe, then the window the probe's count placed.
-      const file = env?.[VARIABLE.FILE];
-      const first = env?.[VARIABLE.FIRST_LINE];
-      const last = env?.[VARIABLE.LAST_LINE];
-      if (run.workingDirectory === PATH.CHECKOUT && file !== undefined) {
-        if (first === undefined || last === undefined)
-          return Promise.resolve(probeFile(files, file, commit));
-        return Promise.resolve(windowOf(files, file, Number(first), Number(last)));
       }
       return Promise.reject(new Error(`the sandbox double was handed a run it does not know`));
     },

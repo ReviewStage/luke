@@ -270,12 +270,6 @@ export const APP_SETTINGS_VIEW: Atom.Atom<AppSettingsView | undefined> = Atom.ma
   (settings) => (settings === undefined ? undefined : appSettingsView(settings)),
 );
 
-/** Whether the runtime offers voice at all, which redraws its reader only as it turns. */
-export const VOICE_AVAILABLE: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings) => settings?.status.voiceAvailable === true,
-);
-
 /**
  * One slice of this window's snapshot, or one field of one (`APP_SLICE`,
  * or an atom built over one), redrawn only as that moves.

@@ -38,7 +38,11 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * reaches nothing of this one.
  *
  * A row that drops a menu takes the props `useMenu().trigger()` hands out
- * (`menu`), and is lit while its menu stands. It takes an app's hint's
+ * (`menu`), and is lit while its menu stands. A row whose place has acts of
+ * its own takes their ⋯ as `actions`, which stands beside the press rather
+ * than inside it, over the row's end: hidden at rest, it comes in while the
+ * row is hovered, holds the keyboard, or the menu it dropped stands, and
+ * takes the count's and the mark's place then, as a task row's ⋯ does. It takes an app's hint's
  * handlers and chord as a Button does, and keeps the focus where it is
  * under a pointer's press (`keepFocus`) as a Button does too. It takes no
  * class or style; its outer spacing is its column's.
@@ -139,6 +143,8 @@ export type NavItemProps = HintProps & {
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** The menu a right-click or a long press opens on it (`useMenu`'s `contextMenu`). */
   contextMenu?: ContextMenuProps | undefined;
+  /** Its place's own acts, a `MoreButton`, standing over its end while it is hovered or reached for. */
+  actions?: ReactNode;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -295,9 +301,10 @@ export function NavItem({
   onClick,
   keepFocus,
   roving,
+  actions,
   ...props
 }: NavItemProps): React.JSX.Element {
-  return (
+  const press = (
     <button
       type="button"
       className={ROW}
@@ -329,5 +336,14 @@ export function NavItem({
       <AtRest mark={mark} count={count} />
       {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
+  );
+  if (!said(actions)) return press;
+  return (
+    <div className="luke-nav-item-frame relative flex min-w-0">
+      {press}
+      <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
+        {actions}
+      </span>
+    </div>
   );
 }

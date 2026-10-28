@@ -1,15 +1,11 @@
-import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { keptImageOf } from "@luke/database/models/attached-file-parts";
-import { listRecentMessages } from "@luke/database/models/message-reads";
-import type { ConversationTarget } from "@luke/database/models/writer";
-import { type FileUIPart, isFileUIPart, isTextUIPart, isToolUIPart, type ToolSet } from "ai";
-import { Effect, type Schema } from "effect";
+import { type FileUIPart, isFileUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { isDeveloperLine, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 
 /**
  * A conversation's stored messages as the model reads them back: a rotated
  * session is seeded once with the newest messages by `seed.ts`, which is
- * what `storedMessageLine` and `readRecentMessages` are for.
+ * what `storedMessageLine` is for.
  */
 
 /** Who a stored message's words are attributed to when a stored message is rendered as a line. */
@@ -72,21 +68,4 @@ export function storedMessageLine(
     .filter((piece) => piece.length > 0)
     .join(" ");
   return `${speaker ?? speakerOf(message)}: ${body}`;
-}
-
-/**
- * The newest finished messages of a conversation, oldest first, read back
- * through the store's own reader so a row outside the vocabulary refuses the
- * page whole rather than being rendered. The limit is on rows, not words:
- * each line is bounded again when rendered.
- */
-export function readRecentMessages(
-  target: ConversationTarget,
-  tools: ToolSet,
-  limit: number,
-): Effect.Effect<readonly StoredUIMessage[], QueryError | Schema.SchemaError, DatabaseServices> {
-  return Effect.map(
-    listRecentMessages(target.userId, target.conversationId, tools, limit),
-    (read) => (read.ok ? read.value.map((record) => record.message) : []),
-  );
 }

@@ -15,7 +15,7 @@ import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
- * composer-foot.tsx -- the foot of every message box: its tools, how near its limit its words stand, a call's status, the round send, and one note under them.
+ * composer-foot.tsx -- the foot of every message box: its tools, how near its limit its words stand, the round send, and one note under them.
  *
  * Every box a message is written in ends the same way, under its field and
  * inside its `ComposerFrame`; the files handed to it stand over the field,
@@ -23,11 +23,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * tools the owner hands it (attach, mention, skill), and at its end the
  * length counter, which says nothing until the words reach four fifths of
  * the limit (`LengthCounter`), the owner's own presses (the microphone, a
- * model), a call's status where a call stands, set a step off the send so
- * the two discs never read as a pair, and the round send last. While the
- * box holds something in the bar's place, a dictation's strip, the strip
- * takes the bar's room and the call's status stays beside it, so neither is
- * left with no way to reach it.
+ * model), and the round send last. While the box holds something in the
+ * bar's place, a dictation's strip, the strip takes the bar's room.
  *
  * The send never changes size or place. It takes no press while the box is
  * empty or `held` (a file still being read), and while a send it made is
@@ -63,8 +60,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * end's placeholders handed by the owner and the send's disc last, so the
  * placeholder lands where the foot does.
  *
- * It is drawn in Tailwind utilities over the theme; `composer-foot.css`
- * keeps the one rule that turns on what the bar holds (`:has()`).
+ * It is drawn in Tailwind utilities over the theme.
  */
 
 /** The send's press: its name, whether the box has anything to send, and whether a send it made is still out. */
@@ -123,10 +119,6 @@ const FOOT =
   "group-data-[look=input]/composer:px-luke-6 group-data-[look=input]/composer:pt-luke-2 group-data-[look=input]/composer:pb-luke-6 " +
   "group-data-[look=bare]/composer:px-0";
 
-/** A call stands a step off the send, so End call and Send never read as a pair, and beside a dictation's strip at the bar's end. */
-const CALL =
-  "luke-composer-foot-call me-tight-gap flex flex-none items-center gap-tight-gap [.luke-composer-foot-strip+&]:me-0";
-
 /** The foot's own box: its bar and its note, stacked. */
 function FootBox({ children }: { children: ReactNode }): React.JSX.Element {
   return <div className={FOOT}>{children}</div>;
@@ -150,18 +142,13 @@ function FootTools({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The bar's end: the counter, the owner's presses, a call, and the send last. */
+/** The bar's end: the counter, the owner's presses, and the send last. */
 function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <div className="luke-composer-foot-end ms-auto flex flex-none items-center gap-tight-gap">
       {children}
     </div>
   );
-}
-
-/** A call's status, a step off the send. */
-function FootCall({ children }: { children: ReactNode }): React.JSX.Element {
-  return <div className={CALL}>{children}</div>;
 }
 
 /** The send: the round submit in the panel's ink, busy while its send is out, and pressable while empty where it says why (`refuses`), described by that line (`refusalId`). */
@@ -231,13 +218,12 @@ function StopButton({ stop }: { stop: ComposerStop }): React.JSX.Element {
   );
 }
 
-/** A message box's foot: a bar of `tools`, the counter, `actions`, `call` and the send or `stop`, or `strip` in the bar's place, and `note` under it. */
+/** A message box's foot: a bar of `tools`, the counter, `actions` and the send or `stop`, or `strip` in the bar's place, and `note` under it. */
 export function ComposerFoot({
   send,
   stop,
   tools,
   actions,
-  call,
   counter,
   strip,
   note,
@@ -247,18 +233,15 @@ export function ComposerFoot({
   stop?: ComposerStop | undefined;
   /** The presses at the bar's start: attach, mention, skill. */
   tools?: ReactNode;
-  /** The owner's own presses at the bar's end, before the call and the send: the microphone, a model. */
+  /** The owner's own presses at the bar's end, before the send: the microphone, a model. */
   actions?: ReactNode;
-  /** A call's status and its controls, where a call stands. */
-  call?: ReactNode;
   /** How many characters the field holds of how many it takes, said from four fifths of the way. */
   counter?: { readonly length: number; readonly limit: number } | undefined;
-  /** What stands in the bar's place while it holds, a dictation's strip; the call stays beside it. */
+  /** What stands in the bar's place while it holds, a dictation's strip. */
   strip?: ReactNode;
   /** The one line under the bar, where there is something to say. */
   note?: ComposerNote | undefined;
 }): React.JSX.Element {
-  const callPart = call === undefined || call === null ? null : <FootCall>{call}</FootCall>;
   const refusalId = useId();
   return (
     <FootBox>
@@ -271,7 +254,6 @@ export function ComposerFoot({
                 <LengthCounter length={counter.length} limit={counter.limit} />
               )}
               {actions}
-              {callPart}
               {stop === undefined ? (
                 <SendButton send={send} refusalId={refusalId} />
               ) : (
@@ -280,10 +262,7 @@ export function ComposerFoot({
             </FootEnd>
           </>
         ) : (
-          <>
-            <div className="luke-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
-            {callPart}
-          </>
+          <div className="luke-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
         )}
       </FootBar>
       {/* Note that the line stands, empty, for as long as the send can refuse, so what it says lands as said. */}

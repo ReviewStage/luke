@@ -71,8 +71,9 @@ import { codingAgentStatusOf } from "./status.js";
  * once eve has taken them. The hand-over runs inside the conversation's
  * lock, so the turn eve opens on the line finds the row standing when its
  * own first write takes the lock, and an eve that did not take the message
- * leaves no row behind. Files the developer attached go with the words,
- * to eve and onto the row, each image kept beside the conversation first
+ * leaves the row withdrawn, read nowhere unless a turn eve hands it to
+ * after all takes it with its kind and sender. Files the developer
+ * attached go with the words, to eve and onto the row, each image kept beside the conversation first
  * and named to eve by its id (`attached-files.ts`), and so does what the words
  * mention of the plan, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
@@ -82,9 +83,10 @@ import { codingAgentStatusOf } from "./status.js";
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
- * sends racing under one key still send once. A row the store failed to
- * write after eve took the message is the one gap left, and the relay
- * still writes the line when the turn receives it. The turn's checkout and
+ * sends racing under one key still send once. A hand-over that answered
+ * nothing past its deadline, or whose store write failed after eve took
+ * the message, withdrew a line eve may still hand a turn, which is why the
+ * row is kept rather than deleted. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
  * first step; a GitHub that could not be asked refuses nothing, since an
@@ -113,9 +115,8 @@ import { codingAgentStatusOf } from "./status.js";
  * asked, is settled failed for its session's end
  * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
  * rather than running until the sweep's day-long bound. The words are then
- * no refusal: they open a fresh session over the same conversation, as the
- * brain's ask opens one for a conversation whose session retired
- * (`brain-host/brain-ask.ts`), and so does a message to an agent whose
+ * no refusal: they open a fresh session over the same conversation, and so
+ * does a message to an agent whose
  * session never claimed its record, past the grace its Start's session had
  * to come up in or where its Start opened none. The fresh session claims
  * the record forward, so the ended one is refused from then on, and is

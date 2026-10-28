@@ -114,6 +114,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -328,6 +329,31 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 
   assert.deepEqual(labels, ["Copy link", "Show details⌥↓", "Archive"]);
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
+});
+
+test("a heading folds its rows away, counting them, and stands folded as the summary is drawn again", () => {
+  fakeAppPlatform(QUIET_PANEL);
+  const heading = (page: HTMLElement) =>
+    [...page.querySelectorAll<HTMLButtonElement>(".task-summary button[aria-expanded]")].find(
+      (button) => button.textContent?.startsWith("Agents"),
+    ) ?? assert.fail("Agents is a fold");
+  const agentRow = (page: HTMLElement) =>
+    page
+      .querySelector('.task-summary [aria-label="Agents"]')
+      ?.textContent?.includes(AGENT.title ?? "") === true;
+  const { page } = mount("plan");
+  assert.equal(heading(page).getAttribute("aria-expanded"), "true");
+  assert.ok(agentRow(page), "the agent is listed");
+
+  act(() => heading(page).click());
+  assert.equal(heading(page).getAttribute("aria-expanded"), "false");
+  assert.equal(heading(page).textContent, "Agents1 agent");
+  assert.ok(!agentRow(page), "the agent is folded away");
+
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  const again = mount("plan").page;
+  assert.equal(heading(again).getAttribute("aria-expanded"), "false", "it stands as it was left");
 });
 
 test("the Inbox's row counts what needs the reader in the attention tone its rows' marks wear", () => {

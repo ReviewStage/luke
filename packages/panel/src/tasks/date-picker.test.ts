@@ -81,7 +81,6 @@ function drawn(): HTMLElement {
         ownRegistry(),
         createElement(PlanBody, {
           task: TASK,
-          live: false,
           onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
           sectionLinks: {
             workspace: "acme",
@@ -114,7 +113,6 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
             null,
             createElement(PlanBody, {
               task: plan,
-              live: false,
               onEdit: editable
                 ? (request: PlanEditRequest) => {
                     saves.push(request);

@@ -79,6 +79,7 @@ import {
   itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
+  RECOMMENDED,
   readersItem,
 } from "./inbox-model.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
@@ -475,9 +476,6 @@ function CardAsk({
       );
   }
 }
-
-/** What marks a choice's option the agent recommends, on an item's card. */
-const RECOMMENDED = "Recommended";
 
 /**
  * An item's task's status as its row wears it before its time: the

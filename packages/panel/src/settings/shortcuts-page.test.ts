@@ -84,7 +84,6 @@ test("the window's Escape is one row, under General, however many layers it step
 
 test("the keys that answer in place stand in the group of what they act on", () => {
   assert.ok(groupRows("Tasks").includes("Choose an ask's option by its number 1 – 9"));
-  assert.ok(groupRows("Tasks").includes("Choose an issue for a new task ⌘ L"));
   assert.ok(groupRows("Tabs & panels").includes("Close focused tab ⌫"));
   assert.ok(groupRows("Navigation").includes("Go to chosen card ⏎"));
   assert.ok(groupRows("Image viewer").includes("Zoom image out −"));
@@ -95,7 +94,7 @@ test("the keys that answer in place stand in the group of what they act on", () 
 test("a chord in place draws its Command as the window's command key, Ctrl where Command is Ctrl", () => {
   restoreCommandKey = installCommandKey(COMMAND_KEY.CONTROL);
 
-  assert.ok(groupRows("Tasks").includes("Choose an issue for a new task Ctrl L"));
+  assert.ok(writingRows().includes("Link selected words Ctrl K"));
 });
 
 test("the tab switcher's keys are listed only where the switcher stands", () => {

@@ -103,7 +103,7 @@ test("a plan's picture is drawn from its bytes under its caption, and one this r
     `![Members page](${picture(taskId, GONE)})`,
   ].join("\n\n");
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
 
   const blocks = [...view.querySelectorAll<HTMLElement>(".picture-block")];
   assert.equal(blocks.length, 2);
@@ -123,7 +123,7 @@ test("a picture that is not available is read as words, with or without alt text
     "\n\n",
   );
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
 
   const blocks = [...view.querySelectorAll<HTMLElement>(".picture-block")];
   assert.deepEqual(
@@ -141,7 +141,7 @@ test("a press on a picture opens the plan's pictures over the window, named by t
     `![Invite email](${picture(taskId, MOCK)})`,
     `![Members page](${picture(taskId, SECOND)})`,
   ].join("\n\n");
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
 
   act(() => {
     view.querySelectorAll<HTMLButtonElement>(".picture-block button")[1]?.click();
@@ -170,7 +170,7 @@ test("who last changed a picture's section is said in the viewer over the window
       { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: now - 2 * HOUR, duringCall: false },
     ],
   };
-  const view = await drawn(createElement(PlanBody, { task, live: false }));
+  const view = await drawn(createElement(PlanBody, { task }));
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
@@ -200,7 +200,7 @@ test("a picture from outside Luke is a link to it, and nothing is read for it", 
   standHost(new Set(), asked);
   const body = "## Approach\n\nThe vendor's flow is ![SSO flow](https://northwind.io/sso.png).";
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
 
   assert.equal(view.querySelector("img"), null);
   assert.equal(view.querySelector(".luke-text-link")?.textContent, "SSO flow");
@@ -268,7 +268,7 @@ test("another plan's picture is drawn as itself, with no press that would open n
   standHost(new Set([MOCK]), []);
   const body = `## Approach\n\n![Copied mock](${picture(otherTaskId, MOCK)})`;
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
 
   assert.ok(view.querySelector(".picture-block img"));
   assert.equal(view.querySelector(".picture-block button"), null);
@@ -278,7 +278,7 @@ test("once the window lets go of its pictures, as an account change asks, each i
   const taskId = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
   standHost(new Set([MOCK]), []);
   const body = `## Approach\n\n![Invite email](${picture(taskId, MOCK)})`;
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body) }));
   assert.ok(view.querySelector(".picture-block img"));
 
   standHost(new Set(), []);
@@ -293,7 +293,7 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   const taskId = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
   standHost(new Set([SECOND]), [], new Set([MOCK]));
   const first = `## Approach\n\n![First mock](${picture(taskId, MOCK)})`;
-  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first) }));
   const failed = view.querySelector(".picture-block");
   assert.match(
     failed?.querySelector('[role="alert"]')?.textContent ?? "",
@@ -314,10 +314,7 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   const next = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})`;
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(PlanBody, { task: taskOf(taskId, next), live: false }),
-      ),
+      onRegistry(AtomRegistry.make(), createElement(PlanBody, { task: taskOf(taskId, next) })),
     ),
   );
   await settle();

@@ -137,14 +137,6 @@
           "dest": "/api/terminal/sessions.js"
         },
         {
-          "src": "/api/voice/sessions",
-          "dest": "/api/voice/sessions"
-        },
-        {
-          "src": "/api/voice/sessions\\.js",
-          "dest": "/api/voice/sessions.js"
-        },
-        {
           "src": "/api/(.*)",
           "dest": "/api/default.js?route=orpc&route-path=$1"
         },
@@ -159,7 +151,7 @@
           "src": "/app/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -171,7 +163,7 @@
           "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|channel|automations?|settings|person|admin)(?:/[^/]+)*/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",

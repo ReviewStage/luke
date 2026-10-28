@@ -57,6 +57,7 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
+import { automationRun } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
@@ -802,9 +803,8 @@ export const startCredentialStands = (userId: string, model: string) =>
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
  * chose, or for a local agent its Mac's own login where it has one
- * (`localAgentRuntimeChoice`), a blank Start, one a Call opens a call into (`call`), a continue
- * and a fork alike, since a call reaches a native harness's agent as it
- * reaches eve's (`voice/deployment-exchange.ts`). Where no credential of
+ * (`localAgentRuntimeChoice`), a blank Start, a continue and a fork alike.
+ * Where no credential of
  * the account's pays, the Start is refused by name, the provider beside
  * it, and nothing is written.
  */
@@ -1216,7 +1216,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         : continued
           ? SERVER_AGENT_START_KIND.CONTINUE
           : SERVER_AGENT_START_KIND.FORK,
-    is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
+    is_from_automation: automationRun(ask) !== undefined,
     has_task: ask.taskId !== null,
     agent_kind: agent.kind,
   });

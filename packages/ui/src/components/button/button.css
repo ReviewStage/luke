@@ -324,10 +324,19 @@
      utilities'), but a read-only one, which records a press given and so
      stands at full strength, and one that keeps the keyboard its fill and
      its words alone, so the app's ring around it is drawn at full strength. */
-  .luke-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"]) {
+  .luke-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"], [data-read-only]) {
     --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
     background: var(--luke-button-fill-faded);
     color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
+  }
+
+  /* A read-only button records a press given rather than offering one, so
+     its words are read and select, as the window's words do (`base.css`
+     keeps a control's from selecting); a badge or a count beside them
+     stays out of a copy. */
+  .luke-button[data-read-only] .luke-button-words {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   /* A submit unavailable stands on the strong fill with a muted glyph rather

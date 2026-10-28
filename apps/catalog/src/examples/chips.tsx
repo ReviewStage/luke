@@ -4,7 +4,6 @@ import {
   BUTTON_VARIANT,
   Button,
   CHIP_CUT,
-  CHIP_EDGE,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_WIDTH,
@@ -14,12 +13,9 @@ import {
   GAP,
   Inline,
   MARK_PROVIDER,
-  PlusIcon,
   ProviderMark,
   STATUS_TONE,
   Stack,
-  TEXT_TONE,
-  Text,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -31,9 +27,8 @@ import { CatalogSection } from "../section";
  * filters, one pressed at a time; a row of compact counts, one pressed and
  * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
  * its mark alone; a name in the code face; removable filters, each
- * springing in as one is added and scaling out as its × lifts it; a
- * branch cut in its middle, its start fading where the cut stands; and a
- * toolbar chip hung on its line's edge, its + under the words over it.
+ * springing in as one is added and scaling out as its × lifts it; and a
+ * branch cut in its middle, its start fading where the cut stands.
  */
 
 const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;
@@ -249,17 +244,6 @@ function Chips(): React.JSX.Element {
             </Chip>
             <Chip look={CHIP_LOOK.TOOLBAR} chevron>
               <ChipName cut={CHIP_CUT.MIDDLE}>acme/a-repository-whose-name-runs-past-it</ChipName>
-            </Chip>
-          </Stack>
-        </div>
-      </CatalogSection>
-      <CatalogSection id="chips-edge" title="Hung on its line's edge">
-        <div className="catalog-column">
-          <Stack gap={GAP.TIGHT} align={ALIGN.START}>
-            <Text tone={TEXT_TONE.MUTED}>Its + stands on the edge these words start on.</Text>
-            <Chip look={CHIP_LOOK.TOOLBAR} edge={CHIP_EDGE.MARK}>
-              <PlusIcon />
-              <ChipName>Link issue</ChipName>
             </Chip>
           </Stack>
         </div>

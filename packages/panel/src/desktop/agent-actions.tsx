@@ -9,11 +9,9 @@ import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
-import { useMemo } from "react";
 import { pressAct } from "../act.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useSteadyDoor } from "../steady-door.js";
-import type { AgentCallDoors, AgentCallPlace, AgentCallPress } from "../tasks/agent-call.js";
 import type { AgentFork } from "../tasks/fork-model.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { agentTranscript, readWholeTranscript } from "../tasks/transcript-copy.js";
@@ -45,10 +43,7 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * (`useAgentTerminalDoors`), and so are those that open a fork of one of its
  * messages or a continue of it as a draft (`useAgentDraftDoors`): the
  * task's draft tab, or the draft on an agent's own page, each started
- * through the same control. So are the doors its Call takes a call through
- * (`useAgentCallDoors`), the window's one press told where the surface's
- * agents stand: the open task for its column, and the agent's own task, or
- * none, for its page.
+ * through the same control.
  */
 
 /** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`), and its sidebar row (`RowDoors`). */
@@ -174,24 +169,11 @@ export function useAgentDraftDoors(
 }
 
 /**
- * The doors a surface's agents take calls through: the window's press
- * (`TasksControl.calls`), told where the surface's agents stand, the task a
- * column holds or the task an agent's page's agent is on, none for an agent
- * with no task, and whether it is archived. Steady across renders, so a
- * pane handed them draws nothing again as the place moves; none where the
- * window has no voice.
+ * One agent's actions, as every surface that draws it offers them. Luke, the
+ * member's operator, is known by his kind and offers neither Rename, Archive,
+ * nor Delete wherever he is drawn, a Luke a Reset retired included: his
+ * name is his kind's, his Reset archives him, and there is one of him.
  */
-export function useAgentCallDoors(
-  calls: AgentCallPress | undefined,
-  place: AgentCallPlace,
-): AgentCallDoors | undefined {
-  const onPress = useSteadyDoor(
-    calls === undefined ? undefined : (agentId: string) => calls.onPress(agentId, place),
-  );
-  return useMemo(() => (onPress === undefined ? undefined : { onPress }), [onPress]);
-}
-
-/** One agent's actions, as every surface that draws it offers them. */
 export function useAgentActions(
   agent: Pick<
     CodingAgentSummary,
@@ -225,9 +207,10 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
+  const luke = agent.kind === CODING_AGENT_KIND.OPERATOR;
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
-  const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
+  const renamable = !luke && agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
@@ -241,21 +224,15 @@ export function useAgentActions(
     : onOpenTerminal === undefined
       ? undefined
       : () => onOpenTerminal(agent.id);
-  const read = agentTranscriptRead(
-    agents.readTranscript,
-    agent.id,
-    label,
-    agent.brief,
-    agent.kind === CODING_AGENT_KIND.OPERATOR,
-  );
+  const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief, luke);
   return {
     doors: {
       onCopy: copied(read),
       onRename: renamable ? rename.begin : undefined,
       // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
       onOpenTerminal: agent.archivedAt !== undefined ? undefined : terminal,
-      archive: agent.archivedAt === undefined ? archive.action : unarchive,
-      deletion: deletion.action,
+      archive: luke ? undefined : agent.archivedAt === undefined ? archive.action : unarchive,
+      deletion: luke ? undefined : deletion.action,
       copyLink,
     },
     rename: renamable ? rename : undefined,

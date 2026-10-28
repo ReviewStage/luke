@@ -18,8 +18,8 @@
  * every error a boundary caught (`createRoot`'s `onCaughtError`), the one
  * place that knows where a window reports to. Note too that it is a door of
  * its own (`@luke/ui/error-boundary`), outside the barrel, because every
- * window's root draws it, the hidden voice window's among them, which would
- * otherwise parse the whole barrel on its way to its first paint.
+ * window's root draws it, which would otherwise parse the whole barrel on its
+ * way to its first paint.
  */
 
 import { Component, type ReactNode } from "react";

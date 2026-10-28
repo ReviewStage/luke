@@ -9,8 +9,7 @@
  * loads the first time it is shown. That bundle exports
  * one module, `planEditor`, and this file is the whole of what the
  * two share. Nothing here imports a value, so the panel carries none of the
- * editor's libraries, and the voice window, which loads the panel's bundle,
- * parses none of them.
+ * editor's libraries.
  */
 
 import type {

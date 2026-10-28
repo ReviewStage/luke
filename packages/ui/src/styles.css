@@ -27,7 +27,6 @@
 @import "./components/calendar/calendar.css";
 @import "./components/block-list/block-list.css";
 @import "./components/card/card.css";
-@import "./components/composer-frame/composer-foot.css";
 @import "./components/facts/facts.css";
 @import "./components/file-text/file-text.css";
 @import "./chart/chart.css";
@@ -69,7 +68,6 @@
 @import "./components/spinner/spinner.css";
 @import "./components/skeleton/skeleton.css";
 @import "./components/shimmer/shimmer.css";
-@import "./components/thinking-dots/thinking-dots.css";
 @import "./components/working-mark/working-mark.css";
 /* After the button's, whose edge and corners it joins. */
 @import "./components/split-button/split-button.css";

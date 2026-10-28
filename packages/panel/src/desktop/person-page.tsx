@@ -58,13 +58,18 @@ import {
   personPageEmpty,
   personRef,
 } from "@luke/ui/person-page-model";
-import { LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
+import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { useCopyToast } from "../copy-feedback.js";
+import {
+  agentPlace,
+  copyLinkItem,
+  LinkWorkspaceProvider,
+  useCopyLinkItem,
+} from "../copy-link-item.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
@@ -277,8 +282,9 @@ function linkWorkspaceOf(tasks: TasksControl): string | undefined {
 
 /**
  * The header's end: their tasks in the sidebar, where the workspace is
- * shared and so filters by who created a task; and ⋯, holding Copy email for a
- * member and the workspace's members in Settings for its owners and admins.
+ * shared and so filters by who created a task; and ⋯, holding Copy link
+ * and Copy email for a member in one group, then the workspace's members in
+ * Settings for its owners and admins.
  */
 function PersonActions({
   tasks,
@@ -312,32 +318,17 @@ function PersonActions({
   const slug = linkWorkspaceOf(tasks);
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
   const showTasks = you ? "Show my tasks in the sidebar" : "Show their tasks in the sidebar";
+  const copies = [
+    ...(link === undefined ? [] : [copyLinkItem(copy, link)]),
+    ...(email === undefined
+      ? []
+      : [{ label: "Copy email", icon: <MailIcon />, onSelect: () => copy(email, "Email copied") }]),
+  ];
   const actions: MenuAction[][] = [
+    ...(copies.length === 0 ? [] : [copies]),
     ...(phone && shared
       ? [[{ label: showTasks, icon: <ListFilterIcon />, onSelect: onShowTasks }]]
       : []),
-    ...(link === undefined
-      ? []
-      : [
-          [
-            {
-              label: LINK_COPY.LABEL,
-              icon: <LinkIcon />,
-              onSelect: () => copy(link, LINK_COPY.COPIED),
-            },
-          ],
-        ]),
-    ...(email === undefined
-      ? []
-      : [
-          [
-            {
-              label: "Copy email",
-              icon: <MailIcon />,
-              onSelect: () => copy(email, "Email copied"),
-            },
-          ],
-        ]),
     ...(workspace === undefined || !manages
       ? []
       : [
