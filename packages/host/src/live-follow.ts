@@ -32,6 +32,13 @@ import {
  * (`confirmWrite`), and it asks again after the service's coalesce window
  * rather than the floor, since a write that lands meanwhile is answered at
  * once.
+ *
+ * A read whose parts the caller follows by cursor (the transcript's newest
+ * messages) is answered those parts only past the cursor it was last
+ * answered (`LIVE_POLL.CURSOR`), which each poll sends back, and the caller
+ * joins such an answer onto the rows it holds (`decodedLiveRows`'s
+ * `joined`); one past no cursor of the reader's, as after a rewind, is
+ * whole, and taken in their place.
  */
 
 /** The least time between two polls, so a service answering at once is not asked in a hot loop; each poll is otherwise held by the service until the rows move. */
@@ -98,13 +105,15 @@ export interface SealedRead<Part extends string> {
 export interface LiveFollowDependencies<Part extends string> {
   /**
    * The read with each part's rows inline (`LIVE_POLL_URL`), held by the
-   * service until the rows move past `after` (`liveDigestOf`); a failure
-   * where the service answered none, asked again a second later, or `gone`
-   * where the read names nothing the account reaches any more, which stops
-   * the follow.
+   * service until the rows move past `after` (`liveDigestOf`), its cursor
+   * parts past `cursor`, the one its last answer named, where it has any; a
+   * failure where the service answered none, asked again a second later, or
+   * `gone` where the read names nothing the account reaches any more, which
+   * stops the follow.
    */
   readonly poll: (
     after: string | undefined,
+    cursor?: string,
   ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /**
    * Hears the read's wait for a write's transaction once an answer carried
@@ -201,6 +210,19 @@ function txidsOf<Part extends string>(read: SealedRead<Part>): readonly string[]
   ];
 }
 
+/** The cursor an answer's cursor parts name to read past next; none for a read with no cursor parts. */
+function cursorOf<Part extends string>(read: SealedRead<Part>): string | undefined {
+  return Object.values<SealedLiveQueryWire>(read.queries).find((query) => query.cursor)?.cursor
+    ?.next;
+}
+
+/** Whether an answer's cursor parts are only what moved past the reader's cursor, rather than whole. */
+function pastOf<Part extends string>(read: SealedRead<Part>): boolean {
+  return Object.values<SealedLiveQueryWire>(read.queries).some(
+    (query) => query.cursor?.past !== undefined,
+  );
+}
+
 /** Each part's rows as a polled read carries them inline; none where a part carries none. */
 function rowsOf<Part extends string>(
   parts: readonly Part[],
@@ -212,26 +234,31 @@ function rowsOf<Part extends string>(
   return Object.fromEntries(rows) as Readonly<Record<Part, readonly unknown[]>>;
 }
 
+/** An answer's rows, undecoded, and whether its cursor parts are only what moved past the reader's cursor, for the caller to join onto the rows it holds. */
+interface LiveAnswer<Part extends string> {
+  readonly rows: Readonly<Record<Part, readonly unknown[]>>;
+  readonly past: boolean;
+}
+
 /**
- * Every part's rows, whole and undecoded, each time they change, for as
- * long as the caller reads: the first answer's, then each poll's that moved
- * (see the module's note). A write's wait settles once the rows of the
- * answer carrying its txid are handed on. It fails only where the read is
- * gone.
+ * Every answer's rows, undecoded, each time they change, for as long as the
+ * caller reads: the first answer's, then each poll's that moved (see the
+ * module's note). A write's wait settles once the rows of the answer
+ * carrying its txid are handed on. It fails only where the read is gone.
  */
-export function liveRows<Part extends string>(
+function liveAnswers<Part extends string>(
   dependencies: LiveFollowDependencies<Part>,
   first: SealedRead<Part>,
-): Stream.Stream<Readonly<Record<Part, readonly unknown[]>>, LiveBroken> {
+): Stream.Stream<LiveAnswer<Part>, LiveBroken> {
   const parts = Object.keys(first.queries).filter((part): part is Part => part in first.queries);
-  return Stream.callback<Readonly<Record<Part, readonly unknown[]>>, LiveBroken>((queue) =>
+  return Stream.callback<LiveAnswer<Part>, LiveBroken>((queue) =>
     Effect.gen(function* () {
       let last: string | undefined;
-      const emit = (rows: Readonly<Record<Part, readonly unknown[]>>) => {
-        const said = JSON.stringify(rows);
+      const emit = (answer: LiveAnswer<Part>) => {
+        const said = JSON.stringify(answer);
         if (said === last) return;
         last = said;
-        Queue.offerUnsafe(queue, rows);
+        Queue.offerUnsafe(queue, answer);
       };
       const confirmations = txConfirmations();
       let handed = false;
@@ -244,7 +271,7 @@ export function liveRows<Part extends string>(
       const answered = (read: SealedRead<Part>) =>
         Effect.gen(function* () {
           const rows = rowsOf(parts, read);
-          if (rows !== undefined) emit(rows);
+          if (rows !== undefined) emit({ rows, past: pastOf(read) });
           const txids = txidsOf(read);
           if (txids.length === 0) return false;
           confirmations.carry(txids, yield* Clock.currentTimeMillis);
@@ -256,9 +283,11 @@ export function liveRows<Part extends string>(
         });
       /** Where the rows stood at the last answer, which the next poll is held past. */
       let seen = liveDigestOf(first.queries);
+      /** The cursor the last answer named, past which the next poll reads the cursor parts; kept through a failed poll, since the rows held stand at it still. */
+      let cursor = cursorOf(first);
       yield* answered(first);
       const pollOnce = Effect.gen(function* () {
-        const read = yield* dependencies.poll(seen);
+        const read = yield* dependencies.poll(seen, cursor);
         if ("failure" in read) {
           if (ended(read)) {
             Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason: GONE })));
@@ -271,6 +300,7 @@ export function liveRows<Part extends string>(
           return yield* Effect.fail(read);
         }
         seen = liveDigestOf(read.queries) ?? seen;
+        cursor = cursorOf(read) ?? cursor;
         return yield* answered(read);
       });
       yield* Effect.forkScoped(
@@ -281,9 +311,23 @@ export function liveRows<Part extends string>(
 }
 
 /**
- * Every part's rows as `liveRows` delivers them, each decoded under
- * `schema` at this boundary. It fails where the read is gone or a delivery
- * does not decode, which the caller answers by sealing it again.
+ * Every part's rows, whole and undecoded, each time they change, for as
+ * long as the caller reads (`liveAnswers`), for a read with no cursor parts.
+ */
+export function liveRows<Part extends string>(
+  dependencies: LiveFollowDependencies<Part>,
+  first: SealedRead<Part>,
+): Stream.Stream<Readonly<Record<Part, readonly unknown[]>>, LiveBroken> {
+  return Stream.map(liveAnswers(dependencies, first), (answer) => answer.rows);
+}
+
+/**
+ * Every part's rows as `liveAnswers` delivers them, each decoded under
+ * `schema` at this boundary, and an answer whose cursor parts are only what
+ * moved past the cursor joined onto the rows last handed on (`joined`),
+ * which a read the caller follows by cursor names. It fails where the read
+ * is gone or a delivery does not decode, which the caller answers by
+ * sealing it again.
  */
 export function decodedLiveRows<Part extends string, Rows>(
   dependencies: Omit<LiveFollowDependencies<Part>, "onTxWait"> & {
@@ -291,15 +335,29 @@ export function decodedLiveRows<Part extends string, Rows>(
   },
   first: SealedRead<Part>,
   schema: Schema.Decoder<Rows>,
+  joined?: (held: Rows, past: Rows) => Rows,
 ): Stream.Stream<Rows, LiveBroken> {
   const decode = Schema.decodeUnknownOption(schema);
   const { onTxWait, ...rest } = dependencies;
-  return liveRows({ ...rest, ...(onTxWait === undefined ? undefined : { onTxWait }) }, first).pipe(
-    Stream.mapEffect((read) =>
-      Option.match(decode(read), {
+  return liveAnswers(
+    { ...rest, ...(onTxWait === undefined ? undefined : { onTxWait }) },
+    first,
+  ).pipe(
+    Stream.mapEffect((answer) =>
+      Option.match(decode(answer.rows), {
         onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: Effect.succeed,
+        onSome: (rows) => Effect.succeed({ rows, past: answer.past }),
       }),
+    ),
+    Stream.mapAccum(
+      (): Rows | undefined => undefined,
+      (held, answer) => {
+        const rows =
+          held !== undefined && answer.past && joined !== undefined
+            ? joined(held, answer.rows)
+            : answer.rows;
+        return [rows, [rows]] as const;
+      },
     ),
   );
 }

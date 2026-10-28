@@ -262,7 +262,8 @@ const openDueAutomation = Effect.gen(function* () {
   const now = yield* Clock.currentTimeMillis;
   Option.getOrThrow(
     yield* createAutomation(owner, {
-      taskId: task.id,
+      organizationId: task.workspaceId,
+      repositories: task.repository === null ? [] : [task.repository],
       name: "Flaky-test sweep",
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
       action: {

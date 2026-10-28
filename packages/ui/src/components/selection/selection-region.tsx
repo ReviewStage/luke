@@ -6,6 +6,8 @@ import {
   useListSelection,
 } from "./list-selection.js";
 
+export { selectionRun } from "./list-selection.js";
+
 /**
  * selection-region.tsx -- a box whose rows are chosen together, as a `List`'s are, where the rows are the app's own: a grid of `CardPress` rows split under group heads.
  *
@@ -16,7 +18,9 @@ import {
  * (`selectKey`). ⌘-click, ⇧-click, ⇧↑↓, ⌘A, and Esc then reach across every
  * group the region holds, in the order the rows are drawn
  * (`list-selection.ts`). The region draws no box of its own, so the page's
- * layout stands as it was.
+ * layout stands as it was. Where its rows stand in runs side by side, a
+ * board's columns, each run wears `selectionRun`, and a ⇧-press reaches only
+ * across its own.
  */
 
 /** A region whose `CardPress` rows are chosen together, kept by `selection`'s owner. */

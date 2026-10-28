@@ -92,14 +92,32 @@ export function readTaskFile(
     if (Option.isNone(stored)) return Option.none();
     const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
-    if (isSecretFile(request.path)) return Option.some(refused(TASK_FILE_REFUSAL.SECRET));
-    const answer = yield* readWindow(stored.value.workspaceId, repository, userId, request).pipe(
-      Effect.catchTag("GitHubUnavailable", (failure) =>
-        Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
-      ),
+    return Option.some(
+      yield* readRepositoryFileWindow(stored.value.workspaceId, repository, userId, request),
     );
-    return Option.some(answer);
   });
+}
+
+/**
+ * The window of the file the request names, of a repository the
+ * workspace's installation reaches, as GitHub holds it now or at the commit
+ * it names, or why it is not shown: a task's file read by the place its
+ * task names, and the read of a place no task names, such as an agent with
+ * no task, whose caller has already confirmed the account is a member of
+ * the workspace.
+ */
+export function readRepositoryFileWindow(
+  workspaceId: string,
+  repository: string,
+  member: string,
+  request: TaskFileRequest,
+): Effect.Effect<TaskFileAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  if (isSecretFile(request.path)) return Effect.succeed(refused(TASK_FILE_REFUSAL.SECRET));
+  return readWindow(workspaceId, repository, member, request).pipe(
+    Effect.catchTag("GitHubUnavailable", (failure) =>
+      Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
+    ),
+  );
 }
 
 /** The App's reach of a task's repository: its token and the repository as GitHub confirmed it, or why it was not reached. */

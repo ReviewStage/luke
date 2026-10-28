@@ -76,7 +76,8 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         const { userId, organizationId, taskId } = yield* openTask;
         const made = Option.getOrThrow(
           yield* createAutomation(userId, {
-            taskId,
+            organizationId,
+            repositories: ["acme/api"],
             name: "Nightly flaky-test sweep",
             trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
@@ -101,7 +102,8 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         for (const table of ["automation", "coding_agent"] as const) {
           yield* sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "organization_id" DROP NOT NULL`);
         }
-        yield* sql`UPDATE automation SET organization_id = NULL WHERE id = ${made.id}`;
+        // Note that an automation no longer names a task when made, so the row is given the one it was made on then.
+        yield* sql`UPDATE automation SET organization_id = NULL, task_id = ${taskId} WHERE id = ${made.id}`;
         yield* sql`UPDATE coding_agent SET organization_id = NULL WHERE id = ${started.agent.id}`;
 
         // Note that the migration names the plan's row by the names it held then, so the later rename is walked back around it.

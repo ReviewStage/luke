@@ -99,12 +99,19 @@ const liveScopeSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
+/**
+ * The agent a transcript is followed for, and the delegation call of the
+ * worker where it is a worker's; each read as text, an id or call of no
+ * shape answered as not found. A reader that names where it holds the
+ * newest messages (`LIVE_POLL.CURSOR`) is answered them past it; one of no
+ * shape is refused.
+ */
 const liveTranscriptSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   call: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_POLL.CURSOR]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_USER_QUERY]: userField,
 });
 

@@ -285,6 +285,7 @@ export type TasksClient = Pick<
   | "readFile"
   | "readTree"
   | "readSkills"
+  | "readRepositoryFile"
   | "readRepositoryTree"
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
@@ -1553,15 +1554,23 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksFileParamsSchema,
           params,
-          "reading a file names a task, a path, and a window of its lines",
+          "reading a file names a task, or a workspace and its repository, a path, and a window of its lines",
         );
         if (!gate()) return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { taskId, ...window } = read;
-        const answer = yield* served(client.readFile(taskId, window));
-        if (answer === undefined) {
-          return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        return carried<TasksFileAnswer>(answer);
+        const { path, firstLine, lastLine, raw, ref } = read;
+        const window = {
+          path,
+          firstLine,
+          lastLine,
+          ...(raw === undefined ? undefined : { raw }),
+          ...(ref === undefined ? undefined : { ref }),
+        };
+        const answer = yield* served(
+          "taskId" in read
+            ? client.readFile(read.taskId, window)
+            : client.readRepositoryFile(read, window),
+        );
+        return carried<TasksFileAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
     // the tree keeps the folders it has opened.

@@ -192,15 +192,24 @@ const genericPlanOf = (statement: string) =>
  * column two tables share is told apart by the relation it is read from,
  * and that a column is read wherever any node of the plan names it, bar a
  * scan's whole row emitted for the node above to pick from (`emitsWholeRow`).
+ * A read in cursor mode is planned past a cursor too, as a reader that names
+ * one is answered.
  */
 const faultsOf = (query: LiveQuery) =>
   Effect.gen(function* () {
     const params = Object.fromEntries(query.params.map((param) => [param, randomUUID()]));
-    const statements = query.statements(params);
-    assert.ok(Option.isSome(statements), `${query.name}'s statements could not be built`);
+    const past = query.cursor === undefined ? [] : [(yield* query.cursor.standing(params)).next];
+    const built = [
+      query.statements(params),
+      ...past.map((cursor) => query.statements(params, cursor)),
+    ];
     const declared = new Map(query.reads.map((table) => [table.name, table]));
     const faults = new Set<string>();
-    for (const statement of Object.values<LiveStatement>(statements.value)) {
+    const planned = built.flatMap((statements) => {
+      assert.ok(Option.isSome(statements), `${query.name}'s statements could not be built`);
+      return Object.values<LiveStatement>(statements.value);
+    });
+    for (const statement of planned) {
       const nodes = nodesOf(yield* genericPlanOf(statement.sql));
       const scans = nodes.flatMap(scanOf);
       const wholeRows = new Set(

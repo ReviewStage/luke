@@ -1,4 +1,3 @@
-import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_KIND,
   CODING_AGENT_MACHINE,
@@ -50,10 +49,8 @@ import {
   type StoreFailure,
 } from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
-import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
@@ -1258,32 +1255,6 @@ function pinAsAsked(
 }
 
 /**
- * The task's automations moved along with it: their workspace and their
- * repository follow the task's, so a task moved to another workspace, or
- * given another repository, leaves no automation naming the old one; one
- * moved into a personal workspace becomes personal, as everything there is.
- */
-const followingAutomations = SqlSchema.void({
-  Request: Schema.Struct({
-    taskId: Schema.String,
-    organizationId: Schema.String,
-    repository: Schema.NullOr(Schema.String),
-  }),
-  execute: ({ taskId, organizationId, repository }) =>
-    Database.use((db) =>
-      db
-        .update(automation)
-        .set({
-          organizationId,
-          repositories: repository === null ? [] : [repository],
-          // A personal workspace holds nothing shared, so an automation moved into one becomes its creator's.
-          scope: sql`case when exists (select 1 from ${personalWorkspace} where ${personalWorkspace.organizationId} = ${organizationId}) then ${AUTOMATION_SCOPE.PERSONAL} else ${automation.scope} end`,
-        })
-        .where(eq(automation.taskId, taskId)),
-    ),
-});
-
-/**
  * The task's agents and inbox moved along with it to another workspace, so
  * no row of the task's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it. Note that the inbox's threads go to the
@@ -1456,13 +1427,6 @@ export function updateTaskCommitted<E = never, R = never>(
                 Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
               );
         const txid = written ?? Option.getOrUndefined(pinned)?.txid;
-        if (changes.organizationId !== undefined || changes.repository !== undefined) {
-          yield* followingAutomations({
-            taskId,
-            organizationId: row.organizationId,
-            repository: row.repository,
-          });
-        }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);

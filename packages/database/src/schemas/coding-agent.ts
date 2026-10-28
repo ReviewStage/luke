@@ -93,6 +93,11 @@ import { task } from "./task.js";
  * for it where it could be; null for an agent started afresh. The source is
  * named by id and held to nothing, so an agent outlives a source discarded
  * after it.
+ * `started_by_agent_id` is the coding agent whose `start_agent` started this
+ * one, always an agent of the same account, which is told when this one's
+ * run ends without finishing; null for an agent a member, Luke, or an
+ * automation started, and once the starter's row is gone. A Continue or a
+ * Fork by hand names none, whoever started its source.
  * `author` is who the agent's commits are by and its pull request is opened
  * as, the developer or the Luke GitHub App with why (`CODING_AGENT_AUTHOR`),
  * settled once as its first session starts and never moved after, so its
@@ -245,6 +250,10 @@ export const codingAgent = pgTable(
     automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
     /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
     startedFrom: jsonb("started_from").$type<StoredStartedFrom>(),
+    /** The coding agent whose `start_agent` started this one; null for any other starter, and once the agent's row is gone. */
+    startedByAgentId: uuid("started_by_agent_id").references((): AnyPgColumn => codingAgent.id, {
+      onDelete: "set null",
+    }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
