@@ -143,6 +143,11 @@ describe("the host's platform concerns", () => {
             Layer.succeed(ThisMacHost, {
               loginItem: () => Effect.succeed(Result.fail("no login item in a fixture")),
               version: Effect.succeed(Result.fail("no luke-host in a fixture")),
+              machine: Effect.succeed({
+                name: "Studio",
+                platform: DEVICE_PLATFORM.DARWIN,
+                arch: DEVICE_ARCH.ARM64,
+              }),
             }),
           ),
         ),

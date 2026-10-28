@@ -357,6 +357,12 @@ export interface ThisMacHostSeam {
     never,
     ChildProcessSpawner.ChildProcessSpawner
   >;
+  /** The Mac as its `luke-host` registers it, which its enroll names so Luke creates the device where it never saw this Mac. */
+  readonly machine: Effect.Effect<{
+    readonly name: string;
+    readonly platform: DevicePlatform;
+    readonly arch: DeviceArch;
+  }>;
 }
 
 export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(
