@@ -18,7 +18,7 @@ import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * messages-metadata-vocabulary-migration.test.ts -- the migration that rewrites every stored message's metadata in the vocabulary that says only what is true.
+ * messages-metadata-vocabulary-migration.test.ts -- the migrations that rewrite every stored message's metadata in the vocabulary that says only what is true.
  *
  * Over a database migrated up to it, holding a row in each shape an earlier
  * build wrote: once it runs, a user row says what carried it by its channel
@@ -29,25 +29,33 @@ import * as SqlClient from "effect/sql/SqlClient";
  * as a typed ask reads as the thread line it is, by its head's lead and key,
  * one naming no thread of the agent's staying as it stands, an assistant row
  * names the model, and every row reads
- * under the write door's own vocabulary; a second run changes nothing.
+ * under the write door's own vocabulary; a second run changes nothing. The
+ * stragglers migration rewrites the rows a release still serving beside the
+ * first wrote in the old shape, so that migration leaves none behind.
  * Synthetic accounts throughout.
  */
 
 const MIGRATION = "20261028004039_messages_metadata_vocabulary";
+const STRAGGLERS = "20261028170638_messages_metadata_vocabulary_stragglers";
 
-/** A migrations folder holding every migration named before this one, and none after. */
-const foldersBefore = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem;
-  const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-vocabulary-" });
-  const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0,
-  );
-  for (const name of names) {
-    yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
-  }
-  return folder;
-});
+/** A migrations folder holding every migration named before `MIGRATION`'s, and none after. */
+const foldersBefore = foldersUpTo(MIGRATION);
+
+/** A migrations folder holding every migration named before `last`, and none after. */
+function foldersUpTo(last: string) {
+  return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem;
+    const path = yield* Path;
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-vocabulary-" });
+    const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
+      (name) => name.localeCompare(last) < 0,
+    );
+    for (const name of names) {
+      yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
+    }
+    return folder;
+  });
+}
 
 /** Each row as an earlier build wrote it, in order, with its words and sender where it kept them; `KEY` stands for the agent's thread's key. */
 const BEFORE = [
@@ -180,6 +188,121 @@ it.effect(
         const path = yield* Path;
         const statements = (yield* fileSystem.readFileString(
           path.join(MIGRATIONS_FOLDER, MIGRATION, "migration.sql"),
+        )).split("--> statement-breakpoint");
+        for (const statement of statements) yield* sql.unsafe(statement);
+        assert.deepEqual(yield* stored, rows);
+      }),
+    ).pipe(Effect.provide(Layer.provideMerge(unmigratedPgliteSqlClient, NodeServices.layer))),
+);
+
+/** Each row a release still serving beside the vocabulary migration wrote in the old shape, in order, with the sender columns it kept. */
+const STRAGGLERS_BEFORE = [
+  {
+    role: "user",
+    metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+  },
+  {
+    role: "user",
+    metadata: { author: "agent", channel: "agent_message", from: "Release notes" },
+    sender: "agent",
+    senderName: "Release notes",
+  },
+  { role: "assistant", metadata: { author: "brain" } },
+  { role: "user", metadata: { author: "developer", channel: "typed" } },
+  {
+    role: "user",
+    metadata: {
+      author: "developer",
+      channel: "github",
+      event: "comment",
+      repository: "acme/app",
+      url: "https://github.com/acme/app/pull/1",
+      by: "reviewer",
+    },
+  },
+  { role: "user", metadata: { author: "developer", channel: "start", brief: "prompt" } },
+  { role: "user", metadata: { author: "developer", channel: "luke" } },
+  { role: "user", metadata: { author: "voice_model", channel: "voice", voice_session_id: "vs-1" } },
+  { role: "assistant", metadata: { author: "model" } },
+] as const;
+
+const STRAGGLERS_AFTER: readonly (readonly [
+  Readonly<Record<string, string>>,
+  string | null,
+  string | null,
+])[] = [
+  [{ channel: "agent_message" }, "agent", "Invite emails"],
+  [{ channel: "agent_message" }, "agent", "Release notes"],
+  [{ author: "model" }, null, null],
+  [{ channel: "typed" }, null, null],
+  [
+    {
+      channel: "github",
+      event: "comment",
+      repository: "acme/app",
+      url: "https://github.com/acme/app/pull/1",
+      by: "reviewer",
+    },
+    null,
+    null,
+  ],
+  [{ channel: "start", brief: "prompt" }, null, null],
+  [{ channel: "luke" }, null, null],
+  [{ author: "voice_model", channel: "voice", voice_session_id: "vs-1" }, null, null],
+  [{ author: "model" }, null, null],
+];
+
+it.effect(
+  "a row a release serving beside the vocabulary migration wrote in the old shape is rewritten, its sender kept in its columns",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runWebMigrations(yield* foldersUpTo(STRAGGLERS));
+        yield* Database.use((db) =>
+          db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
+        );
+        const workspaceId = yield* openWorkspace("dean");
+        const agentId = yield* openTaskAgent("dean", workspaceId, null);
+        const [agent] = yield* sql<{
+          readonly conversationId: string;
+        }>`select conversation_id as "conversationId" from coding_agent where id = ${agentId}`;
+        const conversationId = agent?.conversationId ?? assert.fail("the agent was not written");
+        for (const [seq, row] of STRAGGLERS_BEFORE.entries()) {
+          const sender = "sender" in row ? row.sender : null;
+          const senderName = "senderName" in row ? row.senderName : null;
+          yield* sql`insert into messages (user_id, conversation_id, seq, client_id, role, parts, metadata, placed_at, sender, sender_name)
+            values ('dean', ${conversationId}, ${seq}, ${`row-${seq}`}, ${row.role}, ${JSON.stringify([{ type: "text", text: "Rebase before you push." }])}::jsonb, ${JSON.stringify(row.metadata)}::jsonb, now(), ${sender}, ${senderName})`;
+        }
+        const stored = sql<{
+          readonly id: string;
+          readonly role: string;
+          readonly parts: WireBoundaryInput;
+          readonly metadata: WireBoundaryInput;
+          readonly sender: string | null;
+          readonly senderName: string | null;
+        }>`select id, role, parts, metadata, sender, sender_name as "senderName" from messages where conversation_id = ${conversationId} order by seq`;
+
+        yield* runWebMigrations();
+
+        const rows = yield* stored;
+        assert.deepEqual(
+          rows.map((row) => [row.metadata, row.sender, row.senderName]),
+          STRAGGLERS_AFTER,
+        );
+        const read = yield* readStoredUIMessages(
+          unparsedWire(
+            rows.map(({ id, role, parts, metadata }) => ({ id, role, parts, metadata })),
+          ),
+          {},
+        );
+        assert.equal(read.ok, true);
+
+        // A second run, as a deploy that ran it before recording it would, changes nothing.
+        const fileSystem = yield* FileSystem;
+        const path = yield* Path;
+        const statements = (yield* fileSystem.readFileString(
+          path.join(MIGRATIONS_FOLDER, STRAGGLERS, "migration.sql"),
         )).split("--> statement-breakpoint");
         for (const statement of statements) yield* sql.unsafe(statement);
         assert.deepEqual(yield* stored, rows);
