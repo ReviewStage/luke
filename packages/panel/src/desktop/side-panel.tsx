@@ -6,7 +6,6 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
@@ -1297,15 +1296,11 @@ function PanelTabs({
     const { agent } = entry;
     // The Plan tab's menu is the task's own, Copy link among it, so the tab adds none of its own.
     const document = entry.tab === SIDE_PANEL_TAB.PLAN ? planMenu : undefined;
-    // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id, and names only its pages by it.
+    // Note that the Inbox's panel names no tab of its own: an agent's page holds its panel under the agent's id, and names its tabs by it.
     const linked =
-      document !== undefined
+      document !== undefined || holder === SIDE_PANEL_HOLDER.INBOX
         ? undefined
-        : holder === SIDE_PANEL_HOLDER.TASK
-          ? panelTabPlace(taskId, entry.tab)
-          : holder === SIDE_PANEL_HOLDER.AGENT && isPageTab(entry.tab)
-            ? ({ kind: LINK_PLACE.PAGE, agentId: taskId, pageId: entry.tab.page } as const)
-            : undefined;
+        : panelTabPlace(pagePlaceOf(holder, taskId), entry.tab);
     return {
       chosen: entry.look.selected,
       onClose: entry.close,

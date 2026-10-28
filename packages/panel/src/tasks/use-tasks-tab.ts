@@ -8,7 +8,7 @@ import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
@@ -135,6 +135,7 @@ import {
 import {
   type CodingAgentsControl,
   type ModelsRead,
+  readAgentById,
   useCodingAgents,
   withPendingAgents,
 } from "./use-coding-agents.js";
@@ -296,6 +297,18 @@ interface PersonViewControl {
 
 /** The Admin place's first view, and the one it reads as while it does not stand. */
 const ADMIN_OVERVIEW: AdminView = { kind: ADMIN_TAB.DASHBOARD };
+
+/** The places that are an agent's own, which open on its task where it has one, else on its page. */
+type AgentPlaceKind =
+  | typeof LINK_PLACE.AGENT
+  | typeof LINK_PLACE.MESSAGE
+  | typeof LINK_PLACE.WORKER
+  | typeof LINK_PLACE.CHANGES
+  | typeof LINK_PLACE.PULL_REQUEST_THREAD;
+
+type AgentPlaceOf<K extends AgentPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
+
+type AgentPlace = AgentPlaceOf<AgentPlaceKind>;
 
 /** What may stand in the task's place, the window's own rather than the task's. */
 const STAND_IN = {
@@ -2405,6 +2418,116 @@ export function useTasksTab(input: {
     setStandIn(standing);
   };
 
+  // A review thread's ask, taken by its agent's Pull request tab once drawn; each ask is its own.
+  const revealThread = (
+    changes: string,
+    place: AgentPlaceOf<typeof LINK_PLACE.PULL_REQUEST_THREAD>,
+  ) =>
+    setThreadReveal((last) => ({
+      agentId: changes,
+      threadId: place.threadId,
+      view: place.view,
+      ask: (last?.ask ?? 0) + 1,
+    }));
+  // A message's ask, which its agent's tab or page takes; each ask is its own, so the same message asked twice is brought into view twice.
+  const revealMessage = (place: AgentPlaceOf<typeof LINK_PLACE.MESSAGE>) => {
+    messageAsks.current += 1;
+    setMessageReveal({
+      agentId: place.agentId,
+      messageId: place.messageId,
+      ask: messageAsks.current,
+    });
+  };
+
+  /**
+   * An agent's place on its task: the agent's tab, and the tab of the side
+   * panel that shows what the place names. Note that an agent's worker is
+   * drawn only while its agent's tab is open, so the agent's tab opens with
+   * it, and that its tab is opened with no task words, since a link carries
+   * none; its own rows name its task once they land.
+   */
+  const openOnTask = (planId: string, place: AgentPlace) => {
+    switch (place.kind) {
+      case LINK_PLACE.WORKER:
+        showColumnTab(planId, { agent: place.agentId });
+        linkPanelTab(planId, {
+          subagent: place.callId,
+          delegation: { agent: place.agentId, task: "" },
+        });
+        return;
+      case LINK_PLACE.CHANGES:
+        linkPanelTab(planId, { changes: sharedChangesAgent(planId, place.agentId) });
+        return;
+      // A review thread opens its agent's Pull request tab on the view the link names.
+      case LINK_PLACE.PULL_REQUEST_THREAD: {
+        const changes = sharedChangesAgent(planId, place.agentId);
+        sidePanel.onPullRequestView({ changes }, place.view);
+        linkPanelTab(planId, { changes });
+        revealThread(changes, place);
+        return;
+      }
+      case LINK_PLACE.AGENT:
+        showColumnTab(planId, { agent: place.agentId });
+        return;
+      case LINK_PLACE.MESSAGE:
+        showColumnTab(planId, { agent: place.agentId });
+        revealMessage(place);
+        return;
+    }
+  };
+
+  // An agent's place on its own page, where it works on no task: the page, and the tab of its panel, held under the agent, that shows what the place names.
+  const openOnAgentPage = (place: AgentPlace) => {
+    const { agentId } = place;
+    standInFor({ kind: STAND_IN.AGENT, agentId });
+    switch (place.kind) {
+      case LINK_PLACE.WORKER:
+        sidePanel.onShow(agentId, {
+          subagent: place.callId,
+          delegation: { agent: agentId, task: "" },
+        });
+        return;
+      case LINK_PLACE.CHANGES:
+        sidePanel.onShow(agentId, { changes: agentId });
+        return;
+      case LINK_PLACE.PULL_REQUEST_THREAD:
+        sidePanel.onPullRequestView({ changes: agentId }, place.view);
+        sidePanel.onShow(agentId, { changes: agentId });
+        revealThread(agentId, place);
+        return;
+      case LINK_PLACE.AGENT:
+        return;
+      case LINK_PLACE.MESSAGE:
+        revealMessage(place);
+        return;
+    }
+  };
+
+  /**
+   * An agent's place opened on its task where it has one, else on its page.
+   * Note that a link names the task only where it was written under it, so
+   * one naming none finds the task by the agent: at once where the agent is
+   * the open task's or one on no task the window lists, else by reading the
+   * agent, which opens nothing where the window moved on before it answered.
+   */
+  const openAgentPlace = (place: AgentPlace) => {
+    const open = tasks.activeTaskId;
+    if (place.planId !== undefined) openOnTask(place.planId, place);
+    else if (open !== undefined && agents.agentIds?.includes(place.agentId))
+      openOnTask(open, place);
+    else if (tasklessAgents?.some((agent) => agent.id === place.agentId)) openOnAgentPage(place);
+    else {
+      const mine = navigations.current;
+      readAgentById(act, place.agentId).then((agent) => {
+        if (navigations.current !== mine) return;
+        // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
+        if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
+        else if (agent.planId === null) openOnAgentPage(place);
+        else openOnTask(agent.planId, place);
+      });
+    }
+  };
+
   /**
    * A Luke link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
@@ -2414,6 +2537,8 @@ export function useTasksTab(input: {
    * all the same, and its read says it is not there.
    */
   const openLink = ({ workspace, place }: ReadLink) => {
+    // Every link opened is a navigation of its own, so an agent's read asked for by an earlier one, answering late, opens nothing.
+    navigations.current += 1;
     switch (place.kind) {
       case LINK_PLACE.TASK:
         showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
@@ -2445,63 +2570,18 @@ export function useTasksTab(input: {
         }
         linkPanelTab(place.planId, { page: place.pageId });
         return;
-      // A turn of Luke's own work on the task is drawn nowhere now, so its link opens the task's plan.
-      case LINK_PLACE.TURN:
-        showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
-        return;
-      // Note that an agent's worker's tab is opened with no task words, since a link carries none; its own rows name its task once they land.
-      // An agent's worker is drawn only while its agent's tab is open, so the agent's tab opens with it.
       case LINK_PLACE.WORKER:
-        // A task's own Luke's worker is drawn nowhere now, so its link opens the task's plan.
-        if (place.agentId === undefined) {
-          showMention({ kind: MENTION_KIND.TASK, taskId: place.planId });
-          return;
-        }
-        showColumnTab(place.planId, { agent: place.agentId });
-        linkPanelTab(place.planId, {
-          subagent: place.callId,
-          delegation: { agent: place.agentId, task: "" },
-        });
-        return;
       case LINK_PLACE.CHANGES:
-        linkPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
-        return;
-      // A review thread opens its agent's Pull request tab on the view the link names, which takes the ask once drawn; each ask is its own.
-      case LINK_PLACE.PULL_REQUEST_THREAD: {
-        const changes = sharedChangesAgent(place.planId, place.agentId);
-        sidePanel.onPullRequestView({ changes }, place.view);
-        linkPanelTab(place.planId, { changes });
-        setThreadReveal((last) => ({
-          agentId: changes,
-          threadId: place.threadId,
-          view: place.view,
-          ask: (last?.ask ?? 0) + 1,
-        }));
-        return;
-      }
+      case LINK_PLACE.PULL_REQUEST_THREAD:
       case LINK_PLACE.AGENT:
-        if (place.planId === undefined)
-          standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-        else showColumnTab(place.planId, { agent: place.agentId });
-        return;
-      // Each ask is its own, so the same message asked twice is brought into view twice.
       case LINK_PLACE.MESSAGE:
-        if (place.planId === undefined)
-          standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-        else showColumnTab(place.planId, { agent: place.agentId });
-        messageAsks.current += 1;
-        setMessageReveal({
-          agentId: place.agentId,
-          messageId: place.messageId,
-          ask: messageAsks.current,
-        });
+        openAgentPlace(place);
         return;
       case LINK_PLACE.PERSON: {
         // A person's page is theirs in the workspace the link names, listed first; one the reader is not in names nobody they can see.
         const home = viewed.workspaces.find(
           (each) => each.slug === workspace || each.id === workspace,
         );
-        navigations.current += 1;
         listLinked(workspace);
         standInFor({
           kind: STAND_IN.PERSON,

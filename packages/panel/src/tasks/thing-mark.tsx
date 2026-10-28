@@ -2,7 +2,7 @@ import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { DocumentIcon, ProviderMark } from "@luke/ui";
+import { ProviderMark } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@luke/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
@@ -216,7 +216,6 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.SECTION]: () => <HashIcon aria-hidden="true" />,
   [THING_KIND.VERSION]: (version) => <PlanMark taskId={version.planId} />,
   [THING_KIND.COMMENT]: () => <GLYPH.COMMENT />,
-  [THING_KIND.TURN]: () => <DocumentIcon />,
   [THING_KIND.PAGE]: () => <GLYPH.PAGE />,
   [THING_KIND.AGENT]: (agent, at) => <AgentThingMark agent={agent} at={at} />,
   [THING_KIND.WORKER]: () => <GLYPH.AGENT />,
