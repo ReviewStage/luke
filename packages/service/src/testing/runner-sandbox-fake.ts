@@ -157,6 +157,14 @@ export function runnerSandboxApi() {
   const holdPolicy = { remaining: 0 };
   /** Whether a read that waits for a running command's exit is held until the reader gives up. */
   const waits = { hold: false };
+  /**
+   * The call to a session at which its sandbox begins to stop, as a launch's
+   * end or the sweep stops it a moment before a send reaches it, by the
+   * path past the session: that call and every one after it are answered
+   * 422 `sandbox_stopping`, as Vercel answers them, until a resume opens the
+   * sandbox's next session.
+   */
+  const stopsAt: { call?: ((rest: string) => boolean) | undefined } = {};
   /** What a test does the moment a detached command has started, before the API answers; the exit a waited run ends on, 0 unless it says; and what it does as a waited run arrives, before it ends. */
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
@@ -262,7 +270,9 @@ export function runnerSandboxApi() {
       if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
       }
-      if (resuming && sandbox.status === "stopped") {
+      // A resume of a sandbox still stopping waits the stop out and opens its next session, which
+      // `@vercel/sandbox`'s `withResume` relies on.
+      if (resuming && (sandbox.status === "stopped" || sandbox.status === "stopping")) {
         sandbox.status = "running";
         sandbox.currentSessionId = id("sbs");
         sandbox.resumedWith.push(sandbox.timeout);
@@ -282,6 +292,25 @@ export function runnerSandboxApi() {
         command.exitCode = command.exitCode ?? 143;
       }
       return Response.json({ session: { id: sessionId } });
+    }
+    const current = sandboxes.find((each) => !each.deleted && each.currentSessionId === sessionId);
+    if (current?.status === "running" && stopsAt.call?.(rest) === true) {
+      stopsAt.call = undefined;
+      current.status = "stopping";
+      for (const command of commands.filter((each) => each.sandboxSessionId === sessionId)) {
+        command.exitCode = command.exitCode ?? 143;
+      }
+    }
+    if (current?.status === "stopping") {
+      return Response.json(
+        {
+          error: {
+            code: "sandbox_stopping",
+            message: "Sandbox is stopping and no longer accepts commands.",
+          },
+        },
+        { status: 422 },
+      );
     }
     if (rest === "snapshot") {
       // A snapshot stops the session it is taken of, so a second one asked of it is refused.
@@ -408,6 +437,7 @@ export function runnerSandboxApi() {
     failPolicy,
     holdPolicy,
     waits,
+    stopsAt,
     hooks,
   };
 }

@@ -1241,6 +1241,39 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect.each([
+    ["at its runner's stdin", (rest: string) => rest.endsWith("/stdin"), false],
+    ["at the relaunch's command", (rest: string) => rest === "cmd", true],
+  ] as const)(
+    "a message that meets its sandbox stopping %s resumes the sandbox and runs on a runner launched in its next session",
+    ([, call, runnerExited]) =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const first = api.commands[0];
+        if (runnerExited && first !== undefined) first.exitCode = 0;
+        api.stopsAt.call = call;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.equal(api.commands.length, 2);
+        const relaunch = api.commands[1];
+        assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
+        assert.notEqual(relaunch?.sandboxSessionId, first?.sandboxSessionId);
+        const [, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+      }),
+  );
+
   it.effect(
     "a launch's end that left a message untaken keeps the sandbox up, and the launch that hands it on reads it",
     () =>

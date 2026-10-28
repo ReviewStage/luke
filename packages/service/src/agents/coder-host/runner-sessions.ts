@@ -155,7 +155,12 @@ import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
-import { NOT_FOUND_STATUS, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
+import {
+  NOT_FOUND_STATUS,
+  type SandboxFile,
+  SandboxUnavailable,
+  sessionEnding,
+} from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
@@ -998,7 +1003,8 @@ export const runnerSessions = <
           );
           const lines = [...ahead.lines, opened.line];
           // Note that a write to stdin is that runner's liveness check: Vercel refuses stdin to a
-          // command that exited (`command_not_found_or_exited`, a 404), which relaunches below,
+          // command that exited (`command_not_found_or_exited`, a 404), or whose sandbox is
+          // stopping under it, which relaunches below,
           // because reading the exit first waits out `EXIT_WAIT` on a runner that runs. A runner
           // that reads its lines is queued them only where its exit read none, and one that ends
           // before it takes them hands them to the launch its END starts (`deliverWaiting`).
@@ -1009,7 +1015,9 @@ export const runnerSessions = <
                 Effect.as(true),
                 Effect.catchIf(
                   (failure) =>
-                    failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS,
+                    (failure instanceof SandboxUnavailable &&
+                      failure.status === NOT_FOUND_STATUS) ||
+                    sessionEnding(failure),
                   () => Effect.succeed(false),
                 ),
               );
@@ -1043,7 +1051,15 @@ export const runnerSessions = <
         }
         // The place stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         const wasUp = found.value.running !== undefined;
-        const resumed = yield* machine.resume(found.value);
+        // Note that a place whose stop began as the send reached it (a launch's end or the sweep
+        // stopped it a moment before) refuses every call until it has stopped, so it is resumed
+        // once more and the runner launched in the session that opens, as Vercel's SDK does.
+        const resumed = yield* Effect.gen(function* () {
+          const place = yield* machine.resume(found.value);
+          if (place === PLACE_RESUME.GONE) return place;
+          yield* relaunched(agent, sessionId, found.value.name, place, layout, sent);
+          return place;
+        }).pipe(Effect.retry({ times: 1, while: sessionEnding }));
         if (resumed === PLACE_RESUME.GONE) {
           // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
           // the session goes on in a fresh one, a clean checkout of the repository under the
@@ -1066,7 +1082,6 @@ export const runnerSessions = <
           yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
-        yield* relaunched(agent, sessionId, found.value.name, resumed, layout, sent);
         yield* handed(wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED);
         return accepted;
       });
