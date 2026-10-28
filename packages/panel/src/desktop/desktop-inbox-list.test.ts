@@ -93,6 +93,7 @@ import {
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { playMotions } from "../testing/pane-motion.js";
+import { pointerCross } from "../testing/pointer-cross.js";
 import { waitingOf } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 
@@ -508,9 +509,12 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
   assert.match(selectionBar(page)?.textContent ?? "", /1 selected/u);
 });
 
-test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the list is shown; To do then lists only what still needs you until All is chosen, which sorts it anew, and the choice outlives a relaunch", async () => {
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the pointer is over the list and sorted anew once it leaves; To do then lists only what still needs you, and the choice outlives a relaunch", async () => {
   let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
+  const list = page.querySelector('nav[aria-label="Inbox items"]');
+  assert.ok(list !== null);
+  pointerCross(document.body, list);
   world.inboxes.set(INVITES.id, [
     { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
   ]);
@@ -530,7 +534,7 @@ test("a plan main says changed is read again, so an item answered on another Mac
       "# Invites",
       "Expire after 7 days?",
     ],
-    "the answer moves no row while the list is shown",
+    "the answer moves no row while the pointer is over the list",
   );
   const everything = [
     "# Invites",
@@ -539,6 +543,9 @@ test("a plan main says changed is read again, so an item answered on another Mac
     "How is a failed email retried?",
     "▸ *Alert at 80%?",
   ];
+
+  pointerCross(list, document.body);
+  assert.deepEqual(listed(page), everything, "the pointer gone, the list sorts anew");
 
   showScope(page, "For you");
   assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
@@ -831,12 +838,11 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
     ),
   ];
   for (const header of headers()) act(() => header.click());
-  // Note that the plans keep the order they were drawn in, since the list is shown as the item closes.
   assert.deepEqual(
     headers().map((header) => [header.getAttribute("aria-expanded"), header.textContent]),
     [
-      ["false", "Billing usage alerts1 needs you"],
       ["false", "Invites"],
+      ["false", "Billing usage alerts1 needs you"],
     ],
   );
 });

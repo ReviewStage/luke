@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   EVERYONES,
   INBOX_SORT,
@@ -10,6 +10,7 @@ import {
   inboxList,
   inboxPlaces,
   listedItems,
+  NO_PLACES,
 } from "./inbox-model.js";
 import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
 
@@ -23,12 +24,15 @@ import { type HeldOrder, useHeldOrder } from "./use-held-order.js";
  * another row lets it go, and so does another scope or Whose, or the list
  * being hidden, so an item settled while it was hidden is gone once the
  * list is shown again. An item the
- * list never drew, chosen by a link, gets no row. While the list is shown
- * every row keeps the place it was first drawn in, when its item changed and
- * the status it stood under, so an answer, which changes both, moves no row;
- * hidden, or sorted, grouped, scoped, searched, or Whose chosen anew, it is
- * drawn again where each item stands now. A row that leaves the list lets its
- * place go, so a later change brings it back where it stands then.
+ * list never drew, chosen by a link, gets no row. While the pointer is over
+ * the list every row keeps the place it was first drawn in, when its item
+ * changed and the status it stood under, so nothing moves under the reader's
+ * hand; once it leaves, every row but the chosen one stands where its item
+ * does now, and the chosen row keeps its place while it stays chosen, so an
+ * answer, which changes both, moves no row. Hidden, or sorted, grouped,
+ * scoped, searched, or Whose chosen anew, the list is drawn again where each
+ * item stands now. A row that leaves the list lets its place go, so a later
+ * change brings it back where it stands then.
  */
 
 /** What an Inbox lists and how, bar the item chosen and the places held, which this module adds. */
@@ -39,6 +43,17 @@ interface Drawn {
   readonly list: InboxListView;
   readonly steps: InboxListView;
   readonly kept: string | undefined;
+}
+
+/** The places held of `chosen` alone, or of every row while the pointer is over the list. */
+function heldPlaces(
+  places: ReadonlyMap<string, InboxPlace>,
+  chosen: string | undefined,
+  pointing: boolean,
+): ReadonlyMap<string, InboxPlace> {
+  if (pointing) return places;
+  const place = chosen === undefined ? undefined : places.get(chosen);
+  return chosen === undefined || place === undefined ? NO_PLACES : new Map([[chosen, place]]);
 }
 
 /** Whether two Whose choices name the same people. */
@@ -75,18 +90,26 @@ function sameOrder(was: InboxFilter | undefined, now: InboxFilter): boolean {
 /**
  * The rows an Inbox draws (`list`) and the items K, J, and Next step through
  * (`steps`), which keep the chosen item in its place whether or not it has a
- * row, both held still as the module's head says while `shown`.
+ * row, both held still as the module's head says while `shown`; and what the
+ * list tells as the pointer comes onto it and leaves (`onPointing`).
  */
 export function useHeldInboxList(
   groups: readonly InboxGroup[],
   filter: InboxFilter,
   chosen: string | undefined,
   shown: boolean,
-): { readonly list: InboxListView; readonly steps: InboxListView } {
+): {
+  readonly list: InboxListView;
+  readonly steps: InboxListView;
+  readonly onPointing: (pointing: boolean) => void;
+} {
   const keptLast = useRef<string | undefined>(undefined);
+  // Note that the hold is the pointer's and not the list's being shown, because the Inbox may stand open for as long as the window does.
+  const [pointing, setPointing] = useState(false);
   const order: HeldOrder<InboxFilter, InboxPlace, Drawn> = {
     sameOrder,
-    draw: (places, was) => {
+    draw: (held, was) => {
+      const places = heldPlaces(held, chosen, pointing);
       const matching = inboxList(groups, { ...filter, chosen: undefined, places });
       const listed = listedItems(matching).some(({ item }) => item.id === chosen);
       // Note that the chosen row is kept only once the list drew it, so one chosen from outside the scope never gets a row.
@@ -101,11 +124,11 @@ export function useHeldInboxList(
       const steps = inboxList(groups, { ...filter, chosen, places });
       return { list, steps, kept };
     },
-    placesOf: ({ list }, held) => inboxPlaces(list, held),
+    placesOf: ({ list }, held) => inboxPlaces(list, heldPlaces(held, chosen, pointing)),
   };
   const { list, steps, kept } = useHeldOrder(filter, shown, order);
   useLayoutEffect(() => {
     keptLast.current = shown ? kept : undefined;
   });
-  return { list, steps };
+  return { list, steps, onPointing: setPointing };
 }

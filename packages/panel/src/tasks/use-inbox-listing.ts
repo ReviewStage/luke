@@ -234,8 +234,8 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     readerId: tasks.me,
   };
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
-  // both held still while the page stands.
-  const { list, steps } = useHeldInboxList(
+  // both held still while the page stands: every row while the pointer is over the list, and the chosen row while it stays chosen.
+  const { list, steps, onPointing } = useHeldInboxList(
     standing,
     filter,
     asked?.itemId,
@@ -330,6 +330,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     counts,
     list,
     steps,
+    onPointing,
     chosen,
     filteredOut,
     search: { query, onQuery: setQuery },
