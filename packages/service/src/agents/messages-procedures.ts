@@ -34,7 +34,11 @@
  */
 
 import { childTitlesOf } from "@luke/database/models/child-titles";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  readCodingAgent,
+  readVisibleCodingAgent,
+} from "@luke/database/models/coding-agent-store";
 import { readRewoundRevision } from "@luke/database/models/conversation-rewind";
 import { childConversationId } from "@luke/database/models/ids";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
@@ -106,7 +110,7 @@ export interface MessagesProcedureSeams extends EveReach {
 /** The agent the path names, where the account is a member of its workspace, its conversation targeted under the member who started it; not found otherwise. */
 const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, id: string) {
   const agentId = yield* pathUuid(id);
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleCodingAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const target: ConversationTarget = {
     userId: agent.value.userId,

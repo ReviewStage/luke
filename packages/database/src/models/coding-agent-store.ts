@@ -86,6 +86,7 @@ import { stampConversationsDeleted } from "./soft-delete.js";
 import { TaskAgentUnstopped } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
+  agentReachableBy,
   agentVisibleTo,
   reachableTask,
   taskReachableBy,
@@ -557,9 +558,9 @@ const TasklessAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The agent under this id, where the account may read and write it (`agentVisibleTo`), its task included; any other id reads as no agent. */
+/** The agent under this id, where the account is a member of its workspace; any other id reads as no agent. */
 function reachableAgent(userId: string, agentId: string): SQL | undefined {
-  return and(eq(codingAgent.id, agentId), agentVisibleTo(userId));
+  return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
 }
 
 /** The task row under its own lock, where the account is a member of its workspace. */
@@ -867,7 +868,7 @@ const lockAgentMentionedServers = SqlSchema.findOneOption({
       db
         .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
         .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId)))
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
         .limit(1)
         .for("update"),
     ),
@@ -1884,6 +1885,19 @@ const findAgent = SqlSchema.findOneOption({
     ),
 });
 
+const findVisibleAgent = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(and(eq(codingAgent.id, agentId), agentVisibleTo(userId)))
+        .limit(1),
+    ),
+});
+
 /** The account's pin of the agent, from now; one already standing keeps its instant. */
 const insertAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
@@ -1967,7 +1981,7 @@ const findAgentHeaderOfConversation = SqlSchema.findOneOption({
       db
         .select(CODING_AGENT_HEADER_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId))),
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
     ),
 });
 
@@ -1979,7 +1993,7 @@ const findAgentOfConversation = SqlSchema.findOneOption({
       db
         .select(CODING_AGENT_COLUMNS)
         .from(codingAgent)
-        .where(and(eq(codingAgent.conversationId, conversationId), agentVisibleTo(userId)))
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
         .limit(1),
     ),
 });
@@ -2503,12 +2517,25 @@ export function readCodingAgentByKey(
   return findAgentByKey({ userId, idempotencyKey });
 }
 
-/** The agent under this id, or nothing for an agent of a workspace the account is not in. */
+/** The agent under this id, or nothing for an agent of a workspace the account is not in: the read an agent makes of itself, under the member who started it. */
 export function readCodingAgent(
   userId: string,
   agentId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgent({ userId, agentId });
+}
+
+/**
+ * The agent under this id, where the account may read and write it
+ * (`agentVisibleTo`), its task included; nothing otherwise. The read every
+ * door a member, or another agent, names an agent by its id through makes
+ * first, so an agent on a task they do not see is none to them.
+ */
+export function readVisibleCodingAgent(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return findVisibleAgent({ userId, agentId });
 }
 
 /** The agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent of a workspace the account is not in. */

@@ -18,6 +18,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentNoTeammatesOperator,
+  agentReachableBy,
   agentSeenBy,
   agentVisibleTo,
   isWorkspaceMember,
@@ -563,7 +564,7 @@ function itemAgentSeenBy(userId: string): SQL {
   return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
 }
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it. Only `itemVisibleTo` reads it, since the item's task is asked beside it. */
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it: what an agent's own reads of its items keep, under the member who started it, as it acts as itself (`agentReachableBy`). What a member reads keeps `itemVisibleTo`. */
 function itemReachableBy(userId: string): SQL {
   return sql`(${workspaceReachableBy(userId, ITEM_WORKSPACE)} and ${itemAgentSeenBy(userId)})`;
 }
@@ -610,7 +611,11 @@ const lockAgent = SqlSchema.findOneOption({
         })
         .from(codingAgent)
         .where(
-          and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), agentVisibleTo(userId)),
+          and(
+            eq(codingAgent.id, agentId),
+            eq(codingAgent.userId, userId),
+            agentReachableBy(userId),
+          ),
         )
         .for("update"),
     ),
@@ -990,7 +995,7 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the task's or the agent's where the account may read them (`itemVisibleTo`), or the agent's own under the account that started it, which its tools read. */
+/** The rows a scope names: the task's or the agent's where the account may read them (`itemVisibleTo`), or the agent's own under the account that started it, which its tools read as it acts as itself. */
 function inScope(scope: InboxScope) {
   switch (scope.scope) {
     case INBOX_SCOPE.TASK:
@@ -3891,7 +3896,7 @@ const findAgentItem = SqlSchema.findOneOption({
             eq(inboxItem.userId, userId),
             eq(inboxItem.agentId, agentId),
             eq(inboxItem.key, key),
-            itemVisibleTo(userId),
+            itemReachableBy(userId),
           ),
         ),
     ),

@@ -82,6 +82,7 @@ import {
   readNativeRunStanding,
   readRunnerTokenConversation,
   readStandingOperator,
+  readVisibleCodingAgent,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
@@ -767,7 +768,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
   );
 
   it.effect(
-    "an agent the App reaches, on a task on its starter's own token, is read and written by id by its starter and by no teammate who does not reach the task",
+    "an agent the App reaches, on a task on its starter's own token, is read by id by its starter and by no teammate who does not see the task, while the read an agent makes of itself keeps the agent's reach alone",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -794,14 +795,13 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
 
         assert.deepEqual(
           [
-            Option.isNone(yield* readCodingAgent(teammate, agentId)),
+            Option.isSome(yield* readVisibleCodingAgent(starter, agentId)),
+            Option.isNone(yield* readVisibleCodingAgent(teammate, agentId)),
             yield* listPublishedCodingAgentsById(teammate, [agentId]),
-            Option.isNone(yield* renameCodingAgent(teammate, agentId, "Taken over")),
+            Option.isSome(yield* readCodingAgent(teammate, agentId)),
           ],
-          [true, [], true],
+          [true, true, [], true],
         );
-        const kept = Option.getOrThrow(yield* readCodingAgent(starter, agentId));
-        assert.equal(kept.title, null, "the teammate's rename landed nowhere");
       }),
   );
 });

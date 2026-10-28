@@ -78,7 +78,7 @@
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { readAutomation } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readVisibleCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import {
@@ -429,7 +429,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(
+        readVisibleCodingAgent(context.userId, agentId),
+      );
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
     }),
@@ -499,7 +501,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     agentInbox: signedIn.agentInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(
+        readVisibleCodingAgent(context.userId, agentId),
+      );
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(
         agentInboxLive,
