@@ -8,7 +8,6 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import type { AutomationRunSummary, AutomationSummary } from "@luke/features/automation-wire";
-import { dateOfText } from "@luke/features/time-format";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -838,7 +837,12 @@ function AutomationMaker({
   return (
     <>
       <HoverCardRule />
-      <CreatedByRow actor={maker} at={automation.createdAt} now={now} />
+      <ProvenanceRow
+        verb={PROVENANCE_VERB.CREATED}
+        actor={maker}
+        at={automation.createdAt}
+        now={now}
+      />
     </>
   );
 }
@@ -1153,15 +1157,36 @@ export function ActorStack({
   );
 }
 
-/** Who made a thing and when, as a card's foot says it: their face, then "Created by" and their name, which hangs their card, and the day. */
-export function CreatedByRow({
+/** What a provenance row says its actor did. */
+export const PROVENANCE_VERB = {
+  CREATED: "Created",
+  STARTED: "Started",
+  SHOWN: "Shown",
+  OPENED: "Opened",
+} as const;
+
+export type ProvenanceVerb = (typeof PROVENANCE_VERB)[keyof typeof PROVENANCE_VERB];
+
+/**
+ * Who made, started, showed, or opened a thing, and when, as every card's
+ * provenance row says it: their face or tile, then "Created by" and their
+ * name, which hangs `card` (or their own) and opens `onOpen`, then when, in
+ * the one provenance time ("3d ago", then "Oct 12"), where it is known.
+ */
+export function ProvenanceRow({
+  verb,
   actor,
   at,
   now,
+  card,
+  onOpen,
 }: {
+  verb: ProvenanceVerb;
   actor: Actor;
-  at: number;
+  at?: number | undefined;
   now: number;
+  card?: ReactNode;
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   return (
     <HoverCardRow
@@ -1169,9 +1194,14 @@ export function CreatedByRow({
       glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
       label={
         <>
-          {"Created by "}
-          <ActorRef actor={actor} sentence nameOnly />
-          {` · ${dateOfText(at, now)}`}
+          {`${verb} by `}
+          <ActorRef actor={actor} card={card} onOpen={onOpen} sentence nameOnly />
+          {at === undefined ? null : (
+            <>
+              {" · "}
+              <Time at={at} now={now} hint={false} look={TIME_LOOK.PROVENANCE} />
+            </>
+          )}
         </>
       }
     />

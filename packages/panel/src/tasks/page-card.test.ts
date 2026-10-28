@@ -68,7 +68,7 @@ test("a version written while the card stands is hidden until it loads, never th
   assert.equal(preview()?.dataset.loaded, "true");
 });
 
-test("the head says who showed the version beside it, wherever the card hangs: Luke, an agent by the name the window holds, or a coding agent it holds none of, and nothing for a version from before", () => {
+test("a provenance row says who showed the version, wherever the card hangs: Luke, an agent by the name the window holds, or a coding agent it holds none of, and nothing for a version from before", () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -78,7 +78,7 @@ test("the head says who showed the version beside it, wherever the card hangs: L
         onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
       ),
     );
-    return container.querySelector(".luke-hover-card-sub")?.textContent;
+    return container.querySelector(".luke-hover-card-row")?.textContent;
   };
 
   assert.deepEqual(
@@ -91,11 +91,6 @@ test("the head says who showed the version beside it, wherever the card hangs: L
       }),
       subOf(FUNNEL),
     ],
-    [
-      "Version 2 · Shown by Luke",
-      "Shown by Luke",
-      "Version 2 · Shown by a coding agent",
-      "Version 2",
-    ],
+    ["Shown by Luke", "Shown by Luke", "Shown by Coding agent", undefined],
   );
 });

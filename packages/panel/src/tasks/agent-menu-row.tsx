@@ -20,6 +20,7 @@ import { ACTOR_KIND, type EditReader, teammateCreator } from "@luke/ui/actor-mod
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { type CardFoot, taskFoot } from "./agent-tab-card.js";
 import { agentName } from "./coding-agent-model.js";
 import type { MentionableAgent } from "./mention-picker.js";
 import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-agent-card.js";
@@ -53,9 +54,9 @@ export interface AgentRowPlace extends MentionedAgentsPlace {
 }
 
 /** The line under an agent's card: the task it works on, where the list named it. */
-function cardFoot(agent: MentionableAgent): string | undefined {
-  if (agent.task === undefined) return CARD_FOOT.NO_TASK;
-  return agent.task.name === undefined ? undefined : `${CARD_FOOT.ON}${agent.task.name}`;
+function cardFoot(agent: MentionableAgent): CardFoot | undefined {
+  if (agent.task === undefined) return taskFoot(CARD_FOOT.NO_TASK);
+  return agent.task.name === undefined ? undefined : taskFoot(`${CARD_FOOT.ON}${agent.task.name}`);
 }
 
 /**

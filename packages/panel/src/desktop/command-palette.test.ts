@@ -941,7 +941,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     assert.ok(row, "the agent is listed");
     restOn(row);
     const words = document.querySelector(
-      ".luke-tooltip-card .actor-words [data-actor-ref]",
+      ".luke-tooltip-card .luke-hover-card-row [data-actor-ref]",
     )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";

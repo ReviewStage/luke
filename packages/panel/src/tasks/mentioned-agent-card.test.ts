@@ -323,7 +323,8 @@ async function cardOf(chip: Element | undefined) {
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
     working:
       card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
-    foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
+    foot: card.querySelector(".luke-hover-card-row:last-child .luke-hover-card-row-label")
+      ?.textContent,
     words: card.textContent,
   };
   act(() => {

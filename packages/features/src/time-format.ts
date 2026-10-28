@@ -136,6 +136,16 @@ export function agoText(at: number, now: number): string {
   return count === undefined ? sinceText(at, now) : `${count}${AGO_WORD}`;
 }
 
+/**
+ * When someone made, started, showed, or opened a thing, as its provenance
+ * row says it after their name: the line's words inside a week, "3d ago",
+ * and the day past it, "Oct 12", since a count of weeks reads as vague
+ * beside a name where a day reads as a fact.
+ */
+export function provenanceText(at: number, now: number): string {
+  return now - at < WEEK_MS ? agoText(at, now) : dateOfText(at, now);
+}
+
 /** The moment `at` in full, for the hover over a row's few letters. */
 export function momentText(at: number): string {
   return MOMENT.format(at);

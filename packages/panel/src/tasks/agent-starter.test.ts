@@ -160,11 +160,18 @@ test("a teammate's agent's card says it was started by them, their disc and name
   assert.equal(teammateStarter(AGENT.startedBy, undefined), undefined);
 
   const { card } = await agentNamed(DEAN.userId);
-  const line = card.querySelector(".actor-words") ?? assert.fail("the card names its starter");
-  const starter = line.querySelector<HTMLElement>("[data-actor-ref]") ?? assert.fail("as an actor");
-  assert.equal(line.firstChild?.textContent, "Started by ");
+  const row =
+    card.querySelector(".luke-hover-card-row") ?? assert.fail("the card names its starter");
+  const starter = row.querySelector<HTMLElement>("[data-actor-ref]") ?? assert.fail("as an actor");
+  assert.match(
+    row.querySelector(".luke-hover-card-row-label")?.textContent ?? "",
+    /^Started by Charles Pan · /u,
+  );
   assert.equal(starter.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
-  assert.equal(starter.querySelector("img")?.getAttribute("src"), CHARLES_PICTURE);
+  assert.equal(
+    row.querySelector(".luke-hover-card-row-glyph img")?.getAttribute("src"),
+    CHARLES_PICTURE,
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -179,7 +186,8 @@ test("a teammate's agent's card says it was started by them, their disc and name
 
 test("the starter's name on an agent's card hangs their own card over it, read only, and the agent's card stays standing beneath", async () => {
   const { card } = await agentNamed(DEAN.userId);
-  const starter = card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the starter");
+  const starter =
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ?? assert.fail("the starter");
   assert.equal(starter.tagName, "SPAN", "a person has no page to press through to");
 
   hover(starter);
@@ -217,7 +225,8 @@ async function stacked() {
   pass(PAST_ANY_WAIT);
   const control = document.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named");
   move(control, card);
-  const starter = card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the starter");
+  const starter =
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ?? assert.fail("the starter");
   move(card, starter);
   pass(PAST_ANY_WAIT);
   const theirs = cards()[1] ?? assert.fail("the starter's card hangs over the agent's");
@@ -286,15 +295,19 @@ test("the pointer going from a starter's card back onto the agent's own name kee
   }
 });
 
-test("an agent's card wears its tile beside its name and its pull request at the corner where the plan holds one, and offers no Open agent, since the name it hangs from opens the tab", async () => {
+test("an agent's card wears its tile beside its name, its pull request on a row of its own where the plan holds one with only its standing at the corner, and offers no Open agent, since the name it hangs from opens the tab", async () => {
   const { card, opened } = await agentNamed(DEAN.userId, new Map([[AGENT.id, PULL_REQUEST]]));
   const tile = card.querySelector<HTMLElement>(".luke-hover-card-lead > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
   assert.equal(tile?.dataset.size, "card");
   const corner =
     card.querySelector(".luke-hover-card-corner") ?? assert.fail("the head has a corner");
-  assert.ok(corner.querySelector("[data-pull-request-mark]"), "the pull request's mark leads it");
-  assert.match(corner.textContent ?? "", /^#42 · Failed/u);
+  assert.equal(corner.querySelector("[data-pull-request-mark]"), null, "no pull request in it");
+  assert.match(corner.textContent ?? "", /^Failed · /u);
+  const pullRequest = [...card.querySelectorAll(".luke-hover-card-row")].find(
+    (row) => row.querySelector("[data-pull-request-mark]") !== null,
+  );
+  assert.equal(pullRequest?.textContent, "#42 Expire invitations");
 
   const offers = [...card.querySelectorAll("button")].map((button) => button.textContent ?? "");
   assert.deepEqual(
