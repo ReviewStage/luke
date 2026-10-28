@@ -38,6 +38,8 @@ import { focusChoosable } from "./list-selection.js";
 export type SelectionAct = {
   readonly label: string;
   readonly icon?: React.JSX.Element;
+  /** The act cannot be taken back, as Permanently delete: a chosen row's menu draws it red, last and alone. */
+  readonly danger?: boolean | undefined;
 } & (
   | { readonly onAct: () => void; readonly menu?: undefined }
   | { readonly menu: readonly (readonly MenuAction[])[]; readonly onAct?: undefined }

@@ -1003,9 +1003,16 @@ function PlanDocument({
   );
   const workspaceName = home?.name ?? "";
   const { macs: devices } = agents;
+  // Note that S opens the status chip only while the plan is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(
-    () => ({ workspaceName, onSet: setStanding, devices, repository: repositoryDoor }),
-    [workspaceName, setStanding, devices, repositoryDoor],
+    () => ({
+      workspaceName,
+      onSet: setStanding,
+      devices,
+      repository: repositoryDoor,
+      inSight: planInSight,
+    }),
+    [workspaceName, setStanding, devices, repositoryDoor, planInSight],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;

@@ -81,6 +81,7 @@ export const APP_COMMAND = {
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
   REPLY_TO_SELECTION: "reply-to-selection",
+  SET_STATUS: "set-status",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
   ASK_LUKE: "ask-luke",
@@ -601,6 +602,11 @@ export const APP_SHORTCUTS = {
     label: "Reply to selection",
     chord: { key: SHORTCUT_KEY.R, plain: true },
   },
+  // Note that S opens the open task's status menu, as Linear's S does, answered only where the press is not typing, as J, K, and R are.
+  [APP_COMMAND.SET_STATUS]: {
+    label: "Set status",
+    chord: { key: SHORTCUT_KEY.S, plain: true },
+  },
   [APP_COMMAND.EXIT_AGENT_PAGE]: {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -838,6 +844,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.REPLY_TO_SELECTION,
+      APP_COMMAND.SET_STATUS,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
       APP_COMMAND.AUTOMATIONS,
