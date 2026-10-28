@@ -10,7 +10,15 @@ import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  CHIP_WIDTH,
+  POPOVER_ALIGN,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  VisuallyHidden,
+} from "@luke/ui";
 import { workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -46,11 +54,12 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * later before it, drawing the backlog's mark alone where the card is too
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
- * New task's own chips stand in a head row over the card, the same in the
- * dialog and on a new account's welcome: the title, "New task", then the repository the task
- * is about (`repository-chip.tsx`). While local agents are on
- * and the member has a device, the Runs on chip follows the repository's,
- * Cloud or one of their devices, which the task's agents run on
+ * New task's repository chip stands in a head row over the card, the same in the
+ * dialog and on a new account's welcome: the repository the task is about
+ * (`repository-chip.tsx`), its title, "New task", named to a reader alone,
+ * since the card says what it is, and an automation's drawn before it. While local agents are on
+ * and the member has a device, the Runs on chip stands after the box's "+",
+ * as an agent's box draws where its agent runs: Cloud or one of their devices, which the task's agents run on
  * (`runs-on.tsx`); an automation's card draws none. Note that while local
  * agents are on the card reads the member's devices as it opens and holds
  * Start, saying so, until that read lands, a list read before it opened not
@@ -120,7 +129,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
 /** ⌘Return: a bare task from a box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
-/** Each purpose's head row title, before the repository's chip. */
+/** Each purpose's head row title, before the repository's chip: drawn for an automation's, and named to a reader alone for a task's. */
 const PURPOSE_HEADING = {
   [NEW_TASK_PURPOSE.TASK]: "New task",
   [NEW_TASK_PURPOSE.AUTOMATION]: "Create with an agent",
@@ -469,23 +478,19 @@ export function NewTaskComposer({
     <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
       <div className="new-task-head flex min-w-0 items-center gap-block-gap">
         <div className="new-task-title flex min-w-0 items-center gap-item-gap">
-          <Text
-            variant={TEXT_VARIANT.DIALOG}
-            as={TEXT_ELEMENT.H2}
-            id={titleId}
-            className="max-w-new-task-title shrink-0"
-          >
-            {PURPOSE_HEADING[purpose]}
-          </Text>
-          {repositoryChip}
-          {devices === undefined ? null : (
-            <NewTaskRunsOnChip
-              devices={devices}
-              device={device}
-              disabled={starting}
-              onChoose={chooseDevice}
-            />
+          {forAutomation ? (
+            <Text
+              variant={TEXT_VARIANT.DIALOG}
+              as={TEXT_ELEMENT.H2}
+              id={titleId}
+              className="max-w-new-task-title shrink-0"
+            >
+              {PURPOSE_HEADING[purpose]}
+            </Text>
+          ) : (
+            <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
+          {repositoryChip}
         </div>
       </div>
       <AgentComposer
@@ -508,6 +513,16 @@ export function NewTaskComposer({
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
         listSide={listSide}
+        tools={
+          devices === undefined ? undefined : (
+            <NewTaskRunsOnChip
+              devices={devices}
+              device={device}
+              disabled={starting}
+              onChoose={chooseDevice}
+            />
+          )
+        }
       />
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
