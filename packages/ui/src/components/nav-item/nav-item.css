@@ -76,6 +76,12 @@
     color: var(--luke-tone-ink);
   }
 
+  /* A count of what the reader has yet to look at or finish is in the unread
+     dot's ink (`unread-mark.tsx`), which no status tone names. */
+  .luke-nav-item-count[data-tone="unread"] {
+    --luke-tone-ink: var(--luke-color-accent-text);
+  }
+
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {
     opacity: 1;
   }

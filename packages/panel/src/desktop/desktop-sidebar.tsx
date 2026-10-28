@@ -38,6 +38,7 @@ import {
   motionKey,
   motionRows,
   NAV_COUNT_SHOWN,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
@@ -155,7 +156,7 @@ import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { needsYouNoun, useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
+import { FOR_YOU_NOUN, useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
@@ -1356,10 +1357,9 @@ function ListSkeleton(): React.JSX.Element {
 
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many items wait on the developer across every
- * task at its end, the sum of the counts the Inbox's rows show, in even
- * figures and the needs-you tone the rows it counts wear, since they wait on
- * the developer, and nothing at none. Its chord takes the count's place
+ * the tray, its name, and how many threads For you lists at its end
+ * (`useInboxWaiting`), in even figures and the unread dot's blue, and
+ * nothing at none. Its chord takes the count's place
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
  * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
@@ -1381,8 +1381,8 @@ function SidebarInboxRow({
       current={current ? NAV_CURRENT.PAGE : undefined}
       count={{
         value: waiting,
-        noun: needsYouNoun(waiting),
-        tone: STATUS_TONE.ATTENTION,
+        noun: FOR_YOU_NOUN,
+        tone: NAV_COUNT_TONE.UNREAD,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}

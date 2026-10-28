@@ -9,6 +9,7 @@ import {
   GearIcon,
   InboxIcon,
   MoreButton,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -51,7 +52,7 @@ function Places(): React.JSX.Element {
       </NavItem>
       <NavItem
         icon={<FolderIcon />}
-        count={{ value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
+        count={{ value: 3, noun: "for you", tone: NAV_COUNT_TONE.UNREAD }}
         shortcut={<Chord keys="⇧⌘I" />}
         {...place("inbox")}
       >
