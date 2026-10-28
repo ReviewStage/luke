@@ -40,11 +40,7 @@
  * while it runs. Where the place stopped or the runner ended, it resumes
  * the place, sets the repository's credential at its firewall again, and
  * launches the runner anew with the harness's session to resume and the
- * next event number, whose session files the machine's disk kept. A line
- * written to a runner that runs is held to a deadline past the answer
- * (`CODER.MESSAGE_ACCEPT`): one its runner never took is delivered by a
- * relaunch on the same session, as a runner that reads its stdin no more
- * otherwise leaves it for good.
+ * next event number, whose session files the machine's disk kept.
  * `cancel` writes `stop` to a runner that runs, scoped to the launch running
  * the turn the Stop names, and nothing once that turn is no longer under way;
  * past the answer, a turn still running `CODER.STOP_CONFIRM` on has its
@@ -101,7 +97,6 @@ import {
   clearNativeRewindHanded,
   readNativeRewind,
 } from "@luke/database/models/conversation-rewind";
-import { readMessageByClientId } from "@luke/database/models/message-reads";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { causeKind } from "@luke/runtime/effect";
@@ -832,62 +827,6 @@ export const runnerSessions = <
         return now !== runner.fingerprint;
       });
 
-    /**
-     * A message's deadline, `CODER.MESSAGE_ACCEPT` after its line was written
-     * to a runner already running: where no ACCEPTED took the line by then and
-     * the launch it went to still runs, that runner reads its stdin no more,
-     * so it is ended and launched again on the same session with the line as
-     * its first, as a stale warm runner is. The relaunch mints a new bearer,
-     * so nothing the ended launch posts late, an ACCEPTED of the line
-     * included, is taken, and the line is delivered once. A line whose launch
-     * ended or was replaced since without taking it, as by a Stop's force
-     * that came after it was written, is handed on as a send hands a line,
-     * to the runner running now or a relaunch. A line taken, withdrawn, or
-     * written before the newest turn's Stop, which ended it, is left as it
-     * stands.
-     */
-    const redelivered = (
-      sessionId: string,
-      agent: CodingAgent,
-      message: EveMessage<Turn>,
-      layout: MachineLayout,
-      sent: RunnerMessage,
-      launch: number,
-    ): Effect.Effect<void, { readonly _tag: string }, RunnerServices> =>
-      Effect.andThen(
-        Effect.sleep(CODER.MESSAGE_ACCEPT),
-        holdingRunner(
-          agent.id,
-          Effect.gen(function* () {
-            const { conversationId } = agent;
-            const read = yield* readMessageByClientId(
-              userId,
-              conversationId,
-              CODER_TOOL_SET,
-              sent.line.uuid,
-            );
-            const row = read.ok ? read.value[0] : undefined;
-            if (row === undefined || row.turnId !== undefined) return;
-            const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
-            const stoppedAt = turn?.cancelRequestedAt ?? null;
-            if (stoppedAt !== null && row.createdAt < stoppedAt) return;
-            const found = yield* firstPlace(machine, sessionId);
-            if (Option.isNone(found) || found.value.agentId !== agent.id) return;
-            const live = yield* liveRunner(machine, found.value);
-            if (live === undefined || live.mark.firstSequence !== launch) {
-              yield* sendHolding(sessionId, message, layout, sent);
-              return;
-            }
-            yield* Effect.logWarning(
-              `A ${harness.name} runner took no message within its deadline, and was launched again`,
-            );
-            yield* machine.kill(live.handle);
-            const running = placeOfHandle(live.handle);
-            yield* relaunched(agent, sessionId, found.value.name, running, layout, sent);
-          }),
-        ),
-      );
-
     /** A message to the session, under the agent's runner lease: the place and the agent read afresh, since a call the lease waited behind may have relaunched. */
     const sendHolding = (
       sessionId: string,
@@ -968,15 +907,6 @@ export const runnerSessions = <
             );
           if (wrote) {
             yield* opened.taken;
-            // A line Luke keeps a row of is held to its deadline past the answer, where the
-            // caller has a door for that; one kept no row of, such as a call's ask, has none.
-            const after = yield* Effect.serviceOption(AfterResponse);
-            if (Option.isSome(after) && message.lineId !== undefined) {
-              yield* afterResponse(
-                `A ${harness.name} message's deadline`,
-                redelivered(sessionId, agent, message, layout, sent, running.mark.firstSequence),
-              );
-            }
             // The installation token lives an hour, so each message sets a fresh one, after the
             // write rather than ahead of it: the model takes seconds to reach its first command, and
             // the agent hears the message a GitHub mint and a policy update sooner. Note that a

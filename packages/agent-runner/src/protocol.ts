@@ -501,9 +501,8 @@ export const RUNNER_RELEASE = {
  * time and every message goes behind a model line, so a request the CLI
  * never answers would hold every later message and Stop; past this, a model
  * change is let go and an interrupt ends the launch as `STOPPED`. The CLI
- * answers one within a second, and five leaves a message's model line and
- * its own hand-off well inside Luke's deadline for it
- * (`CODER.MESSAGE_ACCEPT`, thirty seconds).
+ * answers one within a second, and five leaves an interrupt's end inside
+ * the bound Luke forces a Stop at (`CODER.STOP_CONFIRM`, ten seconds).
  */
 export const RUNNER_CONTROL = {
   ANSWER_MS: 5 * 1_000,
