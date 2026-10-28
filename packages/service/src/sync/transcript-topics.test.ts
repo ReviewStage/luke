@@ -14,10 +14,18 @@ import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
+import { recordDelegation } from "../agents/coder-host/delegation.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import {
+  CURSOR_START,
+  delegationPast,
+  transcriptNow,
+  transcriptPast,
+} from "../agents/coder-host/transcript.js";
 import { openChildConversation } from "../agents/eve-host/conversation.js";
 import {
   AssistantMessageBuilder,
+  MESSAGE_ROLE,
   RUN_EVENT,
   RUN_STATUS,
   RUN_TURN_ORIGIN,
@@ -25,6 +33,8 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
+import { modelCatalogOf } from "../providers/model-catalog.js";
+import { wokenOnHub } from "../testing/sync-woken.js";
 import { agentTranscriptLive } from "./live-queries.js";
 import type { LiveParams } from "./live-query.js";
 
@@ -38,7 +48,9 @@ import type { LiveParams } from "./live-query.js";
  * task's, and its workspace's too, so every view of the agent's status
  * hears it; and for a worker opened, its delegation recorded, and its title
  * filled, which notify the agent's own conversation, whose transcript lists
- * its workers.
+ * its workers. A transcript read held on Luke Sync answers the agent's
+ * message, and a wait for a worker's delegation its record, within a
+ * coalesce window of the write.
  *
  * Synthetic accounts, workspaces, tasks, agents, and turns throughout.
  */
@@ -200,5 +212,76 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           params,
         );
       }),
+  );
+
+  it.effect(
+    "on Luke Sync, a held read of the agent's transcript answers its message, and a wait for a worker's delegation the record, each within a coalesce window of the write",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { target, params } = yield* openAgent;
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          const db = yield* Database;
+          const [row] = yield* db
+            .select({ createdAt: agentTable.createdAt })
+            .from(agentTable)
+            .where(eq(agentTable.id, params.agentId));
+          const agent = { createdAt: row?.createdAt ?? assert.fail("the agent has no row") };
+          const own = { id: params.agentId };
+          const turnId = randomUUID();
+          yield* writer.enqueueTurn(target, {
+            turnId,
+            origin: TURN_ORIGIN.TYPED,
+            eveTurnId: "turn_0",
+          });
+          yield* writer.consume(target, {
+            ...runEvent(target, turnId),
+            kind: RUN_EVENT.TURN_STARTED,
+            sequence: 1,
+            origin: RUN_TURN_ORIGIN.TYPED,
+            trigger: TURN_TRIGGER.ASK,
+            at: NOW,
+          });
+          const catalog = modelCatalogOf([]);
+          const { page } = yield* transcriptNow(
+            target,
+            CODER_TOOL_SET,
+            CURSOR_START,
+            agent,
+            own,
+          ).pipe(Effect.provide(catalog));
+          const answer = new AssistantMessageBuilder();
+          answer.stepStart();
+          answer.text("The invites are sent.");
+          const callId = `call_${randomUUID()}`;
+
+          const message = yield* wokenOnHub(
+            transcriptPast(target, CODER_TOOL_SET, page.cursor, agent, own).pipe(
+              Effect.provide(catalog),
+            ),
+            writer.consume(target, {
+              ...runEvent(target, turnId),
+              kind: RUN_EVENT.MESSAGE_COMPLETED,
+              sequence: 2,
+              message: answer.finish(randomUUID()),
+            }),
+          );
+          const delegation = yield* wokenOnHub(
+            delegationPast(target, childConversationId(target.conversationId, callId), agent),
+            recordDelegation(
+              target,
+              callId,
+              { model: "anthropic/claude-opus-5.5", effort: "high" },
+              "researcher",
+            ),
+          );
+
+          assert.deepEqual(
+            message.answered.messages.map((each) => each.role),
+            [MESSAGE_ROLE.ASSISTANT],
+          );
+          assert.equal(delegation.answered.delegation?.model, "anthropic/claude-opus-5.5");
+        }),
+      ),
   );
 });

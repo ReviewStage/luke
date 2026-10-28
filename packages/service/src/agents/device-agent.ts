@@ -30,6 +30,7 @@ import {
 import { beatDevice, deviceLayout } from "@luke/database/models/device-store";
 import { openMacLaunchSecrets, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { storeWriter } from "@luke/database/models/writer";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_LAUNCH_REFUSAL,
@@ -40,8 +41,9 @@ import {
 } from "@luke/features/device-agent-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { EXPERIMENT } from "@luke/settings";
-import { Clock, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
+import { Clock, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { HostedEnvironment } from "../environment.js";
+import { heldUntil } from "../http/held-read.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import { RAN_DIRECTLY_DETAIL } from "./coder-host/status.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -49,7 +51,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 export const DEVICE_AGENT_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
-  /** How often a held read looks again. */
+  /** How often a held read looks again where Luke Sync cannot wake it. */
   POLL: Duration.millis(500),
   /**
    * How long a row may wait before it is withdrawn: past a coding agent's
@@ -77,7 +79,12 @@ export function deviceAgentDeviceOf(userId: string, deviceId: string): DeviceAge
   });
 }
 
-/** What a held read answers: the rows waiting, read again until any is or the hold ends; the Mac beaten and the expired rows withdrawn first. */
+/**
+ * What a held read answers: the rows waiting, read again as each write to
+ * the account's lines and requests lands, which notifies its topic
+ * (`deviceAgentLineSync`, `deviceAgentRequestSync`), until any is or the
+ * hold ends; the Mac beaten and the expired rows withdrawn first.
+ */
 function heldRead<A>(
   userId: string,
   deviceId: string,
@@ -90,14 +97,15 @@ function heldRead<A>(
       userId,
       new Date(now - Duration.toMillis(DEVICE_AGENT_SERVICE.EXPIRY)),
     );
-    const found = yield* waiting.pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced(DEVICE_AGENT_SERVICE.POLL),
-        until: (rows) => rows.length > 0,
-      }),
-      Effect.timeoutOption(DEVICE_AGENT_SERVICE.HOLD),
+    const topics: readonly SyncTopic[] = [[TOPIC.ACCOUNT, userId]];
+    const found = yield* heldUntil(
+      waiting,
+      (rows) => rows.length > 0,
+      topics,
+      DEVICE_AGENT_SERVICE.POLL,
+      DEVICE_AGENT_SERVICE.HOLD,
     );
-    return Option.getOrElse(found, () => []);
+    return Option.match(found, { onNone: () => [], onSome: ({ read }) => read });
   });
 }
 

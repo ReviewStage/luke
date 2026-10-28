@@ -64,6 +64,7 @@ import {
 } from "../automations/automation-live.js";
 import {
   accountInboxLiveStatements,
+  accountItemsLiveStatements,
   channelsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
@@ -261,6 +262,33 @@ export const taskInboxLive = defineLiveQuery({
   reads: SCOPE_INBOX_READS,
   topics: ({ taskId }) => [[TOPIC.TASK, taskId]],
   statements: ({ userId, taskId }) => taskInboxLiveStatements(userId, taskId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/** An instant a read's param binds as epoch milliseconds, as its procedure wrote it; the epoch where it names none. */
+function instantParam(param: string): Date {
+  const millis = Number(param);
+  return new Date(Number.isSafeInteger(millis) && millis > 0 ? millis : 0);
+}
+
+/**
+ * Every inbox item the account reaches, where each stands and those
+ * changed since the reader's instant whole, woken on the account's topic,
+ * which an item written in any of its workspaces names for every member
+ * (`inboxItemSync`), as do its own read marks and what admits it to a
+ * workspace or a repository. Note that a message withdrawn names only its
+ * item's task and agent, and a task or an agent written itself no account,
+ * as for the account's inbox: either shows at the hold's end. The settled
+ * items it carries are those changed since `settledSince`, which its
+ * procedure binds from the clock, since a live statement reads none.
+ */
+export const inboxItemsLive = defineLiveQuery({
+  name: "inboxItems",
+  params: ["userId", "since", "settledSince"],
+  reads: SCOPE_INBOX_READS,
+  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
+  statements: ({ userId, since, settledSince }) =>
+    accountItemsLiveStatements(userId, instantParam(since), instantParam(settledSince)),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -584,6 +612,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   workspacesLive,
   macCommandsLive,
   inboxLive,
+  inboxItemsLive,
   taskInboxLive,
   agentInboxLive,
   channelsLive,
