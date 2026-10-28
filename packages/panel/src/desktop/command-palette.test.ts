@@ -2589,6 +2589,57 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
   ]);
 });
 
+test("⌘K opened with the keys on a Pull request tab leaves ⇧⌘O off the task's Open on GitHub, since the chord opens the pull request there", () => {
+  const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
+  const base = tasksControl();
+  const tasks = tasksControl({
+    tasks: [task],
+    region: { kind: DOCUMENT_REGION.READY, task },
+    activeTaskId: task.id,
+    sidePanel: { ...base.sidePanel, open: true, tab: { changes: LINKED_AGENT } },
+  });
+  const panel = document.body.appendChild(document.createElement("div"));
+  panel.className = "side-panel";
+  panel.appendChild(document.createElement("button")).focus();
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(Looker, { looked: task }),
+          createElement(WindowPalette, {
+            available: true,
+            tab: PANEL_TAB.TASKS,
+            onTabChange: () => undefined,
+            tasks,
+            settings: {
+              rows: {
+                settings: settingsView(),
+                accountDrawn: true,
+                capabilities: DESKTOP_CAPABILITIES,
+              },
+              capabilities: DESKTOP_CAPABILITIES,
+              onViewChange: () => undefined,
+            },
+            readFiles: () => Promise.reject(new Error("no repository is open")),
+          }),
+        ),
+      ),
+    ),
+  );
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
+  });
+  chooseFilter("Commands");
+  type("open on github");
+
+  assert.equal(rowChord("Open on GitHub"), null);
+});
+
 /** The open task's page in `room`, its panel on the plan, beside the palette, the plan looked at as the window's shell looks at it. */
 function paletteBesideTask(room: ShellRoom): HTMLElement {
   const base = tasksControl();

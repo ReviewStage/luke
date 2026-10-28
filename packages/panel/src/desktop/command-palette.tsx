@@ -118,7 +118,7 @@ import {
   searchHit,
 } from "@luke/ui/search-score";
 import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
-import { inTaskOrder } from "@luke/ui/tab-strip-model";
+import { inTaskOrder, isChangesTab } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
   orderTaskRows,
@@ -1475,7 +1475,9 @@ function agentPinRows(
  * the door its ⋯ asks, Version history, Cancel task on a task not already
  * canceled, Change repository, and Open on GitHub where it has a
  * repository; each runs what its menu item runs, Version history and Open
- * on GitHub wearing their chords. None while no plan is looked at. Note
+ * on GitHub wearing their chords, Open on GitHub only while ⇧⌘O opens the
+ * task's rather than the Pull request tab the panel's keys stand on
+ * (`pullRequestKeys`). None while no plan is looked at. Note
  * that Copy link, Mark as read, Pin, Mark done, and Permanently delete are
  * rows of their own.
  */
@@ -1484,6 +1486,7 @@ function taskCommandRows(
   reads: ReadMarks,
   rename: OpenTaskRename | undefined,
   choose: (run: () => void) => void,
+  pullRequestKeys: boolean,
 ): readonly PaletteRow[] {
   const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
   if (task === undefined) return [];
@@ -1506,10 +1509,11 @@ function taskCommandRows(
   ];
   return commands.map(({ item, run }) => {
     const label = commandWords(item, COMMAND_PLACE.PALETTE);
+    const chordElsewhere = pullRequestKeys && item === PANEL_COMMAND.OPEN_ON_GITHUB;
     return {
       icon: item.icon,
       label,
-      command: item.command,
+      command: chordElsewhere ? undefined : item.command,
       terms: [label],
       onChoose: () => choose(run),
     };
@@ -2267,7 +2271,17 @@ export function CommandPalette({
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(listedTasks, choose),
-        ...taskCommandRows(tasks, reads, renameOffer, choose),
+        ...taskCommandRows(
+          tasks,
+          reads,
+          renameOffer,
+          choose,
+          // ⇧⌘O opens the Pull request tab's own while the keys were in the panel on it as ⌘K opened.
+          fromPanel &&
+            tasks.sidePanel.open &&
+            tasks.sidePanel.tab !== undefined &&
+            isChangesTab(tasks.sidePanel.tab),
+        ),
         ...agentArchiveRows(openAgent, askArchive, choose),
         ...panelTabRows(tasks, onTasks),
         ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand, experiments),
