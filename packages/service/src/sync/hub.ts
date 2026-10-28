@@ -298,14 +298,20 @@ const stood = (hub: Hub, listening: Listening, connection: Connection) =>
     if (reconnected) yield* Metric.update(SYNC_METRIC.RECONNECTS, 1);
   });
 
-/** A standing connection was given up: every watch reads again, and waits on its clock until another stands. */
+/**
+ * A standing connection was given up: every watch reads again, and waits on
+ * its clock until another stands. Note that the listener counts as down only
+ * while a watch is registered on it, because a connection lost while none is,
+ * as a resumed instance finds the one Postgres reaped while it was paused,
+ * is replaced before any watch waits on its clock.
+ */
 const lost = (hub: Hub, listening: Listening, loss: Loss) =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     listening.state = LISTENER_STATE.OPENING;
     listening.connection = undefined;
     listening.lost = true;
-    listening.downSince ??= now;
+    if (hub.watchers.all.size > 0) listening.downSince ??= now;
     Latch.closeUnsafe(listening.settled);
     wakeAll(hub.watchers);
     yield* Effect.logWarning(
@@ -528,7 +534,13 @@ const watchOn =
         answeredHeardAt: undefined,
       };
       yield* Effect.acquireRelease(
-        Effect.sync(() => register(hub.watchers, watcher, topics)),
+        Effect.flatMap(Clock.currentTimeMillis, (now) =>
+          Effect.sync(() => {
+            register(hub.watchers, watcher, topics);
+            // Note that a watch registered while no connection stands waits on its clock, so the listener is down from here.
+            if (listening.state !== LISTENER_STATE.UP) listening.downSince ??= now;
+          }),
+        ),
         () =>
           Effect.sync(() => {
             unregister(hub.watchers, watcher, topics);
