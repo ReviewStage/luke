@@ -194,6 +194,12 @@ test("an edit whose rewind went and whose words did not keeps them on its line, 
     "send:second line, again",
     "send:second line, again",
   ]);
+  assert.deepEqual(
+    composer().sent.map((each) => each.text),
+    ["second line, again"],
+    "the Retry that did not go either keeps the words on the line",
+  );
+  assert.equal(composer().draft, "");
 });
 
 test("an edit let go sends nothing and leaves the box as it was", async () => {

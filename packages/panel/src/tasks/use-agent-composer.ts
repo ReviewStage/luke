@@ -201,9 +201,9 @@ function marked(
   return sent.map((each) => (each.id === id ? { ...each, state } : each));
 }
 
-/** The lines with the one by `id` written in no other line's place. */
-function replacingNothing(sent: readonly SentLine[], id: string): readonly SentLine[] {
-  return sent.map((each) => (each.id === id ? { ...each, rewinds: undefined } : each));
+/** The lines with the one by `id` marked as having taken the agent back already. */
+function rewoundBefore(sent: readonly SentLine[], id: string): readonly SentLine[] {
+  return sent.map((each) => (each.id === id ? { ...each, rewound: true } : each));
 }
 
 /** The composer as an agent's tab holds it: what it draws, the words and files its draft keeps, which a closed box draws none of and Continue carries, and the Retry a line marked as not sent offers. */
@@ -310,11 +310,11 @@ export function useAgentComposer(input: {
         ours((was) => ({ ...was, sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED) }));
         return;
       }
-      // A line written in place of another takes the agent back to just before that one first.
-      if (line.rewinds !== undefined) ours((was) => ({ ...was, reverting: line.rewinds }));
-      const rewound =
-        line.rewinds === undefined ? undefined : await rewindTo(agentId, line.rewinds);
-      if (line.rewinds !== undefined) ours((was) => ({ ...was, reverting: undefined }));
+      // A line written in place of another takes the agent back to just before that one first, once.
+      const rewinds = line.rewound === true ? undefined : line.rewinds;
+      if (rewinds !== undefined) ours((was) => ({ ...was, reverting: rewinds }));
+      const rewound = rewinds === undefined ? undefined : await rewindTo(agentId, rewinds);
+      if (rewinds !== undefined) ours((was) => ({ ...was, reverting: undefined }));
       const answer =
         rewound !== undefined && "failure" in rewound
           ? rewound
@@ -373,16 +373,16 @@ export function useAgentComposer(input: {
         inBox = line.rewinds === undefined && holdsNothing(draft);
         return inBox ? { ...EMPTY_DRAFT, text: line.text, attachments: line.attachments } : draft;
       });
-      // Note that an edit whose rewind went stands in no line's place any more, since that line is
-      // gone, so its Retry only sends; a rewind to it again would find no line.
-      const rewoundAlready = rewound !== undefined && !("failure" in rewound);
+      // Note that an edit whose rewind went is marked so, because the line it stood in place of is
+      // gone, so its Retry only sends; a rewind to that line again would find no line.
+      const rewoundNow = rewound !== undefined && !("failure" in rewound);
       ours((was) => ({
         ...was,
         failed: { lineId: line.id, clientKey: line.clientKey, inBox, note },
         sent: inBox
           ? was.sent.filter((each) => each.id !== line.id)
           : marked(
-              rewoundAlready ? replacingNothing(was.sent, line.id) : was.sent,
+              rewoundNow ? rewoundBefore(was.sent, line.id) : was.sent,
               line.id,
               SENT_LINE_STATE.FAILED,
             ),
