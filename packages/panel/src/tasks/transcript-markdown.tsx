@@ -15,7 +15,7 @@ import { type ActHandle, useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 
 /**
- * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn as the Code tab draws code, a table as a quiet grid, and an inline span on a subtle fill.
+ * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn in the window's one code card, a table as a quiet grid, and an inline span on a subtle fill.
  *
  * Streamdown, the markdown renderer behind AI Elements' Response, draws a
  * fenced block and a table with components of its own: a bordered card on

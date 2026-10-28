@@ -27,7 +27,6 @@ import {
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -41,7 +40,6 @@ import {
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { newestFileNote } from "../tasks/file-ref.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
@@ -62,13 +60,12 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
  * `agentEntries`), under quiet headings: the task's Inbox, counting what
  * waits on the developer, and the panel's kinds the task has used, its
- * coding agents, each agent's pull request whose Changes tab the panel
- * opens, and the files its agents showed on it. An agent wears where it stands on its glyph,
+ * coding agents, and each agent's pull request whose Changes tab the panel
+ * opens. An agent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
- * beside the row to say it, and a file is drawn in a row the
- * file tree's own: its type's coloured icon, height, and type size. A row
- * opens what it names exactly as its "+" row does: a kind or a
- * file opens the side panel on its tab, and an agent chooses its tab in the
+ * beside the row to say it. A row
+ * opens what it names exactly as its "+" row does: a kind opens the side
+ * panel on its tab, and an agent chooses its tab in the
  * column. An agent's row offers Archive on a right-click, and the
  * agents archived are folded under Archived at the foot of Coding agents
  * (`agent-archive.tsx`).
@@ -153,7 +150,6 @@ const SECTION_ORDER = [
   TABS_SECTION,
   AGENTS_SECTION,
   ADD_SECTION.PULL_REQUESTS,
-  ADD_SECTION.FILES,
   ADD_SECTION.PAGES,
 ] as const;
 
@@ -323,8 +319,7 @@ interface SummarySection<Entry extends AddEntry = SummaryEntry> {
 
 /**
  * The card each row hangs, the one its tab hangs where it has one: an
- * agent's its tab's card, read from what its tab last held; a file's its
- * path and the agent's note; a pull request's its title, number, and what it
+ * agent's its tab's card, read from what its tab last held; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
  * version; the Inbox's what waits; the plan's the task's card. Each is
  * the card its tab hangs (`tab-card.tsx`), so the row and the tab never
@@ -337,17 +332,14 @@ function withCards(
     tasks: TasksControl;
     inbox: InboxBoardView;
     held: HeldTranscripts;
-    files: readonly string[];
     changes: readonly ChangesOffer[];
-    repository: string | null;
     /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
     onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
-  const { tasks, inbox, held, files, changes, repository, onOpenAgent } = input;
+  const { tasks, inbox, held, changes, onOpenAgent } = input;
   const { agents, mainTabs } = tasks;
   const models = agents.models ?? [];
-  const shown = tasks.shownCode ?? [];
   const card = (entry: AddEntry, subject: CardSubject) => ({
     ...entry,
     card: tabCard(subject) ?? undefined,
@@ -389,11 +381,7 @@ function withCards(
       const place = { taskId };
       return card(entry, { kind: TAB_KIND.PAGE, place, pageId: page.id, name: page.title, page });
     }
-    // Note that a file's row is named by its place in the files listed (`panelEntries`).
-    const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
-    if (path === undefined) return entry;
-    const note = newestFileNote(shown, path, { repository, commit: undefined });
-    return card(entry, { kind: TAB_KIND.FILE, path, note });
+    return entry;
   });
 }
 
@@ -405,7 +393,6 @@ function withCards(
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
   const { sidePanel, mainTabs, agents } = tasks;
-  const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
@@ -433,14 +420,13 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
       kinds: sidePanel.used.filter(
         (kind) => kind !== SIDE_PANEL_TAB.COMMENTS && kind !== SIDE_PANEL_TAB.INBOX,
       ),
-      files,
       changes,
       pages: tasks.pages ?? [],
       plan: openPlanStanding(tasks),
     }),
     ...agentEntries(mainTabs, agents),
   ];
-  return { rows, files, changes };
+  return { rows, changes };
 }
 
 /** A panel kind's row with how many of its things it counts at its end, as the Inbox's row counts what waits. */
@@ -473,21 +459,11 @@ function summarySections(
   tasks: TasksControl,
   inbox: InboxBoardView,
   held: HeldTranscripts,
-  repository: string | null,
   onOpenAgent: (agentId: string) => void,
   openComments: number | undefined,
 ): SummarySection[] {
-  const { rows, files, changes } = summaryRows(tasks, inbox, openComments);
-  const paths = files.map((ref) => ref.path);
-  const entries = withCards(rows, {
-    tasks,
-    inbox,
-    held,
-    files: paths,
-    changes,
-    repository,
-    onOpenAgent,
-  });
+  const { rows, changes } = summaryRows(tasks, inbox, openComments);
+  const entries = withCards(rows, { tasks, inbox, held, changes, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
 
@@ -502,8 +478,7 @@ export function summaryHolds(
 
 /**
  * A row of the column or the card: its glyph, its label, and what tells it
- * apart, a file's folder, as its "+" row says it, after the label on its
- * line, then a failed agent's mark or the Inbox's count. A row with a card
+ * apart, as its "+" row says it, after the label on its line, then a failed agent's mark or the Inbox's count. A row with a card
  * hangs it on hover beside the row, before its start where the window ends
  * past it, as the sidebar's rows hang theirs.
  */
@@ -566,7 +541,7 @@ function AgentSummaryRow({
   );
 }
 
-/** A row of the rail: its glyph alone, naming itself to a reader and in its hint, a file's hint its whole path, which its "+" row is searched by. */
+/** A row of the rail: its glyph alone, naming itself to a reader and in its hint, which its "+" row is searched by. */
 function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
@@ -821,7 +796,6 @@ export function TaskSummary({
   cardId,
   inbox,
   held,
-  repository,
   onOpenAgent,
 }: {
   tasks: TasksControl;
@@ -831,8 +805,6 @@ export function TaskSummary({
   inbox: InboxBoardView;
   /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
-  /** The task's repository, whose showings alone a file row's card reads its note from. */
-  repository: string | null;
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
@@ -841,7 +813,6 @@ export function TaskSummary({
     tasks,
     inbox,
     held,
-    repository,
     onOpenAgent,
     comments?.threads.filter(openThread).length,
   );

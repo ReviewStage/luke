@@ -84,7 +84,6 @@ function subject() {
                   : undefined,
           ),
         showTaskActivity: () => undefined,
-        showTaskCode: () => undefined,
         taskCallEnded: () => undefined,
       }),
       HostKernelTag,

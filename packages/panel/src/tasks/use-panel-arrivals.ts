@@ -1,11 +1,10 @@
 import type { Board } from "@luke/features/board-wire";
 import type { PageLine } from "@luke/features/page-wire";
-import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { useEffect, useRef, useState } from "react";
 import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-side-panel.js";
 
 /**
- * use-panel-arrivals.ts -- shows the side panel's tab for each drawing Luke puts on the open task's board, and each snippet and page he shows on its call.
+ * use-panel-arrivals.ts -- shows the side panel's tab for each drawing Luke puts on the open task's board, and each page he shows on its call.
  *
  * Luke tells the developer what he drew or showed is on screen as he does
  * it, so each arrival shows its tab: the panel opens where it was hidden,
@@ -14,16 +13,13 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  * and nothing here moves focus.
  *
  * An arrival is live, while the developer is on the task: a drawing of
- * Luke's numbered past the one the visit first read, or a snippet the call
- * did not start with. The developer's own strokes number no drawing, so
- * they arrive nothing. A task opened with a drawing or code already on it
- * has nothing arriving; what it holds counts as seen. The code last shown
- * stays on the task past its call, so code is read only while a call
- * stands, and what a call starts with is what the task already held. Two
- * arriving on one read show the code, Luke's latest pointing, and the
- * board's tab reads in semibold until it is shown. A page arrives on a call
- * the same way, as a page the call did not start with or a newer version of
- * one it did, and its tab is shown over any other that arrived with it. A fixture run draws
+ * Luke's numbered past the one the visit first read. The developer's own
+ * strokes number no drawing, so they arrive nothing. A task opened with a
+ * drawing already on it has nothing arriving; what it holds counts as seen.
+ * A page arrives on a call, as a page the call did not start with or a
+ * newer version of one it did, since pages are read only while a call
+ * stands, and its tab is shown over any other that arrived with it, the
+ * other reading in semibold until it is shown. A fixture run draws
  * staged tasks and has nothing arriving.
  */
 
@@ -32,8 +28,6 @@ interface Visit {
   taskId: string;
   /** The number of Luke's latest drawing read, 0 before any, or none before the board is read. */
   drawing: number | undefined;
-  /** The snippets on screen as the call stands, by call id, or none while no call does. */
-  code: Set<string> | undefined;
   /** The newest version of each page read as the call stands, by page id, or none while no call does. */
   pages: Map<string, number> | undefined;
 }
@@ -47,17 +41,6 @@ interface Unread {
 /** The number of Luke's latest drawing, 0 where he has drawn nothing, whether or not the scene holds it yet. */
 function lukeDrawing(board: Board): number {
   return (board.drawing?.elements.length ?? 0) > 0 ? (board.drawing?.number ?? 0) : 0;
-}
-
-/** Whether any snippet is one the visit has not read, reading each as it goes. */
-function readNewCode(read: Set<string>, code: readonly TaskCodeShowing[]): boolean {
-  let fresh = false;
-  for (const showing of code) {
-    if (read.has(showing.callId)) continue;
-    read.add(showing.callId);
-    fresh = true;
-  }
-  return fresh;
 }
 
 /** The newest page the visit has not read at the version listed, reading each as it goes; the list is newest written first. */
@@ -78,20 +61,18 @@ function withUnread(was: Unread, taskId: string, tab: SidePanelTab): Unread {
 }
 
 /**
- * Shows the tab of each drawing and snippet Luke puts on the open task, and
+ * Shows the tab of each drawing and page Luke puts on the open task, and
  * answers the tabs whose arrival came while another arrival's tab was shown.
  */
 export function usePanelArrivals(input: {
   /** The open task, or none where nothing may arrive: no task open, or a fixture run's staged one. */
   taskId: string | undefined;
   board: Board | undefined;
-  /** The code shown on the task, or nothing while no call about it stands, since only a call shows code. */
-  code: readonly TaskCodeShowing[] | undefined;
   /** The plan's pages, or nothing while no call about it stands, since a page shown on a call is what arrives. */
   pages: readonly PageLine[] | undefined;
   panel: SidePanelControl;
 }): readonly SidePanelTab[] {
-  const { taskId, code, pages, panel } = input;
+  const { taskId, pages, panel } = input;
   const visit = useRef<Visit | undefined>(undefined);
   const [unread, setUnread] = useState<Unread>({ taskId: undefined, tabs: [] });
   // Note that a board not yet read is unknown rather than empty, because the
@@ -118,7 +99,7 @@ export function usePanelArrivals(input: {
       return;
     }
     if (visit.current?.taskId !== taskId)
-      visit.current = { taskId, drawing: undefined, code: undefined, pages: undefined };
+      visit.current = { taskId, drawing: undefined, pages: undefined };
     const seen = visit.current;
     const arrived: SidePanelTab[] = [];
     // The first read of the board is what the task already held.
@@ -128,9 +109,6 @@ export function usePanelArrivals(input: {
     }
     // A call's first read is what the task already held, and a call ended
     // reads its successor's afresh.
-    if (code === undefined) seen.code = undefined;
-    else if (seen.code === undefined) seen.code = new Set(code.map((showing) => showing.callId));
-    else if (readNewCode(seen.code, code)) arrived.push(SIDE_PANEL_TAB.CODE);
     if (pages === undefined) seen.pages = undefined;
     else if (seen.pages === undefined)
       seen.pages = new Map(pages.map((page) => [page.id, page.version]));
@@ -144,7 +122,7 @@ export function usePanelArrivals(input: {
     for (const tab of arrived) {
       if (tab !== shown) setUnread((was) => withUnread(was, taskId, tab));
     }
-  }, [taskId, drawing, code, pages, panel.onChoose]);
+  }, [taskId, drawing, pages, panel.onChoose]);
 
   if (unread.taskId !== taskId) return [];
   return unread.tabs.filter((tab) => tab !== shownTab);

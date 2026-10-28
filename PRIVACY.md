@@ -582,24 +582,21 @@ show you code, it names a file and lines, and our service reads them from
 its sandbox checkout. The path, the commit the checkout read it at, the
 line numbers, the lines (at most 200, each cut to 400 characters), and the
 model's note on why it showed them (at most 280 characters) are stored with
-the agent's transcript and sent to your Mac, which draws them in the task's
-Code tab; nothing is read from
-your Mac's disk. The service refuses a path outside the checkout and never
+the agent's transcript; nothing is read from
+your Mac's disk, and Luke on your Mac neither draws nor keeps them. The
+service refuses a path outside the checkout and never
 reads a file named `.env` or starting with `.env`. The voice model is told
-the path and line numbers on screen, so the voice can refer to them. When you open
-the task, Luke on your Mac reads back all the code shown on it, by the same
-rules, and holds it in memory, never on disk, until you leave the task or quit
-Luke. It is never part of the task's plan.
+the path and line numbers on screen, so the voice can refer to them. It is
+never part of the task's plan.
 
-**A whole file opened from a snippet.** A snippet in the Code tab can open
-its whole file in a File tab. Our service reads the file from GitHub at the
-commit the agent's checkout read it at, or, for a file you open from the tree, a
-skill, or code shown before that commit was recorded, at the head of the
-default branch: it confirms the workspace's installation still reaches the
+**A whole file in a File tab.** A file named in a mention or an inbox item
+opens whole in a File tab. Our service reads the file from GitHub at the
+commit named, or, for a file you open from the tree or a skill, at the head
+of the default branch: it confirms the workspace's installation still reaches the
 repository and mints a token for that one repository that reads its contents, used for that
-read and never sent to your Mac, logged, or kept. The rules for code on
-screen apply, and a link, a folder, a file over a megabyte, or one that is
-not text is refused. The file is read 500 lines at a time as you scroll, is
+read and never sent to your Mac, logged, or kept. It never reads a file named
+`.env` or starting with `.env`, and a link, a folder, a file over a megabyte,
+or one that is not text is refused. The file is read 500 lines at a time as you scroll, is
 not stored by our service, and is held by Luke only while its tab is open,
 never on disk, except that copying or downloading it reads it whole (up to
 that megabyte, lines uncut) and a download is written where you save it. The
@@ -1114,7 +1111,7 @@ the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
 app's words; a task's title while you edit it, its plan while you edit it,
-its whiteboard, its Call and Code tabs, the contents of its File tabs with
+its whiteboard, its Call tab, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of

@@ -114,7 +114,7 @@ export interface DiffViewProps {
   /**
    * Whether the patch is coloured in the kept pool's workers, off the
    * window's thread, as a list's files are, where many patches are drawn at
-   * once, a Code tab's cards; on the window's thread where absent. Read once,
+   * once, an Inbox's code cards; on the window's thread where absent. Read once,
    * as the patch is mounted.
    */
   readonly pooled?: boolean | undefined;

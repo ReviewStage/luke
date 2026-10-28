@@ -35,7 +35,6 @@ import {
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
-import type { CodeRef } from "@luke/features/task-wire";
 import {
   browserCallWords,
   CALL_KIND,
@@ -1195,8 +1194,6 @@ export const TOOL_TARGET = {
   BOARD: "board",
   /** The task's own tab, its document. */
   PLAN: "plan",
-  /** The File tab of a file Luke showed, its lines lit as the call showed them. */
-  SHOWN_CODE: "shown-code",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
   /** Another task of the workspace, opened on its plan as the sidebar opens it. */
@@ -1210,7 +1207,6 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
   | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
-  | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
@@ -1225,7 +1221,6 @@ export const TARGET_HINT = {
   [TOOL_TARGET.PAGE]: "Open the page",
   [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
-  [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",

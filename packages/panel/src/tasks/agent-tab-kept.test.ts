@@ -196,7 +196,6 @@ function runningTab() {
       agents: control,
       held: NOTHING_HELD,
       chosen: () => false,
-      shownCode: [],
       pages: undefined,
       task,
     }).agent(AGENT_ID);

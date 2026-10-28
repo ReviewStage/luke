@@ -10,7 +10,7 @@ import { usePerson } from "../member-directory.js";
 import { RUN_CARD, RunCard } from "./turn-card.js";
 
 /**
- * call-card.tsx -- a call's span in a task's logs, an agent's transcript and the Code tab's feed alike: the labelled rule it begins at, and the one it closes with once it has ended, hanging its card.
+ * call-card.tsx -- a call's span in an agent's transcript: the labelled rule it begins at, and the one it closes with once it has ended, hanging its card.
  *
  * A call is marked at each end by a rule across the log carrying a pill, on
  * no band of its own. It begins at "Call started" beside the voice's

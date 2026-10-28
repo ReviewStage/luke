@@ -35,8 +35,6 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TaskCallFailure,
-  type TaskCodeShowing,
-  type TaskShownCode,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
@@ -137,12 +135,10 @@ import {
   type GatewayMethodTable,
   readParams,
 } from "@luke/gateway";
-import { catchAllButInterrupt } from "@luke/runtime/effect";
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { keepIdentity } from "@luke/wire";
 import {
   Cache,
-  Cause,
   Clock,
   Data,
   Duration,
@@ -174,7 +170,6 @@ import {
 } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 import type { RunMode } from "./run-mode.js";
-import { codeExcerpt } from "./task-code-excerpt.js";
 import { followTaskList } from "./task-list-follow.js";
 import { TASK_RECORD_PART, type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import {
@@ -197,14 +192,7 @@ import {
  * its document, and again whenever its mark moves on the Neon Realtime
  * subscription the host holds while the task stands open
  * (`board-follow.ts`); the panel saves the board's scene through here and
- * the view takes the board as the service answered it. The code an agent
- * puts on screen during a call arrives on the call's socket with its lines,
- * read by the service from the agent's checkout, and is cut to what its card draws here
- * (`task-code-excerpt.ts`) and drawn in place; nothing of the repository is read on
- * this Mac. Every code the task's agents showed is read from the service
- * with the document, and again as the record's code part moves, so a task
- * opened after a restart or a switch shows it; each code a call shows lands
- * over that read and stays past the call's end. The repositories the account reaches, and a task's repository
+ * the view takes the board as the service answered it. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
  * task pinned. A
  * plan's history is read for the version history that asks and held nowhere
@@ -316,7 +304,6 @@ export type TasksClient = Pick<
   | "historyLive"
   | "browserTabsLive"
   | "saveBoard"
-  | "readCode"
   | "readFile"
   | "readTree"
   | "readSkills"
@@ -383,7 +370,7 @@ export type TasksClient = Pick<
 };
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit" | "report" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
@@ -410,19 +397,6 @@ export interface TasksComposer extends Composer {
    * doing.
    */
   showActivity: (activity: TaskActivityFrame) => void;
-  /**
-   * Puts code on screen as the agent named it on the open task's call, with the
-   * lines the service read from the task's repository: coloured here and
-   * drawn after every code shown before it, where it stays past the call's
-   * end. Code about any other task, or of a call already held, is dropped.
-   */
-  showCode: (taskId: string, shown: TaskShownCode) => void;
-  /**
-   * Puts code on screen as Luke named it on a call into an agent with no
-   * task, which no task's Code tab takes: held for that agent's page,
-   * coloured here, each call's code once.
-   */
-  showAgentCode: (agentId: string, shown: TaskShownCode) => void;
   /** The call ended: what it was doing is no longer drawn. */
   callEnded: (about: VoiceCallAbout) => void;
   /**
@@ -467,7 +441,6 @@ function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is
 /** The parts of an open task read apart from its document, each laid over the view as it lands, then the document itself and its pin. */
 const OPENED_PART = {
   BOARD: "board",
-  CODE: "code",
   PAGES: "pages",
   DOCUMENT: "document",
   MARKS: "marks",
@@ -552,12 +525,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The view with no activity, no board, no code, and no pages read or told, as a task left behind leaves it. */
+  /** The view with no activity, no board, and no pages read or told, as a task left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
-    shownCode: _shownCode,
-    codeStatus: _codeStatus,
     pages: _pages,
     ...rest
   }: TasksView): TasksView {
@@ -583,12 +554,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** When the open task's plan was last saved, as its record's follow last delivered it. */
   let planSaved: { readonly taskId: string; readonly at: number } | undefined;
-
-  /** The tasks whose agents' answered `show_code` calls moved, whose code is read once by the loop below. */
-  const codeReads = yield* Queue.sliding<string>(1);
-
-  /** The code a call showed, coloured and drawn in the order shown by the loop below. */
-  const codeShows = yield* Queue.unbounded<{ taskId: string; shown: TaskShownCode }>();
 
   /** The newest page of each task's history a window's version history follows, by the task. */
   const historyFollows = yield* FiberMap.make<string>();
@@ -1082,16 +1047,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       : { status: TASKS_READ.READY, task: held };
   }
 
-  /** The view with the task's code as a read answered it: what it holds laid with what a call showed, or the read said to have failed. */
-  function withCodeRead(
-    was: TasksView,
-    stored: Effect.Success<ReturnType<typeof client.readCode>>,
-  ): TasksView {
-    if (stored === undefined) return { ...was, codeStatus: TASKS_READ.FAILED };
-    // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
-    return { ...was, shownCode: withShownCode(stored.code), codeStatus: TASKS_READ.READY };
-  }
-
   /** The view with the task's pages as a read answered them; a failed read keeps the pages held. */
   function withPagesRead(
     was: TasksView,
@@ -1110,7 +1065,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   const partReads: Record<OpenedPart, { started: number; laid: number }> = {
     [OPENED_PART.BOARD]: { started: 0, laid: 0 },
-    [OPENED_PART.CODE]: { started: 0, laid: 0 },
     [OPENED_PART.PAGES]: { started: 0, laid: 0 },
     [OPENED_PART.DOCUMENT]: { started: 0, laid: 0 },
     [OPENED_PART.MARKS]: { started: 0, laid: 0 },
@@ -1159,7 +1113,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const openedRead = yield* FiberHandle.make<void>();
 
   /**
-   * Reads what the active task's page draws, its document, board, code, and
+   * Reads what the active task's page draws, its document, board, and
    * pages, all at once, and tells the window the document with every part
    * that answered before it in one view, so the page lands whole rather than
    * a part at a time, each reflowing what the one before laid out. A part
@@ -1170,21 +1124,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * so an open never queues behind another's reads or a write's answer. A
    * copy of the same task already held stays drawn while the reads are out
    * and through a document read that failed, so a save redraws in place; a
-   * failed board, code, or pages read keeps what is held of it,
-   * as their own reads do. The document and the code say they are reading
-   * only where nothing of them is held, which a switch has already told
+   * failed board or pages read keeps what is held of it,
+   * as their own reads do. The document says it is reading
+   * only where nothing of it is held, which a switch has already told
    * (`TASKS_OPEN`).
    */
   function readOpened(taskId: string) {
     return Effect.gen(function* () {
       const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
       const marksRead = partReadStarted(OPENED_PART.MARKS);
-      write({
-        ...(heldTaskOf(taskId) === undefined
-          ? { document: { status: TASKS_READ.READING } }
-          : undefined),
-        ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
-      });
+      if (heldTaskOf(taskId) === undefined) write({ document: { status: TASKS_READ.READING } });
       /** The parts that answered before the document, each laid with it where still the newest of its part. */
       const early: { part: OpenedPart; read: number; lay: (was: TasksView) => TasksView }[] = [];
       let documentLanded = false;
@@ -1215,7 +1164,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* readPart(OPENED_PART.BOARD, client.readBoard(taskId), (was, board) =>
         board === undefined ? was : { ...was, board },
       );
-      yield* readPart(OPENED_PART.CODE, client.readCode(taskId), withCodeRead);
       yield* readPart(OPENED_PART.PAGES, client.readPages({ taskId }), withPagesRead);
       // Note that the document is read beside the parts, a fiber of its own, so a part as quick as it lands with it.
       const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
@@ -1295,34 +1243,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.ignore(Effect.retry(once, { schedule: BOARD_BACKOFF, while: wanted }));
   }
 
-  /** A code shown as the Code tab's card draws it: the lines around those pointed at, which the window colours. */
-  function showingOf({ code, ...shown }: TaskShownCode): TaskCodeShowing {
-    return { ...shown, code: codeExcerpt(code) };
-  }
-
-  /**
-   * The code the record holds, oldest first, then each a call showed that
-   * the record does not hold yet: one `show_code` call, told live and read
-   * back, is one showing, matched by the call's id. Note that a showing
-   * already held is kept as it is, bar the agent the record names it under,
-   * so a refresh hands the Code tab the same showings and it draws none of
-   * them again.
-   */
-  function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
-    const byCall = new Map((view.shownCode ?? []).map((showing) => [showing.callId, showing]));
-    const read = recorded.map((shown) => {
-      const held = byCall.get(shown.callId);
-      if (held === undefined) return showingOf(shown);
-      // Note that a call's frame names no agent, so the record's copy lends the held showing its own.
-      return shown.agentId === held.agentId || shown.agentId === undefined
-        ? held
-        : { ...held, agentId: shown.agentId };
-    });
-    const recordedCalls = new Set(recorded.map((shown) => shown.callId));
-    const held = view.shownCode ?? [];
-    return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
-  }
-
   /**
    * Reads the active task's pages, each by its newest version. A failed read
    * keeps the pages held, as a failed board read keeps the board.
@@ -1334,25 +1254,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const pages = yield* served(client.readPages({ taskId }));
       if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.PAGES, read)) return;
       view = withPagesRead(view, pages);
-      publish();
-    });
-  }
-
-  /**
-   * Reads every code the active task's agents showed as the service keeps
-   * it, typed turns' and calls' alike, laid with what a call showed. A
-   * failed read keeps whatever is held, and says so; the read says it is
-   * reading only after none or a failed one, as the workspaces' does.
-   */
-  function readShownCode(taskId: string) {
-    return Effect.gen(function* () {
-      if (view.activeTaskId === taskId && view.codeStatus !== TASKS_READ.READY) {
-        write({ codeStatus: TASKS_READ.READING });
-      }
-      const read = partReadStarted(OPENED_PART.CODE);
-      const stored = yield* served(client.readCode(taskId));
-      if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.CODE, read)) return;
-      view = withCodeRead(view, stored);
       publish();
     });
   }
@@ -1467,10 +1368,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Follows `taskId`'s plan, pages, and agents' code live while it is the
-   * open task: the plan read again once a save newer than the copy held
-   * lands, the pages once theirs move, and the code once the `show_code`
-   * calls its agents answered do, each on each seal's first delivery.
+   * Follows `taskId`'s plan and pages live while it is the open task: the
+   * plan read again once a save newer than the copy held lands, and the
+   * pages once theirs move, each on each seal's first delivery.
    */
   function followRecord(taskId: string) {
     return followLive(taskId, {
@@ -1482,7 +1382,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           readPlanWhereSaved();
         }
         if (parts.includes(TASK_RECORD_PART.PAGES)) Queue.offerUnsafe(pageReads, taskId);
-        if (parts.includes(TASK_RECORD_PART.CODE)) Queue.offerUnsafe(codeReads, taskId);
       },
     });
   }
@@ -1512,32 +1411,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       return;
     }
     write({ activity, callActivity: activity });
-  }
-
-  /** Whether code shown about a task is still for the screen: the task is open and the call's code is not drawn already, since a call's code told again is the showing already drawn. */
-  function showsCode(taskId: string, shown: TaskShownCode): boolean {
-    if (view.activeTaskId !== taskId) return false;
-    return !(view.shownCode ?? []).some((showing) => showing.callId === shown.callId);
-  }
-
-  function showCode(taskId: string, shown: TaskShownCode): void {
-    if (showsCode(taskId, shown)) Queue.offerUnsafe(codeShows, { taskId, shown });
-  }
-
-  /** Draws a code shown after the rest, where it is still for the screen as the loop takes it. */
-  function drawShownCode({ taskId, shown }: { taskId: string; shown: TaskShownCode }) {
-    return Effect.sync(() => {
-      if (showsCode(taskId, shown)) {
-        write({ shownCode: [...(view.shownCode ?? []), showingOf(shown)] });
-      }
-    });
-  }
-
-  /** Holds a code shown on a call into an agent with no task, in place of another agent's, each call's code once. */
-  function showAgentCode(agentId: string, shown: TaskShownCode): void {
-    const held = view.agentCallCode?.agentId === agentId ? view.agentCallCode.shownCode : [];
-    if (held.some((showing) => showing.callId === shown.callId)) return;
-    write({ agentCallCode: { agentId, shownCode: [...held, showingOf(shown)] } });
   }
 
   function callEnded(_about: VoiceCallAbout): void {
@@ -1788,13 +1661,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // because the call outlives the task on screen: moving it to this
         // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
-          // Note that the code says it is reading in the same view, so the
-          // page is told twice in all: that it is reading, then what it read.
+          // Note that the page is told twice in all: that it is reading, then what it read.
           view = {
             ...withoutActivity(view),
             activeTaskId: taskId,
             document: { status: TASKS_READ.READING },
-            codeStatus: TASKS_READ.READING,
           };
           publish();
         }
@@ -3038,8 +2909,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     snapshot: () => view,
     activeTaskId: () => view.activeTaskId,
     showActivity,
-    showCode,
-    showAgentCode,
     callEnded,
     listed,
     reset: Effect.gen(function* () {
@@ -3066,24 +2935,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }),
       );
     }),
-    // The code a call shows, coloured in turn, and the board, page, and code
-    // reads their followed marks ask for; every other read of the tasks is an
-    // ask's. Note that these reads hold no lock, because each is ordered by
-    // its part's numbers (`laidNow`), and an open must not queue behind a
-    // read of the task it left.
+    // The board, plan, and page reads their followed marks ask for; every
+    // other read of the tasks is an ask's. Note that these reads hold no lock,
+    // because each is ordered by its part's numbers (`laidNow`), and an open
+    // must not queue behind a read of the task it left.
     lifetime: Effect.gen(function* () {
-      yield* Effect.forkScoped(
-        // A showing that dies is reported and dropped, and the next is still drawn.
-        Effect.forever(
-          Effect.flatMap(Queue.take(codeShows), (show) =>
-            catchAllButInterrupt(drawShownCode(show), (cause) =>
-              Effect.sync(() => {
-                kernel.report(`Drawing code a call showed failed: ${Cause.pretty(cause)}`);
-              }),
-            ),
-          ),
-        ),
-      );
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (taskId) =>
@@ -3102,15 +2958,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.forever(
           Effect.flatMap(Queue.take(pageReads), (taskId) =>
             gate() ? readPages(taskId) : Effect.void,
-          ),
-        ),
-      );
-      yield* Effect.forkScoped(
-        Effect.forever(
-          Effect.flatMap(Queue.take(codeReads), (taskId) =>
-            Effect.suspend(() =>
-              gate() && view.activeTaskId === taskId ? readShownCode(taskId) : Effect.void,
-            ),
           ),
         ),
       );

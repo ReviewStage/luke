@@ -655,7 +655,6 @@ export function mount(
       [],
       [],
       [],
-      [],
       at,
     );
     return createElement(Page, { sidePanel });

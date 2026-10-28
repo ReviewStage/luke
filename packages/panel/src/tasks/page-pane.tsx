@@ -435,7 +435,7 @@ export function PagePane({
     sources.forget();
   };
   const sourceMore = sourceMenu(source, copyWithToast);
-  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES, notes: false });
+  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES });
   const phone = usePhoneRoom();
   const versionWords = `Version ${version} of ${page.version}`;
   useTabActions(
@@ -522,7 +522,7 @@ export function PagePane({
                   />
                 </Tooltip>
                 {showingSource ? (
-                  <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: false }} />
+                  <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
                 ) : null}
               </>
             }

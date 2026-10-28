@@ -1,5 +1,4 @@
 import type { CodeRef } from "@luke/features/task-wire";
-import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import {
   HoverCard,
   HoverCardHead,
@@ -9,7 +8,6 @@ import {
   InlineRef,
 } from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
-import { shownWhereRead } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { useTaskMentions } from "./task-mentions.js";
 
@@ -17,12 +15,11 @@ import { useTaskMentions } from "./task-mentions.js";
  * file-ref.tsx -- a file named anywhere in the window: its look as a row wears it, the card its tab hangs, and its mark, path, and lines as the one button that hangs that card and opens its tab.
  *
  * A file of the task's repository is named in many places beside its own
- * tab: a code card's head, an inbox item's code, the side panel's "+", the
- * task's summary, ⌘K, and a `show_code` row in a transcript. Each wears
+ * tab: an inbox item's code, a mention, and ⌘K. Each wears
  * the file's type icon, as the file tree draws it (`file-type-icon.tsx`),
  * before its name, says its lines one way (`lineRangeText`), and hangs the
  * file's tab's own card while the pointer rests on it: the file's whole
- * path, and Luke's note on the lines where the place knows one. A press or
+ * path. A press or
  * Enter shows the file's tab through the side panel's one door for it
  * (`SidePanelControl.onOpenFile`): the tab it has, or a new one at the
  * strip's end, on the lines the place names, where it names any.
@@ -47,37 +44,12 @@ export function fileLook(path: string): FileLook {
   };
 }
 
-/** Where a file is read: the task's repository, none before one is chosen, and the commit a tab is pinned to, none for the default branch's head. */
-export interface FileRead {
-  readonly repository: string | null;
-  readonly commit: string | undefined;
-}
-
-/**
- * Luke's note on the newest lines of the file he showed with one, if any,
- * which the file's card says: of those read where the file is read, as a
- * File tab's notes are (`notesOf`), so a card never speaks of another
- * repository's file of the same path, nor of another commit than its tab's.
- */
-export function newestFileNote(
-  shown: readonly TaskCodeShowing[],
-  path: string,
-  read: FileRead,
-): string | undefined {
-  return shown.findLast(
-    ({ code }) =>
-      code.ref.path === path &&
-      code.note !== undefined &&
-      (read.repository === null || code.repository === read.repository) &&
-      shownWhereRead(code, read.commit),
-  )?.code.note;
-}
-
 /**
  * A file's card, its tab's and every place naming it, drawn from the parts
  * every hover card is (`@luke/ui`'s `HoverCard`): the file's type icon and its
  * whole path, its repository under the path where the place names one, and
- * under them Luke's note on its lines, where the place knows one.
+ * under them where the file is read, where the place says, as a mention's
+ * lines and commit (`thing-card.tsx`).
  */
 export function FileCard({
   path,
@@ -87,7 +59,8 @@ export function FileCard({
   path: string;
   /** The repository the file is of, under its path, where the place names one. */
   repository?: string | undefined;
-  note: string | undefined;
+  /** Where the file is read, under the path; none where the place says nothing of it. */
+  note?: string | undefined;
 }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="" data-file-card="">
@@ -107,14 +80,11 @@ export function FileCard({
 export function FileRef({
   codeRef,
   repository: named,
-  note,
   onOpen,
 }: {
   codeRef: CodeRef;
   /** The repository the lines were read from, where the place knows it; the task's where it does not. */
   repository?: string | undefined;
-  /** Luke's note on the lines, which the card says; none where the place knows none. */
-  note: string | undefined;
   /** Shows the file's tab on the reference's lines; none where the file cannot be opened from here. */
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
@@ -130,7 +100,7 @@ export function FileRef({
       state={lineRangeText(codeRef)}
       onPress={onOpen === undefined ? undefined : () => onOpen()}
       pressLabel={onOpen === undefined ? undefined : `Open ${fileRefText(codeRef)}`}
-      card={<FileCard path={codeRef.path} repository={repository} note={note} />}
+      card={<FileCard path={codeRef.path} repository={repository} />}
       data-file-ref=""
     />
   );

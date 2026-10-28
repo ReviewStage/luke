@@ -30,7 +30,7 @@ import {
 } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW, type TaskCodeShowing } from "@luke/features/tasks-view";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
@@ -1237,24 +1237,6 @@ it.effect(
     }),
 );
 
-/** Luke's note on a file of the repository, as he showed its lines at `commit`. */
-function shownAt(commit: string, note: string, at: number): TaskCodeShowing {
-  return {
-    callId: `c-${commit}`,
-    turnId: "t",
-    shownAt: at,
-    code: {
-      ref: { path: "apps/web/rollout-store.ts", startLine: 3, endLine: 5 },
-      repository: "acme/relay",
-      commit,
-      firstLine: 1,
-      lineCount: 9,
-      lines: [],
-      note,
-    },
-  };
-}
-
 /** The card an @ row hangs once the pointer rests on it, as the list is drawn for the page given. */
 async function cardOfRow(page: TaskMentionsValue, typed: string, section: string) {
   const { container } = await box(page);
@@ -1271,52 +1253,13 @@ async function cardOfRow(page: TaskMentionsValue, typed: string, section: string
   };
 }
 
-test("an @ row for a file hangs the file's card with Luke's newest note, read at the commit an open tab of it is pinned to", async () => {
-  const shownCode = [
-    shownAt("aaaa111", "Fix parsing", 1_000),
-    shownAt("bbbb222", "Add logging", 2_000),
-  ];
-
-  const pinned = await cardOfRow(
-    {
-      ...planPage([]),
-      shownCode,
-      openFiles: [{ path: "apps/web/rollout-store.ts", commit: "aaaa111" }],
-    },
-    "See @rollout-store",
-    "Files and folders",
-  );
-  assert.equal(
-    pinned.card.querySelector(".luke-hover-card-name")?.textContent,
-    "apps/web/rollout-store.ts",
-  );
-  assert.equal(pinned.card.querySelector(".luke-hover-card-note")?.textContent, "Fix parsing");
-});
-
-test("an @ row for a file with no tab open of it hangs the note of Luke's newest showing", async () => {
-  const { card } = await cardOfRow(
-    {
-      ...planPage([]),
-      shownCode: [
-        shownAt("aaaa111", "Fix parsing", 1_000),
-        shownAt("bbbb222", "Add logging", 2_000),
-      ],
-    },
-    "See @rollout-store",
-    "Files and folders",
-  );
-
-  assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, "Add logging");
-});
-
-test("an @ row for a file Luke showed no note on hangs the file's card with its path alone", async () => {
+test("an @ row for a file hangs the file's card with its path", async () => {
   const { card } = await cardOfRow(planPage([]), "See @rollout-store", "Files and folders");
 
   assert.equal(
     card.querySelector(".luke-hover-card-name")?.textContent,
     "apps/web/rollout-store.ts",
   );
-  assert.equal(card.querySelector(".luke-hover-card-note"), null);
 });
 
 test("an @ row for a page says its version where it has more than one, else its age, and hangs the page's card", async () => {

@@ -52,7 +52,6 @@ function launch(stood: Stood) {
       held.taskAgents,
       [],
       [],
-      [],
       held.taskAgents,
     );
     return null;
@@ -125,16 +124,16 @@ test("a record kept before tasks had their name holds each task's choices under 
 
 test("a Changes tab closed stays closed across a launch, and closing the chosen one chooses the tab viewed before it", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
-  act(() => first.control().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => first.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => first.control().onChoose({ changes: AGENT }));
   act(() => first.control().onClose({ changes: AGENT }));
   assert.deepEqual(first.control().changes, []);
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.CODE);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.COMMENTS);
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(second.control().changes, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.CODE);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.COMMENTS);
 });
 
 test("an agent's Terminal tab opens once at the strip's end and chosen, stands only on its agent's plan, and is kept across no launch", () => {
@@ -195,6 +194,19 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
 });
 
+test("a file's pin opens its tab on the pin's task after a launch, which keeps no file's tab", () => {
+  const file = "src/invites/accept.ts";
+  const first = launch({ task: TASK, taskAgents: [] });
+  act(() => first.control().onOpenFile({ path: file }));
+  act(() => first.control().onPin({ file }, "accept.ts"));
+  first.quit();
+
+  const second = launch({ task: TASK, taskAgents: [] });
+  act(() => second.control().onShow(TASK, { file }));
+  assert.deepEqual(second.control().tab, { file });
+  assert.deepEqual(second.control().strip.at(-1), { file });
+});
+
 test("a tab pinned to the sidebar keeps the place a drag gave it across a launch, on this Mac", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
@@ -207,12 +219,12 @@ test("a tab pinned to the sidebar keeps the place a drag gave it across a launch
   assert.equal(second.control().pins[0]?.position, "a3");
 });
 
-test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, and one Luke never showed opens in a tab the plan draws", () => {
+test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, and another opens in a tab the plan draws", () => {
   const shown = "src/invites/accept.ts";
   const found = "src/invites/expire.ts";
   let control: SidePanelControl | undefined;
   function Probe() {
-    control = useSidePanel(undefined, usedTask(TASK), [], [], [shown], [], []);
+    control = useSidePanel(undefined, usedTask(TASK), [], [], [], []);
     return null;
   }
   const container = document.body.appendChild(document.createElement("div"));
@@ -224,7 +236,7 @@ test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, a
     return control;
   };
   act(() => now().onOpenFile({ path: shown, startLine: 3, endLine: 5 }));
-  act(() => now().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => now().onChoose(SIDE_PANEL_TAB.COMMENTS));
 
   act(() => now().onOpenFile({ path: shown }));
   assert.deepEqual(now().tab, { file: shown });
@@ -247,7 +259,7 @@ test("the agent whose Terminal tab was shown last on a plan is the plan's own, w
   assert.equal(panel.control().lastTerminal, undefined);
   act(() => panel.control().onChoose({ terminal: AGENT }));
   act(() => panel.control().onChoose({ terminal: OTHER_AGENT }));
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
   assert.equal(panel.control().lastTerminal, OTHER_AGENT);
   panel.render({ task: OTHER_TASK, taskAgents: [] });
   assert.equal(panel.control().lastTerminal, undefined);
@@ -281,7 +293,7 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
 
 test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {
   const panel = launch({ task: TASK, taskAgents: [] });
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
   assert.equal(panel.control().open, true);
 
   panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
@@ -290,7 +302,7 @@ test("a plan whose strip holds no tab draws no panel, and the next plan with a t
 
   panel.render({ task: TASK, taskAgents: [] });
   assert.equal(panel.control().open, true);
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
 
   panel.render({ task: OTHER_TASK, taskAgents: [], bare: true });
   act(() => panel.control().onToggle());
@@ -316,7 +328,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
       inbox ? [] : [AGENT],
       [],
       [],
-      [],
       inbox ? undefined : [AGENT],
     );
     return null;
@@ -330,7 +341,7 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   };
 
   render(false);
-  act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose({ changes: AGENT }));
 
@@ -344,7 +355,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   assert.deepEqual(panel().strip, [
     SIDE_PANEL_TAB.PLAN,
     SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.COMMENTS,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -361,7 +371,6 @@ function inboxPanel(inbox: { task: string; held: boolean }, room: ShellRoom = SH
         holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
       },
       undefined,
-      [],
       [],
       [],
       undefined,
@@ -426,7 +435,7 @@ test("a task that may draw no Inbox, holding no agent and nothing waiting, draws
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
 });
 
-test("a record kept while the Call stood in the panel reads with its tab let go from the strip, and its pin let go too", () => {
+test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {
   window.localStorage.setItem(
     "luke.sidePanel",
     JSON.stringify({
@@ -441,8 +450,8 @@ test("a record kept while the Call stood in the panel reads with its tab let go 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.COMMENTS],
-    "the Call stands in no strip of the panel, and the plan leads it",
+    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.COMMENTS],
+    "neither the Call nor Code stands in the strip, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
   assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
@@ -452,7 +461,7 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   let room: ShellRoom = SHELL_ROOM.NARROW;
   let control: SidePanelControl | undefined;
   function Probe({ at }: { at: ShellRoom }) {
-    control = useSidePanel(undefined, usedTask(TASK), [], [], [], [], [], at);
+    control = useSidePanel(undefined, usedTask(TASK), [], [], [], [], at);
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -476,7 +485,7 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
 test("the Inbox with nothing chosen has no task, so the panel left open shows over it in no room, neither full screen on a phone nor empty beside it", () => {
   let control: SidePanelControl | undefined;
   function Probe({ at, task }: { at: ShellRoom; task: OpenTask }) {
-    control = useSidePanel(undefined, task, [], [], [], [], [], at);
+    control = useSidePanel(undefined, task, [], [], [], [], at);
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -587,7 +596,6 @@ test("an agent's transcript stands in a panel beside the Inbox alone, once the t
     control = useSidePanel(
       undefined,
       bare ? { id: TASK, holds: {}, bare: true } : usedTask(TASK),
-      [],
       [],
       [],
       [],

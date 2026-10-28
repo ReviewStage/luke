@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
@@ -26,6 +27,11 @@ import {
  * slice is replaced whole, the version only ever climbs, and `changes`
  * carries exactly one document per applied patch.
  */
+
+/** Two pages of a plan and the agent that showed them, as the store's identity test holds them. */
+const PAGE_ONE = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d01";
+const PAGE_TWO = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d02";
+const AGENT = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d03";
 
 const RUN = {
   launch: {
@@ -120,34 +126,26 @@ it("two slices in one patch are one version", () => {
 
 it("a slice that moved keeps every part of it that did not, so what a reader held of it is the object it still holds", () => {
   const app = store();
-  const shown = (callId: string, lines: readonly string[]) => ({
-    callId,
-    turnId: "turn-1",
-    shownAt: 0,
-    code: {
-      ref: { path: "src/invites.ts", startLine: 1, endLine: 1 },
-      repository: "acme/relay",
-      firstLine: 1,
-      lineCount: lines.length,
-      lines: [...lines],
-    },
+  const page = (id: string, title: string, agentId: string) => ({
+    id,
+    title,
+    version: 1,
+    at: 0,
+    shownBy: { kind: PAGE_SHOWER.AGENT, agentId },
   });
   app.update({
     tasks: {
       ...app.snapshot().tasks,
       activeTaskId: "plan-1",
-      shownCode: [shown("call-1", ["const a = 1;"]), shown("call-2", ["const b = 2;"])],
+      pages: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, "Billing", AGENT)],
     },
   });
   const held = app.snapshot().tasks;
 
-  // The host's next view: the same data, every object of it new, and the second code grown.
+  // The host's next view: the same data, every object of it new, and the second page retitled.
   const next = {
     ...structuredClone(held),
-    shownCode: [
-      shown("call-1", ["const a = 1;"]),
-      shown("call-2", ["const b = 2;", "const c = 3;"]),
-    ],
+    pages: [page(PAGE_ONE, "Invites", AGENT), page(PAGE_TWO, "Billing and plans", AGENT)],
   };
   app.update({ tasks: next });
   const now = app.snapshot().tasks;
@@ -155,9 +153,9 @@ it("a slice that moved keeps every part of it that did not, so what a reader hel
   assert.equal(app.snapshot().version, 2);
   assert.deepEqual(now, next);
   assert.equal(now.document, held.document);
-  assert.equal(now.shownCode?.[0], held.shownCode?.[0]);
-  assert.notEqual(now.shownCode?.[1], held.shownCode?.[1]);
-  assert.equal(now.shownCode?.[1]?.code.ref, held.shownCode?.[1]?.code.ref);
+  assert.equal(now.pages?.[0], held.pages?.[0]);
+  assert.notEqual(now.pages?.[1], held.pages?.[1]);
+  assert.equal(now.pages?.[1]?.shownBy, held.pages?.[1]?.shownBy);
 });
 
 it.effect("a touch re-announces the document without numbering it again", () =>

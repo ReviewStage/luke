@@ -130,7 +130,6 @@ import {
 } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import type { MicrophoneStatus } from "@luke/voice/audio";
-import { shownFiles } from "@luke/voice/code-pane-model";
 import { VOICE_COMMAND, type VoiceCallAbout } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -138,7 +137,6 @@ import { type ActHandle, toastActFailure } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
-import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { useOpenAiKeyMissing } from "../openai-key.js";
@@ -649,14 +647,6 @@ export interface TasksControl {
   unreadTabs: readonly StripTab[];
   /** The open task's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
-  /** Every code the open task's agents showed, oldest first: what the service keeps, and each a call shows as it shows it. */
-  shownCode: TasksView["shownCode"];
-  /** The code shown on calls into an agent with no task, by that agent, which its page draws; none before such a call showed any. */
-  agentCallCode: TasksView["agentCallCode"];
-  /** Whether the last read of the open task's code did not land, what is held still drawn. */
-  codeFailed: boolean;
-  /** Reads the open task's code again after a read that did not land. */
-  onRetryCode: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
@@ -1046,14 +1036,8 @@ const NO_PENDING_POSITIONS: PendingPinPositions = new Map();
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<TasksView["pages"]> = [];
 
-/** No code shown yet on the call standing on an agent's page, the same array every render. */
-const NO_CODE: NonNullable<TasksView["shownCode"]> = [];
-
 /** What an agent's page holds of the plan's panel kinds: nothing, its tabs being the agent's own. */
 const NO_HOLDS: TaskHolds = {};
-
-/** An agent's page holding code a call into it showed, which its Code tab stands for. */
-const CODE_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.CODE]: true };
 
 /** No ids, the same array every render. */
 const NO_IDS: readonly string[] = [];
@@ -1163,8 +1147,8 @@ function secondCallNote(placeName: string): string {
  * read lands: its plan always, of its Inbox whether it may draw one, an
  * agent held, an archived one among them, or an item waiting (`inbox`).
  */
-function taskHolds(view: Pick<TasksView, "board" | "shownCode">, inbox: boolean): TaskHolds {
-  const { board, shownCode } = view;
+function taskHolds(view: Pick<TasksView, "board">, inbox: boolean): TaskHolds {
+  const { board } = view;
   return {
     [SIDE_PANEL_TAB.PLAN]: true,
     [SIDE_PANEL_TAB.INBOX]: inbox,
@@ -1172,7 +1156,6 @@ function taskHolds(view: Pick<TasksView, "board" | "shownCode">, inbox: boolean)
       board === undefined
         ? undefined
         : board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0,
-    [SIDE_PANEL_TAB.CODE]: shownCode === undefined ? undefined : shownCode.length > 0,
   };
 }
 
@@ -1490,11 +1473,6 @@ export function useTasksTab(input: {
     titledSeen.current = { taskId, titled: agentTitled };
     if (landed && untitled) tell(ACT_KIND.TASKS_REFRESH);
   }, [agentTitled, untitled, viewed.activeTaskId, tell]);
-  // A file's tab is held to the files Luke showed on the task the same way.
-  const files = useMemo(
-    () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
-    [viewed.shownCode],
-  );
   // What the open task's row names of its agents, which settles its tab before they are read where it can (`use-main-tabs.ts`).
   const openRow = tasks.tasks.find((task) => task.id === viewed.activeTaskId);
   const rowAgents = openRow?.agents;
@@ -1600,11 +1578,6 @@ export function useTasksTab(input: {
           : [...cloudListed.map((each) => each.id), ...cloudDrafts.map((each) => each.id)],
     [cloudTaskId, cloudListed, cloudDrafts],
   );
-  // An agent's page holds code where a call into it, with no task, showed some.
-  const pageCodeHeld =
-    pageAgent !== undefined &&
-    viewed.agentCallCode?.agentId === pageAgent &&
-    viewed.agentCallCode.shownCode.length > 0;
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
@@ -1616,10 +1589,9 @@ export function useTasksTab(input: {
         }
       : pageAgents === undefined
         ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
-        : { id: pageAgent, holds: pageCodeHeld ? CODE_HOLDS : NO_HOLDS },
+        : { id: pageAgent, holds: NO_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
-    inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
     inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : agentPageIds,
     // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by (`use-inbox-task-agents.ts`).
     inboxView !== undefined
@@ -2351,33 +2323,14 @@ export function useTasksTab(input: {
     [],
   );
 
-  // Code shown on a call lands as a card the diff bundle draws, so the bundle loads as the call stands.
-  usePrefetchDiffBundle(live);
-  // A fixture's staged task has nothing arriving on it, and code arrives
+  // A fixture's staged task has nothing arriving on it, and a page arrives
   // only on a call, since what a task opens with it already held.
-  // A call into an agent with no task stands on that agent's page, whose
-  // side panel the code it shows arrives in.
-  const pageCall =
-    pageAgent !== undefined &&
-    standingCall !== undefined &&
-    standingCall.agentId === pageAgent &&
-    standingCall.taskId === undefined;
-  const pageCode =
-    tasks.agentCallCode?.agentId === pageAgent ? tasks.agentCallCode?.shownCode : undefined;
   const arrivedTabs = usePanelArrivals({
     // Note that nothing of the plan's arrives while an agent's page holds the
     // panel, so the plan's visit ends, and what it gained meanwhile counts as
-    // seen; the page's own visit takes what its agent's call shows.
+    // seen.
     taskId: fixture === undefined ? (pageAgent ?? tasks.activeTaskId) : undefined,
     board: pageAgent === undefined ? tasks.board : undefined,
-    code:
-      pageAgent === undefined
-        ? live
-          ? (tasks.shownCode ?? [])
-          : undefined
-        : pageCall
-          ? (pageCode ?? NO_CODE)
-          : undefined,
     pages: pageAgent === undefined && live ? (tasks.pages ?? NO_PAGES) : undefined,
     panel: sidePanel,
   });
@@ -3329,10 +3282,6 @@ export function useTasksTab(input: {
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
     board: tasks.board,
-    shownCode: tasks.shownCode,
-    agentCallCode: tasks.agentCallCode,
-    codeFailed: tasks.codeStatus === TASKS_READ.FAILED,
-    onRetryCode: () => press(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     agents,
     history: {

@@ -17,7 +17,7 @@ import { parsedUrl } from "./parsed-url.js";
  * from its page or any page under it (`pullRequestAddressOf`); a page an
  * agent showed on a plan, by its Luke link (`link-grammar.ts`); and lines of
  * a file pinned to a commit, `https://github.com/<owner>/<name>/blob/<commit>/<path>#L3-L5`,
- * drawn as the Code tab draws them, its commit whole, since the lines are
+ * drawn as an inbox item's code card draws them, its commit whole, since the lines are
  * read at it and a read takes no abbreviation. A file's link on a branch
  * names no lines that hold still, since a branch moves and its name may
  * hold a slash, so it is no card; nor is a link to anything else, a

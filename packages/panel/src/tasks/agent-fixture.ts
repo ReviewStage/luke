@@ -1088,8 +1088,8 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     ],
   };
   const { html: _html, ...pageLine } = FIXTURE_PAGE;
-  // Note that the call's work and the code Luke showed on it are left out, because they are of the tasks profiles' call, not this agent's.
-  const { activity: _activity, shownCode: _shownCode, ...still } = open;
+  // Note that the call's work is left out, because it is of the tasks profiles' call, not this agent's.
+  const { activity: _activity, ...still } = open;
   return {
     ...still,
     tasks: open.tasks.map((task) => (task.id === taskId ? { ...task, agents } : task)),

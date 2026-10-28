@@ -445,7 +445,6 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
     agents,
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const container = document.createElement("div");
@@ -500,7 +499,6 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
     agents: codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const container = document.createElement("div");
@@ -549,7 +547,6 @@ test("a call about an agent names it by its chip in the place of the words, as i
     agents,
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const opened: ToolTarget[] = [];
@@ -769,7 +766,6 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     agents: codingAgentsControl({}),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: { taskId },
   });
   const container = document.createElement("div");
@@ -836,7 +832,6 @@ test("a call about the plan or another task hangs that task's card as its Plan t
     agents: codingAgentsControl({}),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: { taskId: "task-invoices" },
     task: { name: "Invoice export", status: undefined, card: undefined },
   });
