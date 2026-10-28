@@ -1,6 +1,10 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import type { AppInboxSlice, AppInboxWaitingItem } from "@luke/host/app-state";
+import type {
+  AppInboxSlice,
+  AppInboxTasklessItem,
+  AppInboxWaitingItem,
+} from "@luke/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { InboxIcon } from "lucide-react";
@@ -12,8 +16,10 @@ import {
   type InboxListed,
   inboxAgentOf,
   inboxLineKind,
+  NEEDS_YOU,
   type TasklessInboxAgent,
   taskHolder,
+  waitsOnReader,
 } from "./inbox-model.js";
 import { useAgentTaskRead, useMentionedPlace } from "./mentioned-agent-card.js";
 import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
@@ -102,23 +108,31 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
 }
 
 /** The brief main holds of an item that waits, by its id; none for one settled or unknown. */
-function useWaitingBrief(itemId: string): AppInboxWaitingItem | undefined {
+function useWaitingBrief(itemId: string): WaitingBrief | undefined {
   const inbox = useAppSlice(APP_SLICE.INBOX);
   return [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].find(
     (each) => each.id === itemId,
   );
 }
 
-/** What an item still waiting says of where it stands, before its inbox is read. */
-const WAITING_WORDS = "Waiting for an answer";
+/** A brief of an item main lists as waiting: a task's, which waits on the reader, or a taskless one, which names whom it waits on. */
+type WaitingBrief = AppInboxWaitingItem &
+  Partial<Pick<AppInboxTasklessItem, "startedBy" | "waitsOn">>;
+
+/** What an item still waiting says of where it stands, before its inbox is read: "Needs you" where it waits on the reader, as its read card says; else "Waiting", which the read card's "Waiting on" them begins. */
+function waitingWords(item: WaitingBrief, readerId: string | undefined): string {
+  return waitsOnReader(item, readerId) ? NEEDS_YOU.LABEL : "Waiting";
+}
 
 /** An item's card from main's brief alone: its question, that it waits for an answer, and when it was asked. */
 function WaitingItemCard({
   item,
   now,
+  readerId,
 }: {
-  item: AppInboxWaitingItem;
+  item: WaitingBrief;
   now: number;
+  readerId: string | undefined;
 }): React.JSX.Element {
   return (
     <HoverCard data-inbox-item-card="">
@@ -127,7 +141,7 @@ function WaitingItemCard({
         name={item.title}
         corner={<Time at={item.postedAt} now={now} hint={false} />}
       />
-      <HoverCardNote>{WAITING_WORDS}</HoverCardNote>
+      <HoverCardNote>{waitingWords(item, readerId)}</HoverCardNote>
     </HoverCard>
   );
 }
@@ -164,7 +178,11 @@ export function InboxItemChipCard({
   const now = useMinute();
   const waiting = useWaitingBrief(place.itemId);
   if (listed === undefined) {
-    return waiting === undefined ? fallback : <WaitingItemCard item={waiting} now={now} />;
+    return waiting === undefined ? (
+      fallback
+    ) : (
+      <WaitingItemCard item={waiting} now={now} readerId={me} />
+    );
   }
   return <InboxItemCard listed={listed} now={now} models={models} readerId={me} />;
 }
