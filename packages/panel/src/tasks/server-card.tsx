@@ -27,7 +27,10 @@ import { SERVER_END_CLASS, ServerRowWords, useServerRows } from "./agent-servers
  * The card's head is the popover's own row for the server
  * (`agent-servers.tsx`): its mark, its name, how many tools it offers, and,
  * where the words are an agent's, that agent's switch for it, drawn as it
- * stands and pressed nowhere but the popover. A note under it says what
+ * stands and pressed nowhere but the popover. Where the server or its
+ * sign-in said words of their own behind its problem, a note under the row
+ * quotes them, since the row's own line holds Luke's sentence alone. A note
+ * under that says what
  * the mention does (`serverMentionNote`): an agent with the server on is
  * handed it anyway; one with it off is handed it by the developer's words
  * for one turn alone, the one they open, or, where they reached a turn
@@ -152,6 +155,7 @@ export function ServerCard({
           </span>
         ) : null}
       </div>
+      {row.said === undefined ? null : <HoverCardNote>{row.said}</HoverCardNote>}
       {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
       {tools.length === 0 ? null : (
         <>
