@@ -1647,7 +1647,7 @@ function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
   return count === undefined ? undefined : Number(count);
 }
 
-test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row", async () => {
+test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   const previous = fakeActsAnswer();
@@ -1674,6 +1674,15 @@ test("the channels' counts add up to the Inbox's, Luke's question among them, bu
       {
         ...lukeTaskless({ ...BUMP, agentId: LUKE_AGENT, channelId: archived }),
         workspaceId: ACME.id,
+      },
+      // Note that another workspace's question is set in #general's place, so it would show on that row were it counted.
+      {
+        ...lukeTaskless({
+          ...item("a1b2c3d4-0000-4000-8000-00000000000e", "Rotate the beta key?", 1_100),
+          agentId: LUKE_AGENT,
+          channelId: GENERAL.id,
+        }),
+        workspaceId: "workspace-beta",
       },
     ],
     { withSidebar: true, waiting },
