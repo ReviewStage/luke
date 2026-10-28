@@ -144,7 +144,6 @@ const aimedItsHeartbeat = (
       operatorId: operator.id,
       workspaceId,
       heartbeat: {
-        taskId: null,
         organizationId: workspaceId,
         repositories: [],
         name: OPERATOR_HEARTBEAT_SCHEDULE.NAME,

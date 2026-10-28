@@ -217,7 +217,6 @@ it.effect(
         yield* wakesTheWorkspace(
           createAutomation(teammate, {
             id: randomUUID(),
-            taskId: null,
             organizationId: workspaceId,
             repositories: ["acme/api"],
             name: "Nightly sweep",

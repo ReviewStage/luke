@@ -225,7 +225,8 @@ const openAutomation = (userId: string, workspaceId: string) =>
     const task = yield* startTask(userId, { name: "Flaky tests" });
     yield* updateTask(userId, task.id, { organizationId: workspaceId });
     const made = yield* createAutomation(userId, {
-      taskId: task.id,
+      organizationId: task.workspaceId,
+      repositories: task.repository === null ? [] : [task.repository],
       name: "Flaky-test sweep",
       scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
@@ -476,7 +477,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
           Effect.gen(function* () {
             const made = Option.getOrThrow(
               yield* createAutomation(owner, {
-                taskId: agent.taskId,
+                organizationId: workspaceId,
+                repositories: ["acme/relay"],
                 name,
                 trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
                 action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
