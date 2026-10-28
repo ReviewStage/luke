@@ -1,6 +1,7 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import {
   handedMentionsIn,
   linkMention,
@@ -251,7 +252,7 @@ function agentNoteOf(
   const pullRequest =
     agent.pullRequest === null
       ? ""
-      : `, whose pull request is #${agent.pullRequest.number} (${agent.pullRequest.url})`;
+      : `, whose pull request is ${mentionMarkdownLink(`#${agent.pullRequest.number}`, agent.pullRequest.url)}`;
   const message = agent.archived
     ? ""
     : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
