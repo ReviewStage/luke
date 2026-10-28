@@ -535,13 +535,7 @@ const watchOn =
         answeredHeardAt: undefined,
       };
       yield* Effect.acquireRelease(
-        Effect.flatMap(Clock.currentTimeMillis, (now) =>
-          Effect.sync(() => {
-            register(hub.watchers, watcher, topics);
-            // Note that a watch registered while no connection stands waits on its clock, so the listener is down from here.
-            if (listening.state !== LISTENER_STATE.UP) listening.downSince ??= now;
-          }),
-        ),
+        Effect.sync(() => register(hub.watchers, watcher, topics)),
         () =>
           Effect.sync(() => {
             unregister(hub.watchers, watcher, topics);
