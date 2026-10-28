@@ -1267,6 +1267,15 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
 });
 
+test("a to-do's step draws its Markdown in its box's words: bold as strong words, not asterisks", async () => {
+  const pane = await mountThread(
+    threadItem([askingMessage({ type: INBOX_ASK.DO, steps: ["Open the **Domains** page"] })]),
+  );
+  const step = pane.querySelector("[data-inbox-step]") ?? assert.fail("the step");
+  assert.equal(step.textContent, "Open the Domains page");
+  assert.equal(step.querySelector("strong")?.textContent, "Domains");
+});
+
 test("a to-do with every step ticked by hand stands marked done and Send sends it so, letting a step go takes that back off, and steps ticked with neither press go as they stand", async () => {
   const toDo = { type: INBOX_ASK.DO, steps: ["Open the repository's settings", "Add the secret"] };
   const shown = threadItem([askingMessage(toDo)]);

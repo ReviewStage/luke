@@ -1634,8 +1634,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
 }
 
-/* An inline span of code, in a transcript, a pull request's description, or
-   a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
+/* An inline span of code, in a transcript, a to-do's step, a pull request's
+   description, or a card's branches, is the prose's (`.luke-prose code`, `@luke/ui`'s
    prose.css) in its padding, tint, face and size, and the corner role nearest
    its own, so code reads the same wherever words carry it. */
 .transcript-inline-code,
