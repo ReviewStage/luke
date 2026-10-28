@@ -313,14 +313,15 @@ test("reviewers past the pile's last face are counted, and the count hangs a car
   assert.equal(more.getAttribute("aria-label"), "reviewer5 · Changes requested");
   hover(more);
   const rest = [
-    ...document.querySelectorAll('.luke-tooltip-card [data-actor-card="more"] .actor-more-row'),
+    ...document.querySelectorAll('.luke-tooltip-card [data-actor-card="more"] [data-actor-more]'),
   ];
   assert.deepEqual(
     rest.map((row) => [
       row.querySelector(".actor-mark")?.getAttribute("data-kind"),
-      row.lastElementChild?.textContent,
+      row.querySelector(".luke-hover-card-row-label")?.textContent,
+      row.querySelector(".luke-hover-card-row-end")?.textContent,
     ]),
-    [["github", "reviewer5 · Changes requested"]],
+    [["github", "reviewer5", "Changes requested"]],
   );
 });
 
@@ -343,7 +344,7 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
       assert.fail("the rest are counted"),
   );
   const list = document.querySelector(
-    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
+    '.luke-tooltip-card [data-actor-card="more"] ul[aria-label="Reviewers"]',
   );
   assert.equal(list?.children.length, 45);
   // Note that the list scrolls in the area it stands in.
@@ -393,7 +394,7 @@ test("the count's card hung from a Changes card that itself hangs over its tab s
       assert.fail("the Changes card counts the rest"),
   );
   const list = document.querySelector(
-    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
+    '.luke-tooltip-card [data-actor-card="more"] ul[aria-label="Reviewers"]',
   );
   assert.ok(list, "the count's card hangs over the Changes card");
   act(() => {

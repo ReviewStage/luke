@@ -43,15 +43,15 @@ import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * server-card.test.ts -- a mention of an MCP server or of one of its tools
- * hangs the server's row as the MCP popover draws it: its mark, its name,
- * how many tools it offers, and, in an agent's tab, the agent's switch for
- * it, drawn and never pressed; then what the mention does for the agent,
- * then the server's tools, a few and a count of the rest, or the one tool a
- * tool's mention names. A server switched off for the agent is handed to
+ * hangs the server as the MCP popover reads it: its mark, its name, how
+ * many tools it offers, and, in an agent's tab, whether the agent has it
+ * on, a word with nothing to press; then what the mention does for the
+ * agent, then the server's tools, each its title and its badge, or the one
+ * tool a tool's mention names. A server switched off for the agent is handed to
  * the turn a line opens alone, or to the next turn where the line reached
  * one under way, as its row says or, not yet read back, as the agent stood
- * when it went; the box says the same of a send now. Off an agent the row
- * has no switch and no note. Synthetic agent, plan, and tools.
+ * when it went; the box says the same of a send now. Off an agent the card
+ * says nothing of on or off and has no note. Synthetic agent, plan, and tools.
  */
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -65,7 +65,11 @@ const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 /** Linear's server's tools, out of order, more than a card has height for. */
 const TOOLS = [
   { name: "update_issue", description: "Change an issue." },
-  { name: "list_issues", description: "List the team's issues. Filtered by state." },
+  {
+    name: "list_issues",
+    description: "List the team's issues. Filtered by state.",
+    annotations: { readOnlyHint: true },
+  },
   { name: "get_issue", description: "Read one issue." },
   { name: "create_comment", description: "Comment on an issue." },
   { name: "list_teams", description: "List the teams." },
@@ -242,15 +246,14 @@ async function cardOf(chip: Element | null | undefined) {
   await settle();
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");
-  const drawnSwitch = card.querySelector<HTMLElement>('[data-slot="switch"]');
   const look = {
-    name: card.querySelector(".agent-servers-name")?.textContent,
-    count: card.querySelector(".agent-servers-count")?.textContent,
-    on: drawnSwitch === null ? undefined : String(drawnSwitch.hasAttribute("data-checked")),
-    note: card.querySelector(".agent-servers-row + .luke-hover-card-note")?.textContent,
+    name: card.querySelector(".luke-hover-card-name")?.textContent,
+    count: card.querySelector(".luke-hover-card-sub")?.textContent,
+    on: card.querySelector(".luke-hover-card-corner")?.textContent,
+    note: card.querySelector(".luke-hover-card-head + .luke-hover-card-note")?.textContent,
     tools: [...card.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
-      tool.querySelector(".integration-tool-title")?.textContent,
-      tool.querySelector(".luke-list-row-description")?.textContent,
+      tool.querySelector(".luke-hover-card-row-label")?.textContent,
+      tool.querySelector(".luke-hover-card-row-end")?.textContent,
     ]),
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
@@ -271,29 +274,29 @@ test("in an agent's tab with Linear off, a line that opened a turn hands it that
   assert.deepEqual(await cardOf(chipIn(container, "opened")), {
     name: "Linear",
     count: "7 tools",
-    on: "false",
+    on: "Off",
     note: SERVER_MENTION_NOTE.OFF_OPENS,
     tools: [
-      ["create_comment", "Comment on an issue."],
-      ["get_issue", "Read one issue."],
-      ["get_user", "Read one member."],
-      ["list_issues", "List the team's issues."],
-      ["list_teams", "List the teams."],
-      ["search_documentation", "Search Linear's documentation."],
-      ["update_issue", "Change an issue."],
+      ["create_comment, Comment on an issue.", undefined],
+      ["get_issue, Read one issue.", undefined],
+      ["get_user, Read one member.", undefined],
+      ["list_issues, List the team's issues.", "Read-only"],
+      ["list_teams, List the teams.", undefined],
+      ["search_documentation, Search Linear's documentation.", undefined],
+      ["update_issue, Change an issue.", undefined],
     ],
     presses: 0,
   });
   assert.deepEqual(await cardOf(chipIn(container, "steered")), {
     name: "Linear",
     count: "7 tools",
-    on: "false",
+    on: "Off",
     note: SERVER_MENTION_NOTE.OFF_STEERS,
-    tools: [["list_issues", "List the team's issues."]],
+    tools: [["list_issues, List the team's issues.", "Read-only"]],
     presses: 0,
   });
   const reply = await cardOf(chipIn(container, "first"));
-  assert.equal(reply.on, "false");
+  assert.equal(reply.on, "Off");
   assert.equal(reply.note, SERVER_MENTION_NOTE.OFF);
 });
 
@@ -302,7 +305,7 @@ test("in an agent's tab with Linear on, the line's card says it is on and the me
 
   const opened = await cardOf(chipIn(container, "opened"));
 
-  assert.equal(opened.on, "true");
+  assert.equal(opened.on, "On");
   assert.equal(opened.note, SERVER_MENTION_NOTE.ON_NAMED);
 });
 
@@ -378,5 +381,18 @@ test("off an agent, as in a plan's or Luke's words, the server's row has no swit
   assert.equal(serverCard.note, undefined);
   assert.equal(serverCard.count, "7 tools");
   assert.equal(serverCard.tools.length, 7, "the card lists every tool, scrolling past a few");
-  assert.deepEqual(toolCard.tools, [["list_issues", "List the team's issues."]]);
+  assert.deepEqual(toolCard.tools, [["list_issues, List the team's issues.", "Read-only"]]);
+
+  restOn(tool ?? assert.fail("the tool's chip stands"));
+  await settle();
+  restOn(
+    [...document.querySelectorAll('[data-server-card] ul[aria-label$=" tools"] > li')].at(-1) ??
+      assert.fail("the tool's row stands"),
+  );
+  await settle();
+  assert.equal(
+    document.querySelector("[data-tool-card] .luke-hover-card-note")?.textContent,
+    "List the team's issues.",
+    "the tool's one-line row hangs what it does",
+  );
 });

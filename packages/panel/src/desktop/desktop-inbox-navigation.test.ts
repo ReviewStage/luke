@@ -517,7 +517,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
   assert.match(
     hoveredCard(mark, "[data-inbox-row-card]") ?? "",
-    /^Nightly flake sweep.*Sweep the flaky tests$/su,
+    /^Quarantine the flaky test\?.*Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
