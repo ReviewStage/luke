@@ -7,14 +7,20 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createCodingAgent } from "../coding-agent-store.js";
-import { acceptRunnerLine, queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
+import {
+  acceptRunnerLine,
+  clearRunnerLines,
+  queueRunnerLine,
+  runnerLinesPast,
+} from "../runner-line-store.js";
 
 /**
  * The lines queued for a cloud agent's runner, over a real dialect: a launch
  * reads its own lines past its cursor in the order they were queued, and a
  * message queued again under its id is queued once; a later launch is handed
  * the message lines an earlier one never acknowledged, within the window it
- * names, and nothing else of that launch's; and no account queues for,
+ * names, and nothing else of that launch's, even under the same first event
+ * number once the new launch dropped them; and no account queues for,
  * reads, or acknowledges another's agent. Synthetic accounts and agents
  * throughout.
  */
@@ -103,6 +109,32 @@ it.layer(getTestDB())("the runner line store", (it) => {
         yield* acceptRunnerLine(userId, agentId, taken);
         yield* queue(LAUNCH.NEXT, "next");
         assert.deepEqual(yield* textsPast(userId, agentId, LAUNCH.NEXT), ["untaken", "next"]);
+      }),
+  );
+
+  it.effect(
+    "a launch that dropped its predecessor's lines reads only its untaken messages under the same number",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agentId } = yield* openAccount;
+        const queue = (text: string, lineId?: string) =>
+          queueRunnerLine(userId, {
+            agentId,
+            launch: LAUNCH.FIRST,
+            text,
+            ...(lineId ? { lineId } : {}),
+          });
+        const taken = randomUUID();
+        yield* queue("taken", taken);
+        yield* queue("stop");
+        yield* queue("untaken", randomUUID());
+        yield* acceptRunnerLine(userId, agentId, taken);
+        yield* clearRunnerLines(userId, agentId);
+        yield* queue("first of the next");
+        assert.deepEqual(yield* textsPast(userId, agentId, LAUNCH.FIRST), [
+          "untaken",
+          "first of the next",
+        ]);
       }),
   );
 

@@ -83,6 +83,8 @@ export interface NativeSessions<Turn extends EveHostTurn = EveHostTurn>
   readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
   /** The session's runner ended, keeping its sandbox and the harness's session, so the next message relaunches it; whether no runner runs now. */
   readonly halt: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
+  /** The message lines an ended launch never took handed to a runner launched for them, where none runs (`runner-sessions.ts`'s `LINES_WAITING`); whether one was launched. */
+  readonly deliverWaiting: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
 }
 
 export interface NativeAgentSessionsService {

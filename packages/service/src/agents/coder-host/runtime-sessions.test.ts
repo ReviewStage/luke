@@ -146,6 +146,7 @@ function recording(sessionPrefix: string) {
         calls.push(`halt:${sessionId}:${conversationId}`);
         return answers.halts;
       }),
+    deliverWaiting: () => Effect.succeed(false),
     open: (message) =>
       Effect.sync(() => {
         calls.push(`open:${message.conversationId}`);

@@ -15,7 +15,7 @@
  * took, so a launch that ended before it took a message hands it to the
  * next. A line acknowledged is never handed again; what an earlier launch
  * was written of any other kind (a stop, a model change, a retire) was that
- * launch's alone. A queue drops the agent's lines past their expiry, which
+ * launch's alone, and the next launch drops it as it starts. A queue drops the agent's lines past their expiry, which
  * no launch would be handed any more.
  */
 
@@ -118,6 +118,8 @@ const findLinesPast = SqlSchema.findAll({
             eq(runnerLine.userId, userId),
             eq(runnerLine.agentId, agentId),
             gt(runnerLine.seq, after),
+            // Note that a message line a launch took is never handed again, whichever launch it was written for.
+            or(isNull(runnerLine.lineId), isNull(runnerLine.acceptedAt)),
             or(
               eq(runnerLine.launch, launch),
               and(
@@ -131,6 +133,60 @@ const findLinesPast = SqlSchema.findAll({
         )
         .orderBy(asc(runnerLine.seq))
         .limit(limit),
+    ),
+});
+
+const findWaiting = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, since: Schema.Date }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: ({ userId, agentId, since }) =>
+    Database.use((db) =>
+      db
+        .select({ seq: runnerLine.seq })
+        .from(runnerLine)
+        .where(
+          and(
+            eq(runnerLine.userId, userId),
+            eq(runnerLine.agentId, agentId),
+            isNotNull(runnerLine.lineId),
+            isNull(runnerLine.acceptedAt),
+            gte(runnerLine.createdAt, since),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+const deleteHandedOn = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .delete(runnerLine)
+        .where(
+          and(
+            eq(runnerLine.userId, userId),
+            eq(runnerLine.agentId, agentId),
+            isNull(runnerLine.lineId),
+          ),
+        ),
+    ),
+});
+
+const deleteLine = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, lineId: Schema.String }),
+  execute: ({ userId, agentId, lineId }) =>
+    Database.use((db) =>
+      db
+        .delete(runnerLine)
+        .where(
+          and(
+            eq(runnerLine.userId, userId),
+            eq(runnerLine.agentId, agentId),
+            eq(runnerLine.lineId, lineId),
+            isNull(runnerLine.acceptedAt),
+          ),
+        ),
     ),
 });
 
@@ -207,6 +263,36 @@ export function runnerLinesPast(
   },
 ): RunnerLineEffect<readonly RunnerLine[]> {
   return findLinesPast({ userId, agentId, ...read });
+}
+
+/** Whether a message line of the account's agent queued since `since` stands that no launch acknowledged, which a launch would be handed. */
+export function runnerLinesWaiting(
+  userId: string,
+  agentId: string,
+  since: Date,
+): RunnerLineEffect<boolean> {
+  return Effect.map(findWaiting({ userId, agentId, since }), (rows) => rows.length > 0);
+}
+
+/**
+ * The account's agent's lines dropped as a new launch starts, its caller
+ * holding the agent's runner lease: every line an earlier launch was
+ * written that is no message (a stop, a model change, a retire), which was
+ * that launch's alone. Note that a launch that applied no event before it
+ * ended leaves the next its first event number, so such a line would
+ * otherwise read as the new launch's own.
+ */
+export function clearRunnerLines(userId: string, agentId: string): RunnerLineEffect<void> {
+  return deleteHandedOn({ userId, agentId });
+}
+
+/** The account's agent's message line under its id withdrawn, where no launch acknowledged it, as for a launch that failed before its runner could read it. */
+export function withdrawRunnerLine(
+  userId: string,
+  agentId: string,
+  lineId: string,
+): RunnerLineEffect<void> {
+  return deleteLine({ userId, agentId, lineId });
 }
 
 /**
