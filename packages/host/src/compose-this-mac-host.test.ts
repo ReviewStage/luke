@@ -11,13 +11,13 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@luke/features";
 import { HOST_WIRE } from "@luke/features/host-wire";
-import { GATEWAY_METHOD } from "@luke/gateway";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Duration, Effect, Layer, Option, Result } from "effect";
+import { Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { composeThisMacHost } from "./compose-this-mac-host.js";
-import { THIS_MAC_HOST_STANDING } from "./contract/this-mac-host.js";
+import { THIS_MAC_HOST_STANDING, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
 import {
   HOST_LOGIN_ITEM_ACT,
   HOST_LOGIN_ITEM_STATUS,
@@ -32,6 +32,9 @@ const USER_ID = "user-fixture";
 const DEVICE_ID = "5f0c7a1e-2b3d-4e5f-8a9b-0c1d2e3f4a5b";
 const SERVICE = "https://luke.test";
 const SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"c".repeat(43)}`;
+/** The panel's own operator, which asks the host's methods. */
+const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
+const decodeStanding = Schema.decodeUnknownSync(thisMacHostStandingSchema);
 const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
 
 /** The clock nudged, and the state folder's reads and writes, which wait on no clock, let land, until the condition holds. */
@@ -109,7 +112,7 @@ const thisMac = (stateRoot: string) =>
     ) => {
       const handler = composer.methods[method];
       assert.ok(handler !== undefined);
-      return Effect.orDie(handler(undefined));
+      return Effect.map(Effect.orDie(handler({}, CONTEXT)), decodeStanding);
     };
     return { asked, enrolled, call };
   });
@@ -153,7 +156,11 @@ it.effect(
         });
         const { asked, enrolled, call } = yield* thisMac(stateRoot);
         let standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        for (let round = 0; round < 20_000 && standing.standing === "off"; round += 1) {
+        for (
+          let round = 0;
+          round < 20_000 && standing.standing === THIS_MAC_HOST_STANDING.OFF;
+          round += 1
+        ) {
           yield* TestClock.adjust(Duration.millis(100));
           yield* Effect.yieldNow;
           standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
