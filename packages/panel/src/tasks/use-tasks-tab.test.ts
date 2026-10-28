@@ -144,7 +144,7 @@ function mount(
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
   const record = (kind: PortActKind) => {
-    if (!kind.startsWith("codingAgents.")) told.push(kind);
+    if (!kind.startsWith("agents.")) told.push(kind);
     else agentActs.push(kind);
   };
   let control: TasksControl | undefined;
