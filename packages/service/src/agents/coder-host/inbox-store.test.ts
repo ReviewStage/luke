@@ -1638,7 +1638,7 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
             accountInboxPast(userId, INBOX_CURSOR_START, repositoryless),
             (answer) => answer.planless ?? [],
           );
-        const [carried] = yield* planlessOf(owner, true);
+        const carried = (yield* planlessOf(owner, true)).find((each) => each.id === posted.id);
         assert.deepEqual(
           [carried?.id, carried?.agentKind, carried?.repository, carried?.channelId !== undefined],
           [posted.id, CODING_AGENT_KIND.OPERATOR, null, true],
