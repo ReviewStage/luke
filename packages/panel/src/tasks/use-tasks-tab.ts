@@ -2639,6 +2639,8 @@ export function useTasksTab(input: {
           });
     // Note that a start's page is let go only while it is still this start's, because another start may have replaced it.
     const letGoOfPage = () => setStartingTask((now) => (now?.line === line ? undefined : now));
+    // Note that a later start, bare or an agent's, takes the draft, so words a refusal held for it come back by the toast's Open alone.
+    heldWords.current = [];
     if (line !== undefined) {
       lastStart.current = handed?.idempotencyKey;
       setStartingTask({ line, navigation: pressedAt });
@@ -2665,12 +2667,13 @@ export function useTasksTab(input: {
         };
         // Note that a refusal answered after New task was opened again, or another start pressed,
         // says why in a toast rather than taking the card or the page they stand on, and its Open
-        // brings the refused card back, over whatever card stands then. Its words go back in the
-        // draft where it holds nothing, at once with no card standing and else once the card
-        // standing closes, so they are never lost and never fill a card the developer is looking at.
-        if (newTaskStands.current || lastStart.current !== handed.idempotencyKey) {
-          if (newTaskStands.current) heldWords.current.push(restore);
-          else restore();
+        // brings the refused card back, over whatever card stands then. Where only a card was
+        // opened since, its words go back in the draft once that card closes with nothing in it,
+        // never into the card the developer is looking at; a later start took the draft, so then
+        // they come back by the Open alone.
+        const later = lastStart.current !== handed.idempotencyKey;
+        if (newTaskStands.current || later) {
+          if (!later) heldWords.current.push(restore);
           toast({
             words: `${START_REFUSED_LEAD} ${note.text}`,
             tone: STATUS_TONE.DANGER,
