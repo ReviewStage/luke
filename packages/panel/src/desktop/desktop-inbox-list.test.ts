@@ -746,6 +746,8 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   );
 });
 
+// Note that this test mounts the Inbox eight times, about 1 s on an idle machine but near 5 s on a
+// CI runner whose other workers run the shard's other files, so it is given 10 s.
 test("a tab kept before the scopes opens the Inbox on the scope that lists what it did, Needs you and Unread on To do and All open and Everything on All, and the Needs you press kept before the tabs on To do where pressed and All where not; a scope chosen since is kept in its place", async () => {
   const kept = [
     [SHOW_KEY, "needs-you", "[For you]"],
@@ -778,7 +780,7 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
   ({ page } = mount());
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
-});
+}, 10_000);
 
 test("Order by in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
   window.localStorage.setItem(SORT_KEY, JSON.stringify("waiting"));
