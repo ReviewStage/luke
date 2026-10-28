@@ -141,7 +141,7 @@ import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
 import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
-import { AGENT_LIST_FILTER_REFUSAL, workspaceAgent } from "../workspace-agents.js";
+import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { MESSAGE_AGENT_REFUSAL, MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import {
@@ -1883,9 +1883,10 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
   assert.equal(eve.sent.length, 0);
 });
 
-test("an agent whose starter no longer sees its task keeps its own tools, names itself as itself, and messages an agent its starter still sees, while another agent of that starter names it no longer", async () => {
+test("an agent whose starter no longer sees its task keeps its own tools: it reads itself and messages an agent its starter still sees, while another agent of that starter reads it no longer", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
   const onBilling = await agentOn(agents.caller.userId, tasks.billing);
   // The task moves onto its owner's own token, which the caller's starter keeps none to read through.
   await database.run(
@@ -1893,14 +1894,18 @@ test("an agent whose starter no longer sees its task keeps its own tools, names 
       db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, tasks.billing)),
     ),
   );
-  const named = (callerId: string) =>
-    database.run(workspaceAgent(agents.caller.userId, workspaceId, onBilling.id, callerId));
+  const readAs = async (caller: StartedAgent) =>
+    (await peerCaller(host, caller, eve.services))(CODER_TOOL.READ_AGENT, {
+      agentId: onBilling.id,
+    });
 
-  assert.deepEqual(
-    [Option.isSome(await named(onBilling.id)), Option.isNone(await named(agents.caller.id))],
-    [true, true],
-  );
-  const sent = await directMessage(hostOf(true), onBilling, agents.caller, eve.services);
+  const itself = await readAs(onBilling);
+  assert.equal(itself.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(itself));
+  assert.deepEqual(await readAs(agents.caller), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+  });
+  const sent = await directMessage(host, onBilling, agents.caller, eve.services);
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
 });
 

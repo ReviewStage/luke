@@ -949,7 +949,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "an agent whose starter no longer sees its task still posts and reads its own asks, while that starter reads, counts, and answers none of them, in the Inbox, a channel, or the task's or the agent's read, though one is addressed to them",
+    "an agent whose starter no longer sees its task still posts, reads, and moves its own asks, addressed to no one who cannot see them, while that starter, whom an ask on a task assigned to nobody waits on, reads, counts, and answers none of them, in the Inbox, a channel, or the task's or the agent's read",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -978,12 +978,23 @@ it.layer(getTestDB())("the inbox store", (it) => {
             .set({ githubAccess: GITHUB_ACCESS.TOKEN })
             .where(eq(taskTable.id, task.id)),
         );
+        yield* updateTask(owner, task.id, { assigneeId: null });
         const agent = {
           userId: teammate,
           taskId: task.id,
           agentId: Option.getOrThrow(started).agent.id,
         };
-        const posted = yield* post(agent, { ...SETTINGS, addresseeId: teammate });
+        assert.deepEqual(
+          yield* postInboxThread(agent, {
+            ...SETTINGS,
+            key: "for-teammate",
+            addresseeId: teammate,
+          }),
+          Result.fail(INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE),
+          "an ask is addressed to no one who cannot see its thread",
+        );
+        // Addressed to nobody on a task assigned to nobody, the ask waits on its starter all the same.
+        const posted = yield* post(agent);
         assert.deepEqual(
           (yield* agentInboxItems(agent)).map((each) => each.id),
           [posted.id],
@@ -1878,28 +1889,16 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
       }),
   );
 
-  it.effect(
-    "an item of an agent with no task waits on the member who started it, and once settled stands among their account's stamps until they read it, as a task's does",
-    () =>
-      Effect.gen(function* () {
-        const { agent, workspaceId } = yield* openTasklessAgent;
-        const teammate = yield* openUser;
-        yield* joinWorkspace(workspaceId, teammate);
-        const posted = yield* postedItem(agent, "taskless");
+  it.effect("an item of an agent with no task waits on the member who started it", () =>
+    Effect.gen(function* () {
+      const { agent, workspaceId } = yield* openTasklessAgent;
+      const teammate = yield* openUser;
+      yield* joinWorkspace(workspaceId, teammate);
+      yield* postedId(agent, "taskless");
 
-        const [item] = yield* memberAgentInboxItems(teammate, agent.agentId);
-        assert.equal(item?.waitsOn?.userId, agent.userId);
-
-        // The teammate's answer leaves it read for them and unread for the starter.
-        assert.ok(Option.isSome(yield* answerDone(teammate, posted)));
-        const counted = (readerId: string) =>
-          Effect.map(accountWaitingStamps(readerId), (stamps) =>
-            stamps.some((stamp) => stamp.id === posted.id),
-          );
-        const unread = [yield* counted(agent.userId), yield* counted(teammate)];
-        assert.ok(yield* markInboxItemRead(agent.userId, posted.id));
-        assert.deepEqual([...unread, yield* counted(agent.userId)], [true, false, false]);
-      }),
+      const [item] = yield* memberAgentInboxItems(teammate, agent.agentId);
+      assert.equal(item?.waitsOn?.userId, agent.userId);
+    }),
   );
 });
 

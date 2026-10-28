@@ -199,6 +199,8 @@ export const INBOX_POST_REFUSAL = {
   NO_ADDRESSEE: "no-addressee",
   /** The post is an operator's and addresses its ask to anyone but its own member, the one account that sees its threads. */
   NOT_ITS_MEMBER: "not-its-member",
+  /** The post addresses its ask to a member of the workspace who may not read its thread (`itemVisibleTo`): one who sees not the agent, or not its task, as their GitHub access stands. */
+  ADDRESSEE_CANNOT_SEE: "addressee-cannot-see",
 } as const;
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
@@ -1127,17 +1129,16 @@ function toDoCount(userId: string): SQL<number> {
 }
 
 /**
- * The settled items still unread that wait on the reader (`WAITS_ON`) among
- * those they may read, a task's and an agent's with no task alike: what To
- * do lists beside the open items, so their read marks and new messages on
- * those items move the account's cursor as an open item's change does. Note
- * that who it waits on is spelled out against the task joined on the left
- * rather than read through `WAITS_ON`, because the starter's side then
- * reaches the items by the reader's own index
+ * The settled items still unread that wait on the reader (`WAITS_ON`) on
+ * the tasks of their workspaces, among those they may read
+ * (`itemVisibleTo`): what To do lists beside the open items, so their read
+ * marks and new messages on those items move the account's cursor as an
+ * open item's change does. Note that who it waits on is spelled out
+ * against the joined task rather than read through `WAITS_ON`, because the
+ * starter's side then reaches the items by the reader's own index
  * (`inbox_item_user_status_updated`) and the assignee's by the task's,
  * where a `coalesce` would read every settled item of their workspaces on
- * each look; an item addressed to someone waits on them alone, and one on
- * no task, which has no assignee, on its starter.
+ * each look; an item addressed to someone waits on them alone.
  */
 function accountUnreadSettled(userId: string) {
   const derived = or(
@@ -1145,6 +1146,7 @@ function accountUnreadSettled(userId: string) {
     eq(task.assigneeId, userId),
   );
   return and(
+    isNotNull(inboxItem.taskId),
     itemVisibleTo(userId),
     or(eq(inboxItem.addresseeId, userId), and(isNull(inboxItem.addresseeId), derived)),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
@@ -1271,7 +1273,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** Where every item the account's read names or counts stands: a task's or an agent's with no task open, and the reader's own settled ones still unread, a task's or an agent's alike, which To do lists. Note that the task is joined on the left, because an item with no task has none to join. */
+/** Where every item the account's read names or counts stands: a task's or an agent's with no task open, and the reader's own settled ones still unread, which its tasks' To do counts. Note that the task is joined on the left, because an item with no task has none to join. */
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
@@ -2205,9 +2207,10 @@ const findWorkspaceChannel = SqlSchema.findOneOption({
  * agent: the channel it names, refused where that is no open channel of the
  * agent's workspace, so one archived since the agent chose it takes nothing;
  * and the member it is addressed to, refused where they are no member of
- * that workspace, or, for an operator, anyone but its own member. Note that
- * an operator's threads are its member's alone (`itemAgentSeenBy`), so an
- * ask it addressed to anyone else would wait on someone who never sees it.
+ * that workspace, for an operator anyone but its own member, or one who may
+ * not read the thread, since its agent or its task is hidden from them
+ * (`agentVisibleTo`, which `itemVisibleTo` reads alike). Note that an ask
+ * addressed to someone who never sees it would wait on them unseen.
  */
 function placeOf(
   agent: InboxAgent,
@@ -2232,6 +2235,8 @@ function placeOf(
       }
       const member = yield* isWorkspaceMember(post.addresseeId, organizationId);
       if (!member) return Result.fail(INBOX_POST_REFUSAL.NO_ADDRESSEE);
+      const sees = yield* findReachedAgent({ userId: post.addresseeId, agentId: agent.agentId });
+      if (Option.isNone(sees)) return Result.fail(INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE);
     }
     return Result.succeed({
       channelId: post.channelId ?? null,

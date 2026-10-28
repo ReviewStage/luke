@@ -13,7 +13,7 @@ import {
   recordAutomationRun,
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readCodingAgent, readVisibleCodingAgent } from "@luke/database/models/coding-agent-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
@@ -217,8 +217,9 @@ interface TargetColumns {
 
 /**
  * A target the account may aim runs at: a new agent each run, or an agent
- * the account reads; an agent it cannot read is refused as no request at
- * all, the same as a malformed one.
+ * the account may read (`readVisibleCodingAgent`), its task included; an
+ * agent it cannot read is refused as no request at all, the same as a
+ * malformed one.
  */
 const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -227,7 +228,7 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
     return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
   }
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleCodingAgent(userId, target.agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
 });
